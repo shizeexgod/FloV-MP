@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+
+      # Сервер: собираем C#-геймод (тянет AltV.Net из NuGet).
+      # assemble-runtime.ps1 в CI не гоняем — нужен локальный бэкап alt:V.
+      - name: Build server gamemode
+        run: dotnet build server/src/FloVMP.Gamemode/FloVMP.Gamemode.csproj -c Release --nologo
+
+      # Лаунчер: сборка всех проектов + xUnit-тесты (Core-логика без WPF).
+      - name: Build launcher solution
+        run: dotnet build launcher/FloVMP.Launcher.slnx -c Release --nologo
+
+      - name: Test launcher
+        run: dotnet test launcher/FloVMP.Launcher.slnx -c Release --nologo --no-build

@@ -1,0 +1,28 @@
+# Нормализация переводов строк: в репозитории — LF, при checkout — нативно.
+* text=auto eol=lf
+
+# PowerShell-скрипты Windows-only — CRLF.
+*.ps1 text eol=crlf
+
+# Явно текстовые
+*.cs      text eol=lf
+*.xaml    text eol=lf
+*.csproj  text eol=lf
+*.slnx    text eol=lf
+*.md      text eol=lf
+*.json    text eol=lf
+*.toml    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+
+# Бинарные — не трогать
+*.dll  binary
+*.exe  binary
+*.bin  binary
+*.pak  binary
+*.dat  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.bz2  binary
+*.zip  binary
