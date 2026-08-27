@@ -38,7 +38,9 @@ param(
     [ValidateSet("release", "rc", "dev")]
     [string]$Branch        = "release",
     [string]$OutRoot       = "",
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    # Skip the Sentry-telemetry neutralization patch (see docs/telemetry-sentry.md).
+    [switch]$KeepSentry
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,6 +61,39 @@ function Copy-Required {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     Copy-Item -LiteralPath $From -Destination $To -Force
     Write-Host "  + $($To.Substring($server.Length + 1))"
+}
+
+# Neutralize alt:V's built-in Sentry telemetry by zeroing the hardcoded DSN
+# string inside the runtime copy of altv-server.exe. The backup stays pristine;
+# only runtime\server\altv-server.exe is modified. With an empty DSN
+# sentry-native logs "sentry_init failed" and disables transport + crashpad;
+# the server otherwise boots normally. Rationale/verification:
+# docs/telemetry-sentry.md.
+function Disable-SentryTelemetry {
+    param([string]$ExePath)
+
+    $dsn = "https://586f9304db234ff7bc949b843d4f92dd@sentry-alt.com/4"
+    $bytes = [System.IO.File]::ReadAllBytes($ExePath)
+    $nb = [System.Text.Encoding]::ASCII.GetBytes($dsn)
+
+    $idx = -1
+    for ($i = 0; $i -le $bytes.Length - $nb.Length; $i++) {
+        $hit = $true
+        for ($j = 0; $j -lt $nb.Length; $j++) {
+            if ($bytes[$i + $j] -ne $nb[$j]) { $hit = $false; break }
+        }
+        if ($hit) { $idx = $i; break }
+    }
+
+    if ($idx -lt 0) {
+        Write-Host "  ! DSN string not found - alt:V build may differ." -ForegroundColor Yellow
+        Write-Host "    Telemetry NOT disabled. Check docs/telemetry-sentry.md." -ForegroundColor Yellow
+        return
+    }
+
+    for ($j = 0; $j -lt $nb.Length; $j++) { $bytes[$idx + $j] = 0 }
+    [System.IO.File]::WriteAllBytes($ExePath, $bytes)
+    Write-Host "  ~ Sentry DSN zeroed at offset $idx (telemetry disabled)"
 }
 
 Write-Host "== FloV:MP assemble-runtime ==" -ForegroundColor Cyan
@@ -84,6 +119,13 @@ $srvSrc = Join-Path $AltvBackup "server\$Branch\$plat"
 Copy-Required "$srvSrc\altv-server.exe"         "$server\altv-server.exe"
 Copy-Required "$srvSrc\altv-crash-handler.exe"  "$server\altv-crash-handler.exe"
 Copy-Required "$srvSrc\update.json"             "$server\update.json"
+
+if ($KeepSentry) {
+    Write-Host "  (Sentry telemetry patch skipped: -KeepSentry)" -ForegroundColor Yellow
+}
+else {
+    Disable-SentryTelemetry "$server\altv-server.exe"
+}
 
 # --- 3. coreclr-module (C#) ---------------------------------------
 Write-Host "[coreclr-module]" -ForegroundColor Yellow

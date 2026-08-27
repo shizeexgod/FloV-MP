@@ -17,10 +17,23 @@ Updated: 2026-08-27
 | 3 | Минимальный JS клиентский ресурс | ✅ done — `flovmp-client` грузится |
 | 4 | Тест живым клиентом GTA V | **blocked** — нужен полный набор файлов клиента alt:V 16.4.39 (бэкап неполный, см. ниже) |
 | 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
-| 6 | Отключить Sentry-телеметрию краш-хендлера сервера | todo (низкий приоритет) |
-| 7 | Найти/дособрать полный клиент alt:V 16.4.39 (release, x64_win32) | **todo — главный блокер, нужен владелец** |
+| 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
+| 7 | Найти полный клиент alt:V 16.4.x (release, x64_win32) | **BLOCKED — источника нет.** CDN alt:V мёртв (DNS), `altv.mp` 502, на дисках нет. Нужен владелец: рабочая установка alt:V с другой машины / community-зеркало / архив |
 | 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | todo |
 | 9 | Лаунчер: гибридная совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | todo |
+
+## Done (сессия 2026-08-27, часть 3 — Sentry + сеть)
+- **Sentry-телеметрия отключена.** `altv-server.exe` содержит sentry-native
+  0.6.5 с хардкод-DSN `...@sentry-alt.com/4`; хост живой (Cloudflare, ingest
+  отвечает 400), envelope уходит уже при старте сервера. `SENTRY_DSN` env не
+  помогает (alt:V перетирает через `sentry_options_set_dsn`). Решение:
+  `assemble-runtime.ps1` обнуляет строку DSN в рабочей копии exe (бэкап цел).
+  Проверено `SENTRY_DEBUG=1` — `sentry_init failed`, запросов нет. Опция
+  `-KeepSentry` отключает патч. `docs/telemetry-sentry.md`.
+- **Сеть проверена**: CDN alt:V (`cdn.alt-mp.com`, `cdn.altv.mp`,
+  `cdn.alt-mp.dev`) — DNS мёртв. `altv.mp` — origin 502 (Cloudflare жив).
+  `docs.altv.mp` — 200 (только SPA-оболочка, статьи по угадай-URL 404).
+  Полного клиента alt:V на дисках C:/D:/E: нет (искал по всем `altv.exe`).
 
 ## Done (сессия 2026-08-27, часть 2 — лаунчер + разведка клиента)
 - **Лаунчер** `launcher/` (WPF, net8.0-windows, `FloVMP.Launcher.slnx`):

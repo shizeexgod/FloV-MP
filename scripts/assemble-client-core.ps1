@@ -5,7 +5,7 @@
     own update.json manifest).
 
 .DESCRIPTION
-    The backup at C:\ViMP backup\backup-altv\client is INCOMPLETE — as of the
+    The backup at C:\ViMP backup\backup-altv\client is INCOMPLETE - as of the
     2026-08-27 recon it had 17 of 85 files; the CEF locale paks, V8 snapshots,
     crypto DLLs, legacy.dll etc. are absent. Those normally come from the
     (now dead) alt:V CDN. Until the full 16.4.39 client file set is sourced,
