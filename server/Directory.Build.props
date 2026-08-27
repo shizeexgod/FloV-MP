@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Общие настройки для всех C#-проектов сервера FloV:MP.
+    Целевой фреймворк — net8.0: под него собран coreclr-module alt:V
+    (AltV.Net.Host.runtimeconfig.json → Microsoft.NETCore.App 8.0.0).
+    Не поднимать до net9/net10 без пересборки хоста alt:V.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

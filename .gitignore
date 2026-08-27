@@ -16,3 +16,12 @@ appsettings.*.local.json
 # OS junk
 .DS_Store
 Thumbs.db
+
+# --- FloV:MP ---
+# Собранный рантайм сервера: бинарники alt:V (движок, не наш исходник) +
+# опубликованный C#-геймод + скопированные ресурсы. Собирается скриптом
+# scripts/assemble-runtime.ps1 из C:\ViMP backup\backup-altv. В git не идёт.
+/runtime/
+
+# Логи запусков сервера, если кто-то запустит вне /runtime/
+*.log

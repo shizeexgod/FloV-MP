@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FloVMP.Gamemode</AssemblyName>
+    <RootNamespace>FloVMP.Gamemode</RootNamespace>
+
+    <!--
+      alt:V грузит геймод как изолированный плагин (собственный
+      AssemblyLoadContext). EnableDynamicLoading + CopyLocalLockFileAssemblies
+      кладут AltV.Net.* и прочие зависимости рядом с FloVMP.Gamemode.dll в
+      папке ресурса, чтобы хост нашёл их без обращения к global NuGet-кэшу.
+    -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Версия AltV.Net: последняя стабильная из NuGet-линейки 16.4.x
+      (сервер в бэкапе — 16.4.39, отдельного пакета под .39 нет, ABI внутри
+      16.4.x стабилен). Если хост при старте ругнётся на несовместимость
+      SDK — поднять до 16.4.28-rc.2 и перепроверить.
+    -->
+    <PackageReference Include="AltV.Net" Version="16.4.21" />
+  </ItemGroup>
+
+</Project>
