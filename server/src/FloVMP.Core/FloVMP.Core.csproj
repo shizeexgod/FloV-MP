@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Чистая гейм-логика без привязки к alt:V (AltV.Net не подключается).
+    Отсюда её можно юнит-тестировать (FloVMP.Core.Tests). FloVMP.Gamemode
+    ссылается на этот проект; dotnet publish кладёт FloVMP.Core.dll рядом
+    с геймодом в папку ресурса.
+  -->
+  <PropertyGroup>
+    <AssemblyName>FloVMP.Core</AssemblyName>
+    <RootNamespace>FloVMP.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>

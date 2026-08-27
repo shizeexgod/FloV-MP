@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>FloV:MP</title>
+<style>
+  :root {
+    --accent: #ff3d8a;
+    --accent-dim: #b32c64;
+    --bg0: #0f1015;
+    --bg1: #191b24;
+    --bg2: #22252f;
+    --stroke: #333747;
+    --text0: #eef0f6;
+    --text1: #9aa0b4;
+    --err: #f85149;
+    --ok: #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: transparent;
+    color: var(--text0);
+    overflow: hidden;
+    user-select: none;
+  }
+  .backdrop {
+    position: absolute; inset: 0;
+    background: radial-gradient(1200px 800px at 50% 30%, #1b1d2b 0%, #0b0c11 70%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 360px;
+    background: var(--bg1);
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    padding: 28px 26px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+  }
+  .brand {
+    font-size: 26px; font-weight: 700; letter-spacing: .5px;
+    margin-bottom: 2px;
+  }
+  .brand span { color: var(--accent); }
+  .sub { color: var(--text1); font-size: 12px; margin-bottom: 22px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .tabs button {
+    flex: 1; padding: 8px 0;
+    background: var(--bg2); color: var(--text1);
+    border: 1px solid var(--stroke); border-radius: 8px;
+    font-size: 13px; cursor: pointer;
+  }
+  .tabs button.active {
+    background: var(--accent); border-color: var(--accent);
+    color: #fff; font-weight: 600;
+  }
+
+  label { display: block; font-size: 11px; color: var(--text1); margin: 12px 0 5px; }
+  input {
+    width: 100%; padding: 10px 12px;
+    background: var(--bg2); color: var(--text0);
+    border: 1px solid var(--stroke); border-radius: 8px;
+    font-size: 14px; outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+
+  .msg { min-height: 16px; margin-top: 12px; font-size: 12px; }
+  .msg.err { color: var(--err); }
+  .msg.ok  { color: var(--ok); }
+
+  .go {
+    width: 100%; margin-top: 16px; padding: 12px 0;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 9px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .go:hover { background: var(--accent-dim); }
+  .go:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<div class="backdrop">
+  <div class="card">
+    <div class="brand">FloV<span>:MP</span></div>
+    <div class="sub">Florida V — независимый мультиплеер</div>
+
+    <div class="tabs">
+      <button id="tab-login" class="active">Вход</button>
+      <button id="tab-reg">Регистрация</button>
+    </div>
+
+    <form id="form" autocomplete="off">
+      <label for="user">Никнейм</label>
+      <input id="user" maxlength="20" spellcheck="false" />
+      <label for="pass">Пароль</label>
+      <input id="pass" type="password" maxlength="100" />
+      <div id="msg" class="msg"></div>
+      <button id="go" class="go" type="submit">Войти</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  var mode = "login";
+  var busy = false;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function setMode(m) {
+    mode = m;
+    $("tab-login").classList.toggle("active", m === "login");
+    $("tab-reg").classList.toggle("active", m === "reg");
+    $("go").textContent = m === "login" ? "Войти" : "Зарегистрироваться";
+    setMsg("", "");
+  }
+  function setMsg(text, kind) {
+    var el = $("msg");
+    el.textContent = text || "";
+    el.className = "msg" + (kind ? " " + kind : "");
+  }
+  function setBusy(b) {
+    busy = b;
+    $("go").disabled = b;
+  }
+
+  $("tab-login").addEventListener("click", function () { setMode("login"); });
+  $("tab-reg").addEventListener("click", function () { setMode("reg"); });
+
+  $("form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var user = $("user").value.trim();
+    var pass = $("pass").value;
+    if (user.length < 3 || pass.length < 6) {
+      setMsg("Никнейм от 3 символов, пароль от 6.", "err");
+      return;
+    }
+    setBusy(true);
+    setMsg("Отправка…", "");
+    if (typeof alt !== "undefined") {
+      alt.emit("flovmp:auth:submit", mode, user, pass);
+    }
+  });
+
+  if (typeof alt !== "undefined") {
+    alt.on("flovmp:auth:result", function (ok, message) {
+      setBusy(false);
+      setMsg(message || (ok ? "Готово" : "Ошибка"), ok ? "ok" : "err");
+    });
+  }
+
+  // Локальный превью вне alt:V
+  if (typeof alt === "undefined") setMsg("(превью вне игры)", "");
+</script>
+</body>
+</html>

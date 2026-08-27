@@ -62,12 +62,14 @@ launcher/src/FloVMP.Launcher/bin/Debug/net8.0-windows/FloVMP.Launcher.exe
 | [`docs/engine-recon.md`](docs/engine-recon.md) | что в бэкапе alt:V, сборка рантайма, требование .NET 8 |
 | [`docs/server-config.md`](docs/server-config.md) | формат `server.toml` / `resource.toml` |
 | [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | скелет сервера: C#-геймод + JS-клиент |
+| [`docs/phase3-auth.md`](docs/phase3-auth.md) | каркас авторизации: C# + NUI |
 | [`docs/telemetry-sentry.md`](docs/telemetry-sentry.md) | отключение Sentry-телеметрии сервера |
 | [`docs/launcher.md`](docs/launcher.md) | архитектура лаунчера |
 | [`docs/client-direct-connect.md`](docs/client-direct-connect.md) | прямое подключение клиента alt:V, флаги `altv.exe` |
 | [`docs/launcher-cdn.md`](docs/launcher-cdn.md) | система CDN-манифеста (сверка/докачка ядра) |
 | [`docs/launcher-compat.md`](docs/launcher-compat.md) | совместимость с патчами GTA V (Вариант 1/2) |
 | [`docs/client-recovery-plan.md`](docs/client-recovery-plan.md) | реконструкция клиента alt:V (85/85) |
+| [`docs/live-test-guide.md`](docs/live-test-guide.md) | пошаговый живой тест (нужен GTA V) |
 
 ## Разработка
 

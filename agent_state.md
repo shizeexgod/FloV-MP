@@ -23,7 +23,27 @@ Updated: 2026-08-27
 | 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher-compat.md` |
 | 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/live-test-guide.md` |
 | 11 | Репо-гигиена: `.gitattributes`, `README.md`, CI (GitHub Actions build+test) | todo |
-| 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | todo |
+| 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | ✅ done — `FloVMP.Core/Auth/*` (PBKDF2, стор, троттлинг), `AuthSystem` (спавн только после входа), NUI `html/auth/`, 12 тестов. Визуальный поток не проверен. `docs/phase3-auth.md` |
+| 13 | CI — проверить, что GitHub Actions зелёный; добавить server-тесты в CI | todo |
+| 14 | Фаза 3: HUD (C# события + NUI) | todo |
+
+## Done (сессия 2026-08-28, часть 7 — Фаза 3: авторизация, задача #12)
+- **`server/src/FloVMP.Core/`** — новый проект чистой логики (net8.0, без
+  AltV.Net). `Auth/`: `PasswordHasher` (PBKDF2-SHA256 120k), `Account`
+  (+правила валидации), `IAccountStore`/`JsonAccountStore` (потокобезопасно,
+  durable), `AuthService` (Register/Login + троттлинг подбора).
+- **`FloVMP.Gamemode`**: `Systems/Auth/AuthSystem` — connect больше не
+  спавнит, шлёт `auth:show`; `Alt.OnClient` login/register; при успехе
+  `_authed[player.Id]` + колбэк спавна. `PlayerLifecycle.SpawnAuthed`
+  вынесен из connect. `GamemodeResource` связывает. Стор →
+  `<serverRoot>\flovmp-data\accounts.json`.
+- **Клиент NUI**: `client/html/auth/index.html` (вход/регистрация, тёмная
+  тема + `#ff3d8a`), `client/index.js` — WebView + камера + мост NUI↔сервер.
+  `resource.toml` client-files → `client/**/*`.
+- **`server/tests/FloVMP.Core.Tests/`** — 12 xUnit (PBKDF2 round-trip/соль,
+  Register/Login, дубль case-insensitive, rate-limit + разблок, персист).
+- boot-тест зелёный; версия геймода → `0.2.0-phase3-auth`.
+- `docs/phase3-auth.md`.
 
 ## Done (сессия 2026-08-28, часть 6 — реконструкция клиента, задача #10)
 - **Определена версия CEF клиента** — Chromium 131.0.6778.205 (по `chrome_elf.dll`).

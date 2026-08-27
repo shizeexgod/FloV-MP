@@ -7,5 +7,5 @@ namespace FloVMP.Gamemode;
 public static class BuildInfo
 {
     /// <summary>Версия геймода FloV:MP (не путать с версией движка alt:V).</summary>
-    public const string Version = "0.1.0-phase1";
+    public const string Version = "0.2.0-phase3-auth";
 }

@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/FloVMP.Core/FloVMP.Core.csproj" />
     <Project Path="src/FloVMP.Gamemode/FloVMP.Gamemode.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj" />
   </Folder>
 </Solution>

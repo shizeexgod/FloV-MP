@@ -18,10 +18,14 @@ jobs:
           dotnet-version: |
             8.0.x
 
-      # Сервер: собираем C#-геймод (тянет AltV.Net из NuGet).
-      # assemble-runtime.ps1 в CI не гоняем — нужен локальный бэкап alt:V.
-      - name: Build server gamemode
-        run: dotnet build server/src/FloVMP.Gamemode/FloVMP.Gamemode.csproj -c Release --nologo
+      # Сервер: сборка решения (геймод тянет AltV.Net из NuGet) + тесты
+      # чистой логики (FloVMP.Core.Tests). assemble-runtime.ps1 в CI не
+      # гоняем — нужен локальный бэкап alt:V.
+      - name: Build server solution
+        run: dotnet build server/FloVMP.slnx -c Release --nologo
+
+      - name: Test server core
+        run: dotnet test server/FloVMP.slnx -c Release --nologo --no-build
 
       # Лаунчер: сборка всех проектов + xUnit-тесты (Core-логика без WPF).
       - name: Build launcher solution

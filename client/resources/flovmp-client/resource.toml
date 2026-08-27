@@ -1,9 +1,7 @@
 # FloV:MP — клиентский ресурс (js-module).
 # Чистый client-side: серверной логики нет (она в flovmp-core на C#).
-# Задача на Фазе 1 — доказать, что js-module грузится и события
-# сервер → клиент доходят.
 type = "js"
 client-main = "client/index.js"
 client-files = [
-    "client/*",
+    "client/**/*",
 ]

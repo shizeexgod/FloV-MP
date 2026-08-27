@@ -17,6 +17,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       Версия AltV.Net: последняя стабильная из NuGet-линейки 16.4.x
       (сервер в бэкапе — 16.4.39, отдельного пакета под .39 нет, ABI внутри

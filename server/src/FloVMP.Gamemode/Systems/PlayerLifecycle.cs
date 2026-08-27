@@ -5,10 +5,12 @@ using AltV.Net.Enums;
 namespace FloVMP.Gamemode;
 
 /// <summary>
-/// Жизненный цикл игрока для Фазы 1: подключился → выдать модель и заспавнить,
-/// отключился → просто залогировать. Ничего лишнего — задача этой фазы в том,
-/// чтобы два клиента увидели друг друга и подвигались; вся синхронизация
-/// позиций/анимаций дальше идёт штатным сетевым движком alt:V сама.
+/// Появление игрока в мире — теперь ПОСЛЕ авторизации (<see cref="AuthSystem"/>
+/// вызывает <see cref="SpawnAuthed"/>). До входа игрок не спавнится: клиент
+/// висит на чёрном экране с NUI логина.
+///
+/// Взаимную видимость и синхронизацию перемещения дальше обеспечивает
+/// сетевой движок alt:V сам.
 /// </summary>
 public sealed class PlayerLifecycle
 {
@@ -16,22 +18,18 @@ public sealed class PlayerLifecycle
 
     public void Attach()
     {
-        Alt.OnPlayerConnect += OnPlayerConnect;
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
     }
 
     public void Detach()
     {
-        Alt.OnPlayerConnect -= OnPlayerConnect;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
     }
 
-    private void OnPlayerConnect(IPlayer player, string reason)
+    /// <summary>Заспавнить уже авторизованного игрока.</summary>
+    public void SpawnAuthed(IPlayer player, int accountId)
     {
-        if (!player.Exists)
-        {
-            return;
-        }
+        if (!player.Exists) return;
 
         var index = _spawnCounter++;
         var position = SpawnPoints.Scattered(SpawnPoints.LegionSquare, index);
@@ -40,11 +38,9 @@ public sealed class PlayerLifecycle
         player.Dimension = 0;
         player.Spawn(position, 0);
 
-        // C# → JS round-trip: клиентский ресурс ловит это событие и рисует
-        // приветствие. Заодно проверяем, что js-module жив и связь работает.
         player.Emit("flovmp:client:welcome", player.Name, index);
 
-        Alt.Log($"[FloV:MP] connect: {player.Name} (id {player.Id}) -> spawn #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
+        Alt.Log($"[FloV:MP] spawn: {player.Name} (acc {accountId}) -> #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
     }
 
     private static void OnPlayerDisconnect(IPlayer player, string reason)

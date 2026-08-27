@@ -1,3 +1,4 @@
+using System.IO;
 using AltV.Net;
 
 namespace FloVMP.Gamemode;
@@ -7,13 +8,12 @@ namespace FloVMP.Gamemode;
 /// наследник <see cref="Resource"/> в сборке) и вызывает <see cref="OnStart"/>
 /// при старте ресурса, <see cref="OnStop"/> — при остановке/перезагрузке.
 ///
-/// Здесь только проводка: создаём системы и отдаём им подписку на события.
-/// Никакой игровой логики в самом классе-точке входа — так проще тестировать
-/// системы по отдельности и не превращать точку входа в свалку.
+/// Здесь только проводка систем.
 /// </summary>
 public class GamemodeResource : Resource
 {
     private PlayerLifecycle? _playerLifecycle;
+    private AuthSystem? _auth;
 
     public override void OnStart()
     {
@@ -21,6 +21,11 @@ public class GamemodeResource : Resource
 
         _playerLifecycle = new PlayerLifecycle();
         _playerLifecycle.Attach();
+
+        var accountsPath = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data", "accounts.json");
+        _auth = new AuthSystem(accountsPath, (player, accountId) => _playerLifecycle.SpawnAuthed(player, accountId));
+        _auth.Attach();
+        Alt.Log($"[FloV:MP] core: auth store -> {accountsPath}");
 
         Alt.OnServerStarted += OnServerStarted;
 
@@ -30,6 +35,8 @@ public class GamemodeResource : Resource
     public override void OnStop()
     {
         Alt.OnServerStarted -= OnServerStarted;
+        _auth?.Detach();
+        _auth = null;
         _playerLifecycle?.Detach();
         _playerLifecycle = null;
 
