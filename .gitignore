@@ -1,0 +1,18 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+
+# Node / JS tooling (client NUI, if a build step gets added later)
+node_modules/
+dist/
+
+# Secrets — never commit
+secrets.local.md
+*.env
+appsettings.*.local.json
+
+# OS junk
+.DS_Store
+Thumbs.db
