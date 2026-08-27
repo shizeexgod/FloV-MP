@@ -5,6 +5,8 @@
     <Application.Resources>
         <!-- Палитра FloV:MP: тёмная тема + розовый акцент Florida V (#FF3D8A).
              Полноценный дизайн — отдельным заходом; здесь рабочий минимум. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
         <Color x:Key="AccentColor">#FF3D8A</Color>
         <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}"/>
         <SolidColorBrush x:Key="AccentDim" Color="#B32C64"/>

@@ -30,6 +30,13 @@ public sealed class LauncherSettings
     public string Branch { get; set; } = "release";
 
     /// <summary>
+    /// URL (или локальный путь) манифеста CDN для ядра клиента. Если задан —
+    /// лаунчер может проверить/докачать ядро в AltvCoreDir по этому манифесту.
+    /// Пусто = ручной режим (AltvCoreDir указывается вручную).
+    /// </summary>
+    public string CoreManifestUrl { get; set; } = "";
+
+    /// <summary>
     /// Разрешить лаунчеру синхронизировать глобальный
     /// %LOCALAPPDATA%\altv\altv.toml (gtapath / branch) перед запуском.
     /// По умолчанию выключено — глобальный файл общий с обычным alt:V.

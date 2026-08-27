@@ -6,6 +6,11 @@
     <AssemblyName>FloVMP.Launcher</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>0.1.0</Version>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Launcher.Core\FloVMP.Launcher.Core.csproj" />
+  </ItemGroup>
 
 </Project>

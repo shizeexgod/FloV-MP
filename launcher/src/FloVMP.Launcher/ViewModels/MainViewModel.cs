@@ -3,6 +3,7 @@ using System.Windows.Media;
 using FloVMP.Launcher.Models;
 using FloVMP.Launcher.Mvvm;
 using FloVMP.Launcher.Services;
+using FloVMP.Launcher.Services.Cdn;
 using Microsoft.Win32;
 
 namespace FloVMP.Launcher.ViewModels;
@@ -10,6 +11,8 @@ namespace FloVMP.Launcher.ViewModels;
 public sealed class MainViewModel : ObservableObject
 {
     private readonly LauncherSettings _s;
+    private readonly SyncService _sync = new();
+    private CancellationTokenSource? _syncCts;
 
     public MainViewModel()
     {
@@ -19,8 +22,14 @@ public sealed class MainViewModel : ObservableObject
         DetectGtaCommand = new RelayCommand(DetectGta);
         BrowseGtaCommand = new RelayCommand(BrowseGta);
         BrowseCoreCommand = new RelayCommand(BrowseCore);
+        SyncCoreCommand = new RelayCommand(async () => await SyncCoreAsync(), () => !IsSyncing && !string.IsNullOrWhiteSpace(_s.CoreManifestUrl));
         PlayCommand = new RelayCommand(Play, () => CanPlay);
         SaveCommand = new RelayCommand(Save);
+
+        if (string.IsNullOrWhiteSpace(_s.AltvCoreDir))
+        {
+            _s.AltvCoreDir = Path.Combine(SettingsStore.Dir, "client");
+        }
 
         // Автозаполнение при первом старте.
         if (string.IsNullOrWhiteSpace(_s.GtaPath))
@@ -92,6 +101,27 @@ public sealed class MainViewModel : ObservableObject
         set { _s.SyncAltvToml = value; OnPropertyChanged(); }
     }
 
+    public string CoreManifestUrl
+    {
+        get => _s.CoreManifestUrl;
+        set { _s.CoreManifestUrl = value; OnPropertyChanged(); SyncCoreCommand.RaiseCanExecuteChanged(); }
+    }
+
+    // --- состояние синхронизации ядра ----------------------------
+
+    private bool _isSyncing;
+    public bool IsSyncing
+    {
+        get => _isSyncing;
+        private set { if (SetField(ref _isSyncing, value)) { SyncCoreCommand.RaiseCanExecuteChanged(); PlayCommand.RaiseCanExecuteChanged(); } }
+    }
+
+    private double _syncFraction;
+    public double SyncFraction { get => _syncFraction; private set => SetField(ref _syncFraction, value); }
+
+    private string _syncStatusText = "";
+    public string SyncStatusText { get => _syncStatusText; private set => SetField(ref _syncStatusText, value); }
+
     // --- производные (для UI) --------------------------------------
 
     private string _serverStatusText = "не проверено";
@@ -120,8 +150,52 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand DetectGtaCommand { get; }
     public RelayCommand BrowseGtaCommand { get; }
     public RelayCommand BrowseCoreCommand { get; }
+    public RelayCommand SyncCoreCommand { get; }
     public RelayCommand PlayCommand { get; }
     public RelayCommand SaveCommand { get; }
+
+    private async Task SyncCoreAsync()
+    {
+        if (IsSyncing) return;
+        IsSyncing = true;
+        SyncFraction = 0;
+        _syncCts = new CancellationTokenSource();
+
+        var log = new Progress<string>(Log);
+        var prog = new Progress<DownloadProgress>(p =>
+        {
+            SyncFraction = p.Fraction;
+            SyncStatusText = $"{p.FilesDone}/{p.FilesTotal} · {p.DoneBytes / 1048576d:0.0}/{p.TotalBytes / 1048576d:0.0} МБ · {p.BytesPerSecond / 1048576d:0.0} МБ/с";
+        });
+
+        try
+        {
+            Save();
+            Log($"Синхронизация ядра: {_s.CoreManifestUrl} → {_s.AltvCoreDir}");
+            var report = await _sync.SyncAsync(_s.CoreManifestUrl, _s.AltvCoreDir, log, prog, _syncCts.Token);
+            SyncStatusText = report.Message;
+            Log("Итог: " + report.Message);
+            if (report.Download?.Errors is { Count: > 0 } errs)
+            {
+                foreach (var e in errs.Take(10)) Log("  ! " + e);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Log("Синхронизация отменена.");
+            SyncStatusText = "отменено";
+        }
+        catch (Exception ex)
+        {
+            Log("ОШИБКА синхронизации: " + ex.GetBaseException().Message);
+            SyncStatusText = "ошибка";
+        }
+        finally
+        {
+            IsSyncing = false;
+            RefreshDerived();
+        }
+    }
 
     private async Task CheckServerAsync()
     {

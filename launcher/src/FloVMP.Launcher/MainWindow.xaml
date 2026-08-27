@@ -81,7 +81,22 @@
                     <TextBox Grid.Column="0" Text="{Binding AltvCoreDir, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
                     <Button Grid.Column="1" Content="Обзор…" Command="{Binding BrowseCoreCommand}"/>
                 </Grid>
-                <TextBlock Text="{Binding CoreStatusText}" Foreground="{StaticResource Text1}" FontSize="11" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding CoreStatusText}" Foreground="{StaticResource Text1}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                <TextBlock Text="ОБНОВЛЕНИЕ ЯДРА ПО МАНИФЕСТУ (URL или путь к manifest.json)" Style="{StaticResource Caption}"/>
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding CoreManifestUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                    <Button Grid.Column="1" Content="Проверить / Обновить" Command="{Binding SyncCoreCommand}"/>
+                </Grid>
+                <ProgressBar Height="6" Minimum="0" Maximum="1" Value="{Binding SyncFraction, Mode=OneWay}"
+                             Background="{StaticResource Bg0}" Foreground="{StaticResource Accent}"
+                             BorderThickness="0" Margin="0,4,0,4"
+                             Visibility="{Binding IsSyncing, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="{Binding SyncStatusText}" Foreground="{StaticResource Text1}" FontSize="11" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
 

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Логика лаунчера без UI: детект GTA V, ядро клиента alt:V, статус сервера,
+    настройки, CDN-манифест/сверка/загрузчик. Без WPF — чтобы покрывалось
+    тестами (FloVMP.Launcher.Tests) и не тянуло десктоп-стек в юнит-раннер.
+    net8.0-windows нужен только ради Microsoft.Win32.Registry (GtaLocator).
+  -->
+  <PropertyGroup>
+    <RootNamespace>FloVMP.Launcher</RootNamespace>
+    <AssemblyName>FloVMP.Launcher.Core</AssemblyName>
+    <UseWPF>false</UseWPF>
+  </PropertyGroup>
+
+</Project>

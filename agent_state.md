@@ -19,8 +19,27 @@ Updated: 2026-08-27
 | 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
 | 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
 | 7 | Полный клиент alt:V 16.4.x (release, x64_win32) | **BLOCKED, но есть план.** Официальные источники мертвы (CDN DNS нет, `altv.mp` 502, GitHub `altmp` — только вспом. репы). План восстановления: `docs/client-recovery-plan.md` — 66/68 файлов берутся из живых сторонних источников (CEF 131.0.6778.205 подтверждён на cef-builds), реальная стена только `legacy.dll` (обход — Enhanced GTA V). Нужен владелец: community-зеркало ИЛИ решение по Enhanced |
-| 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | todo |
+| 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
 | 9 | Лаунчер: гибридная совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | todo |
+| 10 | Реконструкция клиента alt:V из сторонних источников (CEF 131.0.6778.205 и т.д.) | todo, если не будет зеркала — см. `docs/client-recovery-plan.md` |
+
+## Done (сессия 2026-08-28, часть 4 — CDN-манифест лаунчера, задача #8)
+- **Рефактор лаунчера на 3 проекта**: `FloVMP.Launcher.Core` (net8.0-windows,
+  без WPF — вся логика, тестируемо), `FloVMP.Launcher` (WPF-UI, ссылается на
+  Core), `FloVMP.Launcher.Tests` (xUnit).
+- **Система CDN-манифеста** `Core/Services/Cdn/`: `Manifest`/`ManifestEntry`,
+  `ManifestClient` (http/локальный/`file://`), `ContentHasher` (SHA-256),
+  `SyncPlanner` (Ok/Missing/WrongSize/WrongHash + лишние), `FileDownloader`
+  (параллельно, HTTP Range докачка, ретраи+backoff, `.part`→атомарный Move,
+  проверка хэша после), `SyncService` (Check/Sync + прогресс/лог).
+- **6 xUnit-тестов** на локальной раздаче — все зелёные (актуальность,
+  классификация, докачка+починка, прогресс до 1.0, ретрай→провал с чистым
+  `.part`, манифест без baseUrl).
+- **`scripts/make-manifest.ps1`** — генератор манифеста из папки (SHA-256).
+- **UI**: секция «Обновление ядра по манифесту» — поле URL, кнопка
+  Проверить/Обновить, прогресс-бар, статус (файлы/МБ/скорость). Настройка
+  `CoreManifestUrl`. Управляемая папка по умолчанию `%LOCALAPPDATA%\FloVMP\client`.
+- `docs/launcher-cdn.md`.
 
 ## Done (сессия 2026-08-27, часть 3 — Sentry + сеть)
 - **Sentry-телеметрия отключена.** `altv-server.exe` содержит sentry-native
