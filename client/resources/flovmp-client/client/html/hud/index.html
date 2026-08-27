@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>FloV:MP HUD</title>
+<style>
+  :root {
+    --accent: #ff3d8a;
+    --text0: #eef0f6;
+    --text1: #b9bed0;
+    --panel: rgba(15, 16, 21, .62);
+    --stroke: rgba(255, 255, 255, .08);
+    --hp: #3fb950;
+    --armor: #4aa3ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: transparent;
+    color: var(--text0);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .topright {
+    position: absolute; top: 18px; right: 20px;
+    text-align: right;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 10px 14px;
+    backdrop-filter: blur(4px);
+  }
+  .brand { font-size: 12px; color: var(--text1); letter-spacing: .5px; }
+  .brand b { color: var(--accent); }
+  .cash { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .meta { font-size: 11px; color: var(--text1); margin-top: 3px; }
+
+  .botleft {
+    position: absolute; left: 20px; bottom: 22px;
+    width: 190px;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    padding: 12px 14px;
+    backdrop-filter: blur(4px);
+  }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .bar-row .lbl { width: 16px; font-size: 11px; color: var(--text1); }
+  .bar {
+    flex: 1; height: 8px; border-radius: 5px;
+    background: rgba(255, 255, 255, .12);
+    overflow: hidden;
+  }
+  .bar > i { display: block; height: 100%; width: 0%; transition: width .25s ease; }
+  .bar.hp > i { background: var(--hp); }
+  .bar.armor > i { background: var(--armor); }
+  .val { width: 26px; text-align: right; font-size: 11px; color: var(--text1); }
+</style>
+</head>
+<body>
+  <div class="topright">
+    <div class="brand">Flo<b>V:MP</b> · <span id="server">—</span></div>
+    <div class="cash">$<span id="cash">0</span></div>
+    <div class="meta"><span id="clock">00:00</span> · онлайн <span id="online">0</span></div>
+  </div>
+
+  <div class="botleft">
+    <div class="bar-row">
+      <span class="lbl">HP</span>
+      <span class="bar hp"><i id="hp-fill"></i></span>
+      <span class="val" id="hp-val">0</span>
+    </div>
+    <div class="bar-row">
+      <span class="lbl">AR</span>
+      <span class="bar armor"><i id="ar-fill"></i></span>
+      <span class="val" id="ar-val">0</span>
+    </div>
+  </div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  if (typeof alt !== "undefined") {
+    alt.on("flovmp:hud:init", function (serverName) {
+      $("server").textContent = serverName || "—";
+    });
+
+    alt.on("flovmp:hud:tick", function (hp, armor, cash, online, hour, minute) {
+      $("hp-fill").style.width = Math.max(0, Math.min(100, hp)) + "%";
+      $("ar-fill").style.width = Math.max(0, Math.min(100, armor)) + "%";
+      $("hp-val").textContent = hp;
+      $("ar-val").textContent = armor;
+      $("cash").textContent = Number(cash).toLocaleString("ru-RU");
+      $("online").textContent = online;
+      $("clock").textContent = pad(hour) + ":" + pad(minute);
+    });
+  }
+</script>
+</body>
+</html>

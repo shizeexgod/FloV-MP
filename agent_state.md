@@ -24,8 +24,19 @@ Updated: 2026-08-27
 | 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/live-test-guide.md` |
 | 11 | Репо-гигиена: `.gitattributes`, `README.md`, CI (GitHub Actions build+test) | todo |
 | 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | ✅ done — `FloVMP.Core/Auth/*` (PBKDF2, стор, троттлинг), `AuthSystem` (спавн только после входа), NUI `html/auth/`, 12 тестов. Визуальный поток не проверен. `docs/phase3-auth.md` |
-| 13 | CI — проверить, что GitHub Actions зелёный; добавить server-тесты в CI | todo |
-| 14 | Фаза 3: HUD (C# события + NUI) | todo |
+| 13 | CI — GitHub Actions | ✅ зелёный (#11 run success 1m26s). Server-тесты добавлены в CI (#12). |
+| 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/phase3-hud.md` |
+| 15 | Фаза 3: инвентарь (C# + NUI) | todo |
+
+## Done (сессия 2026-08-28, часть 8 — Фаза 3: HUD, задача #14)
+- `Systems/Hud/HudSystem.cs` — раз в 1с (аккумулятор в `OnTick`) шлёт
+  каждому вошедшему `flovmp:hud:tick {hp, armor, cash, online, hour, minute}`.
+- `Account.Cash` (стартовый 5000), персистится.
+- `GamemodeResource.OnTick` → `_hud.Tick()`; `OnPlayerAuthed` теперь спавн + HUD.
+- `AuthSystem` колбэк → `Action<IPlayer, Account>`, добавлен `AccountOf`.
+- Клиент: `client/html/hud/index.html` (полоски HP/AR, $cash, часы, онлайн,
+  `#ff3d8a`), постоянный WebView в `index.js`.
+- boot-тест зелёный. `docs/phase3-hud.md`.
 
 ## Done (сессия 2026-08-28, часть 7 — Фаза 3: авторизация, задача #12)
 - **`server/src/FloVMP.Core/`** — новый проект чистой логики (net8.0, без

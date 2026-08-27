@@ -23,13 +23,17 @@ public sealed class AuthSystem
 {
     private readonly AuthService _auth;
     private readonly ConcurrentDictionary<uint, Account> _authed = new();
-    private readonly Action<IPlayer, int> _spawnAuthed;
+    private readonly Action<IPlayer, Account> _onAuthed;
 
-    public AuthSystem(string accountsPath, Action<IPlayer, int> spawnAuthed)
+    public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
     {
         _auth = new AuthService(new JsonAccountStore(accountsPath));
-        _spawnAuthed = spawnAuthed;
+        _onAuthed = onAuthed;
     }
+
+    /// <summary>Аккаунт вошедшего игрока, либо null.</summary>
+    public Account? AccountOf(IPlayer player) =>
+        _authed.TryGetValue(player.Id, out var a) ? a : null;
 
     public void Attach()
     {
@@ -99,7 +103,7 @@ public sealed class AuthSystem
         _authed[player.Id] = account;
         Alt.Log($"[FloV:MP] auth: {player.Name} вошёл как '{account.Username}' (id {account.Id})");
         player.Emit("flovmp:auth:hide");
-        _spawnAuthed(player, account.Id);
+        _onAuthed(player, account);
     }
 
     private static string ThrottleKey(IPlayer player)

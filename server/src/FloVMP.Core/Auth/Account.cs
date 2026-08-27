@@ -9,6 +9,11 @@ public sealed class Account
     public string CreatedUtc { get; set; } = "";
     public string LastLoginUtc { get; set; } = "";
 
+    /// <summary>Наличные на руках. Стартовый баланс — <see cref="StartingCash"/>.</summary>
+    public long Cash { get; set; } = StartingCash;
+
+    public const long StartingCash = 5000;
+
     /// <summary>Правила имени пользователя (общие для клиента и сервера).</summary>
     public static bool IsValidUsername(string? name) =>
         !string.IsNullOrWhiteSpace(name)

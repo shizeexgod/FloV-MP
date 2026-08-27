@@ -18,6 +18,7 @@ alt.log('[FloV:MP] client: ресурс flovmp-client загружен');
 
 let authView = null;
 let authCamera = null;
+let hudView = null;
 
 function openAuth() {
     if (authView) return;
@@ -65,11 +66,34 @@ function closeAuth() {
     }
 }
 
+function openHud() {
+    if (hudView) return;
+    hudView = new alt.WebView('http://resource/client/html/hud/index.html');
+}
+
+function closeHud() {
+    if (hudView) {
+        hudView.destroy();
+        hudView = null;
+    }
+}
+
 alt.onServer('flovmp:auth:show', openAuth);
-alt.onServer('flovmp:auth:hide', closeAuth);
+alt.onServer('flovmp:auth:hide', () => {
+    closeAuth();
+    openHud();
+});
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
     if (authView) authView.emit('flovmp:auth:result', ok, message);
+});
+
+alt.onServer('flovmp:hud:init', (serverName) => {
+    if (hudView) hudView.emit('flovmp:hud:init', serverName);
+});
+
+alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
+    if (hudView) hudView.emit('flovmp:hud:tick', hp, armor, cash, online, hour, minute);
 });
 
 alt.on('connectionComplete', () => {
@@ -78,6 +102,7 @@ alt.on('connectionComplete', () => {
 
 alt.on('disconnect', () => {
     closeAuth();
+    closeHud();
     alt.log('[FloV:MP] client: disconnect');
 });
 
