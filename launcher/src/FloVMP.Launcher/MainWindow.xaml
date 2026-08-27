@@ -96,7 +96,10 @@
                              Background="{StaticResource Bg0}" Foreground="{StaticResource Accent}"
                              BorderThickness="0" Margin="0,4,0,4"
                              Visibility="{Binding IsSyncing, Converter={StaticResource BoolToVis}}"/>
-                <TextBlock Text="{Binding SyncStatusText}" Foreground="{StaticResource Text1}" FontSize="11" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding SyncStatusText}" Foreground="{StaticResource Text1}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                <TextBlock Text="МАНИФЕСТ СОВМЕСТИМОСТИ С ВЕРСИЯМИ GTA V (URL или путь, опционально)" Style="{StaticResource Caption}"/>
+                <TextBox Text="{Binding CompatManifestUrl, UpdateSourceTrigger=PropertyChanged}"/>
             </StackPanel>
         </Border>
 

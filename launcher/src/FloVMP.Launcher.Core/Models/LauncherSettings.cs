@@ -37,6 +37,12 @@ public sealed class LauncherSettings
     public string CoreManifestUrl { get; set; } = "";
 
     /// <summary>
+    /// URL (или локальный путь) манифеста совместимости с версиями GTA5.exe
+    /// (Вариант 1/2). Пусто = проверка совместимости пропускается.
+    /// </summary>
+    public string CompatManifestUrl { get; set; } = "";
+
+    /// <summary>
     /// Разрешить лаунчеру синхронизировать глобальный
     /// %LOCALAPPDATA%\altv\altv.toml (gtapath / branch) перед запуском.
     /// По умолчанию выключено — глобальный файл общий с обычным alt:V.

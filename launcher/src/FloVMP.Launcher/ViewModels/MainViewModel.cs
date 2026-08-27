@@ -4,6 +4,7 @@ using FloVMP.Launcher.Models;
 using FloVMP.Launcher.Mvvm;
 using FloVMP.Launcher.Services;
 using FloVMP.Launcher.Services.Cdn;
+using FloVMP.Launcher.Services.Compat;
 using Microsoft.Win32;
 
 namespace FloVMP.Launcher.ViewModels;
@@ -23,7 +24,7 @@ public sealed class MainViewModel : ObservableObject
         BrowseGtaCommand = new RelayCommand(BrowseGta);
         BrowseCoreCommand = new RelayCommand(BrowseCore);
         SyncCoreCommand = new RelayCommand(async () => await SyncCoreAsync(), () => !IsSyncing && !string.IsNullOrWhiteSpace(_s.CoreManifestUrl));
-        PlayCommand = new RelayCommand(Play, () => CanPlay);
+        PlayCommand = new RelayCommand(async () => await PlayAsync(), () => CanPlay);
         SaveCommand = new RelayCommand(Save);
 
         if (string.IsNullOrWhiteSpace(_s.AltvCoreDir))
@@ -47,6 +48,8 @@ public sealed class MainViewModel : ObservableObject
         Log("Лаунчер запущен. Настройки: " + SettingsStore.FilePath);
         if (!string.IsNullOrWhiteSpace(_s.GtaPath))
             Log("GTA V: " + _s.GtaPath);
+        if (!string.IsNullOrWhiteSpace(App.StartupRestoreNote))
+            Log(App.StartupRestoreNote!);
     }
 
     // --- прокси-свойства к настройкам --------------------------------
@@ -105,6 +108,12 @@ public sealed class MainViewModel : ObservableObject
     {
         get => _s.CoreManifestUrl;
         set { _s.CoreManifestUrl = value; OnPropertyChanged(); SyncCoreCommand.RaiseCanExecuteChanged(); }
+    }
+
+    public string CompatManifestUrl
+    {
+        get => _s.CompatManifestUrl;
+        set { _s.CompatManifestUrl = value; OnPropertyChanged(); }
     }
 
     // --- состояние синхронизации ядра ----------------------------
@@ -239,11 +248,14 @@ public sealed class MainViewModel : ObservableObject
         if (dlg.ShowDialog() == true) AltvCoreDir = dlg.FolderName;
     }
 
-    private void Play()
+    private async Task PlayAsync()
     {
         try
         {
             Save();
+
+            if (!await CompatGateAsync())
+                return;
 
             if (_s.SyncAltvToml)
             {
@@ -262,6 +274,42 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             Log("ОШИБКА запуска: " + ex);
+        }
+    }
+
+    /// <summary>
+    /// Проверка совместимости версии GTA5.exe перед запуском. Возвращает
+    /// false = запуск отменён (версия сломана). Предупреждения не блокируют.
+    /// </summary>
+    private async Task<bool> CompatGateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_s.CompatManifestUrl))
+            return true;
+
+        var game = GameVersion.Detect(_s.GtaPath);
+        if (game is null)
+        {
+            Log("Совместимость: не удалось определить версию GTA5.exe — пропускаю проверку.");
+            return true;
+        }
+
+        var res = await new CompatService().EvaluateAsync(_s.CompatManifestUrl, game);
+        Log($"Совместимость [{res.Verdict}]: {res.Message}");
+
+        switch (res.Verdict)
+        {
+            case CompatVerdict.NeedsFallback:
+                Log("  → версия несовместима. Нужен Вариант 2 (подмена GTA5.exe) — пока не автоматизирован. Запуск отменён.");
+                if (res.FallbackBuild is { } b)
+                    Log($"  → эталонный билд для отката: {b.Id} ({b.GtaFileVersion}), url={b.Url}");
+                return false;
+
+            case CompatVerdict.Unknown:
+                Log("  → версия игры новее манифеста. Запускаю, но клиент может не подключиться.");
+                return true;
+
+            default:
+                return true;
         }
     }
 

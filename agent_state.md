@@ -20,8 +20,21 @@ Updated: 2026-08-27
 | 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
 | 7 | Полный клиент alt:V 16.4.x (release, x64_win32) | **BLOCKED, но есть план.** Официальные источники мертвы (CDN DNS нет, `altv.mp` 502, GitHub `altmp` — только вспом. репы). План восстановления: `docs/client-recovery-plan.md` — 66/68 файлов берутся из живых сторонних источников (CEF 131.0.6778.205 подтверждён на cef-builds), реальная стена только `legacy.dll` (обход — Enhanced GTA V). Нужен владелец: community-зеркало ИЛИ решение по Enhanced |
 | 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
-| 9 | Лаунчер: гибридная совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | todo |
-| 10 | Реконструкция клиента alt:V из сторонних источников (CEF 131.0.6778.205 и т.д.) | todo, если не будет зеркала — см. `docs/client-recovery-plan.md` |
+| 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher-compat.md` |
+| 10 | Реконструкция клиента alt:V из сторонних источников (CEF 131.0.6778.205 и т.д.) | в работе — см. `docs/client-recovery-plan.md` |
+
+## Done (сессия 2026-08-28, часть 5 — совместимость с патчами GTA V, задача #9)
+- `Core/Services/Compat/`: `GameVersion` (детект версии GTA5.exe),
+  `CompatManifest` (модели), `CompatService` (вердикт Ok/Untested/
+  NeedsFallback/Unknown/NoManifest), `PendingRestore` (durable-маркер),
+  `GameExeManager` (Вариант 2: атомарная подмена/откат GTA5.exe со всеми
+  мерами безопасности из HANDOFF), `WatchdogSpawner`.
+- Лаунчер: режим `--watchdog <pid> <marker>` в `App.OnStartup` (без UI,
+  ждёт выход игры → откат); startup-проверка маркера перед показом окна;
+  `CompatGateAsync` в Play (блокирует запуск на Broken-версии).
+- 11 тестов (CompatService 5 + GameExeManager 6) — все зелёные. Итого 17.
+- UI: поле «Манифест совместимости». Настройка `CompatManifestUrl`.
+- `docs/launcher-compat.md`.
 
 ## Done (сессия 2026-08-28, часть 4 — CDN-манифест лаунчера, задача #8)
 - **Рефактор лаунчера на 3 проекта**: `FloVMP.Launcher.Core` (net8.0-windows,
