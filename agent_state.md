@@ -15,13 +15,31 @@ Updated: 2026-08-27
 | 1 | Формат `server.toml` / `resource.toml` | ✅ done — `docs/server-config.md`, проверено стартом |
 | 2 | Минимальный C#-ресурс | ✅ done — `flovmp-core` грузится |
 | 3 | Минимальный JS клиентский ресурс | ✅ done — `flovmp-client` грузится |
-| 4 | Тест живым клиентом GTA V | **blocked** — нужен полный набор файлов клиента alt:V 16.4.39 (бэкап неполный, см. ниже) |
+| 4 | Тест живым клиентом GTA V | **разблокирован** — клиент собран 85/85 (`runtime/client/`). Нужен владелец за ПК с GTA V. Гайд: `docs/live-test-guide.md` |
 | 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
 | 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
-| 7 | Полный клиент alt:V 16.4.x (release, x64_win32) | **BLOCKED, но есть план.** Официальные источники мертвы (CDN DNS нет, `altv.mp` 502, GitHub `altmp` — только вспом. репы). План восстановления: `docs/client-recovery-plan.md` — 66/68 файлов берутся из живых сторонних источников (CEF 131.0.6778.205 подтверждён на cef-builds), реальная стена только `legacy.dll` (обход — Enhanced GTA V). Нужен владелец: community-зеркало ИЛИ решение по Enhanced |
+| 7 | Полный клиент alt:V 16.4.x | ✅ собран 85/85 (`runtime/client/`): 17 бэкап + 62 CEF (cef-builds) + 6 из Majestic RP (форк alt:V на этой же машине, вкл. `legacy.dll` с точным совпадением). Работоспособность не проверена (нужен живой запуск). Полный официальный клиент от сообщества снял бы 4 открытых вопроса — всё ещё желателен |
 | 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
 | 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher-compat.md` |
-| 10 | Реконструкция клиента alt:V из сторонних источников (CEF 131.0.6778.205 и т.д.) | в работе — см. `docs/client-recovery-plan.md` |
+| 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/live-test-guide.md` |
+| 11 | Репо-гигиена: `.gitattributes`, `README.md`, CI (GitHub Actions build+test) | todo |
+| 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | todo |
+
+## Done (сессия 2026-08-28, часть 6 — реконструкция клиента, задача #10)
+- **Определена версия CEF клиента** — Chromium 131.0.6778.205 (по `chrome_elf.dll`).
+- **`scripts/fetch-cef.ps1`** — качает официальный CEF
+  `131.3.5+chromium-131.0.6778.205` windows64 minimal (182 МБ) с
+  `cef-builds.spotifycdn.com`, раскладывает Release/ + Resources/ в layout alt:V.
+- **Находка**: на машине стоит **Majestic RP** (форк alt:V),
+  `%APPDATA%\majestic-launcher\Multiplayer\libs\` — оттуда взяты 6
+  недостающих: `legacy.dll` (99448 Б, точное совпадение с манифестом alt:V!),
+  OpenSSL 3 (`libcrypto`/`libssl-3-x64`), `bassmix.dll`, `discord_game_sdk.dll`
+  (все точное совпадение размера), `freetype.dll` (другой билд, под вопросом).
+  `icudtl_v8.dat` — копия `icudtl.dat` (догадка).
+- **`runtime/client/` собран 85/85** + `manifest.json` (86 записей, 318 МБ).
+- Живой запуск НЕ проверен — 4 открытых вопроса в `docs/client-recovery-plan.md`.
+- `docs/live-test-guide.md` — пошаговый гайд теста для владельца.
+- Задача #4 (живой тест) — разблокирована.
 
 ## Done (сессия 2026-08-28, часть 5 — совместимость с патчами GTA V, задача #9)
 - `Core/Services/Compat/`: `GameVersion` (детект версии GTA5.exe),

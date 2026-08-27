@@ -3,6 +3,49 @@
 Обновлено: 2026-08-28
 Вопрос владельца: «если зеркало alt:V не найдётся — всё в трубу?». **Нет.** Ниже почему.
 
+---
+
+## РЕЗУЛЬТАТ (2026-08-28): клиент собран 85/85 файлов
+
+`scripts/fetch-cef.ps1` + `scripts/assemble-client-core.ps1 -FillFrom` собрали
+полный набор в `runtime/client/`:
+
+- **17** файлов — из бэкапа alt:V (`altv.exe`, `altv-client.dll`,
+  `altv-webengine.exe`, `libce2.dll`, `chrome_elf.dll` и т.д.);
+- **62** файла — официальный CEF `131.3.5+chromium-131.0.6778.205` windows64
+  minimal с `cef-builds.spotifycdn.com` (paks, V8-снапшоты, ANGLE/SwiftShader,
+  `d3dcompiler_47`, `dxcompiler`/`dxil`, 55 локалей);
+- **6** файлов — из локальной установки **Majestic RP** (`%APPDATA%\
+  majestic-launcher\Multiplayer\libs\`; Majestic — RP-проект на форке alt:V):
+  `legacy.dll` (99448 Б — **точное совпадение** с манифестом alt:V),
+  `libcrypto-3-x64.dll`, `libssl-3-x64.dll`, `bassmix.dll`,
+  `discord_game_sdk.dll` — все с точным совпадением размера;
+  `freetype.dll` — 681984 Б vs ожидаемые 831608 (freetype 2.13.3, другой
+  билд, ABI 2.x стабилен — **под вопросом**).
+- `icudtl_v8.dat` — сделан копией `icudtl.dat` (в CEF такого файла нет) —
+  **под вопросом**, проверить живым запуском.
+
+### Что НЕ проверено (нужен владелец + GTA V)
+
+1. Примет ли пропатченный alt:V `libce2.dll` (из бэкапа) ванильные
+   CEF-ресурсы 131.0.6778.205. Версия Chromium та же — шанс высокий.
+2. `freetype.dll` и `icudtl_v8.dat` (см. выше).
+3. `altv.exe` при запуске может требовать валидацию по `update.json` —
+   лаунчер передаёт `-noupdate`, должно пропускаться; если нет — инжектить
+   `altv-client.dll` напрямую, минуя `altv.exe`.
+4. `legacy.dll` из форка Majestic — размер совпал точно, скорее всего сток,
+   но их форк мог тронуть.
+
+**Живой тест: запустить `runtime/client/altv.exe` через лаунчер FloV:MP на
+`127.0.0.1:7788`.** См. `docs/live-test-guide.md`.
+
+### Идеальный вариант (по-прежнему полезен)
+
+Полный официальный клиент alt:V 16.4.x от кого-то из RP-сообщества снимет
+все 4 вопроса выше сразу. Собранное — рабочая гипотеза, не гарантия.
+
+---
+
 ## Что известно точно
 
 - Клиент в бэкапе: **17 из 85 файлов** (см. `docs/client-direct-connect.md`).
