@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    FloV:MP Launcher — C# / WPF / .NET 8 (см. HANDOFF_PROMPT.md).
+    net8.0-windows: лаунчер — отдельный процесс, с движком alt:V по TFM не
+    связан, но HANDOFF фиксирует .NET 8. Desktop Runtime 8 уже стоит.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>

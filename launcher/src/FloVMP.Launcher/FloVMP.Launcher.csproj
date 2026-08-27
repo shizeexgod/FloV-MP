@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>FloVMP.Launcher</RootNamespace>
+    <AssemblyName>FloVMP.Launcher</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>
