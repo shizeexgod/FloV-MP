@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>FloV:MP — инвентарь</title>
+<style>
+  :root {
+    --accent: #ff3d8a;
+    --bg0: #0f1015;
+    --bg1: #191b24;
+    --bg2: #22252f;
+    --slot: #1e212b;
+    --stroke: #333747;
+    --text0: #eef0f6;
+    --text1: #9aa0b4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: transparent; color: var(--text0);
+    overflow: hidden; user-select: none;
+  }
+  .wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .panel {
+    width: 560px;
+    background: var(--bg1);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
+  }
+  .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+  .title { font-size: 18px; font-weight: 700; }
+  .title span { color: var(--accent); }
+  .weight { font-size: 12px; color: var(--text1); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+  }
+  .slot {
+    aspect-ratio: 1 / 1;
+    background: var(--slot);
+    border: 1px solid var(--stroke);
+    border-radius: 10px;
+    padding: 6px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-size: 11px;
+    cursor: pointer;
+    transition: border-color .12s;
+  }
+  .slot.filled:hover { border-color: var(--accent); }
+  .slot.drop-target { border-color: var(--accent); background: #241a22; }
+  .slot .name { color: var(--text0); line-height: 1.2; overflow: hidden; }
+  .slot .qty { align-self: flex-end; color: var(--text1); font-variant-numeric: tabular-nums; }
+  .slot.empty { opacity: .4; }
+
+  .hint { margin-top: 14px; font-size: 11px; color: var(--text1); text-align: center; }
+  .notice { margin-top: 8px; font-size: 12px; color: var(--accent); text-align: center; min-height: 15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="head">
+      <div class="title">Flo<span>V:MP</span> · Инвентарь</div>
+      <div class="weight"><span id="w">0</span> / <span id="wmax">0</span> кг</div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="notice" id="notice"></div>
+    <div class="hint">ЛКМ — использовать · перетащить — переместить · ПКМ — выбросить 1 · I — закрыть</div>
+  </div>
+</div>
+
+<script>
+  var state = { slotCount: 24, maxWeight: 0, weight: 0, slots: [], defs: {} };
+  var dragFrom = null;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function render() {
+    $("w").textContent = state.weight;
+    $("wmax").textContent = state.maxWeight;
+    var g = $("grid");
+    g.innerHTML = "";
+    for (var i = 0; i < state.slotCount; i++) {
+      var s = state.slots[i];
+      var el = document.createElement("div");
+      el.className = "slot " + (s ? "filled" : "empty");
+      el.dataset.idx = i;
+      if (s) {
+        var def = state.defs[s.itemId] || { name: s.itemId };
+        el.innerHTML = '<div class="name">' + def.name + '</div><div class="qty">x' + s.qty + '</div>';
+        el.draggable = true;
+      }
+      g.appendChild(el);
+    }
+  }
+
+  function send(name, a, b) {
+    if (typeof alt !== "undefined") alt.emit(name, a, b);
+  }
+
+  $("grid").addEventListener("click", function (e) {
+    var slot = e.target.closest(".slot");
+    if (!slot || !slot.classList.contains("filled")) return;
+    send("flovmp:inv:use", parseInt(slot.dataset.idx, 10));
+  });
+
+  $("grid").addEventListener("contextmenu", function (e) {
+    e.preventDefault();
+    var slot = e.target.closest(".slot");
+    if (!slot || !slot.classList.contains("filled")) return;
+    send("flovmp:inv:drop", parseInt(slot.dataset.idx, 10), 1);
+  });
+
+  $("grid").addEventListener("dragstart", function (e) {
+    var slot = e.target.closest(".slot");
+    dragFrom = slot ? parseInt(slot.dataset.idx, 10) : null;
+  });
+  $("grid").addEventListener("dragover", function (e) {
+    e.preventDefault();
+    var slot = e.target.closest(".slot");
+    if (slot) slot.classList.add("drop-target");
+  });
+  $("grid").addEventListener("dragleave", function (e) {
+    var slot = e.target.closest(".slot");
+    if (slot) slot.classList.remove("drop-target");
+  });
+  $("grid").addEventListener("drop", function (e) {
+    e.preventDefault();
+    var slot = e.target.closest(".slot");
+    if (slot) slot.classList.remove("drop-target");
+    if (slot && dragFrom !== null) {
+      var to = parseInt(slot.dataset.idx, 10);
+      if (to !== dragFrom) send("flovmp:inv:move", dragFrom, to);
+    }
+    dragFrom = null;
+  });
+
+  if (typeof alt !== "undefined") {
+    alt.on("flovmp:inv:sync", function (json) {
+      try {
+        var d = JSON.parse(json);
+        state.slotCount = d.slotCount;
+        state.maxWeight = d.maxWeight;
+        state.weight = d.weight;
+        state.slots = d.slots || [];
+        state.defs = d.defs || {};
+        render();
+      } catch (err) { /* ignore */ }
+    });
+    alt.on("flovmp:inv:notice", function (text) {
+      $("notice").textContent = text || "";
+      setTimeout(function () { $("notice").textContent = ""; }, 2500);
+    });
+  } else {
+    state.slots = [{ itemId: "phone", qty: 1 }, { itemId: "water", qty: 2 }];
+    state.defs = { phone: { name: "Телефон" }, water: { name: "Вода" } };
+    render();
+  }
+</script>
+</body>
+</html>

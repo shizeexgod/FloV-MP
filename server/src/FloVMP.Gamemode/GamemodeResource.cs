@@ -20,6 +20,7 @@ public class GamemodeResource : Resource
     private PlayerLifecycle? _playerLifecycle;
     private AuthSystem? _auth;
     private HudSystem? _hud;
+    private InventorySystem? _inv;
 
     public override void OnStart()
     {
@@ -30,10 +31,13 @@ public class GamemodeResource : Resource
 
         _hud = new HudSystem(ServerName);
 
-        var accountsPath = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data", "accounts.json");
-        _auth = new AuthSystem(accountsPath, OnPlayerAuthed);
+        var dataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
+        _auth = new AuthSystem(Path.Combine(dataDir, "accounts.json"), OnPlayerAuthed);
         _auth.Attach();
-        Alt.Log($"[FloV:MP] core: auth store -> {accountsPath}");
+
+        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"), p => _auth.AccountOf(p));
+        _inv.Attach();
+        Alt.Log($"[FloV:MP] core: data dir -> {dataDir}");
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnServerStarted += OnServerStarted;
@@ -45,6 +49,8 @@ public class GamemodeResource : Resource
     {
         Alt.OnServerStarted -= OnServerStarted;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
+        _inv?.Detach();
+        _inv = null;
         _auth?.Detach();
         _auth = null;
         _playerLifecycle?.Detach();
@@ -63,6 +69,7 @@ public class GamemodeResource : Resource
     {
         _playerLifecycle?.SpawnAuthed(player, account.Id);
         _hud?.OnAuthed(player, account);
+        _inv?.OnAuthed(player, account);
     }
 
     private void OnPlayerDisconnect(IPlayer player, string reason)

@@ -19,6 +19,9 @@ alt.log('[FloV:MP] client: ресурс flovmp-client загружен');
 let authView = null;
 let authCamera = null;
 let hudView = null;
+let invView = null;
+let lastInvSync = null;
+let inGame = false;
 
 function openAuth() {
     if (authView) return;
@@ -78,10 +81,52 @@ function closeHud() {
     }
 }
 
+function openInventory() {
+    if (invView || !inGame) return;
+    invView = new alt.WebView('http://resource/client/html/inventory/index.html');
+    invView.focus();
+    alt.showCursor(true);
+    alt.toggleGameControls(false);
+
+    if (lastInvSync) invView.emit('flovmp:inv:sync', lastInvSync);
+
+    invView.on('flovmp:inv:move', (from, to) => alt.emitServer('flovmp:inv:move', from | 0, to | 0));
+    invView.on('flovmp:inv:use', (slot) => alt.emitServer('flovmp:inv:use', slot | 0));
+    invView.on('flovmp:inv:drop', (slot, qty) => alt.emitServer('flovmp:inv:drop', slot | 0, qty | 0));
+}
+
+function closeInventory() {
+    if (!invView) return;
+    invView.destroy();
+    invView = null;
+    try { alt.showCursor(false); } catch (e) { /* ignore */ }
+    alt.toggleGameControls(true);
+}
+
+function toggleInventory() {
+    if (invView) closeInventory();
+    else openInventory();
+}
+
 alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
     closeAuth();
     openHud();
+    inGame = true;
+});
+
+alt.onServer('flovmp:inv:sync', (json) => {
+    lastInvSync = json;
+    if (invView) invView.emit('flovmp:inv:sync', json);
+});
+
+alt.onServer('flovmp:inv:notice', (text) => {
+    if (invView) invView.emit('flovmp:inv:notice', text);
+});
+
+// I — открыть/закрыть инвентарь
+alt.on('keyup', (key) => {
+    if (key === 73) toggleInventory();
 });
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
@@ -103,6 +148,8 @@ alt.on('connectionComplete', () => {
 alt.on('disconnect', () => {
     closeAuth();
     closeHud();
+    closeInventory();
+    inGame = false;
     alt.log('[FloV:MP] client: disconnect');
 });
 

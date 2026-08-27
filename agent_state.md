@@ -26,7 +26,22 @@ Updated: 2026-08-27
 | 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | ✅ done — `FloVMP.Core/Auth/*` (PBKDF2, стор, троттлинг), `AuthSystem` (спавн только после входа), NUI `html/auth/`, 12 тестов. Визуальный поток не проверен. `docs/phase3-auth.md` |
 | 13 | CI — GitHub Actions | ✅ зелёный (#11 run success 1m26s). Server-тесты добавлены в CI (#12). |
 | 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/phase3-hud.md` |
-| 15 | Фаза 3: инвентарь (C# + NUI) | todo |
+| 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/phase3-inventory.md` |
+| 16 | Живой тест Фазы 3 (auth + HUD + инвентарь) — нужен владелец + GTA V | todo |
+
+## Done (сессия 2026-08-28, часть 9 — Фаза 3: инвентарь, задача #15)
+- `FloVMP.Core` namespace `FloVMP.Core.Items`: `ItemDef`/`ItemCatalog`
+  (7 предметов), класс `Inventory` (слоты + лимит веса, Add со стекованием
+  и атомарным откатом, Remove по стекам, Move пустой/merge+overflow/swap),
+  `JsonInventoryStore` (persist по accountId).
+- `Systems/Inventory/InventorySystem` — `Alt.OnClient` move/drop/use,
+  `flovmp:inv:sync` строкой JSON, persist на изменение и disconnect,
+  стартовый набор. bandage use → +25 HP.
+- `GamemodeResource`: `_inv` подключён, стор `<dataDir>/inventories.json`.
+- Клиент: `client/html/inventory/index.html` (грид 6×N, drag&drop, ЛКМ/ПКМ),
+  `index.js` toggle по клавише I (`keyup` 73), кэш последнего sync.
+- 11 xUnit (итого 23 server-теста). boot-тест зелёный.
+- версия геймода → `0.3.0-phase3-inv`. `docs/phase3-inventory.md`.
 
 ## Done (сессия 2026-08-28, часть 8 — Фаза 3: HUD, задача #14)
 - `Systems/Hud/HudSystem.cs` — раз в 1с (аккумулятор в `OnTick`) шлёт

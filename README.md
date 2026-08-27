@@ -63,6 +63,8 @@ launcher/src/FloVMP.Launcher/bin/Debug/net8.0-windows/FloVMP.Launcher.exe
 | [`docs/server-config.md`](docs/server-config.md) | формат `server.toml` / `resource.toml` |
 | [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | скелет сервера: C#-геймод + JS-клиент |
 | [`docs/phase3-auth.md`](docs/phase3-auth.md) | каркас авторизации: C# + NUI |
+| [`docs/phase3-hud.md`](docs/phase3-hud.md) | HUD: серверный тик + NUI-оверлей |
+| [`docs/phase3-inventory.md`](docs/phase3-inventory.md) | инвентарь: C# логика + NUI-грид |
 | [`docs/telemetry-sentry.md`](docs/telemetry-sentry.md) | отключение Sentry-телеметрии сервера |
 | [`docs/launcher.md`](docs/launcher.md) | архитектура лаунчера |
 | [`docs/client-direct-connect.md`](docs/client-direct-connect.md) | прямое подключение клиента alt:V, флаги `altv.exe` |
