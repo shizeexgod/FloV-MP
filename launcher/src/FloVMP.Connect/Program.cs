@@ -27,7 +27,7 @@ if (args.Contains("--cdn-only"))
 var opts = ParseArgs(args);
 if (opts is null) return 1;
 
-var (connect, clientDir, gtaDir, port, debug, keepOpen) = opts.Value;
+var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch) = opts.Value;
 
 if (!File.Exists(Path.Combine(clientDir, "altv.exe")))
 {
@@ -43,6 +43,17 @@ if (!File.Exists(Path.Combine(gtaDir, "GTA5.exe")))
 Console.WriteLine($"[connect] server : {connect}");
 Console.WriteLine($"[connect] client : {clientDir}");
 Console.WriteLine($"[connect] gta    : {gtaDir}");
+
+// 0) alt:V должен САМ запустить GTA5.exe (suspended). Если игра/клиент уже
+//    запущены — alt:V не сможет захватить процесс ("suspend count: -1").
+foreach (var stale in new[] { "GTA5", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
+{
+    foreach (var pr in Process.GetProcessesByName(stale))
+    {
+        try { Console.WriteLine($"[connect] закрываю уже запущенный {stale} (PID {pr.Id})"); pr.Kill(true); pr.WaitForExit(5000); }
+        catch { }
+    }
+}
 
 // 1) локальный бэкенд
 var uiDir = Directory.Exists(Path.Combine(clientDir, "ui")) ? Path.Combine(clientDir, "ui") : null;
@@ -63,7 +74,8 @@ try
     // 3) запуск клиента
     var altv = Path.Combine(clientDir, "altv.exe");
     var url = $"altv://connect/{connect}";
-    var argLine = $"-connecturl \"{url}\" -directlaunch -customui {cdn.BaseUrl}/ui/index.html";
+    var direct = noDirectLaunch ? "" : " -directlaunch";
+    var argLine = $"-connecturl \"{url}\"{direct} -customui {cdn.BaseUrl}/ui/index.html";
     Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
 
     var psi = new ProcessStartInfo(altv, argLine)
@@ -109,7 +121,7 @@ static bool IsUp(string name)
     catch { return false; }
 }
 
-static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen)? ParseArgs(string[] a)
+static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch)? ParseArgs(string[] a)
 {
     string? connect = null, client = null, gta = null;
     // alt:V-клиент ходит на бэкенд по ЖЁСТКО зашитому 127.0.0.1:9988
@@ -117,6 +129,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
     var port = 9988;
     var debug = true;
     var keepOpen = false;
+    var noDirectLaunch = false;
 
     for (var i = 0; i < a.Length; i++)
     {
@@ -128,12 +141,13 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
             case "--port" when i + 1 < a.Length && int.TryParse(a[i + 1], out var p): port = p; i++; break;
             case "--no-debug": debug = false; break;
             case "--keep-open": keepOpen = true; break;
+            case "--no-directlaunch": noDirectLaunch = true; break;
         }
     }
 
     if (connect is null)
     {
-        Console.Error.WriteLine("использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--no-debug] [--keep-open]");
+        Console.Error.WriteLine("использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--no-debug] [--keep-open] [--no-directlaunch]");
         return null;
     }
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
@@ -145,7 +159,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
     gta ??= ResolveGtaDir(client);
     if (gta is null) { Console.Error.WriteLine("[err] не нашёл папку GTA V, задайте --gta <dir>"); return null; }
 
-    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen);
+    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch);
 }
 
 static string? ResolveClientDir()
