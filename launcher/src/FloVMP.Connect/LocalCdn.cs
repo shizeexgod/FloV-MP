@@ -73,11 +73,11 @@ public sealed class LocalCdn : IDisposable
             }
             else if (lower.Contains("update.json") && lower.Contains("/launcher"))
             {
-                Write(ctx, 200, "application/json", Enc(LauncherManifest()));
+                Write(ctx, 200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
             }
             else if (lower.Contains("update.json") && lower.Contains("/client"))
             {
-                Write(ctx, 200, "application/json", Enc(_clientManifestJson));
+                Write(ctx, 200, "application/json", Enc(ManifestFor("client_update.json", _clientManifestJson)));
             }
             else if (lower.Contains("/skin"))
             {
@@ -117,8 +117,20 @@ public sealed class LocalCdn : IDisposable
 
     // --- routes ------------------------------------------------------
 
+    /// <summary>
+    /// Готовый манифест из &lt;clientDir&gt;\cdn\&lt;name&gt; (взят у GTAMP —
+    /// alt:V-формат, проверен рабочим прогоном), иначе — сгенерированный.
+    /// </summary>
+    private string ManifestFor(string name, string generated)
+    {
+        var f = Path.Combine(_clientDir, "cdn", name);
+        return File.Exists(f) ? File.ReadAllText(f) : generated;
+    }
+
     private static string LauncherManifest() =>
-        "{\"latestBuildNumber\":-1,\"version\":\"16.3.7\",\"hashList\":{},\"sizeList\":{}}";
+        "{\"latestBuildNumber\":-1,\"version\":\"16.3.7\"," +
+        "\"hashList\":{\"altv.exe\":\"2800e0d6665cdfa9c02419360db44b5cccf64147\"}," +
+        "\"sizeList\":{\"altv.exe\":9267200}}";
 
     private void HandleSkin(HttpListenerContext ctx, string lower)
     {
@@ -187,7 +199,7 @@ public sealed class LocalCdn : IDisposable
         {
             var rel = Path.GetRelativePath(_clientDir, f).Replace('\\', '/');
             if (rel is "update.json" or "manifest.json") continue;
-            if (rel.StartsWith("cache/") || rel.StartsWith("logs/") || rel.StartsWith("backup/")) continue;
+            if (rel.StartsWith("cache/") || rel.StartsWith("logs/") || rel.StartsWith("backup/") || rel.StartsWith("cdn/")) continue;
 
             if (!first) { hashes.Append(','); sizes.Append(','); }
             first = false;
