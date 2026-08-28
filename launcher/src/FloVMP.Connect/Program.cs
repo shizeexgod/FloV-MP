@@ -15,7 +15,7 @@ using FloVMP.Connect;
 if (args.Contains("--cdn-only"))
 {
     var cd = ResolveClientDir() ?? @"C:\FloV-MP\runtime\client";
-    var p = 39987;
+    var p = 9988;
     for (var i = 0; i < args.Length - 1; i++) if (args[i] == "--port") int.TryParse(args[i + 1], out p);
     using var only = new LocalCdn(cd, p, Directory.Exists(Path.Combine(cd, "ui")) ? Path.Combine(cd, "ui") : null);
     only.Start();
@@ -101,7 +101,9 @@ static bool IsUp(string name)
 static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen)? ParseArgs(string[] a)
 {
     string? connect = null, client = null, gta = null;
-    var port = 39987;
+    // alt:V-клиент ходит на бэкенд по ЖЁСТКО зашитому 127.0.0.1:9988
+    // (флаг -customui только включает local-backend режим, порт не читает).
+    var port = 9988;
     var debug = true;
     var keepOpen = false;
 
