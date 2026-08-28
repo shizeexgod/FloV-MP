@@ -52,8 +52,24 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 | 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/phase3-chat.md` |
 | 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 41 тест |
 | 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V | todo — клиент есть (`runtime/client/`), сервер есть |
-| 19 | Переписать «Играть» лаунчера по паттерну GTAMP (свой коннектор + перехват бэкенд-запросов вместо хрупкого `-noupdate`) | todo, после живого теста |
+| 19 | Свой коннектор клиента (`FloVMP.Connect`) | ✅ v1 — `launcher/src/FloVMP.Connect/`: `LocalCdn` (HttpListener-заглушка бэкенда alt:V), `AltvToml`, запуск `altv.exe -directlaunch -customui`. Без подмены GTA5.exe (играем на legacy игрока). Роуты проверены headless. Живой запуск — за владельцем. `docs/flovmp-connector.md` |
 | 20 | Дополнить `config/server.toml` секциями из GTAMP (`[threads]`, лимиты событий, `allowUnknownRPCEvents=false`, `[maxStreaming]`) | todo, мелкая |
+
+## Done (сессия 2026-08-28, часть 13 — прогон + свой коннектор)
+- **Прогон GTAMP-клиентом** — не пошёл: их клиент собран под GTA V Enhanced
+  (подменяет `GTA5.exe` кэшированным 58МБ), у владельца legacy 47МБ →
+  Enhanced-exe на legacy-данных падает. Игра владельца НЕ тронута.
+- Разобран весь стек GTAMP (`connect.cpp`/`proxy.cpp`/`config.cpp`/
+  `multiplayer.cpp`/`manifest.h`): обход мёртвого CDN = флаг `-customui
+  http://127.0.0.1:PORT` (стоковый `altv.exe`, не патч) → alt:V шлёт туда
+  весь бэкенд-трафик. `altv_patched.exe` — их IP, не берём.
+- **`FloVMP.Connect`** (`launcher/src/FloVMP.Connect/`, console net8.0-windows):
+  `LocalCdn` (HttpListener: манифест из реальных файлов, `/backup/*`→404 =
+  без подмены GTA5.exe), `AltvToml`, `Program` (resolve client/GTA →
+  старт CDN → altv.toml → `altv.exe -directlaunch -customui`). Роуты
+  проверены headless (200/404 как надо, loopback без админа).
+- `runtime/client/cache/skin.bin` добавлен (из GTAMP altv-resources),
+  `import-altv-client.ps1` копирует его. `docs/flovmp-connector.md`.
 
 ## Done (сессия 2026-08-28, часть 12 — настоящий клиент из GTAMP)
 - Форумчанин прислал проект **GTAMP** (независимый MP на alt:V без бэкенда —

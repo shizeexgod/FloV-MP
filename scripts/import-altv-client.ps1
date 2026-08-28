@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds runtime\client from a COMPLETE alt:V client payload folder.
 
@@ -63,6 +63,14 @@ Copy-Item (Join-Path $PayloadDir "cef") $OutDir -Recurse -Force
 Copy-Item (Join-Path $PayloadDir "libs") $OutDir -Recurse -Force
 Copy-Item $ManifestJson (Join-Path $OutDir "update.json") -Force
 
+# skin.bin (alt:V launcher config blob) - from altv-resources next to payload, if present
+$skin = Join-Path (Split-Path $PayloadDir -Parent) "altv-resources\skin.bin"
+if (Test-Path $skin) {
+    New-Item -ItemType Directory -Path (Join-Path $OutDir "cache") -Force | Out-Null
+    Copy-Item $skin (Join-Path $OutDir "cache\skin.bin") -Force
+    Write-Host "  + cache\skin.bin"
+}
+
 # --- hash check vs manifest ---
 $manifest = Get-Content $ManifestJson -Raw | ConvertFrom-Json
 $expected = $manifest.hashList.PSObject.Properties.Name
@@ -90,3 +98,4 @@ if ($absent -gt 0) {
 Write-Host ""
 Write-Host "== runtime\client ready ==" -ForegroundColor Green
 Write-Host 'next: powershell -File scripts/make-manifest.ps1 -SourceDir runtime\client -OutFile runtime\client\manifest.json -Version altv-16.4.39 -BaseUrl runtime\client'
+

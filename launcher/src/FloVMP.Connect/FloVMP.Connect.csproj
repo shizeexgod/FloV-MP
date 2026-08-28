@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FloV:MP connector — самостоятельный коннектор клиента alt:V без лаунчера
+    alt:V и без его мёртвого бэкенда.
+
+    Механизм (выяснено разбором GTAMP + живым прогоном 2026-08-28):
+      1) поднять локальный HTTP на 127.0.0.1:<port> — отдаёт клиенту alt:V
+         манифест/файлы из папки клиента + заглушки auth/branch;
+      2) сгенерить altv.toml (gtapath = НАСТОЯЩАЯ папка игры игрока, без
+         подмены GTA5.exe);
+      3) запустить altv.exe -connecturl altv://connect/<ip> -directlaunch
+         -customui http://127.0.0.1:<port>/ui/index.html  (флаг -customui
+         заставляет alt:V слать весь бэкенд-трафик на наш локальный HTTP).
+
+    Console-app; позже WPF-лаунчер (#дизайн) вызывает эту же логику.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FloVMP.Connect</RootNamespace>
+    <AssemblyName>FloVMP.Connect</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>
