@@ -4,4 +4,7 @@ type = "js"
 client-main = "client/index.js"
 client-files = [
     "client/**/*",
+    "client/*",
+    "client/html/*",
+    "client/html/**/*",
 ]
