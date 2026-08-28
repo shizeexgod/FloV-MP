@@ -66,9 +66,14 @@ public sealed class LocalCdn : IDisposable
         {
             ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
 
-            if (lower.Contains("/backup/"))
+            if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
             {
-                // никакой подмены GTA5.exe
+                // "обновлять/подменять нечего" — alt:V берёт настоящий GTA5.exe игрока
+                Write(ctx, 200, "application/json", Enc("{\"files\":[]}"));
+            }
+            else if (lower.Contains("/backup/"))
+            {
+                // файлы бэкапа (кэш GTA5.exe и т.п.) не отдаём
                 Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
             }
             else if (lower.Contains("update.json") && lower.Contains("/launcher"))
