@@ -41,6 +41,7 @@ public sealed class AuthSystem
     {
         Alt.OnPlayerConnect += OnConnect;
         Alt.OnPlayerDisconnect += OnDisconnect;
+        Alt.OnClient("flovmp:client:ready", OnClientReady);
         Alt.OnClient<string, string>("flovmp:auth:login", OnLogin);
         Alt.OnClient<string, string>("flovmp:auth:register", OnRegister);
     }
@@ -56,7 +57,15 @@ public sealed class AuthSystem
     private void OnConnect(IPlayer player, string reason) => Safe.Run("auth.OnConnect", () =>
     {
         if (!player.Exists) return;
-        Alt.Log($"[FloV:MP] auth: {player.Name} подключился, ожидание входа");
+        // NUI логина покажем, когда клиентский ресурс сообщит, что готов
+        // (flovmp:client:ready). Иначе auth:show может уйти раньше, чем
+        // index.js навесит обработчики — и игрок застрянет на чёрном экране.
+        Alt.Log($"[FloV:MP] auth: {player.Name} подключился, ждём готовности клиента");
+    });
+
+    private void OnClientReady(IPlayer player) => Safe.Run("auth.OnClientReady", () =>
+    {
+        if (!player.Exists || IsAuthed(player)) return;
         player.Emit("flovmp:auth:show");
     });
 

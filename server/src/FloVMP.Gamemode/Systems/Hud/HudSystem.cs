@@ -19,6 +19,7 @@ public sealed class HudSystem
 
     private readonly string _serverName;
     private readonly ConcurrentDictionary<uint, Account> _players = new();
+    private readonly ConcurrentDictionary<uint, (int hp, int armor, long cash, int online, int hour, int minute)> _lastSent = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastPushMs;
 
@@ -38,6 +39,7 @@ public sealed class HudSystem
     public void OnDisconnect(IPlayer player)
     {
         _players.TryRemove(player.Id, out _);
+        _lastSent.TryRemove(player.Id, out _);
     }
 
     /// <summary>Вызывается каждый тик ресурса.</summary>
@@ -61,6 +63,11 @@ public sealed class HudSystem
                 // alt:V/GTA: здоровье игрока 100..200 (100 = смерть). HUD: 0..100.
                 var health = Math.Clamp((int)player.Health - 100, 0, 100);
                 var armor = Math.Clamp((int)player.Armor, 0, 100);
+                var snap = (health, armor, acc.Cash, online, hour, minute);
+
+                // не шлём неизменившийся кадр — экономия сети при росте онлайна
+                if (_lastSent.TryGetValue(player.Id, out var prev) && prev == snap) continue;
+                _lastSent[player.Id] = snap;
 
                 player.Emit("flovmp:hud:tick", health, armor, acc.Cash, online, hour, minute);
             }

@@ -55,6 +55,8 @@ public sealed class AuthService
 
     public AuthResult Login(string username, string password, string throttleKey)
     {
+        PruneAttempts();
+
         if (IsRateLimited(throttleKey))
             return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
 
@@ -75,6 +77,21 @@ public sealed class AuthService
     }
 
     // --- throttle -----------------------------------------------------
+
+    /// <summary>Выкинуть протухшие записи, чтобы словарь не рос без конца.</summary>
+    private void PruneAttempts()
+    {
+        lock (_lock)
+        {
+            if (_attempts.Count == 0) return;
+            var now = _now();
+            var stale = _attempts
+                .Where(kv => now - kv.Value.first > _window)
+                .Select(kv => kv.Key)
+                .ToList();
+            foreach (var k in stale) _attempts.Remove(k);
+        }
+    }
 
     private bool IsRateLimited(string key)
     {

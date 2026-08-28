@@ -107,6 +107,20 @@ public sealed class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public void Stale_throttle_entries_are_pruned()
+    {
+        _svc.Register("V", "secret6");
+        // много разных ключей с неудачами
+        for (var i = 0; i < 50; i++)
+            _svc.Login("V", "bad", $"ip:{i}");
+
+        // окно прошло — следующий Login должен всё вычистить, и старый ключ
+        // больше не залочен
+        _now = _now.AddMinutes(6);
+        Assert.NotEqual(AuthOutcome.RateLimited, _svc.Login("V", "bad", "ip:0").Outcome);
+    }
+
+    [Fact]
     public void Accounts_persist_across_store_instances()
     {
         var path = Path.Combine(_dir, "persist.json");

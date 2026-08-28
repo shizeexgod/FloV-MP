@@ -178,6 +178,8 @@ alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
 
 alt.on('connectionComplete', () => {
     alt.log('[FloV:MP] client: connectionComplete — вошли на сервер');
+    // сообщаем серверу, что все обработчики навешены и можно показывать логин
+    alt.emitServer('flovmp:client:ready');
 });
 
 alt.on('disconnect', () => {
