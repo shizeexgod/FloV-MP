@@ -26,6 +26,7 @@
     <RootNamespace>FloVMP.Connect</RootNamespace>
     <AssemblyName>FloVMP.Connect</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
 </Project>

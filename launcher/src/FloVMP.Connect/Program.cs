@@ -44,9 +44,6 @@ Console.WriteLine($"[connect] server : {connect}");
 Console.WriteLine($"[connect] client : {clientDir}");
 Console.WriteLine($"[connect] gta    : {gtaDir}");
 
-// 0) если прошлый запуск не вернул BattlEye — вернуть сейчас
-BattlEye.RestorePendingOnStartup();
-
 // 1) локальный бэкенд
 var uiDir = Directory.Exists(Path.Combine(clientDir, "ui")) ? Path.Combine(clientDir, "ui") : null;
 using var cdn = new LocalCdn(clientDir, port, uiDir);
@@ -56,8 +53,14 @@ cdn.Start();
 AltvToml.Write(clientDir, gtaDir, debug);
 Console.WriteLine("[connect] altv.toml записан");
 
-// 2.5) отключить BattlEye (alt:V с ним не работает); вернём после игры
-BattlEye.Disable(gtaDir);
+// 2.5) BattlEye: файлы НЕ трогаем; глушим службу (если админ), иначе — совет
+BattlEye.Advise(gtaDir);
+var beSuppressed = false;
+if (BattlEye.IsPresent(gtaDir) && BattlEye.IsAdmin() && OperatingSystem.IsWindows())
+{
+    BattlEye.SuppressService();
+    beSuppressed = true;
+}
 
 try
 {
@@ -97,7 +100,7 @@ try
 finally
 {
     Console.WriteLine("[connect] игра закрыта, останавливаю локальный бэкенд");
-    BattlEye.Restore(gtaDir);
+    if (beSuppressed && OperatingSystem.IsWindows()) BattlEye.RestoreService();
 }
 
 if (keepOpen) { Console.WriteLine("нажмите Enter"); Console.ReadLine(); }
