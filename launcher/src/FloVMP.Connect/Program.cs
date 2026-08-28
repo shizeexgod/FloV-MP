@@ -83,7 +83,11 @@ try
         WorkingDirectory = clientDir,
         UseShellExecute = false,
     };
-    psi.Environment["SteamAppId"] = "271590";
+    // SteamAppId ставим ТОЛЬКО для Steam-установки. Для Epic (egs) эта
+    // переменная заставляет GTA5.exe искать Steam Client -> мгновенный вылет
+    // ("Не удалось запустить Steam").
+    if (AltvToml.DetectPlatform(gtaDir) == "steam")
+        psi.Environment["SteamAppId"] = "271590";
 
     using var proc = Process.Start(psi);
     if (proc is null) { Console.Error.WriteLine("[err] не удалось запустить altv.exe"); return 3; }

@@ -35,7 +35,7 @@ public static class AltvToml
         File.WriteAllText(Path.Combine(clientDir, "altv.toml"), toml);
     }
 
-    private static string DetectPlatform(string gtaPath)
+    public static string DetectPlatform(string gtaPath)
     {
         var p = gtaPath.ToLowerInvariant();
         if (p.Contains("steamapps") || p.Contains("\\steam\\")) return "steam";
