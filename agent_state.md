@@ -13,13 +13,20 @@ Updated: 2026-08-28
 - Клиент alt:V реконструирован 85/85 (`runtime/client/`).
 - CI зелёный.
 
-**Ждём от владельца:**
-1. Ссылку на найденную сборку alt:V → `assemble-client-core.ps1 -FillFrom <...>`
-   заменит реконструированные файлы настоящими, перегенерить манифест.
-2. Живой тест 2 игроков по `docs/live-test-guide.md` (нужен GTA V).
+**Клиент — решён (2026-08-28 вечер).** Форумчанин прислал проект GTAMP
+(`docs/gtamp-reference.md`). `runtime/client/` пересобран из его
+`sources/payload/` — **настоящий официальный alt:V 16.4.39, 84/85 exact
+hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых вопроса сняты.
 
-Дальнейшая доводка ядра (раунд 3+) — по результатам живого теста, чтобы не
-чинить вслепую. Перенос геймплея Florida V — только после «ядро — норм».
+**Ждём от владельца:**
+1. Живой тест 2 игроков по `docs/live-test-guide.md` (нужен GTA V).
+   Возможная заминка на запуске: `altv.exe` лезет на мёртвый CDN. Способ
+   GTAMP — свой `connect.exe` + `proxy.dll`; для быстрой проверки можно
+   запустить их `connect.exe` из `gtamp\client-new\` на наш сервер.
+2. Решение по вопросам ниже (репо-сплит, хостинг).
+
+Дальнейшая доводка ядра (раунд 3+) — по результатам живого теста.
+Перенос геймплея Florida V — только после «ядро — норм».
 
 ## Queue
 | # | Задача | Статус |
@@ -31,7 +38,7 @@ Updated: 2026-08-28
 | 4 | Тест живым клиентом GTA V | **разблокирован** — клиент собран 85/85 (`runtime/client/`). Нужен владелец за ПК с GTA V. Гайд: `docs/live-test-guide.md` |
 | 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
 | 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
-| 7 | Полный клиент alt:V 16.4.x | ✅ собран 85/85 (`runtime/client/`): 17 бэкап + 62 CEF (cef-builds) + 6 из Majestic RP (форк alt:V на этой же машине, вкл. `legacy.dll` с точным совпадением). Работоспособность не проверена (нужен живой запуск). Полный официальный клиент от сообщества снял бы 4 открытых вопроса — всё ещё желателен |
+| 7 | Полный клиент alt:V 16.4.x | ✅✅ **настоящий официальный 16.4.39** взят из GTAMP-пейлоада (форумчанин), `runtime/client/` пересобран `scripts/import-altv-client.ps1`, 84/85 exact hash-match (только `altv-webengine.exe` не-сток). Реконструкция CEF+Majestic больше не нужна. `docs/gtamp-reference.md` |
 | 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
 | 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher-compat.md` |
 | 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/live-test-guide.md` |
@@ -42,7 +49,23 @@ Updated: 2026-08-28
 | 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/phase3-inventory.md` |
 | 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/phase3-chat.md` |
 | 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 41 тест |
-| 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V + сборка alt:V | todo |
+| 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V | todo — клиент есть (`runtime/client/`), сервер есть |
+| 19 | Переписать «Играть» лаунчера по паттерну GTAMP (свой коннектор + перехват бэкенд-запросов вместо хрупкого `-noupdate`) | todo, после живого теста |
+| 20 | Дополнить `config/server.toml` секциями из GTAMP (`[threads]`, лимиты событий, `allowUnknownRPCEvents=false`, `[maxStreaming]`) | todo, мелкая |
+
+## Done (сессия 2026-08-28, часть 12 — настоящий клиент из GTAMP)
+- Форумчанин прислал проект **GTAMP** (независимый MP на alt:V без бэкенда —
+  ровно наша задача). Разобран: `docs/gtamp-reference.md`.
+- `sources/payload/` = бит-в-бит официальный клиент alt:V **16.4.39**
+  (sdk `c150769`), 86/86 hash-match. `altv-client.dll` = `287a4443…` —
+  протокол-совместим с нашим сервером.
+- `scripts/import-altv-client.ps1` — раскладывает полный payload в
+  `runtime/client/` + сверка хэшей. Прогнан: **84/85 exact**, не-сток только
+  `cef/altv-webengine.exe` (GTAMP-модификация). Манифест перегенерён.
+- Удалены `runtime/client-fill`, `runtime/client-reconstructed-bak`.
+- Из GTAMP вынесены в задачи: #19 (свой коннектор вместо `-noupdate`),
+  #20 (секции `server.toml`).
+- Открытые вопросы реконструкции (freetype/icudtl_v8/legacy.dll/CEF) — сняты.
 
 ## Done (сессия 2026-08-28, часть 11 — устойчивость ядра, задача #17 раунд 1)
 - `Safe.Run` — изоляция исключений во всех обработчиках событий alt:V.

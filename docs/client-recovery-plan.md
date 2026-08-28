@@ -5,7 +5,24 @@
 
 ---
 
-## РЕЗУЛЬТАТ (2026-08-28): клиент собран 85/85 файлов
+## ИТОГ (2026-08-28, вечер): взят НАСТОЯЩИЙ клиент из GTAMP
+
+Форумчанин прислал проект **GTAMP** (`docs/gtamp-reference.md`). В нём
+`sources/payload/` — **бит-в-бит официальный клиент alt:V 16.4.39**
+(sdk `c150769`, 86/86 hash-match с манифестом), та же версия что сервер.
+
+`runtime/client/` пересобран из него: `scripts/import-altv-client.ps1
+-PayloadDir "<gtamp>\sources\payload"`. **84/85 exact hash-match**,
+единственный не-сток файл — `cef/altv-webengine.exe` (GTAMP модифицировал
+под свой UI; для теста ок, для продакшена — заменить на сток).
+
+Реконструкция ниже (CEF + Majestic) — больше не нужна, оставлена как история.
+Все 4 «открытых вопроса» (freetype, icudtl_v8, legacy.dll, CEF-совместимость)
+**сняты** — файлы настоящие.
+
+---
+
+## (история) РЕЗУЛЬТАТ реконструкции: клиент собран 85/85 файлов
 
 `scripts/fetch-cef.ps1` + `scripts/assemble-client-core.ps1 -FillFrom` собрали
 полный набор в `runtime/client/`:

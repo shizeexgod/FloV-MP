@@ -10,12 +10,12 @@
 
 - .NET SDK + .NET 8 Desktop Runtime (стоит).
 - Бэкап alt:V в `C:\ViMP backup\backup-altv` (для пересборки).
-- `runtime/client/` уже собран (85 файлов + manifest.json, 318 МБ) —
-  см. `docs/client-recovery-plan.md`. Пересобрать при нужде:
+- `runtime/client/` — **настоящий официальный клиент alt:V 16.4.39** из
+  GTAMP-пейлоада (`docs/gtamp-reference.md`), 84/85 exact hash-match, 383 МБ.
+  Пересобрать:
   ```
-  powershell -File scripts/fetch-cef.ps1
-  powershell -File scripts/assemble-client-core.ps1 -FillFrom runtime\client-fill
-  powershell -File scripts/make-manifest.ps1 -SourceDir runtime\client -OutFile runtime\client\manifest.json -Version rec-1 -BaseUrl runtime\client
+  powershell -File scripts/import-altv-client.ps1 -PayloadDir "<путь к gtamp>\sources\payload"
+  powershell -File scripts/make-manifest.ps1 -SourceDir runtime\client -OutFile runtime\client\manifest.json -Version altv-16.4.39 -BaseUrl runtime\client
   ```
 
 ## Шаг 1. Поднять сервер
@@ -90,11 +90,8 @@ altv.exe -connecturl "altv://connect/127.0.0.1:7788?nickname=<ник>" -noupdate
 
 | Симптом | Причина / что делать |
 |---|---|
-| `altv.exe` ругается на версию/обновление, не пускает | `-noupdate` не сработал. Вариант: инжектить `altv-client.dll` напрямую, минуя `altv.exe` (отдельная задача). |
-| Чёрный экран / краш CEF на старте | ванильные CEF-ресурсы не подошли к пропатченному `libce2.dll`. Нужен полный официальный клиент alt:V 16.4.x. |
-| Краш на шрифтах / странный UI | `freetype.dll` от Majestic (2.13.3, размер отличается). Заменить на официальный alt:V-шный. |
-| Краш на ICU / локали | `icudtl_v8.dat` — сейчас это копия `icudtl.dat` (догадка). Нужен настоящий. |
-| Игра запускается, но alt:V не хукает | `legacy.dll` из форка Majestic не подошёл. Нужен стоковый alt:V `legacy.dll`. |
+| `altv.exe` ругается на версию/обновление, не пускает | `-noupdate` не сработал / `altv.exe` лезет на мёртвый CDN. Способ GTAMP: свой `connect.exe` + `proxy.dll` (перехват бэкенд-запросов). См. `docs/gtamp-reference.md` §2 — план переписать «Играть» лаунчера. Быстрый обход для теста: временно поднять локальную заглушку CDN / hosts. |
+| Чёрный экран / краш CEF на старте | не-сток `cef/altv-webengine.exe` (из GTAMP). Взять сток webengine или использовать `connect.exe` GTAMP напрямую для проверки. |
 | Клиент подключился, но педов не видно | серверная синхронизация: проверить `server.log` на `spawn`, проверить dimension. |
 | Заказчик не может подключиться | 7788 закрыт на файрволе/роутере; проверить `announce=false` не мешает (не мешает). |
 
