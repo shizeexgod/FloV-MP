@@ -1,6 +1,35 @@
 # Agent State — FloV:MP
 
-Updated: 2026-08-28
+Updated: 2026-08-29
+
+## ГДЕ МЫ СЕЙЧАС (живой прогон, ночь 28→29.08)
+
+Гоняем свой коннектор `FloVMP.Connect` (`launcher/src/FloVMP.Connect/`,
+`docs/engine/flovmp-connector.md`) — запускает настоящий клиент alt:V
+16.4.39 на наш сервер `127.0.0.1:7788`, обход мёртвого CDN через
+`LocalCdn` (HttpListener на 127.0.0.1:**9988** — порт жёстко зашит в alt:V).
+
+Пройденные грабли (все закоммичены):
+- порт 9988 (не из `-customui` URL);
+- манифесты отдаём дословно из GTAMP (`runtime/client/cdn/*.json`) —
+  минимальный alt:V не переваривал;
+- `/backup/update.json` → `{"files":[]}` (не 404) — иначе alt:V клинит;
+- **BattlEye**: GTA V b3889 legacy требует BE; переименование файлов /
+  глушение службы — ТУПИК (ломает запуск, `ERR_GEN_INVALID`). Коннектор
+  файлы BE НЕ трогает. Решение — **галка BattlEye в Rockstar Launcher
+  выключена владельцем** (Путь A);
+- **SteamAppId**: коннектор ставил `env SteamAppId=271590` (из GTAMP,
+  Steam) → на Epic GTA5.exe вылетал «Не удалось запустить Steam».
+  Исправлено (`119c285`): ставим только для `DetectPlatform=="steam"`.
+
+**Следующий шаг владельца:** пересобрать коннектор и запустить (BE выключен,
+Steam-env убран). Если GTA5.exe всё равно open-and-close → пробовать
+`--no-directlaunch`. Логи: `runtime/client/logs/patcher.log` +
+`launcher_*.log`.
+
+Мой косяк за сессию: глушил службу `BEService` → сломал обычный запуск GTA
+(`ERR_GEN_INVALID`). Владелец починил (`Set-Service BEService -StartupType
+Manual; Start-Service BEService`). В коннекторе убрано.
 
 ## Current task
 
