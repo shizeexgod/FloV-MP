@@ -77,9 +77,13 @@ public sealed class JsonAccountStore : IAccountStore
                 _nextId = Math.Max(_nextId, a.Id + 1);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // битый файл — стартуем пустыми, не роняем сервер
+            // битый файл — не роняем сервер: отодвигаем в карантин, стартуем пустыми
+            var quarantined = StoreFiles.QuarantineCorrupt(_path);
+            Console.Error.WriteLine(
+                $"[FloV:MP] accounts.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}");
+            _byName.Clear();
         }
     }
 

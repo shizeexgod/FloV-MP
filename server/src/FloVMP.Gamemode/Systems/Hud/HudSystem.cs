@@ -28,12 +28,12 @@ public sealed class HudSystem
     }
 
     /// <summary>Игрок вошёл и заспавнен — включаем ему HUD.</summary>
-    public void OnAuthed(IPlayer player, Account account)
+    public void OnAuthed(IPlayer player, Account account) => Safe.Run("hud.OnAuthed", () =>
     {
         _players[player.Id] = account;
         if (player.Exists)
             player.Emit("flovmp:hud:init", _serverName);
-    }
+    });
 
     public void OnDisconnect(IPlayer player)
     {
@@ -49,19 +49,22 @@ public sealed class HudSystem
 
         if (_players.IsEmpty) return;
 
-        var online = _players.Count;
-        var (hour, minute) = ServerClock();
-
-        foreach (var player in Alt.GetAllPlayers())
+        Safe.Run("hud.Tick", () =>
         {
-            if (!player.Exists || !_players.TryGetValue(player.Id, out var acc)) continue;
+            var online = _players.Count;
+            var (hour, minute) = ServerClock();
 
-            // alt:V/GTA: здоровье игрока 100..200 (100 = смерть). HUD: 0..100.
-            var health = Math.Clamp((int)player.Health - 100, 0, 100);
-            var armor = Math.Clamp((int)player.Armor, 0, 100);
+            foreach (var player in Alt.GetAllPlayers())
+            {
+                if (!player.Exists || !_players.TryGetValue(player.Id, out var acc)) continue;
 
-            player.Emit("flovmp:hud:tick", health, armor, acc.Cash, online, hour, minute);
-        }
+                // alt:V/GTA: здоровье игрока 100..200 (100 = смерть). HUD: 0..100.
+                var health = Math.Clamp((int)player.Health - 100, 0, 100);
+                var armor = Math.Clamp((int)player.Armor, 0, 100);
+
+                player.Emit("flovmp:hud:tick", health, armor, acc.Cash, online, hour, minute);
+            }
+        });
     }
 
     private static (int hour, int minute) ServerClock()

@@ -64,8 +64,11 @@ public sealed class JsonInventoryStore : IInventoryStore
         {
             _data = JsonSerializer.Deserialize<Dictionary<int, Record>>(File.ReadAllText(_path)) ?? new();
         }
-        catch
+        catch (Exception ex)
         {
+            var quarantined = StoreFiles.QuarantineCorrupt(_path);
+            Console.Error.WriteLine(
+                $"[FloV:MP] inventories.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}");
             _data = new();
         }
     }

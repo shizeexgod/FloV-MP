@@ -22,6 +22,8 @@ public sealed class ChatSystem
 
     private readonly Func<IPlayer, Account?> _accountOf;
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
+    // снимок ника — на выходе AuthSystem может уже вычистить свою запись
+    private readonly ConcurrentDictionary<uint, string> _names = new();
 
     public ChatSystem(Func<IPlayer, Account?> accountOf)
     {
@@ -52,21 +54,21 @@ public sealed class ChatSystem
         if (player.Exists) player.Emit("flovmp:chat:msg", "system", "", text);
     }
 
-    public void OnPlayerAuthed(IPlayer player, Account account)
+    public void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("chat.OnPlayerAuthed", () =>
     {
+        _names[player.Id] = account.Username;
         SendSystem(player, $"Добро пожаловать на FloV:MP, {account.Username}. /help — команды.");
         Broadcast($"{account.Username} зашёл на сервер.");
-    }
+    });
 
-    private void OnDisconnect(IPlayer player, string reason)
+    private void OnDisconnect(IPlayer player, string reason) => Safe.Run("chat.OnDisconnect", () =>
     {
         _rate.TryRemove(player.Id, out _);
-        var acc = _accountOf(player);
-        if (acc is not null)
-            Broadcast($"{acc.Username} вышел с сервера.");
-    }
+        if (_names.TryRemove(player.Id, out var name))
+            Broadcast($"{name} вышел с сервера.");
+    });
 
-    private void OnSay(IPlayer player, string raw)
+    private void OnSay(IPlayer player, string raw) => Safe.Run("chat.OnSay", () =>
     {
         if (!player.Exists) return;
 
@@ -96,7 +98,7 @@ public sealed class ChatSystem
         foreach (var p in Alt.GetAllPlayers())
             if (p.Exists && _accountOf(p) is not null)
                 p.Emit("flovmp:chat:msg", "player", acc.Username, msg);
-    }
+    });
 
     private void HandleCommand(IPlayer player, Account acc, string text)
     {

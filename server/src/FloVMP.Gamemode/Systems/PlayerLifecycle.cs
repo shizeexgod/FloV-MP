@@ -1,3 +1,4 @@
+using System.Threading;
 using AltV.Net;
 using AltV.Net.Elements.Entities;
 using AltV.Net.Enums;
@@ -14,7 +15,7 @@ namespace FloVMP.Gamemode;
 /// </summary>
 public sealed class PlayerLifecycle
 {
-    private int _spawnCounter;
+    private int _spawnCounter = -1;
 
     public void Attach()
     {
@@ -31,7 +32,7 @@ public sealed class PlayerLifecycle
     {
         if (!player.Exists) return;
 
-        var index = _spawnCounter++;
+        var index = Interlocked.Increment(ref _spawnCounter);
         var position = SpawnPoints.Scattered(SpawnPoints.LegionSquare, index);
 
         player.Model = (uint)PedModel.FreemodeMale01;

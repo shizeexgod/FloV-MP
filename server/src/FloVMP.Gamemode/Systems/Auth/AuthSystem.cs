@@ -23,6 +23,8 @@ public sealed class AuthSystem
 {
     private readonly AuthService _auth;
     private readonly ConcurrentDictionary<uint, Account> _authed = new();
+    // accountId → playerId: не пускаем один аккаунт с двух клиентов
+    private readonly ConcurrentDictionary<int, uint> _activeAccounts = new();
     private readonly Action<IPlayer, Account> _onAuthed;
 
     public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
@@ -51,36 +53,42 @@ public sealed class AuthSystem
 
     public bool IsAuthed(IPlayer player) => _authed.ContainsKey(player.Id);
 
-    private void OnConnect(IPlayer player, string reason)
+    private void OnConnect(IPlayer player, string reason) => Safe.Run("auth.OnConnect", () =>
     {
         if (!player.Exists) return;
         Alt.Log($"[FloV:MP] auth: {player.Name} подключился, ожидание входа");
         player.Emit("flovmp:auth:show");
-    }
+    });
 
-    private void OnDisconnect(IPlayer player, string reason)
+    private void OnDisconnect(IPlayer player, string reason) => Safe.Run("auth.OnDisconnect", () =>
     {
-        _authed.TryRemove(player.Id, out _);
-    }
+        if (_authed.TryRemove(player.Id, out var acc))
+            _activeAccounts.TryRemove(new KeyValuePair<int, uint>(acc.Id, player.Id));
+    });
 
-    private void OnLogin(IPlayer player, string username, string password)
+    private void OnLogin(IPlayer player, string username, string password) => Safe.Run("auth.OnLogin", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
 
         var res = _auth.Login(username ?? "", password ?? "", ThrottleKey(player));
-        player.Emit("flovmp:auth:result", res.Ok, res.Message);
-
-        if (res.Ok && res.Account is not null)
+        if (!res.Ok || res.Account is null)
         {
-            Finish(player, res.Account);
-        }
-        else
-        {
+            player.Emit("flovmp:auth:result", false, res.Message);
             Alt.Log($"[FloV:MP] auth: вход отклонён для {player.Name}: {res.Outcome}");
+            return;
         }
-    }
 
-    private void OnRegister(IPlayer player, string username, string password)
+        if (!TryClaimAccount(res.Account.Id, player.Id))
+        {
+            player.Emit("flovmp:auth:result", false, "аккаунт уже в игре");
+            return;
+        }
+
+        player.Emit("flovmp:auth:result", true, res.Message);
+        Finish(player, res.Account);
+    });
+
+    private void OnRegister(IPlayer player, string username, string password) => Safe.Run("auth.OnRegister", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
 
@@ -91,12 +99,19 @@ public sealed class AuthSystem
             return;
         }
 
-        // после успешной регистрации сразу логиним
         var login = _auth.Login(username!, password!, ThrottleKey(player));
-        player.Emit("flovmp:auth:result", login.Ok, login.Ok ? "регистрация и вход выполнены" : login.Message);
-        if (login.Ok && login.Account is not null)
-            Finish(player, login.Account);
-    }
+        if (!login.Ok || login.Account is null || !TryClaimAccount(login.Account.Id, player.Id))
+        {
+            player.Emit("flovmp:auth:result", false, login.Ok ? "аккаунт уже в игре" : login.Message);
+            return;
+        }
+
+        player.Emit("flovmp:auth:result", true, "регистрация и вход выполнены");
+        Finish(player, login.Account);
+    });
+
+    private bool TryClaimAccount(int accountId, uint playerId) =>
+        _activeAccounts.TryAdd(accountId, playerId);
 
     private void Finish(IPlayer player, Account account)
     {

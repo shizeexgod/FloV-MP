@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using AltV.Net;
 using AltV.Net.Elements.Entities;
@@ -11,17 +12,22 @@ namespace FloVMP.Gamemode;
 /// при старте ресурса, <see cref="OnStop"/> — при остановке/перезагрузке.
 /// <see cref="OnTick"/> — каждый тик сервера.
 ///
-/// Здесь только проводка систем.
+/// Здесь только проводка систем. Все обработчики событий alt:V обёрнуты в
+/// <see cref="Safe"/>: исключение в одной системе не роняет сервер.
 /// </summary>
 public class GamemodeResource : Resource
 {
     private const string ServerName = "FloV:MP Dev";
+    private const int AutoSaveIntervalMs = 60_000;
 
     private PlayerLifecycle? _playerLifecycle;
     private AuthSystem? _auth;
     private HudSystem? _hud;
     private InventorySystem? _inv;
     private ChatSystem? _chat;
+
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private long _lastAutoSaveMs;
 
     public override void OnStart()
     {
@@ -36,7 +42,7 @@ public class GamemodeResource : Resource
         _auth = new AuthSystem(Path.Combine(dataDir, "accounts.json"), OnPlayerAuthed);
         _auth.Attach();
 
-        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"), p => _auth.AccountOf(p));
+        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
 
         _chat = new ChatSystem(p => _auth.AccountOf(p));
@@ -51,6 +57,8 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
+        Safe.Run("core.OnStop.flush", () => _inv?.SaveAll());
+
         Alt.OnServerStarted -= OnServerStarted;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         _chat?.Detach();
@@ -69,23 +77,30 @@ public class GamemodeResource : Resource
     public override void OnTick()
     {
         _hud?.Tick();
+
+        var now = _clock.ElapsedMilliseconds;
+        if (now - _lastAutoSaveMs >= AutoSaveIntervalMs)
+        {
+            _lastAutoSaveMs = now;
+            Safe.Run("core.autosave", () => _inv?.SaveAll());
+        }
     }
 
-    private void OnPlayerAuthed(IPlayer player, Account account)
+    private void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("core.OnPlayerAuthed", () =>
     {
         _playerLifecycle?.SpawnAuthed(player, account.Id);
         _hud?.OnAuthed(player, account);
         _inv?.OnAuthed(player, account);
         _chat?.OnPlayerAuthed(player, account);
-    }
+    });
 
-    private void OnPlayerDisconnect(IPlayer player, string reason)
+    private void OnPlayerDisconnect(IPlayer player, string reason) => Safe.Run("core.OnPlayerDisconnect", () =>
     {
         _hud?.OnDisconnect(player);
-    }
+    });
 
-    private static void OnServerStarted()
+    private static void OnServerStarted() => Safe.Run("core.OnServerStarted", () =>
     {
         Alt.Log("[FloV:MP] core: server fully started");
-    }
+    });
 }

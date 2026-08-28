@@ -31,8 +31,23 @@ Updated: 2026-08-28
 | 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/phase3-hud.md` |
 | 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/phase3-inventory.md` |
 | 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/phase3-chat.md` |
-| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем, интеграционные проверки. НЕ переносить геймплей Florida V пока не готово | in progress |
+| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунд 1 сделан (`docs/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв 60с + флаш на OnStop, карантин битых сторов, Interlocked. 40 тестов |
 | 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V + сборка alt:V | todo |
+
+## Done (сессия 2026-08-28, часть 11 — устойчивость ядра, задача #17 раунд 1)
+- `Safe.Run` — изоляция исключений во всех обработчиках событий alt:V.
+- **Баг-фикс**: порядок обработчиков `OnPlayerDisconnect` — Auth чистил
+  `_authed` первым, из-за чего инвентарь не сохранялся при выходе.
+  Inv теперь хранит `(Inventory, accountId)`, Chat — снимок ника; не зависят
+  от Auth на disconnect.
+- Один аккаунт = один сеанс (`AuthSystem._activeAccounts`), вход отклоняется
+  для уже играющего аккаунта.
+- Автосейв инвентарей раз в 60с (`OnTick`) + флаш на `OnStop`.
+- `StoreFiles.QuarantineCorrupt` — битый JSON-стор уезжает в
+  `*.corrupt-<ticks>`, не затирается.
+- `PlayerLifecycle._spawnCounter` → `Interlocked.Increment`.
+- +3 теста (`StoreRobustnessTests`), итого 40. boot-тест зелёный.
+- версия геймода → `0.5.0-hardening`. `docs/core-hardening.md`.
 
 ## Done (сессия 2026-08-28, часть 10 — Фаза 3: чат, задача #16)
 - `FloVMP.Core/Chat/ChatSanitizer` — Clean (trim/control/схлопывание/лимит
