@@ -44,6 +44,9 @@ Console.WriteLine($"[connect] server : {connect}");
 Console.WriteLine($"[connect] client : {clientDir}");
 Console.WriteLine($"[connect] gta    : {gtaDir}");
 
+// 0) если прошлый запуск не вернул BattlEye — вернуть сейчас
+BattlEye.RestorePendingOnStartup();
+
 // 1) локальный бэкенд
 var uiDir = Directory.Exists(Path.Combine(clientDir, "ui")) ? Path.Combine(clientDir, "ui") : null;
 using var cdn = new LocalCdn(clientDir, port, uiDir);
@@ -53,40 +56,50 @@ cdn.Start();
 AltvToml.Write(clientDir, gtaDir, debug);
 Console.WriteLine("[connect] altv.toml записан");
 
-// 3) запуск клиента
-var altv = Path.Combine(clientDir, "altv.exe");
-var url = $"altv://connect/{connect}";
-var argLine = $"-connecturl \"{url}\" -directlaunch -customui {cdn.BaseUrl}/ui/index.html";
-Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
+// 2.5) отключить BattlEye (alt:V с ним не работает); вернём после игры
+BattlEye.Disable(gtaDir);
 
-var psi = new ProcessStartInfo(altv, argLine)
+try
 {
-    WorkingDirectory = clientDir,
-    UseShellExecute = false,
-};
-psi.Environment["SteamAppId"] = "271590";
+    // 3) запуск клиента
+    var altv = Path.Combine(clientDir, "altv.exe");
+    var url = $"altv://connect/{connect}";
+    var argLine = $"-connecturl \"{url}\" -directlaunch -customui {cdn.BaseUrl}/ui/index.html";
+    Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
 
-using var proc = Process.Start(psi);
-if (proc is null) { Console.Error.WriteLine("[err] не удалось запустить altv.exe"); return 3; }
-Console.WriteLine($"[connect] altv.exe PID {proc.Id}. Жду завершения игры…");
-
-// 4) ждём: пока жив altv.exe или GTA5.exe
-var gtaSeen = false;
-while (true)
-{
-    var altvUp = IsUp("altv.exe");
-    var gtaUp = IsUp("GTA5.exe");
-    if (gtaUp) gtaSeen = true;
-    if (gtaSeen && !gtaUp) break;
-    if (!gtaSeen && !altvUp)
+    var psi = new ProcessStartInfo(altv, argLine)
     {
-        await Task.Delay(3000);
-        if (!IsUp("altv.exe") && !IsUp("GTA5.exe")) break;
+        WorkingDirectory = clientDir,
+        UseShellExecute = false,
+    };
+    psi.Environment["SteamAppId"] = "271590";
+
+    using var proc = Process.Start(psi);
+    if (proc is null) { Console.Error.WriteLine("[err] не удалось запустить altv.exe"); return 3; }
+    Console.WriteLine($"[connect] altv.exe PID {proc.Id}. Жду завершения игры…");
+
+    // 4) ждём: пока жив altv.exe или GTA5.exe
+    var gtaSeen = false;
+    while (true)
+    {
+        var altvUp = IsUp("altv.exe");
+        var gtaUp = IsUp("GTA5.exe");
+        if (gtaUp) gtaSeen = true;
+        if (gtaSeen && !gtaUp) break;
+        if (!gtaSeen && !altvUp)
+        {
+            await Task.Delay(3000);
+            if (!IsUp("altv.exe") && !IsUp("GTA5.exe")) break;
+        }
+        await Task.Delay(500);
     }
-    await Task.Delay(500);
+}
+finally
+{
+    Console.WriteLine("[connect] игра закрыта, останавливаю локальный бэкенд");
+    BattlEye.Restore(gtaDir);
 }
 
-Console.WriteLine("[connect] игра закрыта, останавливаю локальный бэкенд");
 if (keepOpen) { Console.WriteLine("нажмите Enter"); Console.ReadLine(); }
 return 0;
 
