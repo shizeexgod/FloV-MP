@@ -16,7 +16,7 @@
     layout (libs\*, cef\locales\*). Feed the result to
     scripts\assemble-client-core.ps1 -FillFrom <OutDir>.
 
-    NOT covered here (get separately, see docs/client-recovery-plan.md):
+    NOT covered here (get separately, see docs/archive/client-recovery-plan.md):
       legacy.dll (alt:V proprietary), libcrypto-3-x64.dll / libssl-3-x64.dll
       (OpenSSL 3), bassmix.dll (un4seen), discord_game_sdk.dll (Discord),
       freetype.dll.
@@ -113,7 +113,7 @@ foreach ($f in @("resources.pak", "chrome_100_percent.pak", "chrome_200_percent.
     Put (Join-Path $res $f) "libs/$f"
 }
 # alt:V ждёт ещё icudtl_v8.dat - в CEF такого нет. Пробуем как копию icudtl.dat
-# (best-effort, помечено как неточное в docs/client-recovery-plan.md).
+# (best-effort, помечено как неточное в docs/archive/client-recovery-plan.md).
 if (Test-Path (Join-Path $res "icudtl.dat")) {
     Copy-Item (Join-Path $res "icudtl.dat") (Join-Path $OutDir "libs\icudtl_v8.dat") -Force
     Write-Host "  ~ libs/icudtl_v8.dat (guessed = icudtl.dat, VERIFY)"

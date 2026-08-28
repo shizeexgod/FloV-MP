@@ -41,7 +41,7 @@ TOML в корне рабочей папки сервера (рядом с `altv
 
 Даже с `announce=false`/`useCdn=false` движок 16.4.39 пишет 1–2
 `HTTP Request failed, curl code: 6`. Не блокирует. Подробнее —
-`docs/engine-recon.md`.
+`docs/engine/engine-recon.md`.
 
 ## `resource.toml`
 

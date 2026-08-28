@@ -49,7 +49,7 @@ powershell -File scripts/run-server.ps1 -TimeoutSeconds 20
 - Сервер поднимается: оба ресурса грузятся, `[C#] core: server fully started`,
   все сетевые потоки живы, HTTP :7788.
 - Единственные ошибки в логе — `curl code: 6` ×2 (фоновый пинг движка,
-  не блокирует, см. `docs/engine-recon.md`).
+  не блокирует, см. `docs/engine/engine-recon.md`).
 - C#-логи переведены на ASCII (живая консоль alt:V на Windows коверкает
   UTF-8; файл лога при этом корректный UTF-8).
 

@@ -11,7 +11,7 @@
 - .NET SDK + .NET 8 Desktop Runtime (стоит).
 - Бэкап alt:V в `C:\ViMP backup\backup-altv` (для пересборки).
 - `runtime/client/` — **настоящий официальный клиент alt:V 16.4.39** из
-  GTAMP-пейлоада (`docs/gtamp-reference.md`), 84/85 exact hash-match, 383 МБ.
+  GTAMP-пейлоада (`docs/engine/gtamp-reference.md`), 84/85 exact hash-match, 383 МБ.
   Пересобрать:
   ```
   powershell -File scripts/import-altv-client.ps1 -PayloadDir "<путь к gtamp>\sources\payload"
@@ -90,7 +90,7 @@ altv.exe -connecturl "altv://connect/127.0.0.1:7788?nickname=<ник>" -noupdate
 
 | Симптом | Причина / что делать |
 |---|---|
-| `altv.exe` ругается на версию/обновление, не пускает | `-noupdate` не сработал / `altv.exe` лезет на мёртвый CDN. Способ GTAMP: свой `connect.exe` + `proxy.dll` (перехват бэкенд-запросов). См. `docs/gtamp-reference.md` §2 — план переписать «Играть» лаунчера. Быстрый обход для теста: временно поднять локальную заглушку CDN / hosts. |
+| `altv.exe` ругается на версию/обновление, не пускает | `-noupdate` не сработал / `altv.exe` лезет на мёртвый CDN. Способ GTAMP: свой `connect.exe` + `proxy.dll` (перехват бэкенд-запросов). См. `docs/engine/gtamp-reference.md` §2 — план переписать «Играть» лаунчера. Быстрый обход для теста: временно поднять локальную заглушку CDN / hosts. |
 | Чёрный экран / краш CEF на старте | не-сток `cef/altv-webengine.exe` (из GTAMP). Взять сток webengine или использовать `connect.exe` GTAMP напрямую для проверки. |
 | Клиент подключился, но педов не видно | серверная синхронизация: проверить `server.log` на `spawn`, проверить dimension. |
 | Заказчик не может подключиться | 7788 закрыт на файрволе/роутере; проверить `announce=false` не мешает (не мешает). |

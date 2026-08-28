@@ -26,8 +26,8 @@ server/     — C#-геймод (FloVMP.Gamemode) под alt:V coreclr-module
 client/     — клиентский JS-ресурс (flovmp-client)
 launcher/   — WPF-лаунчер: Core (логика) + UI + Tests (xUnit)
 config/     — шаблон server.toml
-scripts/    — сборка рантайма, манифесты, реконструкция клиента (PowerShell)
-docs/       — архитектура, разведка движка, гайды
+scripts/    — сборка рантайма, манифесты, импорт клиента (PowerShell)
+docs/       — документация по разделам (engine/ gameplay/ launcher/ admin/ instructions/ archive/), карта — docs/README.md
 runtime/    — собранный рантайм (в git НЕ хранится, см. .gitignore)
 ```
 
@@ -53,26 +53,12 @@ launcher/src/FloVMP.Launcher/bin/Debug/net8.0-windows/FloVMP.Launcher.exe
 
 ## Живой тест (2 игрока)
 
-См. [`docs/live-test-guide.md`](docs/live-test-guide.md) — нужен GTA V.
+См. [`docs/instructions/live-test-guide.md`](docs/instructions/live-test-guide.md) — нужен GTA V.
 
 ## Документация
 
-| Файл | О чём |
-|---|---|
-| [`docs/engine-recon.md`](docs/engine-recon.md) | что в бэкапе alt:V, сборка рантайма, требование .NET 8 |
-| [`docs/server-config.md`](docs/server-config.md) | формат `server.toml` / `resource.toml` |
-| [`docs/phase1-skeleton.md`](docs/phase1-skeleton.md) | скелет сервера: C#-геймод + JS-клиент |
-| [`docs/phase3-auth.md`](docs/phase3-auth.md) | каркас авторизации: C# + NUI |
-| [`docs/phase3-hud.md`](docs/phase3-hud.md) | HUD: серверный тик + NUI-оверлей |
-| [`docs/phase3-inventory.md`](docs/phase3-inventory.md) | инвентарь: C# логика + NUI-грид |
-| [`docs/phase3-chat.md`](docs/phase3-chat.md) | чат: санитайзер + команды + NUI |
-| [`docs/telemetry-sentry.md`](docs/telemetry-sentry.md) | отключение Sentry-телеметрии сервера |
-| [`docs/launcher.md`](docs/launcher.md) | архитектура лаунчера |
-| [`docs/client-direct-connect.md`](docs/client-direct-connect.md) | прямое подключение клиента alt:V, флаги `altv.exe` |
-| [`docs/launcher-cdn.md`](docs/launcher-cdn.md) | система CDN-манифеста (сверка/докачка ядра) |
-| [`docs/launcher-compat.md`](docs/launcher-compat.md) | совместимость с патчами GTA V (Вариант 1/2) |
-| [`docs/client-recovery-plan.md`](docs/client-recovery-plan.md) | реконструкция клиента alt:V (85/85) |
-| [`docs/live-test-guide.md`](docs/live-test-guide.md) | пошаговый живой тест (нужен GTA V) |
+Карта всех документов по разделам — **[`docs/README.md`](docs/README.md)**
+(`engine/` · `gameplay/` · `launcher/` · `admin/` · `instructions/` · `archive/`).
 
 ## Разработка
 

@@ -39,7 +39,7 @@ param(
     [string]$Branch        = "release",
     [string]$OutRoot       = "",
     [string]$Configuration = "Release",
-    # Skip the Sentry-telemetry neutralization patch (see docs/telemetry-sentry.md).
+    # Skip the Sentry-telemetry neutralization patch (see docs/engine/telemetry-sentry.md).
     [switch]$KeepSentry
 )
 
@@ -68,7 +68,7 @@ function Copy-Required {
 # only runtime\server\altv-server.exe is modified. With an empty DSN
 # sentry-native logs "sentry_init failed" and disables transport + crashpad;
 # the server otherwise boots normally. Rationale/verification:
-# docs/telemetry-sentry.md.
+# docs/engine/telemetry-sentry.md.
 function Disable-SentryTelemetry {
     param([string]$ExePath)
 
@@ -87,7 +87,7 @@ function Disable-SentryTelemetry {
 
     if ($idx -lt 0) {
         Write-Host "  ! DSN string not found - alt:V build may differ." -ForegroundColor Yellow
-        Write-Host "    Telemetry NOT disabled. Check docs/telemetry-sentry.md." -ForegroundColor Yellow
+        Write-Host "    Telemetry NOT disabled. Check docs/engine/telemetry-sentry.md." -ForegroundColor Yellow
         return
     }
 

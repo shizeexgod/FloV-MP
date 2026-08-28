@@ -25,7 +25,7 @@
 копировать в `runtime/server/data/`. Без них в лог сыпется
 `<name>.bin can't be loaded` (не фатально, но модели будут недоступны).
 
-Всё это делает `scripts/assemble-runtime.ps1` (см. `docs/phase1-skeleton.md`).
+Всё это делает `scripts/assemble-runtime.ps1` (см. `docs/gameplay/phase1-skeleton.md`).
 
 ## Требование: .NET 8
 
@@ -69,5 +69,5 @@ UTF-8) чистый: грузятся оба наших ресурса, подн
 - Подключение **живым клиентом GTA V** — нужен реальный игровой клиент,
   не автоматизируется. Это отдельный пункт очереди.
 - ~~Sentry-телеметрия крашей~~ — **разобрано и отключено**, см.
-  `docs/telemetry-sentry.md`. `assemble-runtime.ps1` обнуляет DSN в рабочей
+  `docs/engine/telemetry-sentry.md`. `assemble-runtime.ps1` обнуляет DSN в рабочей
   копии `altv-server.exe`; проверено — запросов на `sentry-alt.com` нет.

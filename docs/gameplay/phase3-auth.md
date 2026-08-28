@@ -65,7 +65,7 @@ connect            сервер НЕ спавнит игрока → Emit flovmp
 
 ## Не проверено / дальше
 
-- Визуальный поток NUI (нужен живой клиент — см. `docs/live-test-guide.md`).
+- Визуальный поток NUI (нужен живой клиент — см. `docs/instructions/live-test-guide.md`).
 - Персонаж/скин, привязка позиции к аккаунту (сейчас всегда Legion Square,
   `FreemodeMale01`).
 - БД вместо JSON.

@@ -1,7 +1,7 @@
 # Лаунчер FloV:MP — скелет (Фаза 2)
 
 Обновлено: 2026-08-27
-Статус: **скелет собирается и запускается. Direct-connect собирается, но не проверен живьём (нужен полный клиент alt:V — см. `docs/client-direct-connect.md`).**
+Статус: **скелет собирается и запускается. Direct-connect собирается, но не проверен живьём (нужен полный клиент alt:V — см. `docs/engine/client-direct-connect.md`).**
 
 ## Стек
 
@@ -27,7 +27,7 @@ Runtime 8 (уже стоит). Решение `launcher/FloVMP.Launcher.slnx`.
 ## Что НЕ реализовано (следующие заходы)
 
 - ✅ ~~CDN-манифест и обновление ресурсов~~ — **сделано**, см.
-  `docs/launcher-cdn.md` (задача #8). Осталось поднять реальный CDN и
+  `docs/launcher/launcher-cdn.md` (задача #8). Осталось поднять реальный CDN и
   подпись манифеста.
 - **Гибридная совместимость с патчами GTA V** (Вариант 1 offset-конфиг с
   CDN; Вариант 2 подмена `GTA5.exe` с atomic-rename / маркером / watchdog).
@@ -48,11 +48,11 @@ launcher/src/FloVMP.Launcher/bin/Debug/net8.0-windows/FloVMP.Launcher.exe
 altv.exe -connecturl "altv://connect/<host>:<port>?nickname=<ник>" -noupdate -branch release -skipprocesscheck -skipprocessconfirmation
 ```
 рабочая директория = «ЯДРО КЛИЕНТА alt:V». Подробности механизма и флагов —
-`docs/client-direct-connect.md`.
+`docs/engine/client-direct-connect.md`.
 
 ## Blockers
 
 - Кнопка ИГРАТЬ не станет активной, пока «ЯДРО КЛИЕНТА» не указывает на
   **полную** папку клиента alt:V (16 обязательных файлов). Бэкап неполный —
-  см. `docs/client-direct-connect.md`, `scripts/assemble-client-core.ps1`,
+  см. `docs/engine/client-direct-connect.md`, `scripts/assemble-client-core.ps1`,
   `runtime/client/MISSING.txt`.

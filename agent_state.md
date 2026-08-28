@@ -14,12 +14,12 @@ Updated: 2026-08-28
 - CI зелёный.
 
 **Клиент — решён (2026-08-28 вечер).** Форумчанин прислал проект GTAMP
-(`docs/gtamp-reference.md`). `runtime/client/` пересобран из его
+(`docs/engine/gtamp-reference.md`). `runtime/client/` пересобран из его
 `sources/payload/` — **настоящий официальный alt:V 16.4.39, 84/85 exact
 hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых вопроса сняты.
 
 **Согласованный порядок (2026-08-28):**
-1. **Прогон** — клиент GTAMP на наш сервер (`docs/quick-connect-test.md`).
+1. **Прогон** — клиент GTAMP на наш сервер (`docs/instructions/quick-connect-test.md`).
    Сервер запущен в фоне, `runtime/gtamp-client/` готов, `.config` правлен
    под Epic. Владелец запускает `connect.exe -connect 127.0.0.1:7788`.
 2. **Перенос сервера** — вынести игровой сервис (server + runtime-сборка) в
@@ -34,25 +34,25 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 | # | Задача | Статус |
 |---|------|--------|
 | 0 | `altv-server.exe` стартует автономно | ✅ done |
-| 1 | Формат `server.toml` / `resource.toml` | ✅ done — `docs/server-config.md`, проверено стартом |
+| 1 | Формат `server.toml` / `resource.toml` | ✅ done — `docs/engine/server-config.md`, проверено стартом |
 | 2 | Минимальный C#-ресурс | ✅ done — `flovmp-core` грузится |
 | 3 | Минимальный JS клиентский ресурс | ✅ done — `flovmp-client` грузится |
-| 4 | Тест живым клиентом GTA V | **разблокирован** — клиент собран 85/85 (`runtime/client/`). Нужен владелец за ПК с GTA V. Гайд: `docs/live-test-guide.md` |
+| 4 | Тест живым клиентом GTA V | **разблокирован** — клиент собран 85/85 (`runtime/client/`). Нужен владелец за ПК с GTA V. Гайд: `docs/instructions/live-test-guide.md` |
 | 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
-| 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/telemetry-sentry.md`) |
-| 7 | Полный клиент alt:V 16.4.x | ✅✅ **настоящий официальный 16.4.39** взят из GTAMP-пейлоада (форумчанин), `runtime/client/` пересобран `scripts/import-altv-client.ps1`, 84/85 exact hash-match (только `altv-webengine.exe` не-сток). Реконструкция CEF+Majestic больше не нужна. `docs/gtamp-reference.md` |
-| 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
-| 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher-compat.md` |
-| 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/live-test-guide.md` |
+| 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/engine/telemetry-sentry.md`) |
+| 7 | Полный клиент alt:V 16.4.x | ✅✅ **настоящий официальный 16.4.39** взят из GTAMP-пейлоада (форумчанин), `runtime/client/` пересобран `scripts/import-altv-client.ps1`, 84/85 exact hash-match (только `altv-webengine.exe` не-сток). Реконструкция CEF+Majestic больше не нужна. `docs/engine/gtamp-reference.md` |
+| 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
+| 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher/launcher-compat.md` |
+| 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/instructions/live-test-guide.md` |
 | 11 | Репо-гигиена: `.gitattributes`, `README.md`, CI (GitHub Actions build+test) | todo |
-| 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | ✅ done — `FloVMP.Core/Auth/*` (PBKDF2, стор, троттлинг), `AuthSystem` (спавн только после входа), NUI `html/auth/`, 12 тестов. Визуальный поток не проверен. `docs/phase3-auth.md` |
+| 12 | Фаза 3: каркас авторизации (C# сервер + NUI клиент) | ✅ done — `FloVMP.Core/Auth/*` (PBKDF2, стор, троттлинг), `AuthSystem` (спавн только после входа), NUI `html/auth/`, 12 тестов. Визуальный поток не проверен. `docs/gameplay/phase3-auth.md` |
 | 13 | CI — GitHub Actions | ✅ зелёный (#11 run success 1m26s). Server-тесты добавлены в CI (#12). |
-| 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/phase3-hud.md` |
-| 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/phase3-inventory.md` |
-| 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/phase3-chat.md` |
-| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 41 тест |
+| 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/gameplay/phase3-hud.md` |
+| 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/gameplay/phase3-inventory.md` |
+| 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/gameplay/phase3-chat.md` |
+| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/engine/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 41 тест |
 | 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V | todo — клиент есть (`runtime/client/`), сервер есть |
-| 19 | Свой коннектор клиента (`FloVMP.Connect`) | ✅ v1 — `launcher/src/FloVMP.Connect/`: `LocalCdn` (HttpListener-заглушка бэкенда alt:V), `AltvToml`, запуск `altv.exe -directlaunch -customui`. Без подмены GTA5.exe (играем на legacy игрока). Роуты проверены headless. Живой запуск — за владельцем. `docs/flovmp-connector.md` |
+| 19 | Свой коннектор клиента (`FloVMP.Connect`) | ✅ v1 — `launcher/src/FloVMP.Connect/`: `LocalCdn` (HttpListener-заглушка бэкенда alt:V), `AltvToml`, запуск `altv.exe -directlaunch -customui`. Без подмены GTA5.exe (играем на legacy игрока). Роуты проверены headless. Живой запуск — за владельцем. `docs/engine/flovmp-connector.md` |
 | 20 | Дополнить `config/server.toml` секциями из GTAMP (`[threads]`, лимиты событий, `allowUnknownRPCEvents=false`, `[maxStreaming]`) | todo, мелкая |
 
 ## Done (сессия 2026-08-28, часть 13 — прогон + свой коннектор)
@@ -69,11 +69,11 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   старт CDN → altv.toml → `altv.exe -directlaunch -customui`). Роуты
   проверены headless (200/404 как надо, loopback без админа).
 - `runtime/client/cache/skin.bin` добавлен (из GTAMP altv-resources),
-  `import-altv-client.ps1` копирует его. `docs/flovmp-connector.md`.
+  `import-altv-client.ps1` копирует его. `docs/engine/flovmp-connector.md`.
 
 ## Done (сессия 2026-08-28, часть 12 — настоящий клиент из GTAMP)
 - Форумчанин прислал проект **GTAMP** (независимый MP на alt:V без бэкенда —
-  ровно наша задача). Разобран: `docs/gtamp-reference.md`.
+  ровно наша задача). Разобран: `docs/engine/gtamp-reference.md`.
 - `sources/payload/` = бит-в-бит официальный клиент alt:V **16.4.39**
   (sdk `c150769`), 86/86 hash-match. `altv-client.dll` = `287a4443…` —
   протокол-совместим с нашим сервером.
@@ -98,7 +98,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   `*.corrupt-<ticks>`, не затирается.
 - `PlayerLifecycle._spawnCounter` → `Interlocked.Increment`.
 - +3 теста (`StoreRobustnessTests`), итого 40. boot-тест зелёный.
-- версия геймода → `0.5.0-hardening`. `docs/core-hardening.md`.
+- версия геймода → `0.5.0-hardening`. `docs/engine/core-hardening.md`.
 
 ## Done (сессия 2026-08-28, часть 10 — Фаза 3: чат, задача #16)
 - `FloVMP.Core/Chat/ChatSanitizer` — Clean (trim/control/схлопывание/лимит
@@ -111,7 +111,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   HTML), `index.js` — `openChat`/`startTyping` по клавише T (`keyup` 84),
   `flovmp:chat:done` возвращает фокус.
 - 14 xUnit (итого 37 server-тестов). boot-тест зелёный.
-- версия геймода → `0.4.0-phase3-chat`. `docs/phase3-chat.md`.
+- версия геймода → `0.4.0-phase3-chat`. `docs/gameplay/phase3-chat.md`.
 
 ## Done (сессия 2026-08-28, часть 9 — Фаза 3: инвентарь, задача #15)
 - `FloVMP.Core` namespace `FloVMP.Core.Items`: `ItemDef`/`ItemCatalog`
@@ -125,7 +125,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 - Клиент: `client/html/inventory/index.html` (грид 6×N, drag&drop, ЛКМ/ПКМ),
   `index.js` toggle по клавише I (`keyup` 73), кэш последнего sync.
 - 11 xUnit (итого 23 server-теста). boot-тест зелёный.
-- версия геймода → `0.3.0-phase3-inv`. `docs/phase3-inventory.md`.
+- версия геймода → `0.3.0-phase3-inv`. `docs/gameplay/phase3-inventory.md`.
 
 ## Done (сессия 2026-08-28, часть 8 — Фаза 3: HUD, задача #14)
 - `Systems/Hud/HudSystem.cs` — раз в 1с (аккумулятор в `OnTick`) шлёт
@@ -135,7 +135,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 - `AuthSystem` колбэк → `Action<IPlayer, Account>`, добавлен `AccountOf`.
 - Клиент: `client/html/hud/index.html` (полоски HP/AR, $cash, часы, онлайн,
   `#ff3d8a`), постоянный WebView в `index.js`.
-- boot-тест зелёный. `docs/phase3-hud.md`.
+- boot-тест зелёный. `docs/gameplay/phase3-hud.md`.
 
 ## Done (сессия 2026-08-28, часть 7 — Фаза 3: авторизация, задача #12)
 - **`server/src/FloVMP.Core/`** — новый проект чистой логики (net8.0, без
@@ -153,7 +153,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 - **`server/tests/FloVMP.Core.Tests/`** — 12 xUnit (PBKDF2 round-trip/соль,
   Register/Login, дубль case-insensitive, rate-limit + разблок, персист).
 - boot-тест зелёный; версия геймода → `0.2.0-phase3-auth`.
-- `docs/phase3-auth.md`.
+- `docs/gameplay/phase3-auth.md`.
 
 ## Done (сессия 2026-08-28, часть 6 — реконструкция клиента, задача #10)
 - **Определена версия CEF клиента** — Chromium 131.0.6778.205 (по `chrome_elf.dll`).
@@ -167,8 +167,8 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   (все точное совпадение размера), `freetype.dll` (другой билд, под вопросом).
   `icudtl_v8.dat` — копия `icudtl.dat` (догадка).
 - **`runtime/client/` собран 85/85** + `manifest.json` (86 записей, 318 МБ).
-- Живой запуск НЕ проверен — 4 открытых вопроса в `docs/client-recovery-plan.md`.
-- `docs/live-test-guide.md` — пошаговый гайд теста для владельца.
+- Живой запуск НЕ проверен — 4 открытых вопроса в `docs/archive/client-recovery-plan.md`.
+- `docs/instructions/live-test-guide.md` — пошаговый гайд теста для владельца.
 - Задача #4 (живой тест) — разблокирована.
 
 ## Done (сессия 2026-08-28, часть 5 — совместимость с патчами GTA V, задача #9)
@@ -182,7 +182,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   `CompatGateAsync` в Play (блокирует запуск на Broken-версии).
 - 11 тестов (CompatService 5 + GameExeManager 6) — все зелёные. Итого 17.
 - UI: поле «Манифест совместимости». Настройка `CompatManifestUrl`.
-- `docs/launcher-compat.md`.
+- `docs/launcher/launcher-compat.md`.
 
 ## Done (сессия 2026-08-28, часть 4 — CDN-манифест лаунчера, задача #8)
 - **Рефактор лаунчера на 3 проекта**: `FloVMP.Launcher.Core` (net8.0-windows,
@@ -200,7 +200,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 - **UI**: секция «Обновление ядра по манифесту» — поле URL, кнопка
   Проверить/Обновить, прогресс-бар, статус (файлы/МБ/скорость). Настройка
   `CoreManifestUrl`. Управляемая папка по умолчанию `%LOCALAPPDATA%\FloVMP\client`.
-- `docs/launcher-cdn.md`.
+- `docs/launcher/launcher-cdn.md`.
 
 ## Done (сессия 2026-08-27, часть 3 — Sentry + сеть)
 - **Sentry-телеметрия отключена.** `altv-server.exe` содержит sentry-native
@@ -209,7 +209,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   помогает (alt:V перетирает через `sentry_options_set_dsn`). Решение:
   `assemble-runtime.ps1` обнуляет строку DSN в рабочей копии exe (бэкап цел).
   Проверено `SENTRY_DEBUG=1` — `sentry_init failed`, запросов нет. Опция
-  `-KeepSentry` отключает патч. `docs/telemetry-sentry.md`.
+  `-KeepSentry` отключает патч. `docs/engine/telemetry-sentry.md`.
 - **Сеть проверена**: CDN alt:V (`cdn.alt-mp.com`, `cdn.altv.mp`,
   `cdn.alt-mp.dev`) — DNS мёртв. `altv.mp` — origin 502 (Cloudflare жив).
   `docs.altv.mp` — 200 (только SPA-оболочка, статьи по угадай-URL 404).
@@ -227,7 +227,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   - `Services/SettingsStore.cs` + `Models/LauncherSettings.cs` — JSON в
     `%LOCALAPPDATA%\FloVMP\launcher.settings.json`.
   - UI: тёмная тема + акцент `#FF3D8A`, MVVM-lite. Сборка + smoke-run ok.
-- **Разведка клиента alt:V** (`docs/client-direct-connect.md`):
+- **Разведка клиента alt:V** (`docs/engine/client-direct-connect.md`):
   - GTA V на машине = **Epic legacy**, `C:\Program Files\9d2d0eb64d5c44529cece33fe2a46482`.
   - `%LOCALAPPDATA%\altv\altv.toml` уже настроен (branch release, egs, gtapath).
   - `altv.exe` = launcher-UI 14.4; флаги: `-connecturl`, `-noupdate`,
@@ -236,7 +236,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
     `resources.pak`, `icudtl.dat`, V8-снапшотов, crypto-DLL, всех
     `cef/locales/*.pak`. `scripts/assemble-client-core.ps1` собирает что есть
     и пишет `runtime/client/MISSING.txt`.
-- Документация: `docs/launcher.md`, `docs/client-direct-connect.md`.
+- Документация: `docs/launcher/launcher.md`, `docs/engine/client-direct-connect.md`.
 
 ## Blockers
 - **Полный клиент alt:V 16.4.39 (release, x64_win32).** Без него `altv.exe`

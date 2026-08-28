@@ -30,7 +30,7 @@ C:\FloV-MP\runtime\gtamp-client\connect.exe -connect 127.0.0.1:7788
 
 **Ожидаемо:** загрузочный экран alt:V → на чёрном фоне **NUI логина FloV:MP**
 (розовый акцент) → регистрация → спавн на Legion Square → HUD → `T` чат →
-`I` инвентарь. Полный чек-лист — `docs/live-test-guide.md`.
+`I` инвентарь. Полный чек-лист — `docs/instructions/live-test-guide.md`.
 
 ## Второй игрок (заказчик, другой ПК)
 
