@@ -25,6 +25,7 @@ public class GamemodeResource : Resource
     private HudSystem? _hud;
     private InventorySystem? _inv;
     private ChatSystem? _chat;
+    private ConsoleCommands? _console;
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
@@ -47,6 +48,12 @@ public class GamemodeResource : Resource
 
         _chat = new ChatSystem(p => _auth.AccountOf(p));
         _chat.Attach();
+
+        _console = new ConsoleCommands(
+            saveAll: () => _inv?.SaveAll(),
+            broadcast: text => _chat?.Broadcast(text),
+            nameOf: p => _auth?.AccountOf(p)?.Username);
+        _console.Attach();
         Alt.Log($"[FloV:MP] core: data dir -> {dataDir}");
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
@@ -61,6 +68,8 @@ public class GamemodeResource : Resource
 
         Alt.OnServerStarted -= OnServerStarted;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
+        _console?.Detach();
+        _console = null;
         _chat?.Detach();
         _chat = null;
         _inv?.Detach();
