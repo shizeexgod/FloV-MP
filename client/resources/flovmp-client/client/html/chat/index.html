@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>FloV:MP — чат</title>
+<style>
+  :root {
+    --accent: #ff3d8a;
+    --sys: #e3b341;
+    --me: #b98cff;
+    --text0: #eef0f6;
+    --text1: #aab0c2;
+    --panel: rgba(15, 16, 21, .55);
+    --stroke: rgba(255, 255, 255, .08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: transparent; color: var(--text0);
+    overflow: hidden; user-select: none;
+  }
+  #chat {
+    position: absolute; left: 20px; top: 20px;
+    width: 460px;
+  }
+  #log {
+    max-height: 260px; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    gap: 2px;
+    font-size: 13px; line-height: 1.35;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+  }
+  #log.dim { opacity: .35; transition: opacity .4s; }
+  .line { word-wrap: break-word; }
+  .line .who { font-weight: 600; }
+  .line.system { color: var(--sys); }
+  .line.me { color: var(--me); font-style: italic; }
+  .line.player .who { color: var(--accent); }
+
+  #inputwrap {
+    margin-top: 8px;
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    padding: 6px 10px;
+    backdrop-filter: blur(4px);
+  }
+  #inputwrap.on { display: block; }
+  #input {
+    width: 100%;
+    background: transparent; border: none; outline: none;
+    color: var(--text0); font-size: 13px; font-family: inherit;
+  }
+</style>
+</head>
+<body>
+<div id="chat">
+  <div id="log" class="dim"></div>
+  <div id="inputwrap"><input id="input" maxlength="256" autocomplete="off" /></div>
+</div>
+
+<script>
+  var log = document.getElementById("log");
+  var wrap = document.getElementById("inputwrap");
+  var input = document.getElementById("input");
+  var lines = [];
+  var dimTimer = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function push(kind, author, text) {
+    var el = document.createElement("div");
+    el.className = "line " + kind;
+    if (kind === "player") {
+      el.innerHTML = '<span class="who">' + esc(author) + ':</span> ' + esc(text);
+    } else if (kind === "me") {
+      el.innerHTML = '* ' + esc(author) + ' ' + esc(text);
+    } else {
+      el.innerHTML = esc(text);
+    }
+    log.appendChild(el);
+    lines.push(el);
+    while (lines.length > 40) { log.removeChild(lines.shift()); }
+    wake();
+  }
+
+  function wake() {
+    log.classList.remove("dim");
+    if (dimTimer) clearTimeout(dimTimer);
+    dimTimer = setTimeout(function () {
+      if (!wrap.classList.contains("on")) log.classList.add("dim");
+    }, 8000);
+  }
+
+  function openInput() {
+    wrap.classList.add("on");
+    log.classList.remove("dim");
+    input.value = "";
+    input.focus();
+  }
+  function closeInput(send) {
+    var v = input.value.trim();
+    wrap.classList.remove("on");
+    input.blur();
+    wake();
+    if (typeof alt !== "undefined") {
+      if (send && v.length > 0) alt.emit("flovmp:chat:say", v);
+      alt.emit("flovmp:chat:done");
+    }
+  }
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); closeInput(true); }
+    else if (e.key === "Escape") { e.preventDefault(); closeInput(false); }
+  });
+
+  if (typeof alt !== "undefined") {
+    alt.on("flovmp:chat:msg", function (kind, author, text) { push(kind, author, text); });
+    alt.on("flovmp:chat:openinput", openInput);
+  } else {
+    push("system", "", "(превью вне игры)");
+    push("player", "Тестер", "привет мир");
+  }
+</script>
+</body>
+</html>

@@ -1,12 +1,15 @@
 # Agent State — FloV:MP
 
-Updated: 2026-08-27
+Updated: 2026-08-28
 
 ## Current task
-- [~] Фаза 1 — скелет сервера готов, стартует с ресурсами.
-- [~] Фаза 2 — скелет лаунчера готов, собирается и запускается.
-- **Блокер обеих фаз к «играбельно»**: бэкап клиента alt:V неполный
-  (17/85 файлов), живой тест невозможен до полного набора клиента.
+- [~] Фаза 1/2 — скелеты сервера и лаунчера готовы, собираются, boot-тест зелёный.
+- [~] Фаза 3 — каркасы auth / HUD / инвентарь / чат готовы (C# + NUI), 37 тестов.
+- **Решение владельца (2026-08-28):** сначала довести MP-ядро до идеала
+  (стабильность/устойчивость/нагрузка), затем переносить геймплей Florida V.
+- Владелец нашёл сборку alt:V — пришлёт ссылку. Тогда: заменить
+  реконструированные файлы клиента настоящими (`assemble-client-core.ps1
+  -FillFrom`), провести живой тест (`docs/live-test-guide.md`).
 
 ## Queue
 | # | Задача | Статус |
@@ -27,7 +30,22 @@ Updated: 2026-08-27
 | 13 | CI — GitHub Actions | ✅ зелёный (#11 run success 1m26s). Server-тесты добавлены в CI (#12). |
 | 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/phase3-hud.md` |
 | 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/phase3-inventory.md` |
-| 16 | Живой тест Фазы 3 (auth + HUD + инвентарь) — нужен владелец + GTA V | todo |
+| 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/phase3-chat.md` |
+| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем, интеграционные проверки. НЕ переносить геймплей Florida V пока не готово | in progress |
+| 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V + сборка alt:V | todo |
+
+## Done (сессия 2026-08-28, часть 10 — Фаза 3: чат, задача #16)
+- `FloVMP.Core/Chat/ChatSanitizer` — Clean (trim/control/схлопывание/лимит
+  256), IsCommand (одиночный `/`), ParseCommand.
+- `Systems/Chat/ChatSystem` — `Alt.OnClient<string>`, rate-limit 4/3с,
+  `//` эскейп, команды `/help /me /online /pos`, `Broadcast`/`SendSystem`,
+  сообщения о входе/выходе. Рассылка только вошедшим.
+- `GamemodeResource`: `_chat` подключён, в `OnPlayerAuthed`.
+- Клиент: `client/html/chat/index.html` (лог 40 строк, затухание, экранир.
+  HTML), `index.js` — `openChat`/`startTyping` по клавише T (`keyup` 84),
+  `flovmp:chat:done` возвращает фокус.
+- 14 xUnit (итого 37 server-тестов). boot-тест зелёный.
+- версия геймода → `0.4.0-phase3-chat`. `docs/phase3-chat.md`.
 
 ## Done (сессия 2026-08-28, часть 9 — Фаза 3: инвентарь, задача #15)
 - `FloVMP.Core` namespace `FloVMP.Core.Items`: `ItemDef`/`ItemCatalog`

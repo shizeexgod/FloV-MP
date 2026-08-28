@@ -22,6 +22,8 @@ let hudView = null;
 let invView = null;
 let lastInvSync = null;
 let inGame = false;
+let chatView = null;
+let chatTyping = false;
 
 function openAuth() {
     if (authView) return;
@@ -108,11 +110,42 @@ function toggleInventory() {
     else openInventory();
 }
 
+function openChat() {
+    if (chatView) return;
+    chatView = new alt.WebView('http://resource/client/html/chat/index.html');
+    chatView.on('flovmp:chat:say', (text) => alt.emitServer('flovmp:chat:say', String(text)));
+    chatView.on('flovmp:chat:done', () => {
+        chatTyping = false;
+        try { chatView.unfocus(); } catch (e) { /* ignore */ }
+        alt.toggleGameControls(true);
+    });
+}
+
+function closeChat() {
+    if (!chatView) return;
+    chatView.destroy();
+    chatView = null;
+    chatTyping = false;
+}
+
+function startTyping() {
+    if (!chatView || chatTyping || !inGame || invView) return;
+    chatTyping = true;
+    chatView.focus();
+    alt.toggleGameControls(false);
+    chatView.emit('flovmp:chat:openinput');
+}
+
 alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
     closeAuth();
     openHud();
+    openChat();
     inGame = true;
+});
+
+alt.onServer('flovmp:chat:msg', (kind, author, text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
 alt.onServer('flovmp:inv:sync', (json) => {
@@ -124,9 +157,11 @@ alt.onServer('flovmp:inv:notice', (text) => {
     if (invView) invView.emit('flovmp:inv:notice', text);
 });
 
-// I — открыть/закрыть инвентарь
+// I — инвентарь, T — чат
 alt.on('keyup', (key) => {
+    if (chatTyping) return;
     if (key === 73) toggleInventory();
+    else if (key === 84) startTyping();
 });
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
@@ -149,6 +184,7 @@ alt.on('disconnect', () => {
     closeAuth();
     closeHud();
     closeInventory();
+    closeChat();
     inGame = false;
     alt.log('[FloV:MP] client: disconnect');
 });
