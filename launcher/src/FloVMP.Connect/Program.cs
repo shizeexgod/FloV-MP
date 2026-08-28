@@ -53,14 +53,10 @@ cdn.Start();
 AltvToml.Write(clientDir, gtaDir, debug);
 Console.WriteLine("[connect] altv.toml записан");
 
-// 2.5) BattlEye: файлы НЕ трогаем; глушим службу (если админ), иначе — совет
+// 2.5) BattlEye: ничего не ломаем. Чиним службу, если её испортил прошлый
+// заход, и советуем отключить BE в Rockstar Launcher.
+if (OperatingSystem.IsWindows()) BattlEye.RepairServiceIfBroken();
 BattlEye.Advise(gtaDir);
-var beSuppressed = false;
-if (BattlEye.IsPresent(gtaDir) && BattlEye.IsAdmin() && OperatingSystem.IsWindows())
-{
-    BattlEye.SuppressService();
-    beSuppressed = true;
-}
 
 try
 {
@@ -100,7 +96,6 @@ try
 finally
 {
     Console.WriteLine("[connect] игра закрыта, останавливаю локальный бэкенд");
-    if (beSuppressed && OperatingSystem.IsWindows()) BattlEye.RestoreService();
 }
 
 if (keepOpen) { Console.WriteLine("нажмите Enter"); Console.ReadLine(); }

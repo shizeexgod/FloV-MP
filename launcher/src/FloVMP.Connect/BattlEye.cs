@@ -5,19 +5,16 @@ using System.Security.Principal;
 namespace FloVMP.Connect;
 
 /// <summary>
-/// GTA V Legacy (свежие билды) требует BattlEye обязательно — файлы BE
-/// удалять/переименовывать НЕЛЬЗЯ (игра откажется: "отсутствуют
-/// необходимые файлы BattlEye"). А активный BE-драйвер блокирует alt:V
-/// от suspend/inject главного потока игры ("Main thread suspend count: -1"
-/// → game launch timeout).
+/// BattlEye + alt:V. GTA V Legacy (свежие билды) требует BE обязательно.
+/// Мы НИЧЕГО не трогаем в файлах BE и НЕ глушим службу (проверено — не
+/// помогает: защита в kernel-драйвере, а поломка службы ломает запуск).
 ///
-/// Что делаем (файлы НЕ трогаем):
-///  - останавливаем и отключаем службу Windows `BEService` (нужен админ) —
-///    драйвер BE не грузится, файлы на месте, игра стартует, alt:V патчит;
-///  - после игры возвращаем службу в Manual.
+/// Единственный надёжный способ: отключить BattlEye в настройках
+/// Rockstar Games Launcher (Настройки → Grand Theft Auto V → BattlEye).
+/// Тогда GTA5.exe не перезапускает себя под BE и alt:V успевает пропатчить.
 ///
-/// Если этого мало — надёжнее всего снять галку BattlEye в Rockstar Games
-/// Launcher: Настройки → Grand Theft Auto V → BattlEye (см. вывод ниже).
+/// Здесь — только совет пользователю + разовое восстановление службы
+/// BEService, если её сломал прошлый (ошибочный) заход коннектора.
 /// </summary>
 public static class BattlEye
 {
@@ -37,56 +34,51 @@ public static class BattlEye
         catch { return false; }
     }
 
-    /// <summary>Остановить + отключить службу BE на время игры.</summary>
+    /// <summary>Вернуть службу BEService в Manual, если она осталась Disabled.</summary>
     [SupportedOSPlatform("windows")]
-    public static void SuppressService()
+    public static void RepairServiceIfBroken()
     {
-        Sc("stop", Service);
-        Sc("config", $"{Service} start= disabled");
-        Console.WriteLine("[be] служба BEService остановлена и отключена на время игры");
-    }
-
-    /// <summary>Вернуть службу BE в исходный режим (Manual).</summary>
-    [SupportedOSPlatform("windows")]
-    public static void RestoreService()
-    {
-        Sc("config", $"{Service} start= demand");
-        Console.WriteLine("[be] служба BEService возвращена (Manual)");
+        try
+        {
+            var q = new ProcessStartInfo("sc.exe", $"qc {Service}")
+            {
+                UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true,
+            };
+            using var p = Process.Start(q);
+            var outp = p?.StandardOutput.ReadToEnd() ?? "";
+            p?.WaitForExit(5000);
+            if (outp.Contains("DISABLED", StringComparison.OrdinalIgnoreCase))
+            {
+                Run("sc.exe", $"config {Service} start= demand");
+                Console.WriteLine("[be] служба BEService восстановлена (Manual)");
+            }
+        }
+        catch { /* не критично */ }
     }
 
     public static void Advise(string gtaDir)
     {
         if (!IsPresent(gtaDir)) return;
         Console.WriteLine();
-        Console.WriteLine("  ┌─ BattlEye обнаружен ────────────────────────────────────────────");
-        Console.WriteLine("  │ alt:V не работает при активном BattlEye.");
-        if (!IsAdmin())
-            Console.WriteLine("  │ Запусти FloVMP.Connect.exe ОТ АДМИНИСТРАТОРА — тогда служба BE");
-        Console.WriteLine("  │ будет отключена автоматически.");
-        Console.WriteLine("  │ Если игра всё равно не заходит — сними галку BattlEye вручную:");
-        Console.WriteLine("  │   Rockstar Games Launcher → Настройки → Grand Theft Auto V →");
-        Console.WriteLine("  │   выключить \"BattlEye\", затем повторить.");
-        Console.WriteLine("  └────────────────────────────────────────────────────────────────");
+        Console.WriteLine("  == BattlEye обнаружен ==========================================");
+        Console.WriteLine("  alt:V не запустится, пока GTA V стартует под BattlEye.");
+        Console.WriteLine("  ОТКЛЮЧИ BattlEye в Rockstar Games Launcher:");
+        Console.WriteLine("    Launcher -> Настройки -> Grand Theft Auto V -> выключить BattlEye");
+        Console.WriteLine("  затем повтори запуск коннектора.");
+        Console.WriteLine("  ===============================================================");
         Console.WriteLine();
     }
 
-    private static void Sc(string verb, string args)
+    private static void Run(string exe, string args)
     {
         try
         {
-            var psi = new ProcessStartInfo("sc.exe", $"{verb} {args}")
+            using var p = Process.Start(new ProcessStartInfo(exe, args)
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            using var p = Process.Start(psi);
+                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
+            });
             p?.WaitForExit(8000);
         }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[be] sc {verb} {args}: {ex.Message}");
-        }
+        catch { }
     }
 }
