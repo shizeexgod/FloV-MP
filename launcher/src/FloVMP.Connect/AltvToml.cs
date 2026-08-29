@@ -8,8 +8,8 @@ public static class AltvToml
 {
     public static void Write(string clientDir, string gtaPath, bool debug)
     {
-        var platform = DetectPlatform(gtaPath);
         var cache = Path.Combine(clientDir, "cache").Replace('\\', '/');
+        var platform = DetectPlatform(gtaPath);
 
         var toml = $"""
             autoBackup = true
@@ -43,19 +43,19 @@ public static class AltvToml
 
         if (Has("steam_api64.dll") || HasDir("steamapps")) return "steam";
         if (Has("EOSSDK-Win64-Shipping.dll") || Has("Rockstar-Games-Epic.exe") || HasDir(".egstore"))
-            return "epic";
+            return "rgl";
         if (Has("PlayGTAV.exe") && Has("Launcher.exe") && !Has("steam_api64.dll")) return "rockstar";
 
         // 2) по пути (fallback)
         var p = gtaPath.ToLowerInvariant();
         if (p.Contains("steamapps") || p.Contains("\\steam\\")) return "steam";
-        if (p.Contains("\\epic games\\") || p.Contains("epicgames")) return "egs";
-        if (p.Contains("rockstar")) return "rockstar";
-        if (Path.GetFileName(gtaPath.TrimEnd('\\')).Length == 32) return "egs"; // GUID-папка Epic
+        if (p.Contains("\\epic games\\") || p.Contains("epicgames")) return "rgl";
+        if (p.Contains("rockstar")) return "rgl";
+        if (Path.GetFileName(gtaPath.TrimEnd('\\')).Length == 32) return "rgl"; // GUID-папка Epic
 
-        // По умолчанию epic, а НЕ steam: ошибочный 'steam' даёт "Не удалось
-        // запустить Steam" на Epic-копии. Эта сборка alt:V ожидает значение
-        // "epic" для CEpicGamesPlatform.
-        return "epic";
+        // По умолчанию rgl, а НЕ steam: ошибочный 'steam' даёт "Не удалось
+        // запустить Steam" на Epic-копии. В launcher runtime строковый
+        // идентификатор для Epic/Rockstar launch flow — rgl.
+        return "rgl";
     }
 }
