@@ -17,6 +17,7 @@
 | [engine/gtamp-reference.md](engine/gtamp-reference.md) | разбор чужого проекта GTAMP (независимый MP на alt:V) — откуда взят настоящий клиент 16.4.39 |
 | [engine/client-direct-connect.md](engine/client-direct-connect.md) | разведка клиента alt:V: флаги `altv.exe`, `altv.toml`, состояние бэкапа |
 | [engine/flovmp-connector.md](engine/flovmp-connector.md) | свой коннектор клиента: `LocalCdn` (заглушка мёртвого бэкенда), запуск `altv.exe`, проблема BattlEye |
+| [engine/live-test-wall.md](engine/live-test-wall.md) | **живой прогон 2026-08-29**: вся цепочка работает до запуска игры; стена — лаунчер alt:V 16.3.7 не патчит GTA V билд 3889; пути B (Enhanced) / A (16.4.39-лаунчер) |
 
 ## gameplay/ — геймплейные системы сервера (C# + NUI)
 

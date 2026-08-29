@@ -2,32 +2,44 @@
 
 Updated: 2026-08-29
 
-## ГДЕ МЫ СЕЙЧАС (живой прогон, ночь 28→29.08)
+## ГДЕ МЫ СЕЙЧАС (живой прогон, 29.08 — УПЁРЛИСЬ В СТЕНУ ВЕРСИЙ)
 
-Гоняем свой коннектор `FloVMP.Connect` (`launcher/src/FloVMP.Connect/`,
-`docs/engine/flovmp-connector.md`) — запускает настоящий клиент alt:V
-16.4.39 на наш сервер `127.0.0.1:7788`, обход мёртвого CDN через
-`LocalCdn` (HttpListener на 127.0.0.1:**9988** — порт жёстко зашит в alt:V).
+Полный разбор: **`docs/engine/live-test-wall.md`**.
 
-Пройденные грабли (все закоммичены):
+**Вся цепочка FloV:MP работает до запуска игры:** сервер + геймод +
+коннектор `FloVMP.Connect` + `LocalCdn` (:9988) + манифесты + self-update
+alt:V + Epic-auth (при запущенном Epic Launcher) + патчер alt:V.
+
+**Стена:** лаунчер alt:V **16.3.7** (из пакета GTAMP, свежее нет) не патчит
+`GTA5.exe` билд **1.0.3889** (текущий Legacy) — `Main thread suspend count:
+-1` каждый прогон → патчи не встают → «не смог запустить GTA5.exe».
+НЕ BattlEye (сохраняется с выключенным BE), НЕ наш код. Пакет GTAMP собран
+под **Enhanced**, под текущий Legacy не рассчитан.
+
+**Решение владельца (29.08):** целимся в актуальную GTA V, даунгрейд игры — нет.
+
+**Пути (см. `live-test-wall.md`):**
+- **B (рекомендуется, доказать стек):** прогон на GTA V **Enhanced** — alt:V
+  16.4.39 + GTAMP собраны под неё. Коннектор менять не надо.
+- **A:** раздобыть лаунчер alt:V **16.4.39** (`altv.exe`) — его патчер знал бы
+  b3889. Риск: 16.4.39 мог уронить Legacy.
+- **C:** ОТКЛОНЁН — даунгрейд GTA5.exe.
+
+Прогон на паузе. Продолжаем серверные фичи + перенос геймплея Florida V
+(живой клиент им не нужен).
+
+### Пройденные грабли коннектора (все закоммичены)
 - порт 9988 (не из `-customui` URL);
-- манифесты отдаём дословно из GTAMP (`runtime/client/cdn/*.json`) —
-  минимальный alt:V не переваривал;
-- `/backup/update.json` → `{"files":[]}` (не 404) — иначе alt:V клинит;
-- **BattlEye**: GTA V b3889 legacy требует BE; переименование файлов /
-  глушение службы — ТУПИК (ломает запуск, `ERR_GEN_INVALID`). Коннектор
-  файлы BE НЕ трогает. Решение — **галка BattlEye в Rockstar Launcher
-  выключена владельцем** (Путь A);
-- **SteamAppId**: коннектор ставил `env SteamAppId=271590` (из GTAMP,
-  Steam) → на Epic GTA5.exe вылетал «Не удалось запустить Steam».
-  Исправлено (`119c285`): ставим только для `DetectPlatform=="steam"`.
+- манифесты дословно из GTAMP (`runtime/client/cdn/*.json`);
+- `/backup/update.json` → `{"files":[]}` (не 404);
+- BattlEye: файлы НЕ трогать, службу НЕ глушить (тупик, `ERR_GEN_INVALID`).
+  Решение — галка BattlEye в Rockstar Launcher (владелец снял);
+- `SteamAppId` ставим только для `DetectPlatform=="steam"` (`119c285`) —
+  на Epic вызывал «Не удалось запустить Steam»;
+- Epic: для egs-копии Epic Games Launcher должен быть ЗАПУЩЕН (`65715fb`);
+- `.cmd`-обёртки `scripts/{run-server,connect}.cmd` — без execution policy.
 
-**Следующий шаг владельца:** пересобрать коннектор и запустить (BE выключен,
-Steam-env убран). Если GTA5.exe всё равно open-and-close → пробовать
-`--no-directlaunch`. Логи: `runtime/client/logs/patcher.log` +
-`launcher_*.log`.
-
-Мой косяк за сессию: глушил службу `BEService` → сломал обычный запуск GTA
+Мой косяк за сессию: глушил `BEService` → сломал обычный запуск GTA
 (`ERR_GEN_INVALID`). Владелец починил (`Set-Service BEService -StartupType
 Manual; Start-Service BEService`). В коннекторе убрано.
 
