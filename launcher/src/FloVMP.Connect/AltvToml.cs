@@ -6,10 +6,12 @@ namespace FloVMP.Connect;
 /// </summary>
 public static class AltvToml
 {
-    public static void Write(string clientDir, string gtaPath, bool debug)
+    public static void Write(string clientDir, string gtaPath, bool debug, string? platformOverride = null)
     {
         var cache = Path.Combine(clientDir, "cache").Replace('\\', '/');
-        var platform = DetectPlatform(gtaPath);
+        var platform = string.IsNullOrWhiteSpace(platformOverride)
+            ? DetectPlatform(gtaPath)
+            : platformOverride.Trim().ToLowerInvariant();
 
         var toml = $"""
             autoBackup = true

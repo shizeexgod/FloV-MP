@@ -4,7 +4,7 @@ using FloVMP.Connect;
 // FloV:MP connector — запуск клиента alt:V на наш сервер без бэкенда alt:V.
 //
 //   FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>]
-//                      [--port <n>] [--no-debug] [--keep-open]
+//                      [--port <n>] [--platform <steam|rgl|rockstar>] [--no-debug] [--keep-open]
 //
 // По умолчанию:
 //   --client  = <exeDir>\..\..\..\..\..\runtime\client  (или CWD\runtime\client)
@@ -27,7 +27,7 @@ if (args.Contains("--cdn-only"))
 var opts = ParseArgs(args);
 if (opts is null) return 1;
 
-var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch) = opts.Value;
+var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride) = opts.Value;
 
 if (!File.Exists(Path.Combine(clientDir, "altv.exe")))
 {
@@ -63,7 +63,7 @@ using var cdn = new LocalCdn(clientDir, port, uiDir);
 cdn.Start();
 
 // 2) altv.toml (настоящий gtapath, без подмены GTA5.exe)
-AltvToml.Write(clientDir, gtaDir, debug);
+AltvToml.Write(clientDir, gtaDir, debug, platformOverride);
 Console.WriteLine("[connect] altv.toml записан");
 
 // 2.5) BattlEye: ничего не ломаем. Чиним службу, если её испортил прошлый
@@ -148,9 +148,9 @@ static string? FindGameExecutable(string gtaDir)
     return null;
 }
 
-static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch)? ParseArgs(string[] a)
+static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride)? ParseArgs(string[] a)
 {
-    string? connect = null, client = null, gta = null;
+    string? connect = null, client = null, gta = null, platformOverride = null;
     // alt:V-клиент ходит на бэкенд по ЖЁСТКО зашитому 127.0.0.1:9988
     // (флаг -customui только включает local-backend режим, порт не читает).
     var port = 9988;
@@ -165,6 +165,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
             case "-connect" or "--connect" when i + 1 < a.Length: connect = a[++i]; break;
             case "--client" when i + 1 < a.Length: client = a[++i]; break;
             case "--gta" when i + 1 < a.Length: gta = a[++i]; break;
+            case "--platform" when i + 1 < a.Length: platformOverride = a[++i]; break;
             case "--port" when i + 1 < a.Length && int.TryParse(a[i + 1], out var p): port = p; i++; break;
             case "--no-debug": debug = false; break;
             case "--keep-open": keepOpen = true; break;
@@ -174,7 +175,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
 
     if (connect is null)
     {
-        Console.Error.WriteLine("использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--no-debug] [--keep-open] [--no-directlaunch]");
+        Console.Error.WriteLine("использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--platform <steam|rgl|rockstar>] [--no-debug] [--keep-open] [--no-directlaunch]");
         return null;
     }
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
@@ -186,7 +187,14 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
     gta ??= ResolveGtaDir(client);
     if (gta is null) { Console.Error.WriteLine("[err] не нашёл папку GTA V, задайте --gta <dir>"); return null; }
 
-    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch);
+    if (!string.IsNullOrWhiteSpace(platformOverride) &&
+        !new[] { "steam", "rgl", "rockstar" }.Contains(platformOverride.Trim().ToLowerInvariant()))
+    {
+        Console.Error.WriteLine("[err] --platform допускает только steam, rgl или rockstar");
+        return null;
+    }
+
+    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride);
 }
 
 static string? ResolveClientDir()
