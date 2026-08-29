@@ -1,34 +1,20 @@
 @echo off
-REM Подключение к серверу FloV:MP через свой коннектор.
-REM   connect.cmd                         -> 127.0.0.1:7788, автодетект игры
-REM   connect.cmd 1.2.3.4:7788            -> другой сервер
-REM   connect.cmd 127.0.0.1:7788 --gta "E:\...\GTAV Enhanced"
-REM Любые доп. аргументы после ip:port пробрасываются в коннектор
-REM (--gta <dir>, --client <dir>, --no-directlaunch, --keep-open).
-setlocal
-set TARGET=%~1
-if "%TARGET%"=="" set TARGET=127.0.0.1:7788
-shift
+set "HERE=%~dp0"
+set "CONNECT=%HERE%..\launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
 
-set CONNECT=%~dp0\..\launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe
 if not exist "%CONNECT%" (
-  echo [FloV:MP] коннектор не собран. Собери:
-  echo   dotnet build "%~dp0\..\launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release
+  echo [FloV:MP] connector not built. Run:
+  echo   dotnet build "%HERE%..\launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release
   pause
   exit /b 1
 )
 
-REM собрать хвост аргументов (%2 %3 ... после сдвига это %1 %2 ...)
-set REST=
-:loop
-if "%~1"=="" goto run
-set REST=%REST% %1
-shift
-goto loop
+set "TARGET=%~1"
+if "%TARGET%"=="" set "TARGET=127.0.0.1:7788"
 
-:run
-echo [FloV:MP] connect -> %TARGET%   %REST%
-echo [FloV:MP] GTA V из Epic -> Epic Games Launcher должен быть ЗАПУЩЕН и залогинен.
+echo [FloV:MP] connect to %TARGET%   %2 %3 %4 %5 %6
+echo [FloV:MP] Epic Games Launcher must be RUNNING and logged in.
 echo.
-"%CONNECT%" -connect %TARGET%%REST%
+"%CONNECT%" -connect %TARGET% %2 %3 %4 %5 %6 %7 %8 %9
+echo.
 pause
