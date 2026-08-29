@@ -66,7 +66,7 @@ public sealed class CompatService
             return new CompatResult(CompatVerdict.NoManifest,
                 "манифест совместимости не загружен — запуск на свой риск");
 
-        var entry = Match(manifest, game);
+        var entry = await MatchAsync(manifest, game, ct);
         if (entry is null)
             return new CompatResult(CompatVerdict.Unknown,
                 $"версия GTA V ({game.FileVersion}, {game.Size} Б) не в манифесте — вероятно, игра обновилась. Обнови лаунчер/подожди патч совместимости.");
@@ -87,8 +87,28 @@ public sealed class CompatService
         };
     }
 
-    private static CompatEntry? Match(CompatManifest manifest, GameVersion game)
+    private static async Task<CompatEntry?> MatchAsync(
+        CompatManifest manifest, GameVersion game, CancellationToken ct)
     {
+        // SHA-256 is authoritative when a profile provides it. Calculate it
+        // only for candidates that ask for it; normal version checks remain
+        // cheap for manifests that contain only metadata.
+        var hashCandidates = manifest.Versions
+            .Where(v => !string.IsNullOrWhiteSpace(v.GtaSha256) &&
+                        string.Equals(v.GtaFileVersion, game.FileVersion, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (hashCandidates.Count > 0)
+        {
+            var actualHash = await game.Sha256Async(ct);
+            var byHash = hashCandidates.FirstOrDefault(v =>
+                string.Equals(v.GtaSha256, actualHash, StringComparison.OrdinalIgnoreCase));
+            if (byHash is not null) return byHash;
+
+            // A profile with an exact hash must never silently downgrade to a
+            // weaker version/size match after the hash disagrees.
+            return null;
+        }
+
         // 1) точное совпадение по размеру + версии
         var byKey = manifest.Versions.FirstOrDefault(v =>
             v.GtaSize == game.Size &&

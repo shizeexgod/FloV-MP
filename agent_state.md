@@ -2,6 +2,12 @@
 
 Updated: 2026-08-30
 
+## Границы продукта
+
+`FloV:MP` — самостоятельный мультиплеерный движок/платформа с прямым
+подключением через лаунчер, без общего мастер-листа. `Florida V` — отдельный
+RP-сервер, который будет базироваться на FloV:MP.
+
 ## Поворот на Legacy 3889 (2026-08-30)
 
 Старые downgrade-архивы и Steam b3521 больше не считаются решением для
@@ -107,7 +113,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 | 14 | Фаза 3: HUD (C# события + NUI) | ✅ done — `HudSystem` (тик 1с через `OnTick`), NUI `html/hud/`, `Account.Cash`. Визуально не проверен. `docs/gameplay/phase3-hud.md` |
 | 15 | Фаза 3: инвентарь (C# + NUI) | ✅ done — `FloVMP.Core.Items` (Inventory/ItemCatalog/store), `InventorySystem`, NUI грид с drag&drop (клавиша I), 11 тестов. Визуально не проверен. `docs/gameplay/phase3-inventory.md` |
 | 16 | Фаза 3: чат (C# + NUI) | ✅ done — `ChatSanitizer` + `ChatSystem` (rate-limit, команды /help /me /online /pos), NUI `html/chat/` (клавиша T), 14 тестов. `docs/gameplay/phase3-chat.md` |
-| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/engine/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 41 тест |
+| 17 | **Доведение MP-ядра до идеала** — устойчивость, автосейв, обработка ошибок, ревью систем. НЕ переносить геймплей Florida V пока не готово | in progress — раунды 1-2 (`docs/engine/core-hardening.md`): Safe-обёртки, фикс порядка disconnect-обработчиков, один аккаунт = один сеанс, автосейв + флаш, карантин битых сторов, хендшейк client:ready (иначе чёрный экран), HUD шлёт только дельты, чистка троттла. 46 тестов |
 | 18 | Живой тест ядра (2 игрока: auth+HUD+инвентарь+чат, видят друг друга, двигаются) — нужен владелец + GTA V | todo — клиент есть (`runtime/client/`), сервер есть |
 | 19 | Свой коннектор клиента (`FloVMP.Connect`) | ✅ v1 — `launcher/src/FloVMP.Connect/`: `LocalCdn` (HttpListener-заглушка бэкенда alt:V), `AltvToml`, запуск `altv.exe -directlaunch -customui`. Без подмены GTA5.exe (играем на legacy игрока). Роуты проверены headless. Живой запуск — за владельцем. `docs/engine/flovmp-connector.md` |
 | 20 | Дополнить `config/server.toml` секциями из GTAMP (`[threads]`, лимиты событий, `allowUnknownRPCEvents=false`, `[maxStreaming]`) | todo, мелкая |

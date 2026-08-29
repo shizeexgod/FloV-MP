@@ -6,6 +6,11 @@
 [`../agent_state.md`](../agent_state.md). Контекст и правила — в
 [`../CLAUDE.md`](../CLAUDE.md).
 
+`FloV:MP` — платформа/движок прямого подключения без общего мастер-листа.
+`Florida V` — отдельный RP-сервер поверх этой платформы.
+
+Подробное разграничение: [architecture/product-boundaries.md](architecture/product-boundaries.md).
+
 ## engine/ — движок alt:V, серверное ядро
 
 | Файл | О чём |

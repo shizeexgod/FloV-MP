@@ -56,6 +56,32 @@ public sealed class CompatServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Matches_by_sha256_when_profile_has_exact_hash()
+    {
+        var exe = Path.Combine(_dir, "GTA5.exe");
+        await File.WriteAllTextAsync(exe, "legacy-3889-fixture");
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(exe)));
+        var m = new CompatManifest
+        {
+            Versions =
+            {
+                new CompatEntry
+                {
+                    GtaFileVersion = "1.0.3889.0", GtaSize = 1,
+                    GtaSha256 = hash, Status = CompatStatus.Supported,
+                },
+            },
+        };
+
+        var res = await new CompatService().EvaluateAsync(
+            WriteManifest(m), new GameVersion("1.0.3889.0", 999, exe));
+
+        Assert.Equal(CompatVerdict.Ok, res.Verdict);
+        Assert.NotNull(res.Entry);
+    }
+
+    [Fact]
     public async Task Unknown_version_returns_Unknown()
     {
         var m = new CompatManifest
