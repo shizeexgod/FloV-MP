@@ -69,6 +69,20 @@ Console.WriteLine("[connect] altv.toml записан");
 if (OperatingSystem.IsWindows()) BattlEye.RepairServiceIfBroken();
 BattlEye.Advise(gtaDir);
 
+// 2.6) Epic: GTA5.exe (Epic-копия) при прямом запуске без запущенного
+// Epic Games Launcher не получает auth -> падает с "Не удалось запустить
+// Steam". Лаунчер Epic должен быть ЗАПУЩЕН и залогинен.
+if (AltvToml.DetectPlatform(gtaDir) == "egs" && !IsUp("EpicGamesLauncher.exe"))
+{
+    Console.WriteLine();
+    Console.WriteLine("  == ВНИМАНИЕ: Epic Games Launcher не запущен ==================");
+    Console.WriteLine("  GTA V куплена в Epic. Запусти Epic Games Launcher, залогинься,");
+    Console.WriteLine("  оставь его открытым — иначе GTA5.exe упадёт с ошибкой Steam.");
+    Console.WriteLine("  (Rockstar Games Launcher закрой.) Затем повтори этот запуск.");
+    Console.WriteLine("  ===========================================================");
+    Console.WriteLine();
+}
+
 try
 {
     // 3) запуск клиента
