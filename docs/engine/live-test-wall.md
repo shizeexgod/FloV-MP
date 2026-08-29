@@ -92,3 +92,50 @@ Rockstar Launcher снята, служба `BEService` в норме).
 
 Пока прогон на паузе — продолжаем серверные фичи и перенос геймплея
 Florida V (живой клиент им не нужен).
+
+---
+
+## ПРОРЫВ 2026-08-29 (вечер): клиент подключился к нашему серверу
+
+Схема GTAMP с подменой exe на b3307/b3337 (`runtime/client/cdn/backup_update.json`
+урезан до одного файла + кэш `EAC7B9E...`) дала **`Main thread suspend count: 15`**
+(было `-1`). Патчер 16.3.7 знает этот билд, BE не мешает (b3307 — до
+обязательного BattlEye).
+
+Из `runtime/client/logs/client_*.log`:
+
+```
+Main thread suspend count: 15
+alt:V build #16.4.39, branch release
+Connect 127.0.0.1 7788
+Downloading resource from: http://127.0.0.1:7788/flovmp-client.resource
+Downloaded and validated resource flovmp-client succesfully
+Finished downloading all resources
+```
+
+**Связка сервер ↔ LocalCdn ↔ клиент ↔ наш геймод — работает.**
+
+### Крашит на версии игровых данных
+
+```
+Game version: 3337 on EGS
+[Warning] Rpf version: 3889 differs from alt rpf version: 3521
+[Warning] Pattern 40 53 55 56 57 48 83 ec 48 not found!
+[Error] ERR_MEM_MULTIALLOC_FREE
+```
+
+- alt:V 16.4.39 держит Legacy до **b3521**.
+- Данные игрока — **b3889** (`update.rpf` ~2 ГБ, обновлён Epic).
+- Подмена exe без даунгрейда rpf → alt:V не находит паттерн в памяти b3889
+  → патч не туда → краш.
+- **GTAMP не решает rpf-даунгрейд**: их `backup_update.json` ссылается на
+  `3411/*` части (~1.9 ГБ), которых нет ни в пакете, ни на живом CDN. Их
+  схема рассчитана на игрока с уже даунгрейднутой (≤3521) GTA V.
+
+### Последний кусок
+
+Даунгрейд-пак **GTA V Legacy → b3521** (или b3407): `update/update.rpf` +
+`update/update2.rpf` + `GTA5.exe` (~2.5 ГБ). Стандартный community-артефакт
+(alt:V/RageMP downgrade). Кладётся в `runtime/client/cdn/`, восстанавливается
+полный `backup_update.json`, alt:V собирает даунгрейднутую игру в своей
+приватной папке (инстолл игрока не трогается).
