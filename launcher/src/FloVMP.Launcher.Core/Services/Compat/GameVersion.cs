@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using FloVMP.Launcher.Services;
 
 namespace FloVMP.Launcher.Services.Compat;
 
@@ -10,14 +11,17 @@ namespace FloVMP.Launcher.Services.Compat;
 /// </summary>
 public sealed record GameVersion(string FileVersion, long Size, string ExePath)
 {
+    public bool IsEnhanced => string.Equals(Path.GetFileName(ExePath), "GTA5_Enhanced.exe", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Короткий ключ для сопоставления с манифестом совместимости.</summary>
     public string Key => $"{FileVersion}|{Size}";
 
     public static GameVersion? Detect(string gtaFolder)
     {
         if (string.IsNullOrWhiteSpace(gtaFolder)) return null;
-        var exe = Path.Combine(gtaFolder, "GTA5.exe");
-        if (!File.Exists(exe)) return null;
+        var exeName = GtaLocator.FindGameExecutable(gtaFolder);
+        if (exeName is null) return null;
+        var exe = Path.Combine(gtaFolder, exeName);
 
         string fv;
         try

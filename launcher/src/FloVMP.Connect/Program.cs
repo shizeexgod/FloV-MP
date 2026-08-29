@@ -34,19 +34,21 @@ if (!File.Exists(Path.Combine(clientDir, "altv.exe")))
     Console.Error.WriteLine($"[err] не найден altv.exe в {clientDir}");
     return 2;
 }
-if (!File.Exists(Path.Combine(gtaDir, "GTA5.exe")))
+var gameExe = FindGameExecutable(gtaDir);
+if (gameExe is null)
 {
-    Console.Error.WriteLine($"[err] не найден GTA5.exe в {gtaDir}");
+    Console.Error.WriteLine($"[err] не найден GTA V executable в {gtaDir} (ожидался GTA5.exe или GTA5_Enhanced.exe)");
     return 2;
 }
 
 Console.WriteLine($"[connect] server : {connect}");
 Console.WriteLine($"[connect] client : {clientDir}");
 Console.WriteLine($"[connect] gta    : {gtaDir}");
+Console.WriteLine($"[connect] exe    : {gameExe}");
 
 // 0) alt:V должен САМ запустить GTA5.exe (suspended). Если игра/клиент уже
 //    запущены — alt:V не сможет захватить процесс ("suspend count: -1").
-foreach (var stale in new[] { "GTA5", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
+foreach (var stale in new[] { "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
 {
     foreach (var pr in Process.GetProcessesByName(stale))
     {
@@ -112,13 +114,13 @@ try
     while (true)
     {
         var altvUp = IsUp("altv.exe");
-        var gtaUp = IsUp("GTA5.exe");
+        var gtaUp = IsUp("GTA5.exe") || IsUp("GTA5_Enhanced.exe");
         if (gtaUp) gtaSeen = true;
         if (gtaSeen && !gtaUp) break;
         if (!gtaSeen && !altvUp)
         {
             await Task.Delay(3000);
-            if (!IsUp("altv.exe") && !IsUp("GTA5.exe")) break;
+            if (!IsUp("altv.exe") && !IsUp("GTA5.exe") && !IsUp("GTA5_Enhanced.exe")) break;
         }
         await Task.Delay(500);
     }
@@ -137,6 +139,13 @@ static bool IsUp(string name)
 {
     try { return Process.GetProcessesByName(Path.GetFileNameWithoutExtension(name)).Length > 0; }
     catch { return false; }
+}
+
+static string? FindGameExecutable(string gtaDir)
+{
+    foreach (var name in new[] { "GTA5.exe", "GTA5_Enhanced.exe" })
+        if (File.Exists(Path.Combine(gtaDir, name))) return name;
+    return null;
 }
 
 static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch)? ParseArgs(string[] a)
@@ -222,7 +231,7 @@ static string? ResolveGtaDir(string clientDir)
                             ?? hklm.OpenSubKey(@"SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto V");
                 foreach (var name in new[] { "InstallFolderEpic", "InstallFolder", "InstallFolderSteam" })
                 {
-                    if (k?.GetValue(name) is string p && File.Exists(Path.Combine(p, "GTA5.exe"))) return p;
+                    if (k?.GetValue(name) is string p && FindGameExecutable(p) is not null) return p;
                 }
             }
             catch { /* ignore */ }
@@ -237,7 +246,7 @@ static string? ResolveGtaDir(string clientDir)
                  @"C:\Program Files\Epic Games\GTAV",
              })
     {
-        if (File.Exists(Path.Combine(c, "GTA5.exe"))) return c;
+        if (FindGameExecutable(c) is not null) return c;
     }
     return null;
 }

@@ -6,7 +6,8 @@ namespace FloVMP.Launcher.Services;
 
 public sealed record GtaCandidate(string Path, string Source)
 {
-    public bool HasExe => File.Exists(System.IO.Path.Combine(Path, "GTA5.exe"));
+    public string? GameExecutable => GtaLocator.FindGameExecutable(Path);
+    public bool HasExe => GameExecutable is not null;
 }
 
 /// <summary>
@@ -65,5 +66,15 @@ public static class GtaLocator
     }
 
     public static bool LooksLikeGtaFolder(string? path) =>
-        !string.IsNullOrWhiteSpace(path) && File.Exists(Path.Combine(path, "GTA5.exe"));
+        FindGameExecutable(path) is not null;
+
+    public static string? FindGameExecutable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        foreach (var name in new[] { "GTA5.exe", "GTA5_Enhanced.exe" })
+        {
+            if (File.Exists(Path.Combine(path, name))) return name;
+        }
+        return null;
+    }
 }

@@ -236,7 +236,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void BrowseGta()
     {
-        var dlg = new OpenFolderDialog { Title = "Папка GTA V (с GTA5.exe)" };
+        var dlg = new OpenFolderDialog { Title = "Папка GTA V (Legacy или Enhanced)" };
         if (!string.IsNullOrWhiteSpace(_s.GtaPath) && Directory.Exists(_s.GtaPath)) dlg.InitialDirectory = _s.GtaPath;
         if (dlg.ShowDialog() == true) GtaPath = dlg.FolderName;
     }
@@ -323,9 +323,10 @@ public sealed class MainViewModel : ObservableObject
 
     private void RefreshDerived()
     {
-        GtaStatusText = GtaLocator.LooksLikeGtaFolder(_s.GtaPath)
-            ? "GTA5.exe найден"
-            : "GTA5.exe НЕ найден в этой папке";
+        var gameExe = GtaLocator.FindGameExecutable(_s.GtaPath);
+        GtaStatusText = gameExe is not null
+            ? $"{gameExe} найден"
+            : "GTA V exe НЕ найден в этой папке";
 
         var v = AltvClientCore.Validate(_s.AltvCoreDir);
         CoreStatusText = v.Ok
