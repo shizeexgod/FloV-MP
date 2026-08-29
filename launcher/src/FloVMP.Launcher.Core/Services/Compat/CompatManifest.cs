@@ -36,6 +36,10 @@ public enum CompatStatus { Unknown, Supported, Untested, Broken }
 
 public sealed class CompatEntry
 {
+    /// <summary>Издание GTA V: Legacy или Enhanced. Пустое значение сохраняет совместимость со старыми манифестами.</summary>
+    [JsonPropertyName("edition")]
+    public GtaEdition? Edition { get; set; }
+
     /// <summary>Человекочитаемая версия игры, напр. "1.0.3570.0".</summary>
     [JsonPropertyName("gtaFileVersion")]
     public string GtaFileVersion { get; set; } = "";

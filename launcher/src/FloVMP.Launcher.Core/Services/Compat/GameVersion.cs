@@ -4,6 +4,8 @@ using FloVMP.Launcher.Services;
 
 namespace FloVMP.Launcher.Services.Compat;
 
+public enum GtaEdition { Legacy, Enhanced }
+
 /// <summary>
 /// Идентификатор установленной версии GTA V. Комбинация метаданных PE
 /// (FileVersion) + размер файла. Полный SHA-256 считается по запросу
@@ -12,9 +14,10 @@ namespace FloVMP.Launcher.Services.Compat;
 public sealed record GameVersion(string FileVersion, long Size, string ExePath)
 {
     public bool IsEnhanced => string.Equals(Path.GetFileName(ExePath), "GTA5_Enhanced.exe", StringComparison.OrdinalIgnoreCase);
+    public GtaEdition Edition => IsEnhanced ? GtaEdition.Enhanced : GtaEdition.Legacy;
 
     /// <summary>Короткий ключ для сопоставления с манифестом совместимости.</summary>
-    public string Key => $"{FileVersion}|{Size}";
+    public string Key => $"{Edition}|{FileVersion}|{Size}";
 
     public static GameVersion? Detect(string gtaFolder)
     {

@@ -95,6 +95,7 @@ public sealed class CompatService
         // cheap for manifests that contain only metadata.
         var hashCandidates = manifest.Versions
             .Where(v => !string.IsNullOrWhiteSpace(v.GtaSha256) &&
+                        (v.Edition is null || v.Edition == game.Edition) &&
                         string.Equals(v.GtaFileVersion, game.FileVersion, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (hashCandidates.Count > 0)
@@ -111,12 +112,14 @@ public sealed class CompatService
 
         // 1) точное совпадение по размеру + версии
         var byKey = manifest.Versions.FirstOrDefault(v =>
+            (v.Edition is null || v.Edition == game.Edition) &&
             v.GtaSize == game.Size &&
             string.Equals(v.GtaFileVersion, game.FileVersion, StringComparison.OrdinalIgnoreCase));
         if (byKey is not null) return byKey;
 
         // 2) только по FileVersion (размер мог чуть отличаться между сторами)
         return manifest.Versions.FirstOrDefault(v =>
+            (v.Edition is null || v.Edition == game.Edition) &&
             !string.IsNullOrEmpty(v.GtaFileVersion) &&
             string.Equals(v.GtaFileVersion, game.FileVersion, StringComparison.OrdinalIgnoreCase));
     }

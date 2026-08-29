@@ -30,6 +30,39 @@ public sealed class CompatServiceTests : IDisposable
         new(fv, size, @"X:\gta\GTA5.exe");
 
     [Fact]
+    public void Enhanced_executable_has_separate_edition_key()
+    {
+        var legacy = new GameVersion("1.0.3889.0", 123, @"X:\gta\GTA5.exe");
+        var enhanced = new GameVersion("1.0.3889.0", 123, @"X:\gta\GTA5_Enhanced.exe");
+
+        Assert.Equal(GtaEdition.Legacy, legacy.Edition);
+        Assert.Equal(GtaEdition.Enhanced, enhanced.Edition);
+        Assert.NotEqual(legacy.Key, enhanced.Key);
+    }
+
+    [Fact]
+    public async Task Manifest_edition_does_not_match_other_edition()
+    {
+        var m = new CompatManifest
+        {
+            Versions =
+            {
+                new CompatEntry
+                {
+                    Edition = GtaEdition.Legacy,
+                    GtaFileVersion = "1.0.3889.0", GtaSize = 12345,
+                    Status = CompatStatus.Supported,
+                },
+            },
+        };
+        var enhanced = new GameVersion("1.0.3889.0", 12345, @"X:\gta\GTA5_Enhanced.exe");
+
+        var res = await new CompatService().EvaluateAsync(WriteManifest(m), enhanced);
+
+        Assert.Equal(CompatVerdict.Unknown, res.Verdict);
+    }
+
+    [Fact]
     public async Task Supported_version_returns_Ok()
     {
         var m = new CompatManifest
