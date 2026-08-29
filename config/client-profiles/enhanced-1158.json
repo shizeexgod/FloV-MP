@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "enhanced-1158",
+  "edition": "Enhanced",
+  "gameExecutable": "GTA5_Enhanced.exe",
+  "gameFileVersion": "1.0.1158.13",
+  "gameSha256": "0c52864d4521d9c9d441348aa1156958792dde8825d0297c851753f167336401",
+  "updateRpfSha256": "aae1703738dcd45400292804aac5126357e0d2cac5a240b392f682d5a82b2450",
+  "update2RpfSha256": "0057a4aba514c8458c435fe69de1d567bd3e3cacc4f73a36b1c29f3cfb9ad9e4",
+  "runtimeClientVersion": "16.4.39",
+  "runtimeLauncherVersion": "16.3.7",
+  "supportStatus": "needs-enhanced-runtime"
+}

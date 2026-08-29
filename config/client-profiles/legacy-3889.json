@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "legacy-3889",
+  "edition": "Legacy",
+  "gameExecutable": "GTA5.exe",
+  "gameFileVersion": "1.0.3889.0",
+  "gameSha256": "677e4e355cfbdb13273b1d992407e3c261b3a108dc4dd5c8a0c4c1da651802e5",
+  "updateRpfSha256": "913a335314b4c3c616397782e4175d6a3cf217219750cb9b457b4a781a73ddc0",
+  "update2RpfSha256": "8e2022693d3be6bf3961bf596045ef2762b34f6aa49d5afb8083659296ca1393",
+  "runtimeClientVersion": "16.4.39",
+  "runtimeLauncherVersion": "16.3.7",
+  "supportStatus": "needs-version-adapter"
+}
