@@ -68,13 +68,22 @@ public sealed class LocalCdn : IDisposable
 
             if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
             {
-                // "обновлять/подменять нечего" — alt:V берёт настоящий GTA5.exe игрока
-                Write(ctx, 200, "application/json", Enc("{\"files\":[]}"));
+                // Подмена GTA5.exe: если в cdn/ лежит backup_update.json —
+                // отдаём его (alt:V скачает поддерживаемый билд exe в свою
+                // приватную папку, настоящий GTA5.exe игрока не трогается).
+                // Нет файла -> "обновлять нечего".
+                Write(ctx, 200, "application/json",
+                    Enc(ManifestFor("backup_update.json", "{\"files\":[]}")));
             }
             else if (lower.Contains("/backup/"))
             {
-                // файлы бэкапа (кэш GTA5.exe и т.п.) не отдаём
-                Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
+                // файл бэкапа по имени (basename), из cdn/
+                var name = Path.GetFileName(path);
+                var f = Path.Combine(_clientDir, "cdn", name);
+                if (File.Exists(f))
+                    Write(ctx, 200, "application/octet-stream", File.ReadAllBytes(f));
+                else
+                    Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
             }
             else if (lower.Contains("update.json") && lower.Contains("/launcher"))
             {
