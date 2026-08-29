@@ -18,6 +18,7 @@
 | [engine/client-direct-connect.md](engine/client-direct-connect.md) | разведка клиента alt:V: флаги `altv.exe`, `altv.toml`, состояние бэкапа |
 | [engine/flovmp-connector.md](engine/flovmp-connector.md) | свой коннектор клиента: `LocalCdn` (заглушка мёртвого бэкенда), запуск `altv.exe`, проблема BattlEye |
 | [engine/live-test-wall.md](engine/live-test-wall.md) | **живой прогон 2026-08-29**: вся цепочка работает до запуска игры; стена — лаунчер alt:V 16.3.7 не патчит GTA V билд 3889; пути B (Enhanced) / A (16.4.39-лаунчер) |
+| [engine/legacy-3889-plan.md](engine/legacy-3889-plan.md) | актуальный план собственного адаптера для Epic Legacy 1.0.3889; старые downgrade-профили не смешиваются с ним |
 
 ## gameplay/ — геймплейные системы сервера (C# + NUI)
 

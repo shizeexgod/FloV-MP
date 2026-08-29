@@ -21,7 +21,7 @@
 
 | Файл | Роль |
 |---|---|
-| `LocalCdn.cs` | `HttpListener` на `127.0.0.1:<port>`. Роуты (по образцу `proxy.cpp`): `/client/*/update.json` → манифест, собранный из РЕАЛЬНЫХ файлов `runtime/client/` (хэши сходятся, клиент ничего не качает); `/client/*/<file>` → файл с диска; `/launcher/*/update.json` → минимальный; `/skin*` → `cache/skin.bin`; `branch-access`/`auth`/`token` → `{"access":true}`; `client-branches`/`/` → `{"release":"16.4.39"}`; **`/backup/*` → 404** (никакой подмены GTA5.exe); прочее → `{}` |
+| `LocalCdn.cs` | `HttpListener` на `127.0.0.1:<port>`. Роуты (по образцу `proxy.cpp`): `/client/*/update.json` → манифест, собранный из РЕАЛЬНЫХ файлов `runtime/client/` (хэши сходятся, клиент ничего не качает); `/client/*/<file>` → файл с диска; `/launcher/*/update.json` → минимальный; `/skin*` → `cache/skin.bin`; `branch-access`/`auth`/`token` → `{"access":true}`; `client-branches`/`/` → `{"release":"16.4.39"}`; `/backup/*` → только явно подготовленный backup-манифест, иначе пустой список; для Legacy 3889 этот маршрут не используется; прочее → `{}` |
 | `AltvToml.cs` | пишет `runtime/client/altv.toml`: `gtapath` = настоящая папка игры, `gtaPlatform` авто (egs/steam/rockstar), `update=false`, `crashReporterEnabled=false` |
 | `Program.cs` | resolve client-dir + GTA (altv.toml → реестр `InstallFolderEpic` → частые пути) → старт LocalCdn → altv.toml → запуск `altv.exe` → ждать выхода игры → стоп CDN. Флаг `--cdn-only` — поднять только бэкенд (диагностика роутов). |
 
