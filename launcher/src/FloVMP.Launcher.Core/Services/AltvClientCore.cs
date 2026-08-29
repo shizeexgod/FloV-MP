@@ -3,10 +3,14 @@ using System.IO;
 
 namespace FloVMP.Launcher.Services;
 
-public sealed record CoreValidation(bool Ok, IReadOnlyList<string> Missing)
+public sealed record CoreValidation(
+    bool Ok,
+    IReadOnlyList<string> Missing,
+    string LauncherVersion = "unknown",
+    string ClientVersion = "unknown")
 {
     public string Summary => Ok
-        ? "ядро клиента: файлы на месте"
+        ? $"ядро клиента: файлы на месте (launcher {LauncherVersion}, client {ClientVersion})"
         : $"ядро клиента: не хватает {Missing.Count} файл(ов)";
 }
 
@@ -57,7 +61,21 @@ public static class AltvClientCore
             .Where(rel => !File.Exists(Path.Combine(coreDir, rel)))
             .ToList();
 
-        return new CoreValidation(missing.Count == 0, missing);
+        static string VersionOf(string path)
+        {
+            try
+            {
+                var version = FileVersionInfo.GetVersionInfo(path).ProductVersion;
+                return string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
+            }
+            catch { return "unknown"; }
+        }
+
+        return new CoreValidation(
+            missing.Count == 0,
+            missing,
+            VersionOf(Path.Combine(coreDir, "altv.exe")),
+            VersionOf(Path.Combine(coreDir, "altv-client.dll")));
     }
 
     public static string BuildConnectUrl(string host, int port, string? nickname, string? password)
