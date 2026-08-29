@@ -3,6 +3,7 @@ using System.IO;
 using AltV.Net;
 using AltV.Net.Elements.Entities;
 using FloVMP.Core.Auth;
+using FloVMP.Core.Logging;
 
 namespace FloVMP.Gamemode;
 
@@ -40,6 +41,9 @@ public class GamemodeResource : Resource
         _hud = new HudSystem(ServerName);
 
         var dataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
+        GameLog.Configure(new FileLogSink(Path.Combine(dataDir, "logs")));
+        GameLog.System("gamemode_start", ("version", BuildInfo.Version));
+
         _auth = new AuthSystem(Path.Combine(dataDir, "accounts.json"), OnPlayerAuthed);
         _auth.Attach();
 
@@ -65,6 +69,11 @@ public class GamemodeResource : Resource
     public override void OnStop()
     {
         Safe.Run("core.OnStop.flush", () => _inv?.SaveAll());
+        Safe.Run("core.OnStop.log", () =>
+        {
+            GameLog.System("gamemode_stop");
+            GameLog.ShutdownAsync().GetAwaiter().GetResult();
+        });
 
         Alt.OnServerStarted -= OnServerStarted;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
@@ -92,6 +101,7 @@ public class GamemodeResource : Resource
         {
             _lastAutoSaveMs = now;
             Safe.Run("core.autosave", () => _inv?.SaveAll());
+            Safe.Run("core.autosave.log", () => _ = GameLog.FlushAsync());
         }
     }
 

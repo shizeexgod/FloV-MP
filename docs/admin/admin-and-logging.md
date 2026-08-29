@@ -16,6 +16,33 @@
 
 ## 1. Система логов (всё логируется)
 
+### Реализовано (2026-08-29) — инфраструктура
+
+`server/src/FloVMP.Core/Logging/`:
+
+| Файл | Что |
+|---|---|
+| `LogEntry.cs` | иммутабельная запись: `Id, TsUtc, Category, Action, Actor{Kind,AccountId,Name}, Target, Details, Ip`. `LogCategory` — 13 категорий-констант (admin/account/character/punishment/money/item/vehicle/org/identity/event/kill/qa/promo + system) |
+| `ILogSink.cs` | приёмник: `Write` (неблокирующий), `FlushAsync`, `IAsyncDisposable` |
+| `FileLogSink.cs` | JSON Lines в `flovmp-data/logs/<category>/<yyyy-MM-dd>.jsonl`. Продюсер кладёт в `Channel` (bounded 10k) и возвращается; фоновый воркер пишет пачками (append, UTF-8 без BOM). Переполнение → drop старейших (`Dropped` счётчик), сервер не встаёт. `FlushAsync` ждёт запись на диск (спин по счётчику `_pending`, кап ~20 с) |
+| `GameLog.cs` | единая статическая точка: `GameLog.Account/Money/Item/Admin/Punishment/Kill/System(...)`. До `Configure(sink)` — тихий no-op (безопасно в тестах). `ShutdownAsync` = flush + dispose |
+
+Проводка (`FloVMP.Gamemode`):
+- `GamemodeResource.OnStart` → `GameLog.Configure(new FileLogSink(<dataDir>/logs))` + `System("gamemode_start")`;
+- `OnTick` автосейв-тик (60 с) → `GameLog.FlushAsync()` (fire-and-forget);
+- `OnStop` → `System("gamemode_stop")` + `GameLog.ShutdownAsync()`;
+- `AuthSystem` → `Account("register")`, `Account("login")` с IP;
+- `InventorySystem` → `Item("use")`, `Item("drop")`.
+
+Тесты: `FloVMP.Core.Tests/LoggingTests.cs` (6) — партиционирование по категории/дате,
+все 500 записей доходят, flush/dispose добивают остаток, no-op без синка,
+категорийные помощники раскладывают по файлам. boot-тест: `logs/system/*.jsonl`
+пишется в первые мс.
+
+**Дальше по этому разделу:** `DbLogSink` (БД, пачками), веб-дашборд
+(`/api/logs`, курсорная пагинация, SSE live-tail, экспорт), ретеншн/архив.
+Категорийных помощников `GameLog` добавляем по мере переноса систем Florida V.
+
 ### Что логируем (категории, как в референсе)
 
 | Категория | Примеры событий |

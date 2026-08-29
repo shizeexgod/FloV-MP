@@ -91,8 +91,10 @@ public sealed class InventorySystem
         if (s is null) return;
 
         var take = Math.Clamp(qty, 1, s.Quantity);
-        e.inv.Remove(s.ItemId, take);
-        Alt.Log($"[FloV:MP] inv: {player.Name} выбросил {s.ItemId} x{take}");
+        var itemId = s.ItemId;
+        e.inv.Remove(itemId, take);
+        FloVMP.Core.Logging.GameLog.Item("drop",
+            FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, take);
         // TODO: положить дроп на землю как объект мира (позже)
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
@@ -105,7 +107,8 @@ public sealed class InventorySystem
         var s = e.inv.Slots[slot];
         if (s is null) return;
 
-        switch (s.ItemId)
+        var itemId = s.ItemId;
+        switch (itemId)
         {
             case "bandage":
                 player.Health = (ushort)Math.Min(200, player.Health + 25);
@@ -113,13 +116,15 @@ public sealed class InventorySystem
                 break;
             case "water":
             case "bread":
-                e.inv.Remove(s.ItemId, 1);
+                e.inv.Remove(itemId, 1);
                 break;
             default:
-                player.Emit("flovmp:inv:notice", $"{s.ItemId}: пока нельзя использовать");
+                player.Emit("flovmp:inv:notice", $"{itemId}: пока нельзя использовать");
                 return;
         }
 
+        FloVMP.Core.Logging.GameLog.Item("use",
+            FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, 1);
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
     });

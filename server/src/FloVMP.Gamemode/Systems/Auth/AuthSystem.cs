@@ -115,6 +115,8 @@ public sealed class AuthSystem
             return;
         }
 
+        FloVMP.Core.Logging.GameLog.Account("register",
+            FloVMP.Core.Logging.LogActor.Player(login.Account.Id, login.Account.Username), Ip(player));
         player.Emit("flovmp:auth:result", true, "регистрация и вход выполнены");
         Finish(player, login.Account);
     });
@@ -126,8 +128,15 @@ public sealed class AuthSystem
     {
         _authed[player.Id] = account;
         Alt.Log($"[FloV:MP] auth: {player.Name} вошёл как '{account.Username}' (id {account.Id})");
+        FloVMP.Core.Logging.GameLog.Account("login",
+            FloVMP.Core.Logging.LogActor.Player(account.Id, account.Username), Ip(player));
         player.Emit("flovmp:auth:hide");
         _onAuthed(player, account);
+    }
+
+    private static string Ip(IPlayer player)
+    {
+        try { return player.Ip ?? ""; } catch { return ""; }
     }
 
     private static string ThrottleKey(IPlayer player)
