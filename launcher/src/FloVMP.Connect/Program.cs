@@ -91,7 +91,7 @@ try
     var altv = Path.Combine(clientDir, "altv.exe");
     var url = $"altv://connect/{connect}";
     var direct = noDirectLaunch ? "" : " -directlaunch";
-    var argLine = $"-connecturl \"{url}\"{direct} -customui {cdn.BaseUrl}/ui/index.html";
+    var argLine = $"-connecturl \"{url}\"{direct} -gtaexe \"{Path.Combine(gtaDir, gameExe)}\" -customui {cdn.BaseUrl}/ui/index.html";
     Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
 
     var psi = new ProcessStartInfo(altv, argLine)

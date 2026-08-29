@@ -264,7 +264,9 @@ public sealed class MainViewModel : ObservableObject
             }
 
             var url = AltvClientCore.BuildConnectUrl(_s.ServerHost, _s.ServerPort, _s.Nickname, null);
-            var args = AltvClientCore.BuildArgs(url, _s.Branch, _s.AllowMultipleInstances);
+            var gameExe = GtaLocator.FindGameExecutable(_s.GtaPath);
+            var gameExePath = gameExe is null ? null : Path.Combine(_s.GtaPath, gameExe);
+            var args = AltvClientCore.BuildArgs(url, _s.Branch, _s.AllowMultipleInstances, gameExePath);
             Log($"Запуск: altv.exe {args}");
             Log($"CWD: {_s.AltvCoreDir}");
 

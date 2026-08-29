@@ -74,7 +74,7 @@ public static class AltvClientCore
     /// Аргументы запуска altv.exe для прямого подключения без launcher-UI
     /// и без обновления с (мёртвого) CDN alt:V.
     /// </summary>
-    public static string BuildArgs(string connectUrl, string branch, bool allowMultiple)
+    public static string BuildArgs(string connectUrl, string branch, bool allowMultiple, string? gameExecutable = null)
     {
         var args = new List<string>
         {
@@ -82,6 +82,8 @@ public static class AltvClientCore
             "-noupdate",
             $"-branch {branch}",
         };
+        if (!string.IsNullOrWhiteSpace(gameExecutable))
+            args.Add($"-gtaexe \"{gameExecutable}\"");
         if (allowMultiple)
         {
             args.Add("-skipprocesscheck");
