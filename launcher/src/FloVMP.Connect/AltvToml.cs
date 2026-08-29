@@ -37,11 +37,24 @@ public static class AltvToml
 
     public static string DetectPlatform(string gtaPath)
     {
+        // 1) по файлам в папке игры (надёжнее пути)
+        bool Has(string f) => File.Exists(Path.Combine(gtaPath, f));
+        bool HasDir(string d) => Directory.Exists(Path.Combine(gtaPath, d));
+
+        if (Has("steam_api64.dll") || HasDir("steamapps")) return "steam";
+        if (Has("EOSSDK-Win64-Shipping.dll") || Has("Rockstar-Games-Epic.exe") || HasDir(".egstore"))
+            return "egs";
+        if (Has("PlayGTAV.exe") && Has("Launcher.exe") && !Has("steam_api64.dll")) return "rockstar";
+
+        // 2) по пути (fallback)
         var p = gtaPath.ToLowerInvariant();
         if (p.Contains("steamapps") || p.Contains("\\steam\\")) return "steam";
-        if (p.Contains("epic") || p.Contains("program files\\") && Path.GetFileName(gtaPath).Length == 32) return "egs";
+        if (p.Contains("\\epic games\\") || p.Contains("epicgames")) return "egs";
         if (p.Contains("rockstar")) return "rockstar";
-        // папка Epic часто называется 32-символьным GUID
-        return Path.GetFileName(gtaPath.TrimEnd('\\')).Length == 32 ? "egs" : "steam";
+        if (Path.GetFileName(gtaPath.TrimEnd('\\')).Length == 32) return "egs"; // GUID-папка Epic
+
+        // По умолчанию egs, а НЕ steam: ошибочный 'steam' даёт "Не удалось
+        // запустить Steam" на Epic-копии. alt:V принимает steam|egs|rockstar.
+        return "egs";
     }
 }
