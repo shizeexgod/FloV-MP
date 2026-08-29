@@ -43,7 +43,7 @@ public static class AltvToml
 
         if (Has("steam_api64.dll") || HasDir("steamapps")) return "steam";
         if (Has("EOSSDK-Win64-Shipping.dll") || Has("Rockstar-Games-Epic.exe") || HasDir(".egstore"))
-            return "egs";
+            return "epic";
         if (Has("PlayGTAV.exe") && Has("Launcher.exe") && !Has("steam_api64.dll")) return "rockstar";
 
         // 2) по пути (fallback)
@@ -53,8 +53,9 @@ public static class AltvToml
         if (p.Contains("rockstar")) return "rockstar";
         if (Path.GetFileName(gtaPath.TrimEnd('\\')).Length == 32) return "egs"; // GUID-папка Epic
 
-        // По умолчанию egs, а НЕ steam: ошибочный 'steam' даёт "Не удалось
-        // запустить Steam" на Epic-копии. alt:V принимает steam|egs|rockstar.
-        return "egs";
+        // По умолчанию epic, а НЕ steam: ошибочный 'steam' даёт "Не удалось
+        // запустить Steam" на Epic-копии. Эта сборка alt:V ожидает значение
+        // "epic" для CEpicGamesPlatform.
+        return "epic";
     }
 }

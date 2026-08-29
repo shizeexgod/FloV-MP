@@ -74,7 +74,7 @@ BattlEye.Advise(gtaDir);
 // 2.6) Epic: GTA5.exe (Epic-копия) при прямом запуске без запущенного
 // Epic Games Launcher не получает auth -> падает с "Не удалось запустить
 // Steam". Лаунчер Epic должен быть ЗАПУЩЕН и залогинен.
-if (AltvToml.DetectPlatform(gtaDir) == "egs" && !IsUp("EpicGamesLauncher.exe"))
+if (AltvToml.DetectPlatform(gtaDir) == "epic" && !IsUp("EpicGamesLauncher.exe"))
 {
     Console.WriteLine();
     Console.WriteLine("  == ВНИМАНИЕ: Epic Games Launcher не запущен ==================");

@@ -10,7 +10,7 @@
 | Реестр | `HKLM\SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto V` → `InstallFolderEpic` = тот же путь |
 | Rockstar Launcher | стоит, `Language = ru-RU` |
 | Steam | стоит (`C:\Program Files (x86)\Steam`), GTA V в Steam-библиотеках **нет** |
-| Конфиг alt:V | `%LOCALAPPDATA%\altv\altv.toml` уже есть: `branch='release'`, `gtaPlatform='egs'`, `gtapath=<epic путь>`, `lang='ru'`, `permissionsSet=false` |
+| Конфиг alt:V | `%LOCALAPPDATA%\altv\altv.toml` уже есть: `branch='release'`, `gtaPlatform='epic'`, `gtapath=<epic путь>`, `lang='ru'`, `permissionsSet=false` |
 
 `altv.toml` — **глобальный** файл клиента alt:V (общий с обычным alt:V, если
 игрок им пользуется). Лаунчер его читает; писать в него — только по явному

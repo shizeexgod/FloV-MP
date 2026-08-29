@@ -292,7 +292,7 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
   - UI: тёмная тема + акцент `#FF3D8A`, MVVM-lite. Сборка + smoke-run ok.
 - **Разведка клиента alt:V** (`docs/engine/client-direct-connect.md`):
   - GTA V на машине = **Epic legacy**, `C:\Program Files\9d2d0eb64d5c44529cece33fe2a46482`.
-  - `%LOCALAPPDATA%\altv\altv.toml` уже настроен (branch release, egs, gtapath).
+  - `%LOCALAPPDATA%\altv\altv.toml` уже настроен (branch release, epic, gtapath).
   - `altv.exe` = launcher-UI 14.4; флаги: `-connecturl`, `-noupdate`,
     `-branch`, `-directlaunch`, `-skipprocesscheck`, `-gtaexe`, `-offline`.
   - **Бэкап клиента неполный: 17/85 файлов.** Нет `legacy.dll`,
