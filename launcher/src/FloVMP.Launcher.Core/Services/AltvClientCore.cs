@@ -147,7 +147,7 @@ public static class AltvClientCore
     /// (и name, если задан), не трогая остальные ключи. Делает .bak.
     /// Вызывается только если пользователь явно включил синхронизацию.
     /// </summary>
-    public static void SyncAltvToml(string gtaPath, string branch, string? nickname)
+    public static void SyncAltvToml(string gtaPath, string branch, string? nickname, string? platformOverride = null)
     {
         var path = GlobalAltvTomlPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -169,8 +169,29 @@ public static class AltvClientCore
 
         SetKey("gtapath", gtaPath);
         SetKey("branch", branch);
+        SetKey("gtaPlatform", string.IsNullOrWhiteSpace(platformOverride)
+            ? DetectPlatform(gtaPath)
+            : platformOverride.Trim().ToLowerInvariant());
         if (!string.IsNullOrWhiteSpace(nickname)) SetKey("name", nickname);
 
         File.WriteAllLines(path, lines);
+    }
+
+    /// <summary>
+    /// Определяет способ запуска GTA без попытки авторизовать игру через другой магазин.
+    /// Epic/Rockstar-копии используют rgl, Steam — steam.
+    /// </summary>
+    public static string DetectPlatform(string gtaPath)
+    {
+        bool Has(string file) => File.Exists(Path.Combine(gtaPath, file));
+        bool HasDir(string dir) => Directory.Exists(Path.Combine(gtaPath, dir));
+
+        if (Has("steam_api64.dll") || HasDir("steamapps")) return "steam";
+        if (Has("EOSSDK-Win64-Shipping.dll") || Has("Rockstar-Games-Epic.exe") || HasDir(".egstore")) return "rgl";
+        if (Has("PlayGTAV.exe") && Has("GTAVLauncher.exe") && !Has("steam_api64.dll")) return "rockstar";
+
+        var path = gtaPath.ToLowerInvariant();
+        if (path.Contains("steamapps") || path.Contains("\\steam\\")) return "steam";
+        return "rgl";
     }
 }
