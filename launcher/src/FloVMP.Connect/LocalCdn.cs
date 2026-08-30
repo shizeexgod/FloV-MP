@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -148,7 +148,7 @@ public sealed class LocalCdn : IDisposable
             return HandleClientFile(path);
         }
 
-        return (200, "application/json", "{}"u8.ToArray());
+        return (200, "text/plain", "ok"u8.ToArray());
     }
 
     private string ManifestFor(string name, string generated)

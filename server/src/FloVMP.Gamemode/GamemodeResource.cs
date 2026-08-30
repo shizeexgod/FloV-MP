@@ -27,8 +27,7 @@ public class GamemodeResource : Resource
     private InventorySystem? _inv;
     private ChatSystem? _chat;
     private ConsoleCommands? _console;
-    private AuthProxyService? _authProxy;
-
+    
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
 
@@ -36,8 +35,6 @@ public class GamemodeResource : Resource
     {
         Alt.Log($"[FloV:MP] core: gamemode start (v{BuildInfo.Version})");
 
-        _authProxy = new AuthProxyService();
-        _authProxy.Start();
 
         _playerLifecycle = new PlayerLifecycle();
         _playerLifecycle.Attach();
@@ -72,8 +69,6 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
-        _authProxy?.Dispose();
-        _authProxy = null;
 
         Safe.Run("core.OnStop.flush", () => _inv?.SaveAll());
         Safe.Run("core.OnStop.log", () =>
@@ -130,3 +125,4 @@ public class GamemodeResource : Resource
         Alt.Log("[FloV:MP] core: server fully started");
     });
 }
+
