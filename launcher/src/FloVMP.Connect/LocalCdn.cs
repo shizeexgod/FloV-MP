@@ -109,12 +109,12 @@ public sealed class LocalCdn : IDisposable
     {
         if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
         {
-            return (200, "application/json", Enc(ManifestFor("backup_update.json", "{\"files\":[]}")));
+            return (200, "application/json", Enc(ManifestFor("backup_update.json", BuildBackupManifest())));
         }
         if (lower.Contains("/backup/"))
         {
             var name = Path.GetFileName(path);
-            var f = Path.Combine(_clientDir, "cdn", name);
+            var f = Path.Combine(_clientDir, "cdn", "backup", name);
             return File.Exists(f)
                 ? (200, "application/octet-stream", File.ReadAllBytes(f))
                 : (404, "text/plain", "Not Found"u8.ToArray());
@@ -233,6 +233,27 @@ public sealed class LocalCdn : IDisposable
         }
         return $"{{\"latestBuildNumber\":-1,\"version\":\"{Version}\",\"sdkVersion\":\"{SdkVersion}\"," +
                $"\"hashList\":{{{hashes}}},\"sizeList\":{{{sizes}}}}}";
+    }
+
+    private string BuildBackupManifest()
+    {
+        var backupDir = Path.Combine(_clientDir, "cdn", "backup");
+        if (!Directory.Exists(backupDir)) return "{\"files\":[]}";
+
+        var files = new StringBuilder();
+        var first = true;
+        foreach (var f in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(backupDir, f).Replace('\\', '/');
+            if (rel is "backup_update.json") continue;
+
+            if (!first) files.Append(',');
+            first = false;
+
+            // Формат backup_update.json у alt:V немного другой, это массив объектов.
+            files.Append($"{{\"name\":\"{rel}\",\"hash\":\"{Sha1(f)}\",\"size\":{new FileInfo(f).Length}}}");
+        }
+        return $"{{\"files\":[{files}]}}";
     }
 
     private static byte[] Enc(string s) => Encoding.UTF8.GetBytes(s);
