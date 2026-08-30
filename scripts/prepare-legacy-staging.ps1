@@ -16,7 +16,8 @@ $platformSpecificSourceFiles = @(
     'EOSSDK-Win64-Shipping-1.17.1.3.dll',
     'Rockstar-Games-Epic.exe',
     'Rockstar-Games-Launcher.exe',
-    'versioninfo.txt'
+    'versioninfo.txt',
+    'title.rgl'
 )
 
 foreach ($path in @($SourceGta, $SteamContent, $UpdateContent)) {
@@ -43,6 +44,7 @@ Get-ChildItem -LiteralPath $SteamContent -Recurse -File |
 Get-ChildItem -LiteralPath $SourceGta -Recurse -File |
     Where-Object {
         $_.FullName -notmatch '\\update\\' -and
+        $_.FullName -notmatch '\\\.egstore\\' -and
         $_.Name -ne 'GTA5.exe' -and
         -not $platformSpecificSourceFiles.Contains($_.Name) -and
         -not $steamFiles.ContainsKey($_.FullName.Substring($SourceGta.Length).TrimStart('\').ToLowerInvariant())
