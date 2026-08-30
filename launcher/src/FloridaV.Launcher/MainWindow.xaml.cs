@@ -27,5 +27,12 @@ public partial class MainWindow : Window
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
         => Close();
-}
 
+    private void PwBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.MainViewModel vm && sender is System.Windows.Controls.PasswordBox pb)
+        {
+            vm.AuthPassword = pb.Password;
+        }
+    }
+}

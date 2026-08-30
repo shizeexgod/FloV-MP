@@ -1,4 +1,4 @@
-﻿<Window x:Class="FloridaV.Launcher.MainWindow"
+<Window x:Class="FloridaV.Launcher.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:FloridaV.Launcher.ViewModels"
@@ -195,7 +195,7 @@
                                     </StackPanel>
 
                                     <!-- Название сервера -->
-                                    <TextBlock Text="Florida V" FontSize="38" FontWeight="Black"
+                                    <TextBlock Text="Держава RP" FontSize="42" FontWeight="Black"
                                                Foreground="White" Margin="0,0,0,4">
                                         <TextBlock.Effect>
                                             <DropShadowEffect Color="Black" BlurRadius="15"
@@ -203,8 +203,8 @@
                                         </TextBlock.Effect>
                                     </TextBlock>
                                     <TextBlock Text="Российский ролевой сервер · FloV:MP"
-                                               Foreground="{StaticResource Text2Brush}" FontSize="12"
-                                               Margin="0,0,0,20"/>
+                                               Foreground="{StaticResource Text2Brush}" FontSize="13"
+                                               Margin="0,0,0,24"/>
 
                                     <!-- Прогресс-бар обновления -->
                                     <StackPanel Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVis}}"
@@ -222,8 +222,23 @@
                                     <!-- Кнопка ИГРАТЬ -->
                                     <Button Style="{StaticResource PlayButton}"
                                             Content="{Binding PlayButtonText}"
-                                            Command="{Binding PlayCommand}"
-                                            IsEnabled="{Binding CanPlay}"/>
+                                            Command="{Binding PlayAsyncCommand}"/>
+
+                                    <!-- Строка статуса -->
+                                    <TextBlock Text="{Binding StatusMessage}"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Margin="0,10,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Text2Brush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                                                        <Setter Property="Foreground" Value="#FF6B6B"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -266,8 +281,52 @@
                     </Grid>
                 </Grid>
             </Grid>
+
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <!-- ОВЕРЛЕЙ АВТОРИЗАЦИИ (Если игрок не вошёл)               -->
+            <!-- ═══════════════════════════════════════════════════════ -->
+            <Grid Grid.Column="0" Grid.ColumnSpan="2" 
+                  Visibility="{Binding IsAuthenticated, Converter={StaticResource BoolToVisInverse}}">
+                
+                <!-- Затенение фона -->
+                <Border Background="#D805050A"/>
+
+                <!-- Окно логина -->
+                <Border Width="400" Background="{StaticResource Bg0Brush}" 
+                        BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1"
+                        CornerRadius="12" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel Margin="32">
+                        
+                        <!-- Лого и заголовок -->
+                        <Image Source="../Assets/florida_logo.png" Width="48" Height="48" Margin="0,0,0,16"/>
+                        <TextBlock Text="Держава RP" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                        <TextBlock Text="Войдите в аккаунт или зарегистрируйтесь" FontSize="12" Foreground="{StaticResource Text2Brush}" HorizontalAlignment="Center" Margin="0,0,0,24"/>
+
+                        <!-- Инпуты -->
+                        <TextBlock Text="Логин" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,4"/>
+                        <TextBox Style="{StaticResource AuthTextBox}" Text="{Binding AuthLogin, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Пароль" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,4"/>
+                        <PasswordBox x:Name="PwBox" Style="{StaticResource AuthPasswordBox}" Margin="0,0,0,8" PasswordChanged="PwBox_PasswordChanged"/>
+
+                        <!-- Ошибка -->
+                        <TextBlock Text="{Binding AuthError}" Foreground="#FF6B6B" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,16"
+                                   Visibility="{Binding HasAuthError, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Кнопки -->
+                        <Button Style="{StaticResource PlayButton}" Content="{Binding AuthButtonText}" 
+                                Command="{Binding LoginCommand}" Margin="0,0,0,12" Height="44"/>
+                        
+                        <Button Background="Transparent" Foreground="{StaticResource Text2Brush}" BorderThickness="0" Cursor="Hand"
+                                Content="У меня ещё нет аккаунта" Command="{Binding ToggleRegisterModeCommand}"
+                                Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisInverse}}"/>
+                        <Button Background="Transparent" Foreground="{StaticResource Text2Brush}" BorderThickness="0" Cursor="Hand"
+                                Content="У меня уже есть аккаунт" Command="{Binding ToggleRegisterModeCommand}"
+                                Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
         </Grid>
     </Border>
 </Window>
-
-

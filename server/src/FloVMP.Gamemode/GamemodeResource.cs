@@ -18,7 +18,7 @@ namespace FloVMP.Gamemode;
 /// </summary>
 public class GamemodeResource : Resource
 {
-    private const string ServerName = "FloV:MP Dev";
+    private const string ServerName = "Держава RP";
     private const int AutoSaveIntervalMs = 60_000;
 
     private PlayerLifecycle? _playerLifecycle;
