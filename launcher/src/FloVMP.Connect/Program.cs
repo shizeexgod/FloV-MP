@@ -48,13 +48,15 @@ Console.WriteLine($"[connect] client : {clientDir}");
 Console.WriteLine($"[connect] gta    : {gtaDir}");
 Console.WriteLine($"[connect] exe    : {gameExe}");
 
-// 0) alt:V должен САМ запустить GTA5.exe (suspended). Если игра/клиент уже
-//    запущены — alt:V не сможет захватить процесс ("suspend count: -1").
-foreach (var stale in new[] { "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
+// 0) alt:V должен САМ запустить GTA5.exe (suspended). Если игра/клиент/старый коннектор уже
+//    запущены — закрываем их для чистого старта.
+var currentPid = Environment.ProcessId;
+foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
 {
     foreach (var pr in Process.GetProcessesByName(stale))
     {
-        try { Console.WriteLine($"[connect] закрываю уже запущенный {stale} (PID {pr.Id})"); pr.Kill(true); pr.WaitForExit(5000); }
+        if (pr.Id == currentPid) continue;
+        try { Console.WriteLine($"[connect] закрываю уже запущенный {stale} (PID {pr.Id})"); pr.Kill(true); pr.WaitForExit(3000); }
         catch { }
     }
 }
