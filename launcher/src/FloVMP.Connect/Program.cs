@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Windows.Forms;
 using FloVMP.Connect;
+using FloVMP.Launcher.Services;
 
 // FloV:MP connector — запуск клиента alt:V на наш сервер без бэкенда alt:V.
 //
@@ -221,48 +223,49 @@ static string? ResolveClientDir()
 
 static string? ResolveGtaDir(string clientDir)
 {
-    // 1) из существующего altv.toml
-    var toml = Path.Combine(clientDir, "altv.toml");
-    if (File.Exists(toml))
+    // 1) Полноценный поиск через GtaLocator (Epic Manifests, реестр Rockstar, Steam)
+    var candidates = GtaLocator.Detect();
+    if (candidates.Count > 0)
     {
-        foreach (var line in File.ReadAllLines(toml))
-        {
-            var t = line.Trim();
-            if (t.StartsWith("gtapath", StringComparison.Ordinal))
-            {
-                var v = t[(t.IndexOf('=') + 1)..].Trim().Trim('\'', '"');
-                if (Directory.Exists(v)) return v;
-            }
-        }
-    }
-    // 2) реестр Rockstar (пишется и Epic-, и RGL-установкой)
-    if (OperatingSystem.IsWindows())
-    {
-        foreach (var view in new[] { Microsoft.Win32.RegistryView.Registry64, Microsoft.Win32.RegistryView.Registry32 })
-        {
-            try
-            {
-                using var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, view);
-                using var k = hklm.OpenSubKey(@"SOFTWARE\Rockstar Games\Grand Theft Auto V")
-                            ?? hklm.OpenSubKey(@"SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto V");
-                foreach (var name in new[] { "InstallFolderEpic", "InstallFolder", "InstallFolderSteam" })
-                {
-                    if (k?.GetValue(name) is string p && FindGameExecutable(p) is not null) return p;
-                }
-            }
-            catch { /* ignore */ }
-        }
+        // Приоритет: реально скачанные папки (наличие RPF архивов)
+        var best = candidates.FirstOrDefault(c => c.IsComplete) ?? candidates[0];
+        Console.WriteLine($"[connect] автоопределена GTA V: {best.Path} [{best.Source}]");
+        return best.Path;
     }
 
-    // 3) частые пути
-    foreach (var c in new[]
-             {
-                 @"C:\Program Files\Rockstar Games\Grand Theft Auto V",
-                 @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V",
-                 @"C:\Program Files\Epic Games\GTAV",
-             })
+    // 2) Если ничего не найдено автоматически — открываем диалоговое окно выбора папки
+    Console.WriteLine();
+    Console.WriteLine("[connect] GTA V не найдена автоматически в реестре/магазинах.");
+    Console.WriteLine("[connect] Открываю окно выбора папки GTA V (Legacy или Enhanced)...");
+    var selected = PromptUserForGtaFolder();
+    if (!string.IsNullOrWhiteSpace(selected))
     {
-        if (FindGameExecutable(c) is not null) return c;
+        Console.WriteLine($"[connect] Выбрана папка: {selected}");
+        return selected;
     }
+
     return null;
+}
+
+static string? PromptUserForGtaFolder()
+{
+    string? selected = null;
+    var thread = new Thread(() =>
+    {
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "FloV:MP — Выберите папку с установленной GTA V (Legacy или Enhanced)",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false
+        };
+        if (dlg.ShowDialog() == DialogResult.OK && Directory.Exists(dlg.SelectedPath))
+        {
+            if (FindGameExecutable(dlg.SelectedPath) is not null)
+                selected = dlg.SelectedPath;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+    return selected;
 }

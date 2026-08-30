@@ -1,20 +1,19 @@
 @echo off
 set "HERE=%~dp0"
-set "CONNECT=%HERE%..\launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
-
-if not exist "%CONNECT%" (
-  echo [FloV:MP] connector not built. Run:
-  echo   dotnet build "%HERE%..\launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release
-  pause
-  exit /b 1
-)
-
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=127.0.0.1:7788"
 
-echo [FloV:MP] connect to %TARGET%   %2 %3 %4 %5 %6
-echo [FloV:MP] Epic Games Launcher must be RUNNING and logged in.
+echo [FloV:MP] Подключение к %TARGET%
+echo [FloV:MP] Автоопределение GTA V (Legacy / Enhanced из Epic Games)...
 echo.
-"%CONNECT%" -connect %TARGET% %2 %3 %4 %5 %6 %7 %8 %9
+
+set "CONNECT_DLL=%HERE%..\launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.dll"
+
+if exist "%CONNECT_DLL%" (
+  dotnet "%CONNECT_DLL%" -connect %TARGET% %2 %3 %4 %5 %6 %7 %8 %9
+) else (
+  dotnet run --project "%HERE%..\launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release -- -connect %TARGET% %2 %3 %4 %5 %6 %7 %8 %9
+)
+
 echo.
 pause

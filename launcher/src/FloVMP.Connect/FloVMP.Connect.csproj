@@ -19,7 +19,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>false</UseWPF>
-    <UseWindowsForms>false</UseWindowsForms>
+    <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -28,5 +28,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Launcher.Core\FloVMP.Launcher.Core.csproj" />
+  </ItemGroup>
 
 </Project>

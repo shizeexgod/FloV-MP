@@ -1,21 +1,14 @@
-using System.Net;
+﻿using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace FloVMP.Connect;
 
 /// <summary>
-/// Локальная заглушка бэкенда alt:V. alt:V-клиент, запущенный с
-/// <c>-customui http://127.0.0.1:PORT/...</c>, шлёт сюда весь бэкенд-трафик:
-/// манифесты обновления, проверку веток/токена, скин лаунчера.
-///
-/// Отдаём:
-///  - манифест клиента, собранный из РЕАЛЬНЫХ файлов папки клиента (значит
-///    хэши всегда сходятся, клиент ничего не докачивает);
-///  - сами файлы (если вдруг попросит) — из папки клиента;
-///  - auth/branch — «всё разрешено, версия 16.4.39»;
-///  - /backup/* — 404, чтобы НЕ включалась подмена GTA5.exe (играем на
-///    настоящем legacy-экзе игрока).
+/// Локальная заглушка бэкенда alt:V. Перехватывает запросы клиента (манифесты,
+/// skin.bin, branch-access, UI) через TcpListener с поддержкой SO_REUSEADDR,
+/// что полностью исключает блокировки HTTP.sys и не требует прав администратора.
 /// </summary>
 public sealed class LocalCdn : IDisposable
 {
@@ -24,7 +17,7 @@ public sealed class LocalCdn : IDisposable
 
     private readonly string _clientDir;
     private readonly string? _uiDir;
-    private readonly HttpListener _listener = new();
+    private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private string _clientManifestJson = "{}";
 
@@ -36,105 +29,128 @@ public sealed class LocalCdn : IDisposable
         _clientDir = clientDir;
         _uiDir = uiDir;
         Port = port;
-        _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+
+        _listener = new TcpListener(IPAddress.Loopback, port);
+        _listener.Server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
     }
 
     public void Start()
     {
         _clientManifestJson = BuildClientManifest();
         _listener.Start();
-        _ = Task.Run(AcceptLoop);
+        _ = Task.Run(AcceptLoopAsync);
         Console.WriteLine($"[cdn] listening on {BaseUrl}");
     }
 
-    private async Task AcceptLoop()
+    private async Task AcceptLoopAsync()
     {
         while (!_cts.IsCancellationRequested)
         {
-            HttpListenerContext ctx;
-            try { ctx = await _listener.GetContextAsync(); }
-            catch { break; }
-            _ = Task.Run(() => Handle(ctx));
+            try
+            {
+                var client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                _ = Task.Run(() => HandleClientAsync(client));
+            }
+            catch when (_cts.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[cdn] accept error: {ex.Message}");
+            }
         }
     }
 
-    private void Handle(HttpListenerContext ctx)
+    private async Task HandleClientAsync(TcpClient client)
     {
-        var path = ctx.Request.Url?.AbsolutePath ?? "/";
-        var lower = path.ToLowerInvariant();
-        try
+        using (client)
+        using (var stream = client.GetStream())
         {
-            ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
+            try
+            {
+                var buffer = new byte[8192];
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _cts.Token);
+                if (bytesRead == 0) return;
 
-            if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
-            {
-                // Подмена GTA5.exe: если в cdn/ лежит backup_update.json —
-                // отдаём его (alt:V скачает поддерживаемый билд exe в свою
-                // приватную папку, настоящий GTA5.exe игрока не трогается).
-                // Нет файла -> "обновлять нечего".
-                Write(ctx, 200, "application/json",
-                    Enc(ManifestFor("backup_update.json", "{\"files\":[]}")));
+                var requestText = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                var firstLine = requestText.Split('\n')[0].Trim();
+                var parts = firstLine.Split(' ');
+                if (parts.Length < 2) return;
+
+                var method = parts[0];
+                var rawPath = parts[1];
+                var queryIdx = rawPath.IndexOf('?');
+                var path = queryIdx >= 0 ? rawPath.Substring(0, queryIdx) : rawPath;
+                var lower = path.ToLowerInvariant();
+
+                var (status, contentType, body) = ProcessRequest(path, lower);
+                Console.WriteLine($"[cdn] {method} {path} -> {status}");
+
+                var headers = $"HTTP/1.1 {status} OK\r\n" +
+                              $"Content-Type: {contentType}\r\n" +
+                              $"Content-Length: {body.Length}\r\n" +
+                              $"Access-Control-Allow-Origin: *\r\n" +
+                              $"Connection: close\r\n\r\n";
+
+                var headerBytes = Encoding.UTF8.GetBytes(headers);
+                await stream.WriteAsync(headerBytes, 0, headerBytes.Length);
+                await stream.WriteAsync(body, 0, body.Length);
+                await stream.FlushAsync();
             }
-            else if (lower.Contains("/backup/"))
+            catch
             {
-                // файл бэкапа по имени (basename), из cdn/
-                var name = Path.GetFileName(path);
-                var f = Path.Combine(_clientDir, "cdn", name);
-                if (File.Exists(f))
-                    Write(ctx, 200, "application/octet-stream", File.ReadAllBytes(f));
-                else
-                    Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
+                // client disconnected or aborted request
             }
-            else if (lower.Contains("update.json") && lower.Contains("/launcher"))
-            {
-                Write(ctx, 200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
-            }
-            else if (lower.Contains("update.json") && lower.Contains("/client"))
-            {
-                Write(ctx, 200, "application/json", Enc(ManifestFor("client_update.json", _clientManifestJson)));
-            }
-            else if (lower.Contains("/skin"))
-            {
-                HandleSkin(ctx, lower);
-            }
-            else if (lower.StartsWith("/ui/") || lower == "/ui")
-            {
-                HandleUi(ctx, path);
-            }
-            else if (lower.Contains("branch-access") || lower.Contains("/auth") || lower.Contains("token"))
-            {
-                Write(ctx, 200, "application/json", Enc("{\"access\": true, \"branches\": [\"release\"]}"));
-            }
-            else if (lower.Contains("client-branches") || lower is "/" or "/w" or "/q")
-            {
-                Write(ctx, 200, "application/json",
-                    Enc($"{{\"release\":\"{Version}\",\"rc\":\"{Version}\",\"dev\":\"{Version}\"}}"));
-            }
-            else if ((lower.Contains("/client/") || lower.Contains("/launcher/")) && !lower.EndsWith(".json"))
-            {
-                HandleClientFile(ctx, path);
-            }
-            else
-            {
-                Write(ctx, 200, "application/json", "{}"u8.ToArray());
-            }
-        }
-        catch
-        {
-            try { Write(ctx, 500, "text/plain", "err"u8.ToArray()); } catch { }
-        }
-        finally
-        {
-            Console.WriteLine($"[cdn] {ctx.Request.HttpMethod} {path} -> {ctx.Response.StatusCode}");
         }
     }
 
-    // --- routes ------------------------------------------------------
+    private (int Status, string ContentType, byte[] Body) ProcessRequest(string path, string lower)
+    {
+        if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
+        {
+            return (200, "application/json", Enc(ManifestFor("backup_update.json", "{\"files\":[]}")));
+        }
+        if (lower.Contains("/backup/"))
+        {
+            var name = Path.GetFileName(path);
+            var f = Path.Combine(_clientDir, "cdn", name);
+            return File.Exists(f)
+                ? (200, "application/octet-stream", File.ReadAllBytes(f))
+                : (404, "text/plain", "Not Found"u8.ToArray());
+        }
+        if (lower.Contains("update.json") && lower.Contains("/launcher"))
+        {
+            return (200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
+        }
+        if (lower.Contains("update.json") && lower.Contains("/client"))
+        {
+            return (200, "application/json", Enc(ManifestFor("client_update.json", _clientManifestJson)));
+        }
+        if (lower.Contains("/skin"))
+        {
+            return HandleSkin(lower);
+        }
+        if (lower.StartsWith("/ui/") || lower == "/ui")
+        {
+            return HandleUi(path);
+        }
+        if (lower.Contains("branch-access") || lower.Contains("/auth") || lower.Contains("token"))
+        {
+            return (200, "application/json", Enc("{\"access\": true, \"branches\": [\"release\"]}"));
+        }
+        if (lower.Contains("client-branches") || lower is "/" or "/w" or "/q")
+        {
+            return (200, "application/json", Enc($"{{\"release\":\"{Version}\",\"rc\":\"{Version}\",\"dev\":\"{Version}\"}}"));
+        }
+        if ((lower.Contains("/client/") || lower.Contains("/launcher/")) && !lower.EndsWith(".json"))
+        {
+            return HandleClientFile(path);
+        }
 
-    /// <summary>
-    /// Готовый манифест из &lt;clientDir&gt;\cdn\&lt;name&gt; (взят у GTAMP —
-    /// alt:V-формат, проверен рабочим прогоном), иначе — сгенерированный.
-    /// </summary>
+        return (200, "application/json", "{}"u8.ToArray());
+    }
+
     private string ManifestFor(string name, string generated)
     {
         var f = Path.Combine(_clientDir, "cdn", name);
@@ -146,46 +162,44 @@ public sealed class LocalCdn : IDisposable
         "\"hashList\":{\"altv.exe\":\"2800e0d6665cdfa9c02419360db44b5cccf64147\"}," +
         "\"sizeList\":{\"altv.exe\":9267200}}";
 
-    private void HandleSkin(HttpListenerContext ctx, string lower)
+    private (int Status, string ContentType, byte[] Body) HandleSkin(string lower)
     {
         var skin = Path.Combine(_clientDir, "cache", "skin.bin");
         if (!File.Exists(skin)) skin = Path.Combine(_clientDir, "skin.bin");
 
         if (lower.EndsWith("/hash"))
         {
-            Write(ctx, File.Exists(skin) ? 200 : 404, "text/plain",
-                Enc(File.Exists(skin) ? Sha1(skin) : "Not Found"));
-            return;
+            return File.Exists(skin)
+                ? (200, "text/plain", Enc(Sha1(skin)))
+                : (404, "text/plain", "Not Found"u8.ToArray());
         }
         if (lower.EndsWith(".json"))
         {
-            if (!File.Exists(skin)) { Write(ctx, 404, "text/plain", "Not Found"u8.ToArray()); return; }
+            if (!File.Exists(skin)) return (404, "text/plain", "Not Found"u8.ToArray());
             var json = $"{{\"version\":\"{Version}\",\"hashList\":{{\"skin.bin\":\"{Sha1(skin)}\"}}," +
                        $"\"sizeList\":{{\"skin.bin\":{new FileInfo(skin).Length}}}}}";
-            Write(ctx, 200, "application/json", Enc(json));
-            return;
+            return (200, "application/json", Enc(json));
         }
-        if (File.Exists(skin)) Write(ctx, 200, "application/octet-stream", File.ReadAllBytes(skin));
-        else Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
+        return File.Exists(skin)
+            ? (200, "application/octet-stream", File.ReadAllBytes(skin))
+            : (404, "text/plain", "Not Found"u8.ToArray());
     }
 
-    private void HandleUi(HttpListenerContext ctx, string path)
+    private (int Status, string ContentType, byte[] Body) HandleUi(string path)
     {
-        if (_uiDir is null) { Write(ctx, 200, "text/html", Enc("<!doctype html><title>FloV:MP</title>")); return; }
+        if (_uiDir is null) return (200, "text/html", Enc("<!doctype html><title>FloV:MP</title>"));
         var rel = path.Length > 4 ? path[4..] : "index.html";
         if (string.IsNullOrEmpty(rel)) rel = "index.html";
         var file = Path.GetFullPath(Path.Combine(_uiDir, rel));
         if (!file.StartsWith(Path.GetFullPath(_uiDir), StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
         {
-            Write(ctx, 404, "text/plain", "Not Found"u8.ToArray());
-            return;
+            return (404, "text/plain", "Not Found"u8.ToArray());
         }
-        Write(ctx, 200, ContentType(file), File.ReadAllBytes(file));
+        return (200, ContentType(file), File.ReadAllBytes(file));
     }
 
-    private void HandleClientFile(HttpListenerContext ctx, string path)
+    private (int Status, string ContentType, byte[] Body) HandleClientFile(string path)
     {
-        // .../x64_win32/<rel>  ->  <clientDir>/<rel>
         var marker = "x64_win32/";
         var i = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
         string rel = i >= 0 ? path[(i + marker.Length)..] : Path.GetFileName(path);
@@ -194,15 +208,12 @@ public sealed class LocalCdn : IDisposable
         var file = Path.GetFullPath(Path.Combine(_clientDir, rel));
         if (!file.StartsWith(Path.GetFullPath(_clientDir), StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
         {
-            // запасной вариант — поиск по имени
             var byName = Directory.EnumerateFiles(_clientDir, Path.GetFileName(rel), SearchOption.AllDirectories).FirstOrDefault();
-            if (byName is null) { Write(ctx, 404, "text/plain", "Not Found"u8.ToArray()); return; }
+            if (byName is null) return (404, "text/plain", "Not Found"u8.ToArray());
             file = byName;
         }
-        Write(ctx, 200, "application/octet-stream", File.ReadAllBytes(file));
+        return (200, "application/octet-stream", File.ReadAllBytes(file));
     }
-
-    // --- manifest --------------------------------------------------
 
     private string BuildClientManifest()
     {
@@ -222,17 +233,6 @@ public sealed class LocalCdn : IDisposable
         }
         return $"{{\"latestBuildNumber\":-1,\"version\":\"{Version}\",\"sdkVersion\":\"{SdkVersion}\"," +
                $"\"hashList\":{{{hashes}}},\"sizeList\":{{{sizes}}}}}";
-    }
-
-    // --- helpers -------------------------------------------------
-
-    private static void Write(HttpListenerContext ctx, int status, string contentType, byte[] body)
-    {
-        ctx.Response.StatusCode = status;
-        ctx.Response.ContentType = contentType;
-        ctx.Response.ContentLength64 = body.Length;
-        ctx.Response.OutputStream.Write(body, 0, body.Length);
-        ctx.Response.OutputStream.Close();
     }
 
     private static byte[] Enc(string s) => Encoding.UTF8.GetBytes(s);
@@ -256,7 +256,7 @@ public sealed class LocalCdn : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
-        try { _listener.Stop(); _listener.Close(); } catch { }
+        try { _listener.Stop(); } catch { }
         _cts.Dispose();
     }
 }

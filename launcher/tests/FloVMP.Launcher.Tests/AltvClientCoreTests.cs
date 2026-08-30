@@ -27,4 +27,21 @@ public sealed class AltvClientCoreTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "steam_api64.dll"), "fixture");
         Assert.Equal("steam", AltvClientCore.DetectPlatform(_dir));
     }
+
+    [Fact]
+    public void Hybrid_folder_with_epic_and_steam_prioritizes_rgl()
+    {
+        File.WriteAllText(Path.Combine(_dir, "steam_api64.dll"), "fixture");
+        File.WriteAllText(Path.Combine(_dir, "EOSSDK-Win64-Shipping.dll"), "fixture");
+        Assert.Equal("rgl", AltvClientCore.DetectPlatform(_dir));
+    }
+
+    [Fact]
+    public void IsGameDownloaded_requires_archives()
+    {
+        Assert.False(GtaLocator.IsGameDownloaded(_dir));
+
+        File.WriteAllText(Path.Combine(_dir, "common.rpf"), "archive");
+        Assert.True(GtaLocator.IsGameDownloaded(_dir));
+    }
 }
