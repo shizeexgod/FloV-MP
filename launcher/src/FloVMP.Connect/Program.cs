@@ -85,13 +85,21 @@ if (AltvToml.DetectPlatform(gtaDir) == "rgl" && !IsUp("EpicGamesLauncher.exe"))
     Console.WriteLine();
 }
 
+// 2.7) skin.bin — внедряем SHA-256 хэш customUiUrl для надежной загрузки NUI-оболочки
+var customUi = $"{cdn.BaseUrl}/ui/index.html";
+foreach (var skinPath in new[] { Path.Combine(clientDir, "cache", "skin.bin"), Path.Combine(clientDir, "skin.bin") })
+{
+    if (SkinPatcher.PatchSkinBin(skinPath, customUi))
+        Console.WriteLine($"[connect] skin.bin успешно пропатчен ({Path.GetFileName(skinPath)})");
+}
+
 try
 {
     // 3) запуск клиента
     var altv = Path.Combine(clientDir, "altv.exe");
     var url = $"altv://connect/{connect}";
     var direct = noDirectLaunch ? "" : " -directlaunch";
-    var argLine = $"-connecturl \"{url}\"{direct} -gtaexe \"{Path.Combine(gtaDir, gameExe)}\" -customui {cdn.BaseUrl}/ui/index.html";
+    var argLine = $"-connecturl \"{url}\"{direct} -gtaexe \"{Path.Combine(gtaDir, gameExe)}\" -customui {customUi}";
     Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
 
     var psi = new ProcessStartInfo(altv, argLine)

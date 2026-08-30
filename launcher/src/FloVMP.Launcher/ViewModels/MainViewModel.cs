@@ -5,6 +5,7 @@ using FloVMP.Launcher.Mvvm;
 using FloVMP.Launcher.Services;
 using FloVMP.Launcher.Services.Cdn;
 using FloVMP.Launcher.Services.Compat;
+using FloVMP.Launcher.Services.Profiles;
 using Microsoft.Win32;
 
 namespace FloVMP.Launcher.ViewModels;
@@ -13,6 +14,7 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly LauncherSettings _s;
     private readonly SyncService _sync = new();
+    private readonly ProfileService _profiles = new();
     private CancellationTokenSource? _syncCts;
 
     public MainViewModel()
