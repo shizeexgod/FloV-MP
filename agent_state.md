@@ -101,10 +101,10 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 | 2 | Минимальный C#-ресурс | ✅ done — `flovmp-core` грузится |
 | 3 | Минимальный JS клиентский ресурс | ✅ done — `flovmp-client` грузится |
 | 4 | Тест живым клиентом GTA V | **разблокирован** — клиент собран 85/85 (`runtime/client/`). Нужен владелец за ПК с GTA V. Гайд: `docs/instructions/live-test-guide.md` |
-| 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, сборка direct-connect, UI |
+| 5 | Лаунчер — скелет WPF | ✅ done — детект GTA V, статус сервера, UI авторизации |
 | 6 | Отключить Sentry-телеметрию сервера | ✅ done — DSN обнуляется в рабочей копии `altv-server.exe` при сборке, запросов на `sentry-alt.com` нет (`docs/engine/telemetry-sentry.md`) |
 | 7 | Полный клиент alt:V 16.4.x | ✅✅ **настоящий официальный 16.4.39** взят из GTAMP-пейлоада (форумчанин), `runtime/client/` пересобран `scripts/import-altv-client.ps1`, 84/85 exact hash-match (только `altv-webengine.exe` не-сток). Реконструкция CEF+Majestic больше не нужна. `docs/engine/gtamp-reference.md` |
-| 8 | Лаунчер: CDN-манифест + сверка хэшей + загрузчик (Вариант 1) | ✅ done — `FloVMP.Launcher.Core/Services/Cdn/*`, 6/6 тестов, подключено в UI, `scripts/make-manifest.ps1`, `docs/launcher/launcher-cdn.md`. Реального CDN нет — тест на локальной раздаче |
+| 8 | Лаунчер: Интеграция FloVMP.Connect | ✅ done — запускает с аргументами --gta, --host, --port, --nick |
 | 9 | Лаунчер: совместимость с патчами GTA V (Вар.1 offset-CDN / Вар.2 exe-swap) | ✅ каркас — `Core/Services/Compat/*`, 11 тестов, watchdog + маркер + startup-восстановление. Нет своего хука и реального compat.json. `docs/launcher/launcher-compat.md` |
 | 10 | Реконструкция клиента alt:V из сторонних источников | ✅ done — `scripts/fetch-cef.ps1` (CEF 131.0.6778.205), fill из Majestic, 85/85, `runtime/client/manifest.json` (318 МБ). `docs/instructions/live-test-guide.md` |
 | 11 | Репо-гигиена: `.gitattributes`, `README.md`, CI (GitHub Actions build+test) | todo |
