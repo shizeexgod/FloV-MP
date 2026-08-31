@@ -1,34 +1,169 @@
 /**
- * FloV:MP — клиентская точка входа (js-module / alt-client).
- *
- * Фаза 3 (каркас): экран авторизации.
- *   - сервер шлёт flovmp:auth:show → показываем NUI логина/регистрации,
- *     курсор, блок управления, статичная камера;
- *   - NUI шлёт flovmp:auth:submit {mode,user,pass} → пересылаем на сервер;
- *   - сервер шлёт flovmp:auth:result {ok,msg} → отдаём в NUI;
- *   - сервер шлёт flovmp:auth:hide → убираем NUI, возвращаем управление.
- *
- * До входа сервер игрока не спавнит — экран чёрный, поверх него NUI.
+ * FloV:MP — клиентский движок мультиплеера.
+ * Сервер: Держава Онлайн.
  */
 
 import * as alt from 'alt-client';
 import * as native from 'natives';
 
-alt.log('[FloV:MP] client: ресурс flovmp-client загружен');
+alt.log('[FloV:MP] Клиентский модуль FloV:MP загружен');
 
 let authView = null;
 let authCamera = null;
-let hudView = null;
-let invView = null;
-let lastInvSync = null;
 let inGame = false;
 let chatView = null;
 let chatTyping = false;
 
+// --- NoClip (Полет на F4 с невидимостью) ---------------------------------
+let noClip = false;
+let noClipPos = null;
+
+function toggleNoClip() {
+    if (!inGame || authView || chatTyping) return;
+    const player = alt.Player.local;
+    if (!player || !player.valid) return;
+
+    noClip = !noClip;
+
+    if (noClip) {
+        noClipPos = { ...player.pos };
+        native.freezeEntityPosition(player.scriptID, true);
+        native.setEntityCollision(player.scriptID, false, false);
+        native.setEntityInvincible(player.scriptID, true);
+        native.setEntityVisible(player.scriptID, false, 0);
+        native.setEntityAlpha(player.scriptID, 0, false);
+        alt.log('[FloV:MP] NoClip включен (инвиз)');
+    } else {
+        native.freezeEntityPosition(player.scriptID, false);
+        native.setEntityCollision(player.scriptID, true, true);
+        native.setEntityInvincible(player.scriptID, false);
+        native.setEntityVisible(player.scriptID, true, 0);
+        native.resetEntityAlpha(player.scriptID);
+        alt.log('[FloV:MP] NoClip выключен (видимый)');
+    }
+}
+
+// --- Постоянный игровой цикл (Каждый тик) --------------------------------
+alt.everyTick(() => {
+    // 1) Полное отключение стандартного трафика и NPC
+    native.setPedDensityMultiplierThisFrame(0.0);
+    native.setScenarioPedDensityMultiplierThisFrame(0.0, 0.0);
+    native.setVehicleDensityMultiplierThisFrame(0.0);
+    native.setRandomVehicleDensityMultiplierThisFrame(0.0);
+    native.setParkedVehicleDensityMultiplierThisFrame(0.0);
+
+    // 2) Отключение служб полиции / скорой / спавна копов
+    for (let i = 1; i <= 15; i++) {
+        native.enableDispatchService(i, false);
+    }
+    native.setCreateRandomCops(false);
+    native.setCreateRandomCopsNotOnScenarios(false);
+    native.setCreateRandomCopsOnScenarios(false);
+
+    const player = alt.Player.local;
+    if (player && player.valid) {
+        native.setPlayerWantedLevel(player.scriptID, 0, false);
+        native.setPlayerWantedLevelNow(player.scriptID, false);
+    }
+
+    // 3) Блокировка колеса выбора оружия на Tab
+    native.disableControlAction(0, 37, true); // INPUT_SELECT_WEAPON (TAB)
+    native.disableControlAction(0, 157, true); // 1
+    native.disableControlAction(0, 158, true); // 2
+    native.disableControlAction(0, 159, true); // 3
+    native.disableControlAction(0, 160, true); // 4
+    native.disableControlAction(0, 161, true); // 5
+    native.disableControlAction(0, 162, true); // 6
+    native.disableControlAction(0, 163, true); // 7
+    native.disableControlAction(0, 164, true); // 8
+    native.disableControlAction(0, 165, true); // 9
+
+    // 4) Скрытие стандартных элементов интерфейса GTA
+    native.hideHudComponentThisFrame(6);  // Vehicle Name
+    native.hideHudComponentThisFrame(7);  // Area Name
+    native.hideHudComponentThisFrame(8);  // Vehicle Class
+    native.hideHudComponentThisFrame(9);  // Street Name
+    native.hideHudComponentThisFrame(19); // Weapon Wheel
+    native.hideHudComponentThisFrame(20); // Weapon Wheel Stats
+    native.hideHudComponentThisFrame(22); // Weapons HUD
+
+    // 5) Блокировка вызова Social Club оверлея на клавишу HOME
+    native.disableControlAction(0, 212, true); // INPUT_FRONTEND_SOCIAL_CLUB_HOME
+    native.disableControlAction(0, 213, true); // INPUT_FRONTEND_SOCIAL_CLUB_SECONDARY
+
+    // 6) Логика NoClip
+    if (noClip && player && player.valid) {
+        native.disableControlAction(0, 30, true); // A-D
+        native.disableControlAction(0, 31, true); // W-S
+        native.disableControlAction(0, 21, true); // Shift
+        native.disableControlAction(0, 22, true); // Space
+        native.disableControlAction(0, 36, true); // Ctrl
+        native.disableControlAction(0, 44, true); // Q
+        native.disableControlAction(0, 24, true); // Attack
+        native.disableControlAction(0, 25, true); // Aim
+
+        const camRot = native.getGameplayCamRot(2);
+        const radZ = camRot.z * (Math.PI / 180.0);
+        const radX = camRot.x * (Math.PI / 180.0);
+        const cosX = Math.abs(Math.cos(radX));
+
+        const forward = {
+            x: -Math.sin(radZ) * cosX,
+            y: Math.cos(radZ) * cosX,
+            z: Math.sin(radX)
+        };
+
+        const right = {
+            x: Math.cos(radZ),
+            y: Math.sin(radZ),
+            z: 0.0
+        };
+
+        let speed = 0.9;
+        if (native.isDisabledControlPressed(0, 21) || native.isControlPressed(0, 21)) {
+            speed = 3.8; // Shift (Fast)
+        } else if (native.isControlPressed(0, 19)) {
+            speed = 0.15; // Alt (Slow)
+        }
+
+        // W / S
+        if (native.isDisabledControlPressed(0, 32) || native.isControlPressed(0, 32)) {
+            noClipPos.x += forward.x * speed;
+            noClipPos.y += forward.y * speed;
+            noClipPos.z += forward.z * speed;
+        }
+        if (native.isDisabledControlPressed(0, 33) || native.isControlPressed(0, 33)) {
+            noClipPos.x -= forward.x * speed;
+            noClipPos.y -= forward.y * speed;
+            noClipPos.z -= forward.z * speed;
+        }
+
+        // A / D
+        if (native.isDisabledControlPressed(0, 34) || native.isControlPressed(0, 34)) {
+            noClipPos.x -= right.x * speed;
+            noClipPos.y -= right.y * speed;
+        }
+        if (native.isDisabledControlPressed(0, 35) || native.isControlPressed(0, 35)) {
+            noClipPos.x += right.x * speed;
+            noClipPos.y += right.y * speed;
+        }
+
+        // Space / Ctrl
+        if (native.isDisabledControlPressed(0, 22) || native.isControlPressed(0, 22)) {
+            noClipPos.z += speed;
+        }
+        if (native.isDisabledControlPressed(0, 36) || native.isControlPressed(0, 36)) {
+            noClipPos.z -= speed;
+        }
+
+        native.setEntityCoordsNoOffset(player.scriptID, noClipPos.x, noClipPos.y, noClipPos.z, false, false, false);
+        native.setEntityHeading(player.scriptID, camRot.z);
+    }
+});
+
+// --- Авторизация ---------------------------------------------------------
 function openAuth() {
     if (authView) return;
-
-    // статичная камера над Los Santos, чтобы не смотреть в никуда
     try {
         authCamera = native.createCamWithParams(
             'DEFAULT_SCRIPTED_CAMERA',
@@ -36,7 +171,7 @@ function openAuth() {
         native.setCamActive(authCamera, true);
         native.renderScriptCams(true, false, 0, true, false, 0);
     } catch (err) {
-        alt.log('[FloV:MP] client: камера логина недоступна: ' + err);
+        alt.log('[FloV:MP] Камера авторизации: ' + err);
     }
 
     authView = new alt.WebView('http://resource/client/html/auth/index.html');
@@ -55,9 +190,7 @@ function closeAuth() {
         authView.destroy();
         authView = null;
     }
-    try {
-        alt.showCursor(false);
-    } catch (e) { /* ignore */ }
+    try { alt.showCursor(false); } catch (e) { }
     alt.toggleGameControls(true);
 
     try {
@@ -67,56 +200,18 @@ function closeAuth() {
             authCamera = null;
         }
     } catch (err) {
-        alt.log('[FloV:MP] client: сброс камеры: ' + err);
+        alt.log('[FloV:MP] Сброс камеры: ' + err);
     }
 }
 
-function openHud() {
-    if (hudView) return;
-    hudView = new alt.WebView('http://resource/client/html/hud/index.html');
-}
-
-function closeHud() {
-    if (hudView) {
-        hudView.destroy();
-        hudView = null;
-    }
-}
-
-function openInventory() {
-    if (invView || !inGame) return;
-    invView = new alt.WebView('http://resource/client/html/inventory/index.html');
-    invView.focus();
-    alt.showCursor(true);
-    alt.toggleGameControls(false);
-
-    if (lastInvSync) invView.emit('flovmp:inv:sync', lastInvSync);
-
-    invView.on('flovmp:inv:move', (from, to) => alt.emitServer('flovmp:inv:move', from | 0, to | 0));
-    invView.on('flovmp:inv:use', (slot) => alt.emitServer('flovmp:inv:use', slot | 0));
-    invView.on('flovmp:inv:drop', (slot, qty) => alt.emitServer('flovmp:inv:drop', slot | 0, qty | 0));
-}
-
-function closeInventory() {
-    if (!invView) return;
-    invView.destroy();
-    invView = null;
-    try { alt.showCursor(false); } catch (e) { /* ignore */ }
-    alt.toggleGameControls(true);
-}
-
-function toggleInventory() {
-    if (invView) closeInventory();
-    else openInventory();
-}
-
+// --- Чат -----------------------------------------------------------------
 function openChat() {
     if (chatView) return;
     chatView = new alt.WebView('http://resource/client/html/chat/index.html');
     chatView.on('flovmp:chat:say', (text) => alt.emitServer('flovmp:chat:say', String(text)));
     chatView.on('flovmp:chat:done', () => {
         chatTyping = false;
-        try { chatView.unfocus(); } catch (e) { /* ignore */ }
+        try { chatView.unfocus(); } catch (e) { }
         alt.toggleGameControls(true);
     });
 }
@@ -129,75 +224,58 @@ function closeChat() {
 }
 
 function startTyping() {
-    if (!chatView || chatTyping || !inGame || invView) return;
+    if (!chatView || chatTyping || !inGame) return;
     chatTyping = true;
     chatView.focus();
     alt.toggleGameControls(false);
     chatView.emit('flovmp:chat:openinput');
 }
 
+// --- Обработчики событий -------------------------------------------------
 alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
     closeAuth();
-    openHud();
     openChat();
     inGame = true;
-});
 
-alt.onServer('flovmp:chat:msg', (kind, author, text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
-});
-
-alt.onServer('flovmp:inv:sync', (json) => {
-    lastInvSync = json;
-    if (invView) invView.emit('flovmp:inv:sync', json);
-});
-
-alt.onServer('flovmp:inv:notice', (text) => {
-    if (invView) invView.emit('flovmp:inv:notice', text);
-});
-
-// I — инвентарь, T — чат
-alt.on('keyup', (key) => {
-    if (chatTyping) return;
-    if (key === 73) toggleInventory();
-    else if (key === 84) startTyping();
+    const player = alt.Player.local;
+    if (player && player.valid) {
+        native.requestCollisionAtCoord(player.pos.x, player.pos.y, player.pos.z);
+        native.freezeEntityPosition(player.scriptID, false);
+    }
 });
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
     if (authView) authView.emit('flovmp:auth:result', ok, message);
 });
 
-alt.onServer('flovmp:hud:init', (serverName) => {
-    if (hudView) hudView.emit('flovmp:hud:init', serverName);
+alt.onServer('flovmp:chat:msg', (kind, author, text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
-alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
-    if (hudView) hudView.emit('flovmp:hud:tick', hp, armor, cash, online, hour, minute);
+// Клавиши: F4 — NoClip, T — Чат
+alt.on('keyup', (key) => {
+    if (chatTyping) return;
+    if (key === 115) { // F4
+        toggleNoClip();
+    } else if (key === 84) { // T
+        startTyping();
+    }
 });
 
 alt.on('connectionComplete', () => {
-    alt.log('[FloV:MP] client: connectionComplete — вошли на сервер');
-    // сообщаем серверу, что все обработчики навешены и можно показывать логин
+    alt.log('[FloV:MP] Успешное подключение к серверу');
     alt.emitServer('flovmp:client:ready');
 });
 
 alt.on('disconnect', () => {
+    if (noClip) toggleNoClip();
     closeAuth();
-    closeHud();
-    closeInventory();
     closeChat();
     inGame = false;
-    alt.log('[FloV:MP] client: disconnect');
+    alt.log('[FloV:MP] Отключено от сервера');
 });
 
 alt.onServer('flovmp:client:welcome', (name, index) => {
-    alt.log(`[FloV:MP] client: welcome "${name}", точка спавна #${index}`);
-    try {
-        native.beginTextCommandThefeedPost('STRING');
-        native.addTextComponentSubstringPlayerName(`FloV:MP — добро пожаловать, ${name}`);
-        native.endTextCommandThefeedPostTicker(false, true);
-    } catch (err) {
-        alt.log(`[FloV:MP] client: нативное уведомление недоступно: ${err}`);
-    }
+    alt.log(`[Держава Онлайн] Добро пожаловать на сервер, ${name}!`);
 });

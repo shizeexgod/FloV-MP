@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 title FloV:MP Server
 cd /d "%~dp0.."
 set FLOVMP_SERVER_DIR=%~dp0..\runtime\server

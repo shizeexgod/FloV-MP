@@ -1,19 +1,22 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using FloVMP.Connect;
 using FloVMP.Launcher.Services;
 
-// FloV:MP connector — запуск клиента alt:V на наш сервер без бэкенда alt:V.
+Console.OutputEncoding = Encoding.UTF8;
+Console.InputEncoding = Encoding.UTF8;
+
+// FloV:MP connector — автономный запуск alt:V на наш сервер без внешнего бэкенда alt:V.
 //
 //   FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>]
-//                      [--port <n>] [--platform <steam|rgl|rockstar>] [--no-debug] [--keep-open]
-//
-// По умолчанию:
-//   --client  = <exeDir>\..\..\..\..\..\runtime\client  (или CWD\runtime\client)
-//   --gta     = автодетект из altv.toml рядом с клиентом, иначе спросить
-//   --port    = 39987
+//                      [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open]
 
-// Диагностический режим: поднять только локальный бэкенд и ждать (для проверки роутов).
 if (args.Contains("--cdn-only"))
 {
     var cd = ResolveClientDir() ?? @"C:\FloV-MP\runtime\client";
@@ -31,65 +34,130 @@ if (opts is null) return 1;
 
 var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride) = opts.Value;
 
-if (!File.Exists(Path.Combine(clientDir, "altv.exe")))
+var altvExe = Path.Combine(clientDir, "altv.exe");
+if (!File.Exists(altvExe))
 {
-    Console.Error.WriteLine($"[err] не найден altv.exe в {clientDir}");
+    Console.Error.WriteLine($"[err] Не найден altv.exe в папке {clientDir}");
     return 2;
 }
+
 var gameExe = FindGameExecutable(gtaDir);
 if (gameExe is null)
 {
-    Console.Error.WriteLine($"[err] не найден GTA V executable в {gtaDir} (ожидался GTA5.exe или GTA5_Enhanced.exe)");
+    Console.Error.WriteLine($"[err] Не найден исполняемый файл GTA V в папке {gtaDir} (ожидался GTA5.exe или GTA5_Enhanced.exe)");
     return 2;
 }
 
-Console.WriteLine($"[connect] server : {connect}");
-Console.WriteLine($"[connect] client : {clientDir}");
-Console.WriteLine($"[connect] gta    : {gtaDir}");
-Console.WriteLine($"[connect] exe    : {gameExe}");
+var detectedPlatform = AltvToml.DetectPlatform(gtaDir);
 
-// 0) alt:V должен САМ запустить GTA5.exe (suspended). Если игра/клиент/старый коннектор уже
-//    запущены — закрываем их для чистого старта.
+Console.WriteLine($"[connect] Сервер    : {connect}");
+Console.WriteLine($"[connect] Клиент    : {clientDir}");
+Console.WriteLine($"[connect] GTA V     : {gtaDir}");
+Console.WriteLine($"[connect] Файл игры : {gameExe}");
+Console.WriteLine($"[connect] Платформа : {detectedPlatform.ToUpperInvariant()}");
+
+// Автоматически проверяем и поднимаем сервер, если подключаемся к локальному хосту
+if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
+{
+    var portTarget = 7788;
+    if (connect.Contains(':') && int.TryParse(connect.Split(':')[1], out var parsedPort))
+        portTarget = parsedPort;
+
+    bool isListening = false;
+    for (int retry = 0; retry < 2; retry++)
+    {
+        try
+        {
+            using var tcpProbe = new System.Net.Sockets.TcpClient();
+            var connectTask = tcpProbe.ConnectAsync("127.0.0.1", portTarget);
+            if (await Task.WhenAny(connectTask, Task.Delay(500)) == connectTask && tcpProbe.Connected)
+            {
+                isListening = true;
+                break;
+            }
+        }
+        catch { }
+    }
+
+    if (!isListening)
+    {
+        Console.WriteLine($"[connect] Сервер не отвечает на порту {portTarget}. Запускаю сервер Держава Онлайн...");
+        var serverCandidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "server", "src", "FloVMP.ServerLauncher", "bin", "Release", "net8.0", "FloVMP.ServerLauncher.exe"),
+            Path.Combine(Environment.CurrentDirectory, "server", "src", "FloVMP.ServerLauncher", "bin", "Release", "net8.0", "FloVMP.ServerLauncher.exe"),
+            @"C:\FloV-MP\server\src\FloVMP.ServerLauncher\bin\Release\net8.0\FloVMP.ServerLauncher.exe"
+        };
+
+        var foundServer = serverCandidates.FirstOrDefault(File.Exists);
+        if (foundServer is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(foundServer) { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Minimized });
+                Console.WriteLine("[connect] Ожидаю инициализации сетевого интерфейса сервера...");
+                for (int i = 0; i < 15; i++)
+                {
+                    await Task.Delay(1000);
+                    try
+                    {
+                        using var tcpProbe = new System.Net.Sockets.TcpClient();
+                        var connectTask = tcpProbe.ConnectAsync("127.0.0.1", portTarget);
+                        if (await Task.WhenAny(connectTask, Task.Delay(500)) == connectTask && tcpProbe.Connected)
+                        {
+                            Console.WriteLine($"[connect] Сервер успешно запущен и принимает соединения (порт {portTarget}).");
+                            isListening = true;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[connect] Не удалось автоматически запустить сервер: {ex.Message}");
+            }
+        }
+    }
+}
+
+// Закрываем зависшие прошлые процессы игры/клиента и служб
 var currentPid = Environment.ProcessId;
-foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE" })
+foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE", "SocialClubHelper", "RockstarErrorHandler", "Launcher", "LauncherPatcher" })
 {
     foreach (var pr in Process.GetProcessesByName(stale))
     {
         if (pr.Id == currentPid) continue;
-        try { Console.WriteLine($"[connect] закрываю уже запущенный {stale} (PID {pr.Id})"); pr.Kill(true); pr.WaitForExit(3000); }
+        try 
+        { 
+            Console.WriteLine($"[connect] Закрываю старый процесс {stale} (PID {pr.Id})"); 
+            pr.Kill(true); 
+            pr.WaitForExit(3000); 
+        }
         catch { }
     }
 }
 
-// 1) локальный бэкенд
+// Очищаем старый кэш ресурсов клиента (кроме skin.bin), чтобы обновления скриптов применялись мгновенно
+var cacheDir = Path.Combine(clientDir, "cache");
+if (Directory.Exists(cacheDir))
+{
+    foreach (var subDir in Directory.GetDirectories(cacheDir))
+    {
+        try { Directory.Delete(subDir, true); } catch { }
+    }
+}
+
+// 1) Локальный CDN бэкенд
 var uiDir = Directory.Exists(Path.Combine(clientDir, "ui")) ? Path.Combine(clientDir, "ui") : null;
 using var cdn = new LocalCdn(clientDir, port, uiDir);
 cdn.Start();
 
-// 2) altv.toml (настоящий gtapath, без подмены GTA5.exe)
+// 2) altv.toml
 AltvToml.Write(clientDir, gtaDir, debug, platformOverride);
 Console.WriteLine("[connect] altv.toml записан");
 
-// 2.5) BattlEye: ничего не ломаем. Чиним службу, если её испортил прошлый
-// заход, и советуем отключить BE в Rockstar Launcher.
-if (OperatingSystem.IsWindows()) BattlEye.RepairServiceIfBroken();
-BattlEye.Advise(gtaDir);
-
-// 2.6) Epic: GTA5.exe (Epic-копия) при прямом запуске без запущенного
-// Epic Games Launcher не получает auth -> падает с "Не удалось запустить
-// Steam". Лаунчер Epic должен быть ЗАПУЩЕН и залогинен.
-if (AltvToml.DetectPlatform(gtaDir) == "rgl" && !IsUp("EpicGamesLauncher.exe"))
-{
-    Console.WriteLine();
-    Console.WriteLine("  == ВНИМАНИЕ: Epic Games Launcher не запущен ==================");
-    Console.WriteLine("  GTA V куплена в Epic. Запусти Epic Games Launcher, залогинься,");
-    Console.WriteLine("  оставь его открытым — иначе GTA5.exe упадёт с ошибкой Steam.");
-    Console.WriteLine("  (Rockstar Games Launcher закрой.) Затем повтори этот запуск.");
-    Console.WriteLine("  ===========================================================");
-    Console.WriteLine();
-}
-
-// 2.7) skin.bin — внедряем SHA-256 хэш customUiUrl для надежной загрузки NUI-оболочки
+// 2.7) skin.bin — патчим customUiUrl для загрузки NUI
 var customUi = $"{cdn.BaseUrl}/ui/index.html";
 foreach (var skinPath in new[] { Path.Combine(clientDir, "cache", "skin.bin"), Path.Combine(clientDir, "skin.bin") })
 {
@@ -99,29 +167,32 @@ foreach (var skinPath in new[] { Path.Combine(clientDir, "cache", "skin.bin"), P
 
 try
 {
-    // 3) запуск клиента
-    var altv = Path.Combine(clientDir, "altv.exe");
+    // 3) Запуск клиента alt:V
     var url = $"altv://connect/{connect}";
     var direct = noDirectLaunch ? "" : " -directlaunch";
-    var argLine = $"-connecturl \"{url}\"{direct} -customui {customUi}";
-    Console.WriteLine($"[connect] запуск: altv.exe {argLine}");
+    var argLine = $"-connecturl \"{url}\"{direct} -customui {customUi} -noupdate";
+    Console.WriteLine($"[connect] Запуск: altv.exe {argLine}");
 
-    var psi = new ProcessStartInfo(altv, argLine)
+    var psi = new ProcessStartInfo(altvExe, argLine)
     {
         WorkingDirectory = clientDir,
         UseShellExecute = false,
     };
-    // SteamAppId ставим ТОЛЬКО для Steam-установки. Для Epic (egs) эта
-    // переменная заставляет GTA5.exe искать Steam Client -> мгновенный вылет
-    // ("Не удалось запустить Steam").
-    if (AltvToml.DetectPlatform(gtaDir) == "steam")
+
+    if (detectedPlatform == "steam")
         psi.Environment["SteamAppId"] = "271590";
+    else
+        psi.Environment.Remove("SteamAppId");
 
     using var proc = Process.Start(psi);
-    if (proc is null) { Console.Error.WriteLine("[err] не удалось запустить altv.exe"); return 3; }
-    Console.WriteLine($"[connect] altv.exe PID {proc.Id}. Жду завершения игры…");
+    if (proc is null)
+    {
+        Console.Error.WriteLine("[err] Не удалось запустить altv.exe");
+        return 3;
+    }
+    Console.WriteLine($"[connect] altv.exe запущен (PID {proc.Id}). Ожидаю запуска и завершения игры...");
 
-    // 4) ждём: пока жив altv.exe или GTA5.exe
+    // 4) Ждём завершения
     var gtaSeen = false;
     while (true)
     {
@@ -139,10 +210,10 @@ try
 }
 finally
 {
-    Console.WriteLine("[connect] игра закрыта, останавливаю локальный бэкенд");
+    Console.WriteLine("[connect] Игра закрыта, останавливаю локальный бэкенд.");
 }
 
-if (keepOpen) { Console.WriteLine("нажмите Enter"); Console.ReadLine(); }
+if (keepOpen) { Console.WriteLine("Нажмите Enter для выхода..."); Console.ReadLine(); }
 return 0;
 
 // --- helpers ---------------------------------------------------------
@@ -163,8 +234,6 @@ static string? FindGameExecutable(string gtaDir)
 static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride)? ParseArgs(string[] a)
 {
     string? connect = null, client = null, gta = null, platformOverride = null;
-    // alt:V-клиент ходит на бэкенд по ЖЁСТКО зашитому 127.0.0.1:9988
-    // (флаг -customui только включает local-backend режим, порт не читает).
     var port = 9988;
     var debug = true;
     var keepOpen = false;
@@ -187,22 +256,30 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
 
     if (connect is null)
     {
-        Console.Error.WriteLine("использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--platform <steam|rgl|rockstar>] [--no-debug] [--keep-open] [--no-directlaunch]");
+        Console.Error.WriteLine("Использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open] [--no-directlaunch]");
         return null;
     }
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
         connect = connect["altv://connect/".Length..];
 
     client ??= ResolveClientDir();
-    if (client is null) { Console.Error.WriteLine("[err] не нашёл папку клиента, задайте --client <dir>"); return null; }
+    if (client is null)
+    {
+        Console.Error.WriteLine("[err] Не найдена папка клиента alt:V (runtime/client). Задайте путь через --client <dir>");
+        return null;
+    }
 
     gta ??= ResolveGtaDir(client);
-    if (gta is null) { Console.Error.WriteLine("[err] не нашёл папку GTA V, задайте --gta <dir>"); return null; }
+    if (gta is null)
+    {
+        Console.Error.WriteLine("[err] Не найдена папка с установленной GTA V. Задайте путь через --gta <dir>");
+        return null;
+    }
 
     if (!string.IsNullOrWhiteSpace(platformOverride) &&
-        !new[] { "steam", "rgl", "rockstar" }.Contains(platformOverride.Trim().ToLowerInvariant()))
+        !new[] { "egs", "steam", "rgl", "rockstar", "epic" }.Contains(platformOverride.Trim().ToLowerInvariant()))
     {
-        Console.Error.WriteLine("[err] --platform допускает только steam, rgl или rockstar");
+        Console.Error.WriteLine("[err] --platform допускает только egs, steam или rgl");
         return null;
     }
 
@@ -211,34 +288,40 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
 
 static string? ResolveClientDir()
 {
-    foreach (var c in new[]
-             {
-                 Path.Combine(Environment.CurrentDirectory, "runtime", "client"),
-                 Path.Combine(AppContext.BaseDirectory, "client"),
-                 @"C:\FloV-MP\runtime\client",
-             })
+    var candidates = new[]
     {
-        if (File.Exists(Path.Combine(c, "altv.exe"))) return c;
+        Path.Combine(Environment.CurrentDirectory, "runtime", "client"),
+        Path.Combine(AppContext.BaseDirectory, "client"),
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "runtime", "client"),
+        @"C:\FloV-MP\runtime\client",
+    };
+
+    foreach (var c in candidates)
+    {
+        try
+        {
+            var full = Path.GetFullPath(c);
+            if (Directory.Exists(full) && File.Exists(Path.Combine(full, "altv.exe")))
+                return full;
+        }
+        catch { }
     }
     return null;
 }
 
 static string? ResolveGtaDir(string clientDir)
 {
-    // 1) Полноценный поиск через GtaLocator (Epic Manifests, реестр Rockstar, Steam)
     var candidates = GtaLocator.Detect();
     if (candidates.Count > 0)
     {
-        // Приоритет: реально скачанные папки (наличие RPF архивов)
         var best = candidates.FirstOrDefault(c => c.IsComplete) ?? candidates[0];
-        Console.WriteLine($"[connect] автоопределена GTA V: {best.Path} [{best.Source}]");
+        Console.WriteLine($"[connect] Автоопределена GTA V: {best.Path} [{best.Source}]");
         return best.Path;
     }
 
-    // 2) Если ничего не найдено автоматически — открываем диалоговое окно выбора папки
     Console.WriteLine();
-    Console.WriteLine("[connect] GTA V не найдена автоматически в реестре/магазинах.");
-    Console.WriteLine("[connect] Открываю окно выбора папки GTA V (Legacy или Enhanced)...");
+    Console.WriteLine("[connect] GTA V не найдена автоматически.");
+    Console.WriteLine("[connect] Открываю окно выбора папки GTA V...");
     var selected = PromptUserForGtaFolder();
     if (!string.IsNullOrWhiteSpace(selected))
     {

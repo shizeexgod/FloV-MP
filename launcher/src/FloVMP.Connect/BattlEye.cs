@@ -1,20 +1,20 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Principal;
 
 namespace FloVMP.Connect;
 
 /// <summary>
-/// BattlEye + alt:V. GTA V Legacy (свежие билды) требует BE обязательно.
-/// Мы НИЧЕГО не трогаем в файлах BE и НЕ глушим службу (проверено — не
-/// помогает: защита в kernel-драйвере, а поломка службы ломает запуск).
+/// BattlEye + alt:V. GTA V Legacy (СЃРІРµР¶РёРµ Р±РёР»РґС‹) С‚СЂРµР±СѓРµС‚ BE РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+/// РњС‹ РќРР§Р•Р“Рћ РЅРµ С‚СЂРѕРіР°РµРј РІ С„Р°Р№Р»Р°С… BE Рё РќР• РіР»СѓС€РёРј СЃР»СѓР¶Р±Сѓ (РїСЂРѕРІРµСЂРµРЅРѕ вЂ” РЅРµ
+/// РїРѕРјРѕРіР°РµС‚: Р·Р°С‰РёС‚Р° РІ kernel-РґСЂР°Р№РІРµСЂРµ, Р° РїРѕР»РѕРјРєР° СЃР»СѓР¶Р±С‹ Р»РѕРјР°РµС‚ Р·Р°РїСѓСЃРє).
 ///
-/// Единственный надёжный способ: отключить BattlEye в настройках
-/// Rockstar Games Launcher (Настройки → Grand Theft Auto V → BattlEye).
-/// Тогда GTA5.exe не перезапускает себя под BE и alt:V успевает пропатчить.
+/// Р•РґРёРЅСЃС‚РІРµРЅРЅС‹Р№ РЅР°РґС‘Р¶РЅС‹Р№ СЃРїРѕСЃРѕР±: РѕС‚РєР»СЋС‡РёС‚СЊ BattlEye РІ РЅР°СЃС‚СЂРѕР№РєР°С…
+/// Rockstar Games Launcher (РќР°СЃС‚СЂРѕР№РєРё в†’ Grand Theft Auto V в†’ BattlEye).
+/// РўРѕРіРґР° GTA5.exe РЅРµ РїРµСЂРµР·Р°РїСѓСЃРєР°РµС‚ СЃРµР±СЏ РїРѕРґ BE Рё alt:V СѓСЃРїРµРІР°РµС‚ РїСЂРѕРїР°С‚С‡РёС‚СЊ.
 ///
-/// Здесь — только совет пользователю + разовое восстановление службы
-/// BEService, если её сломал прошлый (ошибочный) заход коннектора.
+/// Р—РґРµСЃСЊ вЂ” С‚РѕР»СЊРєРѕ СЃРѕРІРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ + СЂР°Р·РѕРІРѕРµ РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ СЃР»СѓР¶Р±С‹
+/// BEService, РµСЃР»Рё РµС‘ СЃР»РѕРјР°Р» РїСЂРѕС€Р»С‹Р№ (РѕС€РёР±РѕС‡РЅС‹Р№) Р·Р°С…РѕРґ РєРѕРЅРЅРµРєС‚РѕСЂР°.
 /// </summary>
 public static class BattlEye
 {
@@ -34,7 +34,7 @@ public static class BattlEye
         catch { return false; }
     }
 
-    /// <summary>Вернуть службу BEService в Manual, если она осталась Disabled.</summary>
+    /// <summary>Р’РµСЂРЅСѓС‚СЊ СЃР»СѓР¶Р±Сѓ BEService РІ Manual, РµСЃР»Рё РѕРЅР° РѕСЃС‚Р°Р»Р°СЃСЊ Disabled.</summary>
     [SupportedOSPlatform("windows")]
     public static void RepairServiceIfBroken()
     {
@@ -50,23 +50,16 @@ public static class BattlEye
             if (outp.Contains("DISABLED", StringComparison.OrdinalIgnoreCase))
             {
                 Run("sc.exe", $"config {Service} start= demand");
-                Console.WriteLine("[be] служба BEService восстановлена (Manual)");
+                Console.WriteLine("[be] СЃР»СѓР¶Р±Р° BEService РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅР° (Manual)");
             }
         }
-        catch { /* не критично */ }
+        catch { /* РЅРµ РєСЂРёС‚РёС‡РЅРѕ */ }
     }
 
-    public static void Advise(string gtaDir)
+        public static void Advise(string gtaDir)
     {
         if (!IsPresent(gtaDir)) return;
-        Console.WriteLine();
-        Console.WriteLine("  == BattlEye обнаружен ==========================================");
-        Console.WriteLine("  alt:V не запустится, пока GTA V стартует под BattlEye.");
-        Console.WriteLine("  ОТКЛЮЧИ BattlEye в Rockstar Games Launcher:");
-        Console.WriteLine("    Launcher -> Настройки -> Grand Theft Auto V -> выключить BattlEye");
-        Console.WriteLine("  затем повтори запуск коннектора.");
-        Console.WriteLine("  ===============================================================");
-        Console.WriteLine();
+        Console.WriteLine("[connect] Напоминание: Убедитесь, что BattlEye отключен в Rockstar Launcher (если игра не запускается).");
     }
 
     private static void Run(string exe, string args)
@@ -82,3 +75,4 @@ public static class BattlEye
         catch { }
     }
 }
+

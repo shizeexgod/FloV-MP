@@ -107,6 +107,10 @@ public sealed class LocalCdn : IDisposable
 
     private (int Status, string ContentType, byte[] Body) ProcessRequest(string path, string lower)
     {
+        if (lower.Contains("/rpc_update"))
+        {
+            return (200, "text/plain", "OK"u8.ToArray());
+        }
         if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
         {
             return (200, "application/json", Enc(ManifestFor("backup_update.json", BuildBackupManifest())));
@@ -115,15 +119,16 @@ public sealed class LocalCdn : IDisposable
         {
             var name = Path.GetFileName(path);
             var f = Path.Combine(_clientDir, "cdn", "backup", name);
+            if (!File.Exists(f)) f = Path.Combine(_clientDir, "backup", name);
             return File.Exists(f)
                 ? (200, "application/octet-stream", File.ReadAllBytes(f))
                 : (404, "text/plain", "Not Found"u8.ToArray());
         }
-        if (lower.Contains("update.json") && lower.Contains("/launcher"))
+        if (lower.Contains("update.json") && lower.Contains("launcher"))
         {
             return (200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
         }
-        if (lower.Contains("update.json") && lower.Contains("/client"))
+        if (lower.Contains("update.json") && (lower.Contains("/client") || lower.Contains("update_release")))
         {
             return (200, "application/json", Enc(ManifestFor("client_update.json", _clientManifestJson)));
         }
@@ -148,7 +153,8 @@ public sealed class LocalCdn : IDisposable
             return HandleClientFile(path);
         }
 
-        return (200, "text/plain", "ok"u8.ToArray());
+        // По умолчанию возвращаем валидный JSON, чтобы C++ JSON-парсер alt:V никогда не падал
+        return (200, "application/json", "{}"u8.ToArray());
     }
 
     private string ManifestFor(string name, string generated)
@@ -157,10 +163,20 @@ public sealed class LocalCdn : IDisposable
         return File.Exists(f) ? File.ReadAllText(f) : generated;
     }
 
-    private static string LauncherManifest() =>
-        "{\"latestBuildNumber\":-1,\"version\":\"16.3.7\"," +
-        "\"hashList\":{\"altv.exe\":\"2800e0d6665cdfa9c02419360db44b5cccf64147\"}," +
-        "\"sizeList\":{\"altv.exe\":9267200}}";
+    private string LauncherManifest()
+    {
+        var f = Path.Combine(_clientDir, "cdn", "launcher_update.json");
+        if (File.Exists(f)) return File.ReadAllText(f);
+
+        var altv = Path.Combine(_clientDir, "altv.exe");
+        if (!File.Exists(altv)) altv = Path.Combine(_clientDir, "altv.exe.bak");
+        var hash = File.Exists(altv) ? Sha1(altv) : "40eb9c68ba08e83c7bdd7709be768b6a93427070";
+        var size = File.Exists(altv) ? new FileInfo(altv).Length : 5656576;
+
+        return $"{{\"latestBuildNumber\":-1,\"version\":\"16.3.7\"," +
+               $"\"hashList\":{{\"altv.exe\":\"{hash}\"}}," +
+               $"\"sizeList\":{{\"altv.exe\":{size}}}}}";
+    }
 
     private (int Status, string ContentType, byte[] Body) HandleSkin(string lower)
     {
@@ -171,7 +187,7 @@ public sealed class LocalCdn : IDisposable
         {
             return File.Exists(skin)
                 ? (200, "text/plain", Enc(Sha1(skin)))
-                : (404, "text/plain", "Not Found"u8.ToArray());
+                : (200, "text/plain", "0000000000000000000000000000000000000000"u8.ToArray());
         }
         if (lower.EndsWith(".json"))
         {
@@ -238,6 +254,7 @@ public sealed class LocalCdn : IDisposable
     private string BuildBackupManifest()
     {
         var backupDir = Path.Combine(_clientDir, "cdn", "backup");
+        if (!Directory.Exists(backupDir)) backupDir = Path.Combine(_clientDir, "backup");
         if (!Directory.Exists(backupDir)) return "{\"files\":[]}";
 
         var files = new StringBuilder();
@@ -245,12 +262,11 @@ public sealed class LocalCdn : IDisposable
         foreach (var f in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
         {
             var rel = Path.GetRelativePath(backupDir, f).Replace('\\', '/');
-            if (rel is "backup_update.json") continue;
+            if (rel is "backup_update.json" or "README.md") continue;
 
             if (!first) files.Append(',');
             first = false;
 
-            // Формат backup_update.json у alt:V немного другой, это массив объектов.
             files.Append($"{{\"name\":\"{rel}\",\"hash\":\"{Sha1(f)}\",\"size\":{new FileInfo(f).Length}}}");
         }
         return $"{{\"files\":[{files}]}}";

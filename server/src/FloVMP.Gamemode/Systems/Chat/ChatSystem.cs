@@ -57,7 +57,7 @@ public sealed class ChatSystem
     public void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("chat.OnPlayerAuthed", () =>
     {
         _names[player.Id] = account.Username;
-        SendSystem(player, $"Добро пожаловать на FloV:MP, {account.Username}. /help — команды.");
+        SendSystem(player, $"Добро пожаловать на Держава Онлайн, {account.Username}. /help — команды.");
         Broadcast($"{account.Username} зашёл на сервер.");
     });
 
