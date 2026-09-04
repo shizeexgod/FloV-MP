@@ -11,4 +11,6 @@ public class LauncherSettings
     [JsonPropertyName("autoUpdate")] public bool AutoUpdate { get; set; } = true;
     /// <summary>"Legacy" или "Enhanced".</summary>
     [JsonPropertyName("clientEdition")] public string ClientEdition { get; set; } = "Legacy";
+    /// <summary>Id пресета акцентного цвета лаунчера (см. ACCENTS в renderer.js). По умолчанию — фирменный золотой.</summary>
+    [JsonPropertyName("accentColor")] public string AccentColor { get; set; } = "gold";
 }

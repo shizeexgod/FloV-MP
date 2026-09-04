@@ -13,6 +13,7 @@ let authCamera = null;
 let inGame = false;
 let chatView = null;
 let chatTyping = false;
+let settingsView = null;
 
 // --- NoClip (Полет на F4 с невидимостью) ---------------------------------
 let noClip = false;
@@ -231,6 +232,29 @@ function startTyping() {
     chatView.emit('flovmp:chat:openinput');
 }
 
+// --- Настройки (акцентный цвет и т.д.) ------------------------------------
+function openSettings() {
+    if (settingsView || !inGame || authView) return;
+    settingsView = new alt.WebView('http://resource/client/html/settings/index.html');
+    settingsView.focus();
+    alt.showCursor(true);
+    alt.toggleGameControls(false);
+
+    settingsView.on('flovmp:settings:close', closeSettings);
+    settingsView.on('flovmp:settings:accent', () => {
+        // Пока чисто клиентская настройка (localStorage, общий для всех NUI-экранов
+        // этого resource) — без записи на сервер/аккаунт.
+    });
+}
+
+function closeSettings() {
+    if (!settingsView) return;
+    settingsView.destroy();
+    settingsView = null;
+    try { alt.showCursor(false); } catch (e) { }
+    alt.toggleGameControls(true);
+}
+
 // --- Обработчики событий -------------------------------------------------
 alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
@@ -253,13 +277,16 @@ alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
-// Клавиши: F4 — NoClip, T — Чат
+// Клавиши: F4 — NoClip, T — Чат, F9 — Настройки
 alt.on('keyup', (key) => {
     if (chatTyping) return;
     if (key === 115) { // F4
         toggleNoClip();
     } else if (key === 84) { // T
         startTyping();
+    } else if (key === 120) { // F9
+        if (settingsView) closeSettings();
+        else openSettings();
     }
 });
 
@@ -272,6 +299,7 @@ alt.on('disconnect', () => {
     if (noClip) toggleNoClip();
     closeAuth();
     closeChat();
+    closeSettings();
     inGame = false;
     alt.log('[FloV:MP] Отключено от сервера');
 });

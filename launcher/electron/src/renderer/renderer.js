@@ -32,10 +32,10 @@ function renderNews() {
   const short = document.getElementById('news-list-short');
   const full = document.getElementById('news-list-full');
   short.innerHTML = NEWS.map(
-    (n) => `<div class="news-card"><div class="t">${n.title}</div><div class="d">${n.date}</div></div>`
+    (n) => `<div class="news-card"><div class="news-thumb"></div><div><div class="t">${n.title}</div><div class="d">${n.date}</div></div></div>`
   ).join('');
   full.innerHTML = NEWS.map(
-    (n) => `<div class="news-full-card"><div class="t">${n.title}</div><div class="d">${n.date}</div></div>`
+    (n) => `<div class="news-full-card"><div class="news-thumb"></div><div><div class="t">${n.title}</div><div class="d">${n.date}</div></div></div>`
   ).join('');
 }
 renderNews();
@@ -61,7 +61,58 @@ let settings = {
   serverPort: 7788,
   autoUpdate: true,
   clientEdition: 'Legacy',
+  accentColor: 'gold',
 };
+
+// ─── Акцентный цвет: фирменный золотой + пресеты на выбор ──────────────────
+const ACCENTS = [
+  { id: 'gold',   name: 'Золотой (по умолчанию)', accent: '#fdd015', soft: '#ffe873', deep: '#fc8c06', ink: '#1a1206' },
+  { id: 'pink',   name: 'Розовый',                accent: '#ff3d8a', soft: '#ff7ab3', deep: '#c21e63', ink: '#1a0410' },
+  { id: 'blue',   name: 'Голубой',                accent: '#4ac3ff', soft: '#8ddcff', deep: '#2e8fdb', ink: '#031420' },
+  { id: 'green',  name: 'Зелёный',                accent: '#3fd98a', soft: '#8af0bc', deep: '#22b86b', ink: '#031b10' },
+  { id: 'purple', name: 'Фиолетовый',              accent: '#c084fc', soft: '#ddb4ff', deep: '#9d5cf0', ink: '#1a0f26' },
+  { id: 'red',    name: 'Красный',                accent: '#ff5d5d', soft: '#ff9a9a', deep: '#e63946', ink: '#210404' },
+];
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}
+
+function applyAccent(id) {
+  const preset = ACCENTS.find((a) => a.id === id) || ACCENTS[0];
+  const root = document.documentElement.style;
+  const rgb = hexToRgb(preset.accent);
+  root.setProperty('--accent', preset.accent);
+  root.setProperty('--accent-soft', preset.soft);
+  root.setProperty('--accent-deep', preset.deep);
+  root.setProperty('--accent-ink', preset.ink);
+  root.setProperty('--accent-dim', preset.deep);
+  root.setProperty('--accent-wash', `rgba(${rgb},.14)`);
+  root.setProperty('--accent-hover', `rgba(${rgb},.1)`);
+  root.setProperty('--accent-glow', `rgba(${rgb},.18)`);
+  root.setProperty('--accent-shadow', `rgba(${rgb},.55)`);
+  root.setProperty('--accent-shadow-strong', `rgba(${rgb},.7)`);
+
+  document.querySelectorAll('.accent-swatch').forEach((el) => {
+    el.classList.toggle('selected', el.dataset.accent === preset.id);
+  });
+}
+
+function renderAccentPicker() {
+  const el = document.getElementById('accent-picker');
+  el.innerHTML = ACCENTS.map(
+    (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}"
+      style="background:linear-gradient(135deg, ${a.soft}, ${a.accent} 55%, ${a.deep})"></button>`
+  ).join('');
+  el.querySelectorAll('.accent-swatch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      settings.accentColor = btn.dataset.accent;
+      applyAccent(settings.accentColor);
+      saveSettingsDebounced();
+    });
+  });
+}
 
 function applySettingsToUI() {
   document.getElementById('set-nickname').value = settings.nickname;
@@ -70,6 +121,7 @@ function applySettingsToUI() {
   document.getElementById('set-port').value = settings.serverPort;
   document.getElementById('set-autoupdate').checked = settings.autoUpdate;
   setEditionToggle(settings.clientEdition);
+  applyAccent(settings.accentColor);
 
   document.getElementById('account-nick').textContent = settings.nickname;
   document.getElementById('avatar-initial').textContent = (settings.nickname || 'И')[0].toUpperCase();
@@ -225,6 +277,7 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
 
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
+  renderAccentPicker();
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
   applySettingsToUI();

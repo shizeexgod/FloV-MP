@@ -3,9 +3,28 @@
 <head>
 <meta charset="utf-8" />
 <title>FloV:MP — чат</title>
+<script>
+(function(){
+  var PRESETS = {
+    gold:{accent:'#fdd015',dim:'#b3790a',ink:'#1a1206'},
+    pink:{accent:'#ff3d8a',dim:'#b3316f',ink:'#1a0410'},
+    blue:{accent:'#4ac3ff',dim:'#2e8fdb',ink:'#031420'},
+    green:{accent:'#3fd98a',dim:'#22b86b',ink:'#031b10'},
+    purple:{accent:'#c084fc',dim:'#8b3fe8',ink:'#1a0f26'},
+    red:{accent:'#ff5d5d',dim:'#c23a3a',ink:'#210404'}
+  };
+  var id = 'gold';
+  try { id = localStorage.getItem('flovmp:accent') || 'gold'; } catch (e) {}
+  var p = PRESETS[id] || PRESETS.gold;
+  var s = document.documentElement.style;
+  s.setProperty('--accent', p.accent);
+  s.setProperty('--accent-dim', p.dim);
+  s.setProperty('--accent-ink', p.ink);
+})();
+</script>
 <style>
   :root {
-    --accent: #ff3d8a;
+    --accent: #fdd015;
     --sys: #e3b341;
     --me: #b98cff;
     --text0: #eef0f6;

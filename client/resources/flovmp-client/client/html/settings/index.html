@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Держава RP — настройки</title>
+<script>
+(function(){
+  var PRESETS = {
+    gold:{accent:'#fdd015',dim:'#b3790a',ink:'#1a1206'},
+    pink:{accent:'#ff3d8a',dim:'#b3316f',ink:'#1a0410'},
+    blue:{accent:'#4ac3ff',dim:'#2e8fdb',ink:'#031420'},
+    green:{accent:'#3fd98a',dim:'#22b86b',ink:'#031b10'},
+    purple:{accent:'#c084fc',dim:'#8b3fe8',ink:'#1a0f26'},
+    red:{accent:'#ff5d5d',dim:'#c23a3a',ink:'#210404'}
+  };
+  var id = 'gold';
+  try { id = localStorage.getItem('flovmp:accent') || 'gold'; } catch (e) {}
+  var p = PRESETS[id] || PRESETS.gold;
+  var s = document.documentElement.style;
+  s.setProperty('--accent', p.accent);
+  s.setProperty('--accent-dim', p.dim);
+  s.setProperty('--accent-ink', p.ink);
+})();
+</script>
+<style>
+  :root {
+    --accent: #fdd015;
+    --accent-dim: #b3790a;
+    --accent-ink: #1a1206;
+    --bg0: #0f1015;
+    --bg1: #191b24;
+    --bg2: #22252f;
+    --stroke: #333747;
+    --text0: #eef0f6;
+    --text1: #9aa0b4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: transparent;
+    color: var(--text0);
+    overflow: hidden;
+    user-select: none;
+  }
+  .backdrop {
+    position: absolute; inset: 0;
+    background: rgba(6, 6, 10, .55);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: 380px;
+    background: var(--bg1);
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    padding: 24px 26px 26px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .55);
+    position: relative;
+  }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .head h1 { font-size: 17px; font-weight: 700; }
+  .close {
+    width: 26px; height: 26px; border-radius: 7px; border: none;
+    background: var(--bg2); color: var(--text1); cursor: pointer; font-size: 13px;
+  }
+  .close:hover { color: var(--text0); }
+
+  .section-label {
+    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text1); margin-bottom: 10px;
+  }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .swatch {
+    width: 34px; height: 34px; border-radius: 9px; cursor: pointer;
+    border: 2px solid transparent; padding: 0; position: relative;
+  }
+  .swatch.selected { border-color: var(--text0); }
+  .swatch.selected::after {
+    content: "\2713"; position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 14px; font-weight: 700;
+    color: rgba(0,0,0,.55);
+  }
+  .hint { font-size: 11px; color: var(--text1); margin-top: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="backdrop">
+  <div class="card">
+    <div class="head">
+      <h1>Настройки</h1>
+      <button class="close" id="close">&#10005;</button>
+    </div>
+    <div class="section-label">Акцентный цвет</div>
+    <div class="swatches" id="swatches"></div>
+    <div class="hint">Влияет на все игровые экраны (HUD, чат, инвентарь, вход). Совпадает с пресетами в лаунчере. Esc — закрыть.</div>
+  </div>
+</div>
+
+<script>
+  var PRESETS = [
+    { id: 'gold',   accent: '#fdd015', soft: '#ffe873', deep: '#fc8c06' },
+    { id: 'pink',   accent: '#ff3d8a', soft: '#ff7ab3', deep: '#c21e63' },
+    { id: 'blue',   accent: '#4ac3ff', soft: '#8ddcff', deep: '#2e8fdb' },
+    { id: 'green',  accent: '#3fd98a', soft: '#8af0bc', deep: '#22b86b' },
+    { id: 'purple', accent: '#c084fc', soft: '#ddb4ff', deep: '#9d5cf0' },
+    { id: 'red',    accent: '#ff5d5d', soft: '#ff9a9a', deep: '#e63946' },
+  ];
+  var DIM_INK = {
+    gold:['#b3790a','#1a1206'], pink:['#b3316f','#1a0410'], blue:['#2e8fdb','#031420'],
+    green:['#22b86b','#031b10'], purple:['#8b3fe8','#1a0f26'], red:['#c23a3a','#210404'],
+  };
+
+  var current = 'gold';
+  try { current = localStorage.getItem('flovmp:accent') || 'gold'; } catch (e) {}
+
+  function apply(id) {
+    var d = DIM_INK[id] || DIM_INK.gold;
+    var s = document.documentElement.style;
+    s.setProperty('--accent', (PRESETS.filter(function (p) { return p.id === id; })[0] || PRESETS[0]).accent);
+    s.setProperty('--accent-dim', d[0]);
+    s.setProperty('--accent-ink', d[1]);
+    document.querySelectorAll('.swatch').forEach(function (el) {
+      el.classList.toggle('selected', el.dataset.id === id);
+    });
+  }
+
+  var wrap = document.getElementById('swatches');
+  PRESETS.forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'swatch';
+    b.dataset.id = p.id;
+    b.style.background = 'linear-gradient(135deg,' + p.soft + ',' + p.accent + ' 55%,' + p.deep + ')';
+    b.addEventListener('click', function () {
+      current = p.id;
+      try { localStorage.setItem('flovmp:accent', current); } catch (e) {}
+      apply(current);
+      if (typeof alt !== 'undefined') alt.emit('flovmp:settings:accent', current);
+    });
+    wrap.appendChild(b);
+  });
+  apply(current);
+
+  function close() {
+    if (typeof alt !== 'undefined') alt.emit('flovmp:settings:close');
+  }
+  document.getElementById('close').addEventListener('click', close);
+  document.addEventListener('keyup', function (e) {
+    if (e.key === 'Escape') close();
+  });
+</script>
+</body>
+</html>
