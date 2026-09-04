@@ -42,6 +42,7 @@
     }
   },
   "dependencies": {
+    "@phosphor-icons/core": "^2.1.1",
     "lucide-static": "^1.41.0"
   }
 }

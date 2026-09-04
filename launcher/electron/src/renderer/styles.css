@@ -182,6 +182,19 @@ button{ font-family: inherit; }
 .rail-item:hover{ color: var(--text); }
 .rail-item.active{ color: var(--text); font-weight:700; }
 .rail-item.active .icon{ color: var(--accent); }
+/* Точечный компромисс с Majestic: у них иконки залитые, у нас обводка
+   (Lucide) — вместо смены всего пака заливаем только 3 иконки главных
+   разделов, и только когда пункт активен/наведён (как вкладки в iOS —
+   обводка в покое, заливка при внимании). Остальной пак остаётся Lucide. */
+.rail-item.active .icon-gamepad, .rail-item:hover .icon-gamepad{
+  -webkit-mask-image:url('assets/icons/game-controller-fill.svg'); mask-image:url('assets/icons/game-controller-fill.svg');
+}
+.rail-item.active .icon-newspaper, .rail-item:hover .icon-newspaper{
+  -webkit-mask-image:url('assets/icons/newspaper-fill.svg'); mask-image:url('assets/icons/newspaper-fill.svg');
+}
+.rail-item.active .icon-settings, .rail-item:hover .icon-settings{
+  -webkit-mask-image:url('assets/icons/gear-fill.svg'); mask-image:url('assets/icons/gear-fill.svg');
+}
 .rail-item.active::before{
   content:""; position:absolute; left:-10px; top:8px; bottom:8px; width:3px; border-radius:3px;
   background: var(--accent);
