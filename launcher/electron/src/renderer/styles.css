@@ -46,6 +46,15 @@ body{
 button{ font-family: inherit; }
 ::selection{ background: var(--accent); color: var(--accent-ink); }
 
+/* Градиентный текст — для брендовых надписей (не для всего подряд:
+   плоский текст лучше читается там, где мало контраста с фоном, поэтому
+   на .hero-headline поверх сцены оставлен обычный белый). */
+.text-gradient{
+  background: linear-gradient(135deg, var(--accent-soft), var(--accent) 55%, var(--accent-deep));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+
 /* ---------- иконки Lucide (mask-технология — наследуют color родителя) --- */
 .icon{
   display:inline-block; flex:0 0 auto;
