@@ -1,0 +1,41 @@
+{
+  "name": "derzhava-rp-launcher",
+  "productName": "Derzhava RP Launcher",
+  "version": "1.0.0",
+  "description": "Держава RP Launcher — окно запуска для FloV:MP",
+  "main": "src/main.js",
+  "author": "Derzhava RP",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "ru.derzhavarp.launcher",
+    "productName": "Derzhava RP Launcher",
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../src/FloVMP.Launcher.Native/bin/Release/net8.0-windows",
+        "to": "native",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

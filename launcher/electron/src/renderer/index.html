@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Держава RP Launcher</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ─── Титлбар ─── -->
+  <div class="titlebar">
+    <div class="brand">ДЕРЖАВА RP LAUNCHER</div>
+    <div class="win-controls">
+      <button class="win-btn" id="btn-min" title="Свернуть">&#8211;</button>
+      <button class="win-btn" id="btn-max" title="Развернуть">&#9633;</button>
+      <button class="win-btn close" id="btn-close" title="Закрыть">&#10005;</button>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- ─── Рельс: свёрнут, разворачивается по наведению ─── -->
+    <nav class="rail" id="rail">
+      <div class="rail-logo">
+        <div class="rail-mark">Д</div>
+        <div class="rail-name"><b>Держава RP</b><span>RolePlay</span></div>
+      </div>
+      <div class="rail-sep"></div>
+      <div class="rail-nav">
+        <button class="rail-item active" data-page="play"><span class="ic">&#127918;</span><span class="lb">Играть</span></button>
+        <button class="rail-item" data-page="news"><span class="ic">&#128240;</span><span class="lb">Новости</span></button>
+        <button class="rail-item" data-page="settings"><span class="ic">&#9881;</span><span class="lb">Настройки</span></button>
+      </div>
+      <div class="rail-sep"></div>
+      <div class="rail-nav">
+        <button class="rail-item" id="btn-discord"><span class="ic">&#128172;</span><span class="lb">Discord</span></button>
+        <button class="rail-item" id="btn-forum"><span class="ic">&#128203;</span><span class="lb">Форум</span></button>
+        <button class="rail-item" id="btn-donate"><span class="ic">&#128176;</span><span class="lb">Донат</span></button>
+      </div>
+      <div class="rail-spacer"></div>
+      <div class="rail-account">
+        <div class="rail-avatar" id="avatar-initial">И</div>
+        <div class="rail-account-name"><b id="account-nick">Игрок</b><span>Игрок</span></div>
+        <div class="rail-version">Держава RP Launcher v1.0.0 | FloV:MP</div>
+      </div>
+    </nav>
+
+    <!-- ─── Контент ─── -->
+    <main class="content">
+
+      <!-- Играть -->
+      <section class="page active" id="page-play">
+        <div class="hero">
+          <div class="glow"></div>
+          <div class="skyline" id="skyline"></div>
+          <div class="fade"></div>
+          <div class="hero-top">
+            <div class="hero-kicker">GTA V &middot; РУССКИЙ RP &middot; ОНЛАЙН</div>
+            <div class="hero-headline">Твоя история начинается здесь</div>
+          </div>
+          <div class="hero-bottom">
+            <div class="status-pill"><span class="status-dot" id="status-dot"></span><span id="status-text">Офлайн</span>&nbsp;&middot;&nbsp;<span id="status-online" style="color:var(--text-dim)">нет данных</span></div>
+            <div class="server-name">Держава RP</div>
+            <div class="server-desc">Российский ролевой сервер &middot; FloV:MP</div>
+            <div class="play-row">
+              <div class="status-msg" id="play-status"></div>
+              <button class="btn-play" id="btn-play">ИГРАТЬ</button>
+            </div>
+          </div>
+        </div>
+        <aside class="news-col">
+          <h3>Последние новости</h3>
+          <div class="news-list" id="news-list-short"></div>
+        </aside>
+      </section>
+
+      <!-- Новости -->
+      <section class="page" id="page-news">
+        <h2>Новости</h2>
+        <div class="news-full-list" id="news-list-full"></div>
+      </section>
+
+      <!-- Настройки -->
+      <section class="page" id="page-settings">
+        <h2>Настройки</h2>
+        <div class="settings-list">
+
+          <div class="card">
+            <h4>Игрок</h4>
+            <span class="field-label">Никнейм</span>
+            <input type="text" id="set-nickname">
+          </div>
+
+          <div class="card">
+            <h4>GTA V</h4>
+            <span class="field-label">Папка игры</span>
+            <div class="row" style="margin-bottom:12px">
+              <input type="text" id="set-gtapath">
+              <button class="btn-secondary" id="btn-browse">Обзор&hellip;</button>
+              <button class="btn-secondary" id="btn-detect">Автоопределить</button>
+            </div>
+            <span class="field-label">Версия клиента</span>
+            <div class="toggle-group">
+              <button class="toggle-btn" id="toggle-legacy" data-edition="Legacy">Legacy</button>
+              <button class="toggle-btn" id="toggle-enhanced" data-edition="Enhanced">Enhanced</button>
+            </div>
+            <div class="hint" id="settings-status"></div>
+          </div>
+
+          <div class="card">
+            <h4>Сервер</h4>
+            <div class="row">
+              <div>
+                <span class="field-label">Адрес</span>
+                <input type="text" id="set-host">
+              </div>
+              <div style="max-width:120px">
+                <span class="field-label">Порт</span>
+                <input type="number" id="set-port">
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h4>Обновления</h4>
+            <label class="checkbox-row">
+              <input type="checkbox" id="set-autoupdate">
+              Обновлять FloV:MP автоматически
+            </label>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ─── Оверлей авторизации ─── -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-box">
+      <div class="auth-mark">Д</div>
+      <h2>Держава RP</h2>
+      <div class="sub" id="auth-sub">Войдите в аккаунт или зарегистрируйтесь</div>
+      <label>Логин</label>
+      <input type="text" id="auth-login">
+      <label>Пароль</label>
+      <input type="password" id="auth-password">
+      <div class="auth-error" id="auth-error"></div>
+      <button class="btn-play" style="width:100%" id="btn-auth-submit">ВОЙТИ</button>
+      <button class="btn-toggle-mode" id="btn-toggle-mode">У меня ещё нет аккаунта</button>
+    </div>
+  </div>
+
+</div>
+<script src="renderer.js"></script>
+</body>
+</html>

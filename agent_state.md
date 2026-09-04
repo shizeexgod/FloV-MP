@@ -317,3 +317,29 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
 - `runtime/` (сервер и клиент) — в `.gitignore`.
 - Решения `.slnx` (не `.sln`) — дефолт `dotnet` 10.
 - Правка глобального `altv.toml` — только по явной галке, всегда `.bak`.
+
+## Лаунчер: пивот на Electron (2026-09-04)
+
+Владелец забраковал визуал WPF-лаунчера (`FloridaV.Launcher`) как
+недостаточно красивый по сравнению с Majestic/GTA5RP. Разведка (разбор
+папки `C:\Users\User\AppData\Roaming\majestic-launcher` + форум GTA5RP)
+подтвердила: оба реальных конкурента рендерят UI через Chromium
+(Electron/CEF), а не нативными Windows-контролами — этим и объясняется
+их уровень полировки. Решение: **лаунчер переезжает на Electron**.
+
+- **Новый проект** `launcher/electron/` — Electron-оболочка, весь UI на
+  HTML/CSS/JS (адаптация дизайна из артефакта "Держава RP Launcher
+  Concepts", вариант A). `npm start` / `scripts/run-launcher-electron.cmd`.
+- **Новый проект** `launcher/src/FloVMP.Launcher.Native/` — тонкий C#
+  console-хелпер (net8.0-windows). Держит реестр Windows / поиск GTA V /
+  запуск через `FloVMP.Connect` (exe-подмена, BattlEye-safe) — весь этот
+  код НЕ переписан на JS, просто перенесён без изменения логики из
+  `FloridaV.Launcher.Services`. Протокол — NDJSON по stdio
+  (`{"id":N,"cmd":"..."}` → `{"id":N,"ok":true,"result":...}`), Electron
+  спавнит процесс один раз и держит живым (`launcher/electron/src/native-bridge.js`).
+- Настройки — тот же файл `%LOCALAPPDATA%\FloridaV\settings.json`, что и
+  у старого WPF-лаунчера — без миграции, оба читают один формат.
+- **Старый `FloridaV.Launcher` (WPF) НЕ удалён**, но больше не
+  развивается — оставлен на случай отката. Решение об окончательном
+  удалении — отдельно, владельцем.
+- `CLAUDE.md` обновлён (таблица стека, строка «Лаунчер»).

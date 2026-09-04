@@ -3,6 +3,7 @@
     <Project Path="src/FloridaV.Launcher/FloridaV.Launcher.csproj" />
     <Project Path="src/FloVMP.Connect/FloVMP.Connect.csproj" />
     <Project Path="src/FloVMP.Launcher.Core/FloVMP.Launcher.Core.csproj" />
+    <Project Path="src/FloVMP.Launcher.Native/FloVMP.Launcher.Native.csproj" />
     <Project Path="src/FloVMP.Launcher/FloVMP.Launcher.csproj" />
   </Folder>
   <Folder Name="/tests/">
