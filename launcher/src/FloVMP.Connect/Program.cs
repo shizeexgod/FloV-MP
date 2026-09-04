@@ -32,7 +32,7 @@ if (args.Contains("--cdn-only"))
 var opts = ParseArgs(args);
 if (opts is null) return 1;
 
-var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride) = opts.Value;
+var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname) = opts.Value;
 
 var altvExe = Path.Combine(clientDir, "altv.exe");
 if (!File.Exists(altvExe))
@@ -154,7 +154,7 @@ using var cdn = new LocalCdn(clientDir, port, uiDir);
 cdn.Start();
 
 // 2) altv.toml
-AltvToml.Write(clientDir, gtaDir, debug, platformOverride);
+AltvToml.Write(clientDir, gtaDir, debug, platformOverride, nickname);
 Console.WriteLine("[connect] altv.toml записан");
 
 // 2.7) skin.bin — патчим customUiUrl для загрузки NUI
@@ -231,9 +231,10 @@ static string? FindGameExecutable(string gtaDir)
     return null;
 }
 
-static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride)? ParseArgs(string[] a)
+static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride, string? nickname)? ParseArgs(string[] a)
 {
-    string? connect = null, client = null, gta = null, platformOverride = null;
+    string? connect = null, client = null, gta = null, platformOverride = null, nickname = null, host = null;
+    int? sPort = null;
     var port = 9988;
     var debug = true;
     var keepOpen = false;
@@ -244,6 +245,9 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
         switch (a[i])
         {
             case "-connect" or "--connect" when i + 1 < a.Length: connect = a[++i]; break;
+            case "--host" or "-host" when i + 1 < a.Length: host = a[++i]; break;
+            case "--server-port" when i + 1 < a.Length && int.TryParse(a[i + 1], out var sp): sPort = sp; i++; break;
+            case "--nick" or "-nick" or "--nickname" when i + 1 < a.Length: nickname = a[++i]; break;
             case "--client" when i + 1 < a.Length: client = a[++i]; break;
             case "--gta" when i + 1 < a.Length: gta = a[++i]; break;
             case "--platform" when i + 1 < a.Length: platformOverride = a[++i]; break;
@@ -254,9 +258,14 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
         }
     }
 
+    if (connect is null && !string.IsNullOrWhiteSpace(host))
+    {
+        connect = $"{host}:{sPort ?? 7788}";
+    }
+
     if (connect is null)
     {
-        Console.Error.WriteLine("Использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open] [--no-directlaunch]");
+        Console.Error.WriteLine("Использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--nick <name>] [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open] [--no-directlaunch]");
         return null;
     }
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
@@ -283,7 +292,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
         return null;
     }
 
-    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride);
+    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride, nickname);
 }
 
 static string? ResolveClientDir()

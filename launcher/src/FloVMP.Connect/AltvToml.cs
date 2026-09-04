@@ -7,12 +7,13 @@ namespace FloVMP.Connect;
 /// </summary>
 public static class AltvToml
 {
-    public static void Write(string clientDir, string gtaPath, bool debug, string? platformOverride = null)
+    public static void Write(string clientDir, string gtaPath, bool debug, string? platformOverride = null, string? nickname = null)
     {
         var cache = Path.Combine(clientDir, "cache").Replace('\\', '/');
         var platform = string.IsNullOrWhiteSpace(platformOverride)
             ? "steam"
             : platformOverride.Trim().ToLowerInvariant();
+        var playerName = string.IsNullOrWhiteSpace(nickname) ? "shize5" : nickname.Trim();
 
         var toml = $"""
             audioFrameLimit = false
@@ -49,7 +50,7 @@ public static class AltvToml
             linuxCompatibility = false
             logTimeFormat = '%H:%M:%S'
             maxDownloadSpeed = 0
-            name = 'shize5'
+            name = '{playerName}'
             netgraph = false
             permissionsSet = true
             promotedOnTop = false

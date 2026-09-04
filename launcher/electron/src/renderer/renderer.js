@@ -20,23 +20,126 @@ document.getElementById('btn-discord').addEventListener('click', () => openUrl('
 document.getElementById('btn-forum').addEventListener('click', () => openUrl('https://forum.derzhava-rp.ru'));
 document.getElementById('btn-donate').addEventListener('click', () => openUrl('https://donate.derzhava-rp.ru'));
 
-// ─── Новости (пока статичные — как и было в WPF-версии) ────────────────────
+// ─── Новости и модальное окно статьи ─────────────────────────────────────
 const NEWS = [
-  { title: 'Открытие Держава RP — добро пожаловать!', date: '30.08.2026' },
-  { title: 'Новая карта: реальные улицы Москвы', date: '29.08.2026' },
-  { title: 'Обновление FloV:MP 1.0 — стабильный запуск', date: '28.08.2026' },
-  { title: 'Первые RP-фракции открыты для вступления', date: '27.08.2026' },
+  {
+    id: 1,
+    badge: 'ОТКРЫТИЕ',
+    title: 'Открытие Держава RP — добро пожаловать!',
+    date: '30.08.2026',
+    summary: 'Долгожданный запуск сервера на независимом движке FloV:MP.',
+    body: `<p>Мы рады приветствовать всех первопроходцев проекта <b>Держава RP</b>! Это масштабный мир на базе собственного высокопроизводительного мультиплеера <b>FloV:MP</b>, свободного от ограничений старых платформ.</p>
+    <p>Что вас ждёт на старте:</p>
+    <ul>
+      <li>Уникальная экономическая система с реальными профессиями и бизнесами;</li>
+      <li>Проработанная физика транспорта и кастомные модели отечественного автопрома;</li>
+      <li>Полная свобода от стандартных GTA-ботов и назойливого амбиента — мир заполняют только живые игроки;</li>
+      <li>Интуитивный инвентарь нового поколения и голосовая связь высокой четкости.</li>
+    </ul>
+    <p>Каждый новый игрок получает стартовый пакет для комфортного старта в городе. Увидимся на сервере!</p>`
+  },
+  {
+    id: 2,
+    badge: 'КАРТА',
+    title: 'Новая карта: реальные улицы Москвы',
+    date: '29.08.2026',
+    summary: 'Кремль, Арбат, Сити и спальные районы прямо в GTA V.',
+    body: `<p>Наши левел-дизайнеры завершили интеграцию уникального городского массива. Вы сможете прокатиться по Садовому кольцу, прогуляться по историческому центру или устроить гонки на широких проспектах.</p>
+    <p>Особенности локации:</p>
+    <ul>
+      <li>Высокая детализация фасадов и узнаваемые ориентиры;</li>
+      <li>Оптимизированный стриминг текстур без просадки FPS;</li>
+      <li>Специальные зоны для государственных служб и бандформирований.</li>
+    </ul>
+    <p>Карта продолжит расширяться с каждым сезонным патчем.</p>`
+  },
+  {
+    id: 3,
+    badge: 'ОБНОВЛЕНИЕ',
+    title: 'Обновление FloV:MP 1.0 — стабильный запуск',
+    date: '28.08.2026',
+    summary: 'Автономный сетевой стек, быстрый кэш и защита соединения.',
+    body: `<p>Ядро мультиплеера переведено на версию <b>FloV:MP 1.0</b>. Мы полностью избавились от внешних зависимостей и построили автономную серверную архитектуру.</p>
+    <p>Ключевые изменения:</p>
+    <ul>
+      <li>Мгновенный вход без очередей через наш оптимизированный коннектор;</li>
+      <li>Атомарная проверка ресурсов и защита от рассинхронизации;</li>
+      <li>Поддержка современных версий GTA V и гладкая интерполяция движения;</li>
+      <li>Интеграция нативного лаунчера с автоопределением установленной игры.</li>
+    </ul>`
+  },
+  {
+    id: 4,
+    badge: 'ФРАКЦИИ',
+    title: 'Первые RP-фракции открыты для вступления',
+    date: '27.08.2026',
+    summary: 'Полиция, МЧС, Правительство и криминальные группировки ждут лидеров.',
+    body: `<p>Начался набор лидеров и активных участников в ключевые государственные и нелегальные структуры штата.</p>
+    <p>Доступные направления:</p>
+    <ul>
+      <li><b>Министерство Внутренних Дел</b> — контроль правопорядка, погони и патрулирование;</li>
+      <li><b>Скорая Медицинская Помощь</b> — спасение жизней и полевая медицина;</li>
+      <li><b>Городская Мэрия</b> — управление налогами, лицензиями и городскими проектами;</li>
+      <li><b>Особые группировки</b> — контроль районов и нелегальный оборот.</li>
+    </ul>
+    <p>Подавайте заявки на нашем официальном форуме или в игре!</p>`
+  },
 ];
+
+function openNewsModal(newsItem) {
+  const modal = document.getElementById('news-modal-overlay');
+  document.getElementById('news-modal-badge').textContent = newsItem.badge || 'НОВОСТЬ';
+  document.getElementById('news-modal-title').textContent = newsItem.title;
+  document.getElementById('news-modal-date').textContent = newsItem.date;
+  document.getElementById('news-modal-text').innerHTML = newsItem.body;
+  modal.classList.remove('hidden');
+}
+
+function closeNewsModal() {
+  document.getElementById('news-modal-overlay').classList.add('hidden');
+}
+
+document.getElementById('news-modal-close').addEventListener('click', closeNewsModal);
+document.getElementById('news-modal-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeNewsModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeNewsModal();
+});
 
 function renderNews() {
   const short = document.getElementById('news-list-short');
   const full = document.getElementById('news-list-full');
-  short.innerHTML = NEWS.map(
-    (n) => `<div class="news-card"><div class="news-thumb"></div><div><div class="t">${n.title}</div><div class="d">${n.date}</div></div></div>`
-  ).join('');
-  full.innerHTML = NEWS.map(
-    (n) => `<div class="news-full-card"><div class="news-thumb"></div><div><div class="t">${n.title}</div><div class="d">${n.date}</div></div></div>`
-  ).join('');
+  
+  short.innerHTML = NEWS.map((n) => `
+    <div class="news-card" data-news-id="${n.id}">
+      <div class="news-thumb"></div>
+      <div>
+        <div class="t">${n.title}</div>
+        <div class="d">${n.date}</div>
+      </div>
+    </div>
+  `).join('');
+
+  full.innerHTML = NEWS.map((n) => `
+    <div class="news-full-card" data-news-id="${n.id}">
+      <div class="news-thumb"></div>
+      <div style="flex:1">
+        <span class="news-tag">${n.badge}</span>
+        <div class="t">${n.title}</div>
+        <div class="summary">${n.summary}</div>
+        <div class="d">${n.date}</div>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('[data-news-id]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = parseInt(el.dataset.newsId, 10);
+      const item = NEWS.find((n) => n.id === id);
+      if (item) openNewsModal(item);
+    });
+  });
 }
 renderNews();
 
@@ -62,6 +165,13 @@ let settings = {
   autoUpdate: true,
   clientEdition: 'Legacy',
   accentColor: 'gold',
+  language: 'ru',
+  animations: true,
+  autostart: false,
+  minimizeOnPlay: true,
+  notifNews: true,
+  notifStatus: true,
+  notifSound: false,
 };
 
 // ─── Акцентный цвет: фирменный золотой + пресеты на выбор ──────────────────
@@ -103,7 +213,8 @@ function renderAccentPicker() {
   const el = document.getElementById('accent-picker');
   el.innerHTML = ACCENTS.map(
     (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}"
-      style="background:linear-gradient(135deg, ${a.soft}, ${a.accent} 55%, ${a.deep})"></button>`
+      style="background:linear-gradient(135deg, ${a.soft}, ${a.accent} 55%, ${a.deep})">
+      <span class="icon icon-check"></span></button>`
   ).join('');
   el.querySelectorAll('.accent-swatch').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -120,12 +231,51 @@ function applySettingsToUI() {
   document.getElementById('set-host').value = settings.serverHost;
   document.getElementById('set-port').value = settings.serverPort;
   document.getElementById('set-autoupdate').checked = settings.autoUpdate;
+  document.getElementById('set-language').value = settings.language;
+  document.getElementById('set-animations').checked = settings.animations;
+  document.getElementById('set-autostart').checked = settings.autostart;
+  document.getElementById('set-minimizeonplay').checked = settings.minimizeOnPlay;
+  document.getElementById('set-notif-news').checked = settings.notifNews;
+  document.getElementById('set-notif-status').checked = settings.notifStatus;
+  document.getElementById('set-notif-sound').checked = settings.notifSound;
   setEditionToggle(settings.clientEdition);
   applyAccent(settings.accentColor);
 
   document.getElementById('account-nick').textContent = settings.nickname;
   document.getElementById('avatar-initial').textContent = (settings.nickname || 'И')[0].toUpperCase();
 }
+
+// ─── Доп. переключатели вкладки «Внешний вид» / автозапуск / уведомления ──
+const SIMPLE_TOGGLES = [
+  ['set-language', 'language', 'value'],
+  ['set-animations', 'animations', 'checked'],
+  ['set-autostart', 'autostart', 'checked'],
+  ['set-minimizeonplay', 'minimizeOnPlay', 'checked'],
+  ['set-notif-news', 'notifNews', 'checked'],
+  ['set-notif-status', 'notifStatus', 'checked'],
+  ['set-notif-sound', 'notifSound', 'checked'],
+];
+SIMPLE_TOGGLES.forEach(([id, key, prop]) => {
+  document.getElementById(id).addEventListener(prop === 'checked' ? 'change' : 'input', (e) => {
+    settings[key] = e.target[prop];
+    saveSettingsDebounced();
+  });
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  settings.nickname = 'Игрок';
+  applySettingsToUI();
+  saveSettingsDebounced();
+  document.getElementById('auth-overlay').classList.remove('hidden');
+  document.getElementById('auth-login').value = '';
+  document.getElementById('auth-password').value = '';
+});
+
+document.getElementById('btn-check-update').addEventListener('click', () => {
+  document.getElementById('btn-check-update').lastChild.textContent = ' Установлена последняя версия';
+});
+document.getElementById('btn-open-site').addEventListener('click', () => openUrl('https://derzhava-rp.ru'));
+document.getElementById('btn-open-support').addEventListener('click', () => openUrl('https://discord.gg/derzhavarp'));
 
 function setEditionToggle(edition) {
   document.getElementById('toggle-legacy').classList.toggle('on', edition === 'Legacy');
@@ -220,6 +370,9 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   btn.textContent = 'ИГРАТЬ';
   if (result && result.success) {
     status.textContent = 'Игра запущена! Хорошей игры!';
+    if (settings.minimizeOnPlay) {
+      setTimeout(() => window.floridaV.minimize(), 1500);
+    }
   } else {
     status.textContent = (result && result.error) || 'Неизвестная ошибка запуска.';
     status.classList.add('error');

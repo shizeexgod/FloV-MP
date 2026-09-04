@@ -13,4 +13,12 @@ public class LauncherSettings
     [JsonPropertyName("clientEdition")] public string ClientEdition { get; set; } = "Legacy";
     /// <summary>Id пресета акцентного цвета лаунчера (см. ACCENTS в renderer.js). По умолчанию — фирменный золотой.</summary>
     [JsonPropertyName("accentColor")] public string AccentColor { get; set; } = "gold";
+
+    [JsonPropertyName("language")] public string Language { get; set; } = "ru";
+    [JsonPropertyName("animations")] public bool Animations { get; set; } = true;
+    [JsonPropertyName("autostart")] public bool Autostart { get; set; } = false;
+    [JsonPropertyName("minimizeOnPlay")] public bool MinimizeOnPlay { get; set; } = true;
+    [JsonPropertyName("notifNews")] public bool NotifNews { get; set; } = true;
+    [JsonPropertyName("notifStatus")] public bool NotifStatus { get; set; } = true;
+    [JsonPropertyName("notifSound")] public bool NotifSound { get; set; } = false;
 }

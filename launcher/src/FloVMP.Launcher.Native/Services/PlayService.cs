@@ -19,7 +19,7 @@ public static class PlayService
         if (connectExe == null)
             return new LaunchResult(false, "Не найден FloVMP.Connect.exe. Убедитесь что движок FloV:MP установлен.");
 
-        var args = $"--gta \"{gtaPath}\" --host {serverHost} --port {serverPort} --nick \"{nickname}\"";
+        var args = $"-connect {serverHost}:{serverPort} --gta \"{gtaPath}\" --nick \"{nickname}\"";
 
         try
         {

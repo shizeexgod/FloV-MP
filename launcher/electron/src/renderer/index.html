@@ -12,9 +12,9 @@
   <div class="titlebar">
     <div class="brand">ДЕРЖАВА RP LAUNCHER</div>
     <div class="win-controls">
-      <button class="win-btn" id="btn-min" title="Свернуть">&#8211;</button>
-      <button class="win-btn" id="btn-max" title="Развернуть">&#9633;</button>
-      <button class="win-btn close" id="btn-close" title="Закрыть">&#10005;</button>
+      <button class="win-btn" id="btn-min" title="Свернуть"><span class="icon icon-minus"></span></button>
+      <button class="win-btn" id="btn-max" title="Развернуть"><span class="icon icon-square"></span></button>
+      <button class="win-btn close" id="btn-close" title="Закрыть"><span class="icon icon-x"></span></button>
     </div>
   </div>
 
@@ -28,15 +28,15 @@
       </div>
       <div class="rail-sep"></div>
       <div class="rail-nav">
-        <button class="rail-item active" data-page="play"><span class="ic">&#127918;</span><span class="lb">Играть</span></button>
-        <button class="rail-item" data-page="news"><span class="ic">&#128240;</span><span class="lb">Новости</span></button>
-        <button class="rail-item" data-page="settings"><span class="ic">&#9881;</span><span class="lb">Настройки</span></button>
+        <button class="rail-item active" data-page="play"><span class="icon icon-gamepad"></span><span class="lb">Играть</span></button>
+        <button class="rail-item" data-page="news"><span class="icon icon-newspaper"></span><span class="lb">Новости</span></button>
+        <button class="rail-item" data-page="settings"><span class="icon icon-settings"></span><span class="lb">Настройки</span></button>
       </div>
       <div class="rail-sep"></div>
       <div class="rail-nav">
-        <button class="rail-item" id="btn-discord"><span class="ic">&#128172;</span><span class="lb">Discord</span></button>
-        <button class="rail-item" id="btn-forum"><span class="ic">&#128203;</span><span class="lb">Форум</span></button>
-        <button class="rail-item" id="btn-donate"><span class="ic">&#128176;</span><span class="lb">Донат</span></button>
+        <button class="rail-item" id="btn-discord"><span class="icon icon-discord"></span><span class="lb">Discord</span></button>
+        <button class="rail-item" id="btn-forum"><span class="icon icon-forum"></span><span class="lb">Форум</span></button>
+        <button class="rail-item" id="btn-donate"><span class="icon icon-donate"></span><span class="lb">Донат</span></button>
       </div>
       <div class="rail-spacer"></div>
       <div class="rail-account">
@@ -87,13 +87,14 @@
         <div class="settings-list">
 
           <div class="card">
-            <h4>Игрок</h4>
+            <h4><span class="icon icon-user"></span>Профиль</h4>
             <span class="field-label">Никнейм</span>
-            <input type="text" id="set-nickname">
+            <input type="text" id="set-nickname" style="margin-bottom:14px">
+            <div class="link-row" id="btn-logout"><span class="icon icon-logout"></span>Выйти из аккаунта</div>
           </div>
 
           <div class="card">
-            <h4>GTA V</h4>
+            <h4><span class="icon icon-gamepad"></span>GTA V</h4>
             <span class="field-label">Папка игры</span>
             <div class="row" style="margin-bottom:12px">
               <input type="text" id="set-gtapath">
@@ -109,7 +110,7 @@
           </div>
 
           <div class="card">
-            <h4>Сервер</h4>
+            <h4><span class="icon icon-link"></span>Сервер</h4>
             <div class="row">
               <div>
                 <span class="field-label">Адрес</span>
@@ -123,23 +124,92 @@
           </div>
 
           <div class="card">
-            <h4>Обновления</h4>
-            <label class="checkbox-row">
-              <input type="checkbox" id="set-autoupdate">
-              Обновлять FloV:MP автоматически
-            </label>
+            <h4><span class="icon icon-palette"></span>Внешний вид</h4>
+            <span class="field-label">Акцентный цвет</span>
+            <div class="accent-picker" id="accent-picker"></div>
+            <div class="hint" style="margin-bottom:4px">По умолчанию — фирменный золотой Держава RP.</div>
+            <div class="field-row">
+              <div><div class="ft">Язык интерфейса</div></div>
+              <select id="set-language">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <div><div class="ft">Анимации интерфейса</div><div class="fd">Плавное появление окон и переходов</div></div>
+              <label class="switch"><input type="checkbox" id="set-animations" checked><span class="track"></span></label>
+            </div>
           </div>
 
           <div class="card">
-            <h4>Акцентный цвет</h4>
-            <div class="accent-picker" id="accent-picker"></div>
-            <div class="hint">По умолчанию — фирменный золотой Держава RP. Применяется сразу и запоминается.</div>
+            <h4><span class="icon icon-refresh"></span>Автозапуск и обновления</h4>
+            <div class="field-row">
+              <div><div class="ft">Обновлять FloV:MP автоматически</div><div class="fd">Загружать патчи движка при запуске</div></div>
+              <label class="switch"><input type="checkbox" id="set-autoupdate"><span class="track"></span></label>
+            </div>
+            <div class="field-row">
+              <div><div class="ft">Запускать вместе с Windows</div></div>
+              <label class="switch"><input type="checkbox" id="set-autostart"><span class="track"></span></label>
+            </div>
+            <div class="field-row">
+              <div><div class="ft">Сворачивать лаунчер при запуске игры</div></div>
+              <label class="switch"><input type="checkbox" id="set-minimizeonplay" checked><span class="track"></span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h4><span class="icon icon-bell"></span>Уведомления</h4>
+            <div class="field-row">
+              <div><div class="ft">Новости сервера</div></div>
+              <label class="switch"><input type="checkbox" id="set-notif-news" checked><span class="track"></span></label>
+            </div>
+            <div class="field-row">
+              <div><div class="ft">Сервер онлайн / офлайн</div></div>
+              <label class="switch"><input type="checkbox" id="set-notif-status" checked><span class="track"></span></label>
+            </div>
+            <div class="field-row">
+              <div><div class="ft">Звук уведомлений</div></div>
+              <label class="switch"><input type="checkbox" id="set-notif-sound"><span class="track"></span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h4><span class="icon icon-info"></span>О программе</h4>
+            <div class="field-row">
+              <div class="ft">Версия лаунчера</div>
+              <div class="about-version">1.0.0</div>
+            </div>
+            <div class="link-row" id="btn-check-update"><span class="icon icon-download"></span>Проверить обновления</div>
+            <div class="link-row" id="btn-open-site"><span class="icon icon-globe"></span>Сайт сервера</div>
+            <div class="link-row" id="btn-open-support"><span class="icon icon-help"></span>Поддержка</div>
           </div>
 
         </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- ─── Модальное окно новости ─── -->
+  <div class="news-modal-overlay hidden" id="news-modal-overlay">
+    <div class="news-modal-box">
+      <div class="news-modal-banner">
+        <span class="news-modal-badge" id="news-modal-badge">ОБНОВЛЕНИЕ</span>
+        <button class="news-modal-close" id="news-modal-close" title="Закрыть">
+          <span class="icon icon-x"></span>
+        </button>
+      </div>
+      <div class="news-modal-content">
+        <h2 id="news-modal-title"></h2>
+        <div class="news-modal-meta">
+          <span class="news-modal-date" id="news-modal-date"></span>
+          <span class="news-modal-dot">•</span>
+          <span class="news-modal-author">Команда Держава RP</span>
+        </div>
+        <div class="news-modal-divider"></div>
+        <div class="news-modal-text" id="news-modal-text"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ─── Оверлей авторизации ─── -->

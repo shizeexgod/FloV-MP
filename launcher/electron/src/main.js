@@ -13,10 +13,11 @@ function createWindow() {
     height: 720,
     minWidth: 960,
     minHeight: 600,
+    center: true,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    show: false,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -25,9 +26,14 @@ function createWindow() {
     },
   });
 
+  mainWindow.webContents.on('console-message', (_e, _level, message) => {
+    console.log('[renderer]', message);
+  });
+
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.show();
+  mainWindow.focus();
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:state', 'maximized'));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:state', 'normal'));
