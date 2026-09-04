@@ -23,18 +23,16 @@
     <Border Background="{StaticResource Bg0Brush}" CornerRadius="12"
             BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1">
         <Grid>
-            <Grid.ColumnDefinitions>
-                <!-- Левый рельс: зарезервировано место под свёрнутое состояние (64) -->
-                <ColumnDefinition Width="64"/>
-                <!-- Основная область -->
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- Рельс и правая часть делят один и тот же (единственный, неявный)
+                 столбец: это намеренно — если раскладывать их по отдельным
+                 Grid.Column, WPF обрежет разворачивающийся рельс по границе
+                 его узкой ячейки (64px), а не даст ему наплыть поверх контента. -->
 
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- ЛЕВЫЙ РЕЛЬС: свёрнут (иконки), по наведению разворачивается   -->
             <!-- и «наплывает» поверх контента, не сдвигая его.               -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Border x:Name="SidebarRail" Grid.Column="0" Panel.ZIndex="10"
+            <Border x:Name="SidebarRail" Panel.ZIndex="10"
                     Style="{StaticResource SidebarRailStyle}"
                     Background="{StaticResource SidebarGradient}"
                     CornerRadius="12,0,0,12"
@@ -173,9 +171,10 @@
             </Border>
 
             <!-- ═══════════════════════════════════════════════════════ -->
-            <!-- ПРАВАЯ ЧАСТЬ                                           -->
+            <!-- ПРАВАЯ ЧАСТЬ: во всю ширину окна, слева отступ (64) под   -->
+            <!-- свёрнутый рельс — рельс наплывает поверх при раскрытии. -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Grid Grid.Column="1">
+            <Grid Margin="64,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="48"/>   <!-- Тайтл-бар -->
                     <RowDefinition Height="*"/>    <!-- Контент -->
@@ -228,6 +227,24 @@
                                 <!-- Мягкое розовое свечение верхнего правого угла -->
                                 <Border Background="{StaticResource HeroGlowBrush}"/>
 
+                                <!-- Силуэт города (декоративный, как в макете варианта A) -->
+                                <Canvas VerticalAlignment="Bottom" Height="150" Opacity="0.9">
+                                    <Canvas.Resources>
+                                        <LinearGradientBrush x:Key="BuildingBrush" StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#171722" Offset="0"/>
+                                            <GradientStop Color="#0A0A10" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Canvas.Resources>
+                                    <Rectangle Canvas.Left="0"   Canvas.Bottom="0" Width="46" Height="60"  Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="50"  Canvas.Bottom="0" Width="30" Height="95"  Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="84"  Canvas.Bottom="0" Width="54" Height="70"  Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="142" Canvas.Bottom="0" Width="26" Height="115" Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="172" Canvas.Bottom="0" Width="40" Height="80"  Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="216" Canvas.Bottom="0" Width="34" Height="135" Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="254" Canvas.Bottom="0" Width="58" Height="65"  Fill="{StaticResource BuildingBrush}"/>
+                                    <Rectangle Canvas.Left="316" Canvas.Bottom="0" Width="28" Height="100" Fill="{StaticResource BuildingBrush}"/>
+                                </Canvas>
+
                                 <!-- Декоративные розовые линии (неоновый эффект) -->
                                 <Canvas>
                                     <Rectangle Canvas.Left="-50" Canvas.Top="80"
@@ -241,30 +258,46 @@
                                 </Canvas>
 
                                 <!-- Нижний градиент для читаемости текста -->
-                                <Border VerticalAlignment="Bottom" Height="200" CornerRadius="0,0,10,10">
+                                <Border VerticalAlignment="Bottom" Height="220" CornerRadius="0,0,10,10">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                             <GradientStop Color="Transparent" Offset="0"/>
-                                            <GradientStop Color="#CC0A0A10" Offset="1"/>
+                                            <GradientStop Color="#CC0A0A10" Offset="0.65"/>
+                                            <GradientStop Color="#F00A0A10" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                 </Border>
 
+                                <!-- Верхний левый угол: рекламный заголовок -->
+                                <StackPanel VerticalAlignment="Top" HorizontalAlignment="Left" Margin="28,26,28,0" MaxWidth="360">
+                                    <TextBlock Text="GTA V · РУССКИЙ RP · ОНЛАЙН" FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource AccentBrush}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="ТВОЯ ИСТОРИЯ НАЧИНАЕТСЯ ЗДЕСЬ" FontSize="22" FontWeight="Black"
+                                               Foreground="White" TextWrapping="Wrap" LineHeight="26">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="0" Opacity="0.6"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
+                                </StackPanel>
+
                                 <!-- Контент карточки -->
-                                <StackPanel VerticalAlignment="Bottom" Margin="28,28,28,28">
-                                    <!-- Онлайн-статус -->
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                                 Fill="{Binding ServerStatusBrush}" Margin="0,0,8,0"/>
-                                        <TextBlock Text="{Binding ServerStatusText}"
-                                                   Foreground="{StaticResource Text2Brush}" FontSize="12"/>
-                                        <TextBlock Text=" • " Foreground="{StaticResource Text2Brush}" FontSize="12"/>
-                                        <TextBlock Text="{Binding OnlineText}"
-                                                   Foreground="{StaticResource Text2Brush}" FontSize="12"/>
-                                    </StackPanel>
+                                <StackPanel VerticalAlignment="Bottom" Margin="28,28,28,26">
+                                    <!-- Онлайн-статус: значок-пилюля -->
+                                    <Border HorizontalAlignment="Left" Background="#33101018" CornerRadius="7"
+                                            Padding="10,5" Margin="0,0,0,10">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                                     Fill="{Binding ServerStatusBrush}" Margin="0,0,7,0"/>
+                                            <TextBlock Text="{Binding ServerStatusText}"
+                                                       Foreground="{StaticResource Text1Brush}" FontSize="11.5" FontWeight="SemiBold"/>
+                                            <TextBlock Text=" · " Foreground="{StaticResource Text2Brush}" FontSize="11.5"/>
+                                            <TextBlock Text="{Binding OnlineText}"
+                                                       Foreground="{StaticResource Text2Brush}" FontSize="11.5"/>
+                                        </StackPanel>
+                                    </Border>
 
                                     <!-- Название сервера -->
-                                    <TextBlock Text="Держава RP" FontSize="42" FontWeight="Black"
+                                    <TextBlock Text="Держава RP" FontSize="38" FontWeight="Black"
                                                Foreground="White" Margin="0,0,0,4">
                                         <TextBlock.Effect>
                                             <DropShadowEffect Color="Black" BlurRadius="15"
@@ -273,11 +306,11 @@
                                     </TextBlock>
                                     <TextBlock Text="Российский ролевой сервер · FloV:MP"
                                                Foreground="{StaticResource Text2Brush}" FontSize="13"
-                                               Margin="0,0,0,24"/>
+                                               Margin="0,0,0,22"/>
 
                                     <!-- Прогресс-бар обновления -->
                                     <StackPanel Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVis}}"
-                                                Margin="0,0,0,12">
+                                                Margin="0,0,0,14">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                             <TextBlock Text="Загрузка FloV:MP: "
                                                        Foreground="{StaticResource Text2Brush}" FontSize="11"/>
@@ -288,26 +321,31 @@
                                                      Value="{Binding UpdateProgress}"/>
                                     </StackPanel>
 
-                                    <!-- Кнопка ИГРАТЬ -->
-                                    <Button Style="{StaticResource PlayButton}"
-                                            Content="{Binding PlayButtonText}"
-                                            Command="{Binding PlayAsyncCommand}"/>
-
-                                    <!-- Строка статуса -->
-                                    <TextBlock Text="{Binding StatusMessage}"
-                                               FontSize="11" TextWrapping="Wrap"
-                                               Margin="0,10,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource Text2Brush}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding HasError}" Value="True">
-                                                        <Setter Property="Foreground" Value="#FF6B6B"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                    <!-- Строка статуса + кнопка ИГРАТЬ (справа, не во всю ширину) -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding StatusMessage}"
+                                                   FontSize="11" TextWrapping="Wrap"
+                                                   VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="{StaticResource Text2Brush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasError}" Value="True">
+                                                            <Setter Property="Foreground" Value="#FF6B6B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <Button Grid.Column="1" Style="{StaticResource PlayButton}"
+                                                Content="{Binding PlayButtonText}"
+                                                Command="{Binding PlayAsyncCommand}"
+                                                Width="180"/>
+                                    </Grid>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -511,7 +549,7 @@
             <!-- ═══════════════════════════════════════════════════════ -->
             <!-- ОВЕРЛЕЙ АВТОРИЗАЦИИ (Если игрок не вошёл)               -->
             <!-- ═══════════════════════════════════════════════════════ -->
-            <Grid Grid.Column="0" Grid.ColumnSpan="2" 
+            <Grid Panel.ZIndex="20"
                   Visibility="{Binding IsAuthenticated, Converter={StaticResource BoolToVisInverse}}">
                 
                 <!-- Затенение фона -->
