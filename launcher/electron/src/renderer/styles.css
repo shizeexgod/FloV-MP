@@ -28,6 +28,8 @@
   --accent-shadow-strong: rgba(253,208,21,.7);
   --good:#35d19a;
   --bad:#e74c3c;
+  --bad-soft:#ff6b6b;
+  --bad-strong:#c0392b;
 
   --rail-collapsed: 64px;
   --rail-expanded: 232px;
@@ -133,7 +135,7 @@ button{ font-family: inherit; }
 }
 .win-btn .icon{ width:13px; height:13px; }
 .win-btn:hover{ background: var(--surface-3); color: var(--text); }
-.win-btn.close:hover{ background:#c0392b; color:#fff; }
+.win-btn.close:hover{ background: var(--bad-strong); color:#fff; }
 
 /* ---------- корпус: рельс + контент ---------- */
 .body{ flex:1; display:flex; position:relative; min-height:0; }
@@ -255,7 +257,7 @@ button{ font-family: inherit; }
 .server-desc{ color: var(--text-dim); font-size:13px; margin-bottom:20px; }
 .play-row{ display:flex; align-items:center; gap:16px; }
 .status-msg{ flex:1; font-size:11px; color: var(--text-dim); }
-.status-msg.error{ color:#ff6b6b; }
+.status-msg.error{ color: var(--bad-soft); }
 .btn-play{
   flex: 0 0 auto; width:180px; height:52px; border:none; border-radius:9px; cursor:pointer;
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));
@@ -421,7 +423,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .auth-box .sub{ text-align:center; font-size:12px; color: var(--text-dim); margin-bottom:22px; }
 .auth-box label{ font-size:11px; color: var(--text-dim); margin-bottom:4px; display:block; }
 .auth-box input{ margin-bottom:14px; }
-.auth-error{ font-size:11px; color:#ff6b6b; margin-bottom:12px; min-height:14px; }
+.auth-error{ font-size:11px; color: var(--bad-soft); margin-bottom:12px; min-height:14px; }
 .btn-toggle-mode{
   background:transparent; border:none; color: var(--text-dim); font-size:12px; cursor:pointer;
   width:100%; text-align:center; margin-top:4px; padding:8px;
