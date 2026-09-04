@@ -61,13 +61,16 @@
 
                     <!-- Навигация -->
                     <StackPanel Grid.Row="2" Margin="0,16,0,0">
-                        <Button Style="{StaticResource NavButton}" Tag="Active"
+                        <Button Style="{StaticResource NavButton}"
+                                Tag="{Binding CurrentPage, Converter={StaticResource PageActiveTag}, ConverterParameter=Play}"
                                 Content="🎮  Играть"
                                 Command="{Binding NavigatePlayCommand}"/>
                         <Button Style="{StaticResource NavButton}"
+                                Tag="{Binding CurrentPage, Converter={StaticResource PageActiveTag}, ConverterParameter=News}"
                                 Content="📰  Новости"
                                 Command="{Binding NavigateNewsCommand}"/>
                         <Button Style="{StaticResource NavButton}"
+                                Tag="{Binding CurrentPage, Converter={StaticResource PageActiveTag}, ConverterParameter=Settings}"
                                 Content="⚙  Настройки"
                                 Command="{Binding NavigateSettingsCommand}"/>
 
@@ -132,8 +135,9 @@
                     </Grid>
                 </Border>
 
-                <!-- ─── Основной контент ─── -->
-                <Grid Grid.Row="1" Margin="24,0,24,24">
+                <!-- ─── Страница «Играть» ─── -->
+                <Grid Grid.Row="1" Margin="24,0,24,24"
+                      Visibility="{Binding CurrentPage, Converter={StaticResource PageVis}, ConverterParameter=Play}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="300"/>
@@ -279,6 +283,163 @@
                             </ItemsControl>
                         </ScrollViewer>
                     </Grid>
+                </Grid>
+
+                <!-- ─── Страница «Новости» ─── -->
+                <Grid Grid.Row="1" Margin="24,0,24,24"
+                      Visibility="{Binding CurrentPage, Converter={StaticResource PageVis}, ConverterParameter=News}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="НОВОСТИ" FontSize="20" FontWeight="Bold" Margin="0,0,0,16"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding NewsItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel MaxWidth="640" HorizontalAlignment="Left"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,12" Padding="20,16">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" Foreground="White"/>
+                                            <TextBlock Text="{Binding Date}" FontSize="11"
+                                                       Foreground="{StaticResource Text2Brush}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- ─── Страница «Настройки» ─── -->
+                <Grid Grid.Row="1" Margin="24,0,24,24"
+                      Visibility="{Binding CurrentPage, Converter={StaticResource PageVis}, ConverterParameter=Settings}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="НАСТРОЙКИ" FontSize="20" FontWeight="Bold" Margin="0,0,0,16"/>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+
+                            <!-- Игрок -->
+                            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="ИГРОК" FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource Text2Brush}" Margin="0,0,0,12"/>
+                                    <TextBlock Text="Никнейм" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,6"/>
+                                    <TextBox Style="{StaticResource AuthTextBox}"
+                                             Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Игра -->
+                            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="GTA V" FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource Text2Brush}" Margin="0,0,0,12"/>
+
+                                    <TextBlock Text="Папка игры" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,6"/>
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Style="{StaticResource AuthTextBox}"
+                                                 Text="{Binding GtaPath, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                                        <Button Grid.Column="1" Content="Обзор…" Padding="14,8" Margin="0,0,6,0"
+                                                Background="{StaticResource Bg2Brush}" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                                Command="{Binding BrowseGtaPathCommand}"/>
+                                        <Button Grid.Column="2" Content="Автоопределить" Padding="14,8"
+                                                Background="{StaticResource Bg2Brush}" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                                Command="{Binding DetectGtaCommand}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Версия клиента" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,6"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Button Content="Legacy" Padding="18,8" Margin="0,0,8,0" Cursor="Hand" BorderThickness="0"
+                                                Command="{Binding SetClientEditionCommand}" CommandParameter="Legacy">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{StaticResource Bg2Brush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Text2Brush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsLegacyEdition}" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Content="Enhanced" Padding="18,8" Cursor="Hand" BorderThickness="0"
+                                                Command="{Binding SetClientEditionCommand}" CommandParameter="Enhanced">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{StaticResource Bg2Brush}"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource Text2Brush}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsEnhancedEdition}" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <TextBlock Text="{Binding StatusMessage}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{StaticResource Text2Brush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Сервер -->
+                            <Border Style="{StaticResource Card}" Padding="20" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="СЕРВЕР" FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource Text2Brush}" Margin="0,0,0,12"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                            <TextBlock Text="Адрес" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,6"/>
+                                            <TextBox Style="{StaticResource AuthTextBox}"
+                                                     Text="{Binding ServerHost, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="Порт" Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,0,0,6"/>
+                                            <TextBox Style="{StaticResource AuthTextBox}"
+                                                     Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Обновления -->
+                            <Border Style="{StaticResource Card}" Padding="20">
+                                <StackPanel>
+                                    <TextBlock Text="ОБНОВЛЕНИЯ" FontSize="11" FontWeight="Bold"
+                                               Foreground="{StaticResource Text2Brush}" Margin="0,0,0,12"/>
+                                    <CheckBox Content="Обновлять FloV:MP автоматически" Foreground="White"
+                                              IsChecked="{Binding AutoUpdate}"/>
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
 

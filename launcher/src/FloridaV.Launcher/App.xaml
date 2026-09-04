@@ -7,6 +7,8 @@
         <ResourceDictionary>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
                 <local:BoolToVisInverseConverter x:Key="BoolToVisInverse"/>
+                <local:PageVisibilityConverter x:Key="PageVis"/>
+                <local:PageActiveTagConverter x:Key="PageActiveTag"/>
                 <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Styles/Colors.xaml"/>
                 <ResourceDictionary Source="Styles/Controls.xaml"/>

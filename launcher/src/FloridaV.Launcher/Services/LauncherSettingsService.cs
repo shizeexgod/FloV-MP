@@ -11,6 +11,8 @@ public class LauncherSettings
     [JsonPropertyName("serverHost")] public string ServerHost { get; set; } = "127.0.0.1";
     [JsonPropertyName("serverPort")] public int ServerPort { get; set; } = 7788;
     [JsonPropertyName("autoUpdate")] public bool AutoUpdate { get; set; } = true;
+    /// <summary>"Legacy" или "Enhanced" — какой профиль клиента использовать при запуске.</summary>
+    [JsonPropertyName("clientEdition")] public string ClientEdition { get; set; } = "Legacy";
 }
 
 public static class LauncherSettingsService

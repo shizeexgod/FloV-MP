@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FloridaV.Launcher.Models;
 using FloridaV.Launcher.Services;
+using Microsoft.Win32;
 
 namespace FloridaV.Launcher.ViewModels;
 
@@ -20,6 +21,8 @@ public partial class MainViewModel : ObservableObject
         _gtaPath = _settings.GtaPath;
         _serverHost = _settings.ServerHost;
         _serverPort = _settings.ServerPort;
+        _clientEdition = _settings.ClientEdition;
+        _autoUpdate = _settings.AutoUpdate;
 
         // Если есть сохранённый ник - пропускаем авторизацию
         _isAuthenticated = !string.IsNullOrEmpty(_nickname) && _nickname != "Игрок";
@@ -42,6 +45,17 @@ public partial class MainViewModel : ObservableObject
 
     public string VersionText => "Florida V Launcher v1.0.0  |  FloV:MP";
     public string NicknameInitial => Nickname.Length > 0 ? Nickname[..1].ToUpper() : "Г";
+
+    // ─── Навигация ──────────────────────────────────────────────────────────
+    [ObservableProperty] private AppPage _currentPage = AppPage.Play;
+
+    // ─── Настройки (страница «Настройки») ──────────────────────────────────
+    [ObservableProperty] private string _clientEdition = "Legacy";
+    [ObservableProperty] private bool _autoUpdate = true;
+    [ObservableProperty] private string _settingsSavedMessage = "";
+
+    public bool IsLegacyEdition => ClientEdition == "Legacy";
+    public bool IsEnhancedEdition => ClientEdition == "Enhanced";
 
     // ─── Авторизация в лаунчере ─────────────────────────────────────────────
     [ObservableProperty] private bool _isAuthenticated = false;
@@ -141,17 +155,43 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DetectGta() => _ = Task.Run(AutoDetectGtaAsync);
     [RelayCommand]
-    private void NavigatePlay() { }
+    private void NavigatePlay() => CurrentPage = AppPage.Play;
     [RelayCommand]
-    private void NavigateNews() { }
+    private void NavigateNews() => CurrentPage = AppPage.News;
     [RelayCommand]
-    private void NavigateSettings() { }
+    private void NavigateSettings() => CurrentPage = AppPage.Settings;
     [RelayCommand]
     private void OpenDiscord() => OpenUrl("https://discord.gg/floridav");
     [RelayCommand]
     private void OpenForum() => OpenUrl("https://forum.florida-v.ru");
     [RelayCommand]
     private void OpenDonate() => OpenUrl("https://donate.florida-v.ru");
+
+    [RelayCommand]
+    private void BrowseGtaPath()
+    {
+        var dlg = new OpenFolderDialog { Title = "Папка с GTA5.exe / GTA5_Enhanced.exe" };
+        if (!string.IsNullOrWhiteSpace(GtaPath) && Directory.Exists(GtaPath))
+            dlg.InitialDirectory = GtaPath;
+
+        if (dlg.ShowDialog() != true) return;
+
+        if (!GtaLocatorService.IsValidGtaFolder(dlg.FolderName))
+        {
+            ShowError("В выбранной папке не найден GTA5.exe / GTA5_Enhanced.exe.");
+            return;
+        }
+
+        GtaPath = dlg.FolderName;
+        GtaVersion = GtaLocatorService.DetectVersion(GtaPath);
+        ClientEdition = GtaVersion == "Enhanced" ? "Enhanced" : "Legacy";
+        HasError = false;
+        StatusMessage = $"GTA V указана вручную — {GtaVersion}";
+    }
+
+    /// <summary>Параметр — "Legacy" или "Enhanced".</summary>
+    [RelayCommand]
+    private void SetClientEdition(string edition) => ClientEdition = edition;
 
     private Task AutoDetectGtaAsync()
     {
@@ -202,6 +242,8 @@ public partial class MainViewModel : ObservableObject
         _settings.GtaPath = GtaPath;
         _settings.ServerHost = ServerHost;
         _settings.ServerPort = ServerPort;
+        _settings.ClientEdition = ClientEdition;
+        _settings.AutoUpdate = AutoUpdate;
         LauncherSettingsService.Save(_settings);
     }
 
@@ -219,4 +261,15 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnNicknameChanged(string value) => SaveSettings();
     partial void OnGtaPathChanged(string value) => SaveSettings();
+    partial void OnServerHostChanged(string value) => SaveSettings();
+    partial void OnServerPortChanged(int value) => SaveSettings();
+    partial void OnAutoUpdateChanged(bool value) => SaveSettings();
+
+    partial void OnClientEditionChanged(string value)
+    {
+        SaveSettings();
+        OnPropertyChanged(nameof(IsLegacyEdition));
+        OnPropertyChanged(nameof(IsEnhancedEdition));
+        SettingsSavedMessage = $"Профиль клиента: {value}";
+    }
 }
