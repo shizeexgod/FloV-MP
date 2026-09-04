@@ -34,4 +34,16 @@
         <GradientStop Color="#0A0A10" Offset="1"/>
     </LinearGradientBrush>
 
+    <!-- Временный знак «Д» (плейсхолдер до реального лого «Держава Онлайн») -->
+    <LinearGradientBrush x:Key="LogoMarkGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF7AB3" Offset="0"/>
+        <GradientStop Color="#FF3D8A" Offset="0.55"/>
+        <GradientStop Color="#C21E63" Offset="1"/>
+    </LinearGradientBrush>
+
+    <RadialGradientBrush x:Key="HeroGlowBrush" GradientOrigin="0.72,0.18" Center="0.72,0.18" RadiusX="0.65" RadiusY="0.9">
+        <GradientStop Color="#29FF3D8A" Offset="0"/>
+        <GradientStop Color="#00FF3D8A" Offset="1"/>
+    </RadialGradientBrush>
+
 </ResourceDictionary>

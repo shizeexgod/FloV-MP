@@ -43,7 +43,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statusMessage = "";
     [ObservableProperty] private bool _hasError = false;
 
-    public string VersionText => "Florida V Launcher v1.0.0  |  FloV:MP";
+    public string VersionText => "Держава RP Launcher v1.0.0  |  FloV:MP";
     public string NicknameInitial => Nickname.Length > 0 ? Nickname[..1].ToUpper() : "Г";
 
     // ─── Навигация ──────────────────────────────────────────────────────────

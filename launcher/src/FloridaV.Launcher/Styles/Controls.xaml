@@ -149,4 +149,29 @@
         </Style.Triggers>
     </Style>
 
+    <!-- ===== Левый рельс: свёрнут (только иконки), разворачивается по наведению ===== -->
+    <Style x:Key="SidebarRailStyle" TargetType="Border">
+        <Setter Property="Width" Value="64"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Width" To="228" Duration="0:0:0.15"
+                                              DecelerationRatio="0.6"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Width" To="64" Duration="0:0:0.15"
+                                              DecelerationRatio="0.6"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.ExitActions>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
 </ResourceDictionary>
