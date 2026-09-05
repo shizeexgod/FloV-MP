@@ -311,6 +311,17 @@ document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
   });
 });
 
+// ─── Настройки: всплывающее окно (как у Majestic), не отдельная страница —
+// открывается поверх текущего экрана (Играть/Новости), тот остаётся видимым
+// и блюрится позади, закрывается — крестиком, кликом мимо или Esc.
+const settingsOverlay = document.getElementById('settings-overlay');
+document.getElementById('btn-open-settings').addEventListener('click', () => settingsOverlay.classList.remove('hidden'));
+document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.add('hidden'));
+settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) settingsOverlay.classList.add('hidden');
+});
+
 // ─── Настройки: категории слева (Основное/Дополнительно/О программе) ───────
 document.querySelectorAll('.settings-subnav [data-subtab]').forEach((btn) => {
   btn.addEventListener('click', () => {

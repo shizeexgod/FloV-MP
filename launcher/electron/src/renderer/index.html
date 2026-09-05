@@ -30,7 +30,7 @@
       <div class="rail-nav">
         <button class="rail-item active" data-page="play"><span class="icon icon-gamepad"></span><span class="lb">Играть</span></button>
         <button class="rail-item" data-page="news"><span class="icon icon-newspaper"></span><span class="lb">Новости</span></button>
-        <button class="rail-item" data-page="settings"><span class="icon icon-settings"></span><span class="lb">Настройки</span></button>
+        <button class="rail-item" id="btn-open-settings"><span class="icon icon-settings"></span><span class="lb">Настройки</span></button>
       </div>
       <div class="rail-sep"></div>
       <div class="rail-nav">
@@ -114,16 +114,25 @@
         <div class="news-full-list" id="news-list-full"></div>
       </section>
 
-      <!-- Настройки -->
-      <section class="page" id="page-settings">
-        <h2>Настройки</h2>
-        <div class="settings-shell">
-          <nav class="settings-subnav">
-            <button class="cabinet-item active" data-subtab="main" type="button"><span class="icon icon-sliders"></span>Основное</button>
-            <button class="cabinet-item" data-subtab="extra" type="button"><span class="icon icon-monitor"></span>Дополнительно</button>
-            <button class="cabinet-item" data-subtab="about" type="button"><span class="icon icon-info"></span>О программе</button>
-          </nav>
-          <div class="settings-panels">
+    </main>
+  </div>
+
+  <!-- ─── Настройки — всплывающее окно поверх текущего экрана с блюром фона
+       (как у Majestic: settings-shell__backdrop, backdrop-filter blur(8px),
+       сверено CDP-инспекцией), а не отдельная страница ─── -->
+  <div class="settings-overlay hidden" id="settings-overlay">
+    <div class="settings-box">
+      <div class="settings-box-head">
+        <h2><span class="icon icon-settings"></span>Настройки</h2>
+        <button class="cabinet-close" id="settings-close" type="button"><span class="icon icon-x"></span></button>
+      </div>
+      <div class="settings-shell">
+        <nav class="settings-subnav">
+          <button class="cabinet-item active" data-subtab="main" type="button"><span class="icon icon-sliders"></span>Основное</button>
+          <button class="cabinet-item" data-subtab="extra" type="button"><span class="icon icon-monitor"></span>Дополнительно</button>
+          <button class="cabinet-item" data-subtab="about" type="button"><span class="icon icon-info"></span>О программе</button>
+        </nav>
+        <div class="settings-panels">
 
             <div class="settings-tab active" data-subtab="main">
               <div class="settings-list">
@@ -237,9 +246,8 @@
 
           </div>
         </div>
-      </section>
-
-    </main>
+      </div>
+    </div>
   </div>
 
   <!-- ─── Модальное окно новости ─── -->

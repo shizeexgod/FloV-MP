@@ -39,16 +39,23 @@ const OUT = process.argv[2] || '.';
   await win.click('#news-modal-close');
   await win.waitForTimeout(200);
 
-  // 4. Настройки — верх
+  // 4. Настройки — всплывающее окно поверх текущего экрана (не страница)
   await win.hover('#rail');
-  await win.click('.rail-item[data-page="settings"]');
+  await win.click('#btn-open-settings');
   await win.mouse.move(700, 500);
-  await win.waitForTimeout(200);
-  await shot('04-settings-top');
+  await win.waitForTimeout(400);
+  await shot('04-settings-modal-open');
 
-  // 5. Настройки — прокрутка вниз (весь список карточек)
+  // 4b. Вкладка «Дополнительно» внутри модалки
+  await win.click('.settings-subnav [data-subtab="extra"]');
+  await win.waitForTimeout(200);
+  await shot('04b-settings-extra');
+  await win.click('.settings-subnav [data-subtab="main"]');
+  await win.waitForTimeout(150);
+
+  // 5. Настройки — прокрутка вниз (активная вкладка "Основное")
   await win.evaluate(() => {
-    document.querySelector('.settings-list').scrollTop = 999;
+    document.querySelector('.settings-tab.active .settings-list').scrollTop = 999;
   });
   await win.waitForTimeout(150);
   await shot('05-settings-bottom');
@@ -63,6 +70,11 @@ const OUT = process.argv[2] || '.';
     const goldSwatch = await win.$('.accent-swatch[data-accent="gold"]');
     if (goldSwatch) await goldSwatch.click();
   }
+
+  // 6b. Закрыть настройки — под ними должна остаться страница как была (без блюра)
+  await win.click('#settings-close');
+  await win.waitForTimeout(300);
+  await shot('06b-settings-closed');
 
   // 7. Консоль на ошибки
   const errors = [];
