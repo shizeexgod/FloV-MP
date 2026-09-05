@@ -29,16 +29,18 @@ const OUT = process.argv[2] || '.';
     console.log('shot:', name);
   }
 
-  // 1. Играть, рельс свёрнут
-  await shot('01-play-collapsed');
+  // 1. Играть (рельс статичный)
+  await shot('01-play');
 
-  // 2. Рельс развёрнут по наведению
-  await win.hover('#rail');
+  // 2. Ресурсы — флайаут по одной иконке
+  await win.click('#btn-resources');
   await win.waitForTimeout(250);
-  await shot('02-play-rail-hover');
+  await shot('02-resources-flyout');
+  await win.keyboard.press('Escape');
+  await win.waitForTimeout(150);
 
-  // 3. Новости
-  await win.click('.rail-item[data-page="news"]');
+  // 3. Новости — переход по кнопке «Все» в блоке новостей рельса
+  await win.click('.rail-news-all');
   await win.mouse.move(700, 500);
   await win.waitForTimeout(200);
   await shot('03-news');

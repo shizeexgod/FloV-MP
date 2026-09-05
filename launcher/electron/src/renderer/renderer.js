@@ -6,19 +6,52 @@ document.getElementById('btn-max').addEventListener('click', () => window.florid
 document.getElementById('btn-close').addEventListener('click', () => window.floridaV.close());
 
 // ─── Навигация по страницам ─────────────────────────────────────────────────
-document.querySelectorAll('.rail-item[data-page]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.rail-item[data-page]').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    const target = btn.dataset.page;
-    document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${target}`));
+function navigateTo(target) {
+  document.querySelectorAll('[data-page]').forEach((b) => {
+    if (b.classList.contains('rail-item')) b.classList.toggle('active', b.dataset.page === target);
   });
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${target}`));
+}
+document.querySelectorAll('[data-page]').forEach((btn) => {
+  btn.addEventListener('click', () => navigateTo(btn.dataset.page));
 });
 
 const openUrl = (url) => window.open(url, '_blank');
-document.getElementById('btn-discord').addEventListener('click', () => openUrl('https://discord.gg/derzhavarp'));
-document.getElementById('btn-forum').addEventListener('click', () => openUrl('https://forum.derzhava-rp.ru'));
-document.getElementById('btn-donate').addEventListener('click', () => openUrl('https://donate.derzhava-rp.ru'));
+
+// ─── Ресурсы: сайт/форум/донат + соцсети, флайаут по одной иконке ──────────
+const RESOURCE_URLS = {
+  site: 'https://derzhava-rp.ru',
+  forum: 'https://forum.derzhava-rp.ru',
+  donate: 'https://donate.derzhava-rp.ru',
+  discord: 'https://discord.gg/derzhavarp',
+  telegram: 'https://t.me/derzhavarp',
+  youtube: 'https://youtube.com/@derzhavarp',
+};
+(function initResources() {
+  const btn = document.getElementById('btn-resources');
+  const fly = document.getElementById('res-flyout');
+  if (!btn || !fly) return;
+  const setOpen = (open) => {
+    fly.classList.toggle('hidden', !open);
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(fly.classList.contains('hidden'));
+  });
+  fly.querySelectorAll('.res-link').forEach((link) => {
+    link.addEventListener('click', () => {
+      const url = RESOURCE_URLS[link.dataset.res];
+      if (url) openUrl(url);
+      setOpen(false);
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!fly.classList.contains('hidden') && !e.target.closest('.rail-resources')) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+})();
 
 // ─── Новости и модальное окно статьи ─────────────────────────────────────
 const NEWS = [
@@ -128,6 +161,7 @@ function countIcon(name) {
 
 function renderNewsShort() {
   const short = document.getElementById('news-list-short');
+  if (!short) return;
   short.innerHTML = NEWS.slice(0, 4).map((n) => `
     <div class="news-card" data-news-id="${n.id}">
       <div class="news-thumb"></div>
@@ -174,9 +208,22 @@ function renderNewsFull() {
   `).join('');
 }
 
+function renderRailNews() {
+  const el = document.getElementById('rail-news-list');
+  if (!el) return;
+  el.innerHTML = NEWS.slice(0, 4).map((n) => `
+    <button class="rail-news-item" data-news-id="${n.id}" type="button">
+      <span class="rail-news-badge">${n.badge}</span>
+      <span class="rail-news-t">${n.title}</span>
+      <span class="rail-news-d">${n.date}</span>
+    </button>
+  `).join('');
+}
+
 function renderNews() {
   renderNewsShort();
   renderNewsFull();
+  renderRailNews();
 
   document.body.addEventListener('click', (e) => {
     const el = e.target.closest('[data-news-id]');

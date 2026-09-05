@@ -20,31 +20,60 @@
 
   <div class="body">
 
-    <!-- ─── Рельс: свёрнут, разворачивается по наведению ─── -->
+    <!-- ─── Рельс (статичный): лого · игровое меню · лента новостей ·
+         ресурсы · профиль. Компоновка — вариант A. ─── -->
     <nav class="rail" id="rail">
       <div class="rail-logo">
         <div class="rail-mark"><img src="assets/logo.png" alt="Держава RP"></div>
         <div class="rail-name"><b class="text-gradient">Держава RP</b><span>RolePlay</span></div>
       </div>
+
       <div class="rail-sep"></div>
+
       <div class="rail-nav">
         <button class="rail-item active" data-page="play"><span class="icon icon-gamepad"></span><span class="lb">Играть</span></button>
-        <button class="rail-item" data-page="news"><span class="icon icon-newspaper"></span><span class="lb">Новости</span></button>
         <button class="rail-item" id="btn-open-settings"><span class="icon icon-settings"></span><span class="lb">Настройки</span></button>
       </div>
+
       <div class="rail-sep"></div>
-      <div class="rail-nav">
-        <button class="rail-item" id="btn-discord"><span class="icon icon-discord"></span><span class="lb">Discord</span></button>
-        <button class="rail-item" id="btn-forum"><span class="icon icon-forum"></span><span class="lb">Форум</span></button>
-        <button class="rail-item" id="btn-donate"><span class="icon icon-donate"></span><span class="lb">Донат</span></button>
+
+      <div class="rail-news">
+        <div class="rail-news-head">
+          <span class="rail-news-title">Новости</span>
+          <button class="rail-news-all" data-page="news">Все</button>
+        </div>
+        <div class="rail-news-list" id="rail-news-list"></div>
       </div>
-      <div class="rail-spacer"></div>
+
+      <div class="rail-sep"></div>
+
+      <div class="rail-resources">
+        <button class="rail-item" id="btn-resources" type="button" aria-expanded="false">
+          <span class="icon icon-link"></span><span class="lb">Ресурсы</span>
+          <span class="icon icon-chevron-down rail-res-caret"></span>
+        </button>
+        <div class="res-flyout hidden" id="res-flyout">
+          <div class="res-group">
+            <div class="res-group-title">Проект</div>
+            <button class="res-link" data-res="site"><span class="icon icon-globe"></span>Сайт сервера</button>
+            <button class="res-link" data-res="forum"><span class="icon icon-forum"></span>Форум</button>
+            <button class="res-link" data-res="donate"><span class="icon icon-donate"></span>Пополнить баланс</button>
+          </div>
+          <div class="res-group">
+            <div class="res-group-title">Соцсети</div>
+            <button class="res-link" data-res="discord"><span class="icon icon-discord"></span>Discord</button>
+            <button class="res-link" data-res="telegram"><span class="icon icon-send"></span>Telegram</button>
+            <button class="res-link" data-res="youtube"><span class="icon icon-video"></span>YouTube</button>
+          </div>
+        </div>
+      </div>
+
       <button class="rail-account" id="btn-open-cabinet" type="button">
         <div class="rail-avatar" id="avatar-initial">И</div>
-        <div class="rail-account-name"><b id="account-nick">Игрок</b><span>Игрок</span></div>
+        <div class="rail-account-name"><b id="account-nick">Игрок</b><span>Профиль</span></div>
         <span class="icon icon-chevron-right rail-account-arrow"></span>
-        <div class="rail-version">Держава RP Launcher v1.0.0 | FloV:MP</div>
       </button>
+      <div class="rail-version">Держава RP Launcher v1.0.0 · FloV:MP</div>
     </nav>
 
     <!-- ─── Личный кабинет (модалка: рельс-вкладки слева + контент справа,
@@ -102,10 +131,6 @@
             </div>
           </div>
         </div>
-        <aside class="news-col">
-          <h3>Последние новости</h3>
-          <div class="news-list" id="news-list-short"></div>
-        </aside>
       </section>
 
       <!-- Новости -->
