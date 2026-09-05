@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('floridaV', {
   browseFolder: () => ipcRenderer.invoke('native:browseFolder'),
   serverStatus: (host, port) => ipcRenderer.invoke('native:serverStatus', host, port),
   play: (gtaPath, host, port, nickname) => ipcRenderer.invoke('native:play', gtaPath, host, port, nickname),
+  cancelPlay: () => ipcRenderer.invoke('native:cancelPlay'),
+  onDownloadProgress: (cb) => ipcRenderer.on('download:progress', (_e, data) => cb(data)),
 
   // Автозапуск с Windows — настоящая системная настройка через Electron,
   // не просто галочка в settings.json.

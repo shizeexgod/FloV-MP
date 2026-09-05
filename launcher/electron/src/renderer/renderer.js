@@ -506,6 +506,37 @@ async function detectGta() {
   saveSettingsDebounced();
 }
 
+// ─── Модалка запуска / загрузки файлов ────────────────────────────────────
+const launchOverlay = document.getElementById('launch-overlay');
+function openLaunchModal(serverName) {
+  document.getElementById('launch-title').textContent = (serverName || 'Басманный').toUpperCase();
+  updateLaunchProgress({ phase: 'Подготовка…', percent: 0, downloaded: 0, total: 0, speed: 0 });
+  launchOverlay.classList.remove('hidden');
+}
+function closeLaunchModal() { launchOverlay.classList.add('hidden'); }
+function fmtGb(bytes) { return (Number(bytes || 0) / 1073741824).toFixed(1); }
+function updateLaunchProgress(d) {
+  d = d || {};
+  const pct = Math.max(0, Math.min(100, Number(d.percent) || 0));
+  document.getElementById('launch-bar-fill').style.width = pct + '%';
+  if (d.phase) document.getElementById('launch-phase').textContent = d.phase;
+  const dl = typeof d.downloaded === 'number' ? fmtGb(d.downloaded) : (d.downloaded ?? '0');
+  const tot = typeof d.total === 'number' ? fmtGb(d.total) : (d.total ?? '0');
+  document.getElementById('launch-stat-size').textContent = `${dl} ГБ из ${tot} ГБ`;
+  const spd = typeof d.speed === 'number' ? Math.round(d.speed / 1048576) : (d.speed ?? '0');
+  document.getElementById('launch-stat-speed').textContent = `${spd} MB/s`;
+}
+document.getElementById('launch-cancel').addEventListener('click', () => {
+  window.floridaV.cancelPlay?.();
+  closeLaunchModal();
+});
+// Реальные данные загрузки от нативного слоя (main → preload → сюда).
+window.floridaV.onDownloadProgress?.((data) => {
+  // data: { downloaded, total, speed, percent, phase, done, error }
+  if (!launchOverlay.classList.contains('hidden')) updateLaunchProgress(data);
+  if (data && data.done) setTimeout(closeLaunchModal, 700);
+});
+
 // ─── Кнопка ИГРАТЬ ───────────────────────────────────────────────────────
 document.getElementById('btn-play').addEventListener('click', async () => {
   const btn = document.getElementById('btn-play');
@@ -516,20 +547,21 @@ document.getElementById('btn-play').addEventListener('click', async () => {
     return;
   }
   btn.disabled = true;
-  btn.textContent = 'ЗАПУСК...';
+  btn.textContent = 'ЗАПУСК…';
   status.classList.remove('error');
-  status.textContent = 'Запуск игры...';
+  status.textContent = '';
+  openLaunchModal('Басманный');
 
   const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);
 
   btn.disabled = false;
   btn.textContent = 'ИГРАТЬ';
   if (result && result.success) {
-    status.textContent = 'Игра запущена! Хорошей игры!';
-    if (settings.minimizeOnPlay) {
-      setTimeout(() => window.floridaV.minimize(), 1500);
-    }
+    updateLaunchProgress({ phase: 'Игра запущена', percent: 100 });
+    setTimeout(closeLaunchModal, 900);
+    if (settings.minimizeOnPlay) setTimeout(() => window.floridaV.minimize(), 1500);
   } else {
+    closeLaunchModal();
     status.textContent = (result && result.error) || 'Неизвестная ошибка запуска.';
     status.classList.add('error');
   }

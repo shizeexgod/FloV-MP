@@ -311,6 +311,22 @@
     </div>
   </div>
 
+  <!-- ─── Модалка запуска / загрузки файлов (по образцу GameLaunchModal) ─── -->
+  <div class="launch-overlay hidden" id="launch-overlay">
+    <div class="launch-backdrop"></div>
+    <div class="launch-card">
+      <div class="launch-srv-icon"><span class="icon icon-mappin"></span></div>
+      <div class="launch-title" id="launch-title">БАСМАННЫЙ</div>
+      <div class="launch-phase" id="launch-phase">Подготовка…</div>
+      <div class="launch-bar"><div class="launch-bar-fill" id="launch-bar-fill"></div></div>
+      <div class="launch-stats">
+        <span id="launch-stat-size">0 ГБ из 0 ГБ</span>
+        <span id="launch-stat-speed">0 MB/s</span>
+      </div>
+      <button class="launch-cancel" id="launch-cancel" type="button">Отмена</button>
+    </div>
+  </div>
+
   <!-- ─── Оверлей авторизации ─── -->
   <div class="auth-overlay" id="auth-overlay">
     <div class="auth-box">

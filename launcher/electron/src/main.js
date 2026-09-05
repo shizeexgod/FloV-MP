@@ -91,6 +91,14 @@ ipcMain.handle('native:browseFolder', () => native.call('browseFolder'));
 ipcMain.handle('native:serverStatus', (_e, host, port) => native.call('serverStatus', { host, port }));
 ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) =>
   native.call('play', { gtaPath, host, port, nickname }));
+ipcMain.handle('native:cancelPlay', () => native.call('cancelPlay').catch(() => null));
+
+// Нативный слой (FloVMP.Connect через C#-помощник) шлёт события прогресса
+// загрузки строкой NDJSON {"event":"download","downloaded":..,"total":..,
+// "speed":..,"percent":..,"phase":".."}. NativeBridge эмитит их как 'event'.
+native.on?.('download', (data) => {
+  mainWindow?.webContents.send('download:progress', data);
+});
 
 // ─── Автозапуск с Windows — настоящая системная настройка (не просто чекбокс),
 // через встроенный Electron API поверх реестра Run/Startup, ничего своего
