@@ -217,7 +217,7 @@ button{ font-family: inherit; }
 .rail-avatar{
   width:32px; height:32px; border-radius:50%; background: var(--accent);
   display:flex; align-items:center; justify-content:center;
-  font-family:'Unbounded',sans-serif; font-weight:700; font-size:13px; color: var(--accent-ink);
+  font-family:'Golos Text',sans-serif; font-weight:700; font-size:13px; color: var(--accent-ink);
 }
 .rail-account-name{ margin-top:8px; text-align:center; opacity:0; transition:opacity .2s ease; white-space:nowrap; }
 .rail:hover .rail-account-name{ opacity:1; }
@@ -262,7 +262,7 @@ button{ font-family: inherit; }
   color: var(--accent-soft); margin-bottom:8px;
 }
 .hero-headline{
-  font-family:'Unbounded',sans-serif; font-weight:900; font-size:22px; line-height:1.15;
+  font-family:'Golos Text',sans-serif; font-weight:700; font-size:22px; line-height:1.15;
   text-transform:uppercase; text-shadow: 0 4px 14px rgba(0,0,0,.6);
 }
 .hero-bottom{ position:absolute; left:28px; right:28px; bottom:26px; }
@@ -290,7 +290,7 @@ button{ font-family: inherit; }
 .btn-play{
   flex: 0 0 auto; width:180px; height:52px; border:none; border-radius:9px; cursor:pointer;
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));
-  color: var(--accent-ink); font-family:'Unbounded',sans-serif; font-weight:800; font-size:15px;
+  color: var(--accent-ink); font-family:'Golos Text',sans-serif; font-weight:700; font-size:15px;
   box-shadow: 0 12px 28px -8px var(--accent-shadow);
   transition: transform .18s ease, box-shadow .18s ease;
 }
@@ -335,7 +335,7 @@ button{ font-family: inherit; }
 }
 
 #page-news h2, #page-settings h2{
-  font-family:'Unbounded',sans-serif; font-weight:800; font-size:19px; margin:0 0 18px;
+  font-family:'Golos Text',sans-serif; font-weight:700; font-size:19px; margin:0 0 18px;
 }
 .news-full-list{ overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:14px; padding-right:8px; }
 .news-full-card{
@@ -518,7 +518,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
   padding:24px; overflow-y:auto; flex:1;
 }
 .news-modal-content h2{
-  font-family:'Unbounded',sans-serif; font-size:20px; line-height:1.25; margin:0 0 10px;
+  font-family:'Golos Text',sans-serif; font-weight:700; font-size:20px; line-height:1.25; margin:0 0 10px;
 }
 .news-modal-meta{
   display:flex; align-items:center; gap:8px; font-size:11.5px; color: var(--text-faint);
