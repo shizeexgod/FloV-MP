@@ -6,4 +6,7 @@
     <Nullable>enable</Nullable>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
 </Project>
