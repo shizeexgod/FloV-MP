@@ -166,9 +166,10 @@ alt.everyTick(() => {
 function openAuth() {
     if (authView) return;
     try {
+        // Камера с видом на Красную площадь / Кремль (Москва)
         authCamera = native.createCamWithParams(
             'DEFAULT_SCRIPTED_CAMERA',
-            -365.0, -130.0, 120.0, -10.0, 0.0, 240.0, 55.0, false, 2);
+            -220.0, -1080.0, 65.0, -15.0, 0.0, 340.0, 60.0, false, 2);
         native.setCamActive(authCamera, true);
         native.renderScriptCams(true, false, 0, true, false, 0);
     } catch (err) {
@@ -255,6 +256,39 @@ function closeSettings() {
     alt.toggleGameControls(true);
 }
 
+function loadCollisionAndUnfreeze(targetPos) {
+    const player = alt.Player.local;
+    if (!player || !player.valid) return;
+
+    native.freezeEntityPosition(player.scriptID, true);
+    native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
+    native.setFocusPosAndVel(targetPos.x, targetPos.y, targetPos.z, 0, 0, 0);
+
+    let attempts = 0;
+    const interval = alt.setInterval(() => {
+        attempts++;
+        if (!player || !player.valid) {
+            alt.clearInterval(interval);
+            native.clearFocus();
+            return;
+        }
+
+        native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
+        const [hasGround, groundZ] = native.getGroundZFor3dCoord(targetPos.x, targetPos.y, targetPos.z + 10.0, 0, false);
+        const collisionLoaded = native.hasCollisionLoadedAroundEntity(player.scriptID);
+
+        if ((hasGround && collisionLoaded) || attempts >= 40) {
+            alt.clearInterval(interval);
+            native.clearFocus();
+            if (hasGround && Math.abs(groundZ - targetPos.z) < 25.0) {
+                native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ + 0.5, false, false, false, true);
+            }
+            native.freezeEntityPosition(player.scriptID, false);
+            alt.log(`[FloV:MP] Коллизия местности загружена (попыток: ${attempts}, groundZ: ${hasGround ? groundZ.toFixed(2) : 'n/a'})`);
+        }
+    }, 100);
+}
+
 // --- Обработчики событий -------------------------------------------------
 alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
@@ -264,8 +298,7 @@ alt.onServer('flovmp:auth:hide', () => {
 
     const player = alt.Player.local;
     if (player && player.valid) {
-        native.requestCollisionAtCoord(player.pos.x, player.pos.y, player.pos.z);
-        native.freezeEntityPosition(player.scriptID, false);
+        loadCollisionAndUnfreeze(player.pos);
     }
 });
 

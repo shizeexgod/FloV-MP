@@ -10,8 +10,23 @@ namespace FloVMP.Gamemode;
 /// </summary>
 public static class SpawnPoints
 {
-    /// <summary>Legion Square, тротуар у фонтана.</summary>
-    public static readonly Position LegionSquare = new(-262.0f, -955.0f, 31.22f);
+    /// <summary>Москва: Красная площадь / Кремль (центр карты RMRP).</summary>
+    public static readonly Position MoscowRedSquare = new(-262.0f, -955.0f, 31.5f);
+
+    /// <summary>Москва: Деловой центр Москва-Сити.</summary>
+    public static readonly Position MoscowCity = new(-1150.0f, -440.0f, 45.0f);
+
+    /// <summary>Москва: Главное управление МВД / Полиция.</summary>
+    public static readonly Position MoscowPolice = new(440.0f, -982.0f, 30.7f);
+
+    /// <summary>Москва: Городская больница / Склиф.</summary>
+    public static readonly Position MoscowHospital = new(310.0f, -590.0f, 43.3f);
+
+    /// <summary>Основная точка спавна проекта Держава Онлайн.</summary>
+    public static readonly Position DefaultSpawn = MoscowRedSquare;
+
+    /// <summary>Обратная совместимость (Legion Square = Красная площадь в URF RMRP).</summary>
+    public static readonly Position LegionSquare = MoscowRedSquare;
 
     /// <summary>
     /// Небольшой разброс вокруг точки, чтобы игроки не спавнились строго

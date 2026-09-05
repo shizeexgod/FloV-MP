@@ -33,7 +33,7 @@ public sealed class PlayerLifecycle
         if (!player.Exists) return;
 
         var index = Interlocked.Increment(ref _spawnCounter);
-        var position = SpawnPoints.Scattered(SpawnPoints.LegionSquare, index);
+        var position = SpawnPoints.Scattered(SpawnPoints.DefaultSpawn, index);
 
         player.Model = (uint)PedModel.FreemodeMale01;
         player.Dimension = 0;
