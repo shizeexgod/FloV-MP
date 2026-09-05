@@ -311,8 +311,14 @@ document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
   });
 });
 
-document.getElementById('btn-check-update').addEventListener('click', () => {
-  document.getElementById('btn-check-update').lastChild.textContent = ' Установлена последняя версия';
+// Честно: реального сервера обновлений (CDN-раздачи манифестов) пока нет,
+// поэтому кнопка не притворяется, что что-то проверила — просто говорит,
+// что проверять пока нечего, и возвращает исходный текст через паузу.
+document.getElementById('btn-check-update').addEventListener('click', (e) => {
+  const label = e.currentTarget.lastChild;
+  const original = label.textContent;
+  label.textContent = ' Сервер обновлений ещё не подключён';
+  setTimeout(() => { label.textContent = original; }, 2500);
 });
 document.getElementById('btn-open-site').addEventListener('click', () => openUrl('https://derzhava-rp.ru'));
 document.getElementById('btn-open-support').addEventListener('click', () => openUrl('https://discord.gg/derzhavarp'));
