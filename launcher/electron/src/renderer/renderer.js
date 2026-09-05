@@ -27,6 +27,8 @@ const NEWS = [
     badge: 'ОТКРЫТИЕ',
     title: 'Открытие Держава RP — добро пожаловать!',
     date: '30.08.2026',
+    likes: 214,
+    views: 3180,
     summary: 'Долгожданный запуск сервера на независимом движке FloV:MP.',
     body: `<p>Мы рады приветствовать всех первопроходцев проекта <b>Держава RP</b>! Это масштабный мир на базе собственного высокопроизводительного мультиплеера <b>FloV:MP</b>, свободного от ограничений старых платформ.</p>
     <p>Что вас ждёт на старте:</p>
@@ -43,6 +45,8 @@ const NEWS = [
     badge: 'КАРТА',
     title: 'Новая карта: реальные улицы Москвы',
     date: '29.08.2026',
+    likes: 176,
+    views: 2540,
     summary: 'Кремль, Арбат, Сити и спальные районы прямо в GTA V.',
     body: `<p>Наши левел-дизайнеры завершили интеграцию уникального городского массива. Вы сможете прокатиться по Садовому кольцу, прогуляться по историческому центру или устроить гонки на широких проспектах.</p>
     <p>Особенности локации:</p>
@@ -58,6 +62,8 @@ const NEWS = [
     badge: 'ОБНОВЛЕНИЕ',
     title: 'Обновление FloV:MP 1.0 — стабильный запуск',
     date: '28.08.2026',
+    likes: 98,
+    views: 1710,
     summary: 'Автономный сетевой стек, быстрый кэш и защита соединения.',
     body: `<p>Ядро мультиплеера переведено на версию <b>FloV:MP 1.0</b>. Мы полностью избавились от внешних зависимостей и построили автономную серверную архитектуру.</p>
     <p>Ключевые изменения:</p>
@@ -73,6 +79,8 @@ const NEWS = [
     badge: 'ФРАКЦИИ',
     title: 'Первые RP-фракции открыты для вступления',
     date: '27.08.2026',
+    likes: 132,
+    views: 1980,
     summary: 'Полиция, МЧС, Правительство и криминальные группировки ждут лидеров.',
     body: `<p>Начался набор лидеров и активных участников в ключевые государственные и нелегальные структуры штата.</p>
     <p>Доступные направления:</p>
@@ -92,6 +100,8 @@ function openNewsModal(newsItem) {
   document.getElementById('news-modal-title').textContent = newsItem.title;
   document.getElementById('news-modal-date').textContent = newsItem.date;
   document.getElementById('news-modal-text').innerHTML = newsItem.body;
+  document.getElementById('news-modal-likes').textContent = newsItem.likes ?? 0;
+  document.getElementById('news-modal-views').textContent = newsItem.views ?? 0;
   modal.classList.remove('hidden');
 }
 
@@ -107,11 +117,18 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeNewsModal();
 });
 
-function renderNews() {
+function parseRuDate(d) {
+  const [day, month, year] = d.split('.').map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
+function countIcon(name) {
+  return `<span class="icon icon-${name}"></span>`;
+}
+
+function renderNewsShort() {
   const short = document.getElementById('news-list-short');
-  const full = document.getElementById('news-list-full');
-  
-  short.innerHTML = NEWS.map((n) => `
+  short.innerHTML = NEWS.slice(0, 4).map((n) => `
     <div class="news-card" data-news-id="${n.id}">
       <div class="news-thumb"></div>
       <div>
@@ -120,25 +137,64 @@ function renderNews() {
       </div>
     </div>
   `).join('');
+}
 
-  full.innerHTML = NEWS.map((n) => `
+function renderNewsFull() {
+  const full = document.getElementById('news-list-full');
+  const query = (document.getElementById('news-search')?.value || '').trim().toLowerCase();
+  const sortMode = document.getElementById('news-sort')?.value || 'new';
+  const filterBadge = document.getElementById('news-filter')?.value || 'all';
+
+  let items = NEWS.filter((n) => !query || n.title.toLowerCase().includes(query));
+  if (filterBadge !== 'all') items = items.filter((n) => n.badge === filterBadge);
+  items = items.slice().sort((a, b) => {
+    const diff = parseRuDate(a.date) - parseRuDate(b.date);
+    return sortMode === 'old' ? diff : -diff;
+  });
+
+  if (!items.length) {
+    full.innerHTML = `<div class="hint" style="padding:20px 0">Ничего не найдено по запросу.</div>`;
+    return;
+  }
+
+  full.innerHTML = items.map((n) => `
     <div class="news-full-card" data-news-id="${n.id}">
       <div class="news-thumb"></div>
       <div style="flex:1">
         <span class="news-tag">${n.badge}</span>
         <div class="t">${n.title}</div>
         <div class="summary">${n.summary}</div>
-        <div class="d">${n.date}</div>
+        <div class="news-full-meta">
+          <span class="d">${n.date}</span>
+          <span class="news-count">${countIcon('heart')} ${n.likes ?? 0}</span>
+          <span class="news-count">${countIcon('eye')} ${n.views ?? 0}</span>
+        </div>
       </div>
     </div>
   `).join('');
+}
 
-  document.querySelectorAll('[data-news-id]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const id = parseInt(el.dataset.newsId, 10);
-      const item = NEWS.find((n) => n.id === id);
-      if (item) openNewsModal(item);
-    });
+function renderNews() {
+  renderNewsShort();
+  renderNewsFull();
+
+  document.body.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-news-id]');
+    if (!el) return;
+    const id = parseInt(el.dataset.newsId, 10);
+    const item = NEWS.find((n) => n.id === id);
+    if (item) openNewsModal(item);
+  });
+
+  const badges = Array.from(new Set(NEWS.map((n) => n.badge)));
+  const filterSelect = document.getElementById('news-filter');
+  if (filterSelect) {
+    filterSelect.innerHTML = '<option value="all">Все категории</option>'
+      + badges.map((b) => `<option value="${b}">${b}</option>`).join('');
+  }
+  ['news-search', 'news-sort', 'news-filter'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(id === 'news-search' ? 'input' : 'change', renderNewsFull);
   });
 }
 renderNews();

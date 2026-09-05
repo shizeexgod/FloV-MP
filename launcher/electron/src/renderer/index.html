@@ -111,6 +111,19 @@
       <!-- Новости -->
       <section class="page" id="page-news">
         <h2>Новости</h2>
+        <div class="news-toolbar">
+          <div class="news-search-wrap">
+            <span class="icon icon-search"></span>
+            <input type="text" id="news-search" placeholder="Поиск по новостям">
+          </div>
+          <select id="news-sort">
+            <option value="new">Сначала новые</option>
+            <option value="old">Сначала старые</option>
+          </select>
+          <select id="news-filter">
+            <option value="all">Все категории</option>
+          </select>
+        </div>
         <div class="news-full-list" id="news-list-full"></div>
       </section>
 
@@ -268,6 +281,10 @@
         </div>
         <div class="news-modal-divider"></div>
         <div class="news-modal-text" id="news-modal-text"></div>
+        <div class="news-modal-counts">
+          <span class="news-count"><span class="icon icon-heart"></span><span id="news-modal-likes">0</span></span>
+          <span class="news-count"><span class="icon icon-eye"></span><span id="news-modal-views">0</span></span>
+        </div>
       </div>
     </div>
   </div>
@@ -290,6 +307,7 @@
   </div>
 
 </div>
+<script src="dev-shim.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>
