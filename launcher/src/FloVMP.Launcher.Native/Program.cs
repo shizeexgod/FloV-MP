@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FloVMP.Launcher.Native.Models;
@@ -17,6 +18,14 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // NDJSON-протокол с Electron — строго UTF-8 в обе стороны. Без этого на
+        // русской Windows stdin/stdout берут OEM-кодировку (CP866) и любой
+        // кириллический ник/путь превращается в мусор при первом же round-trip
+        // (ник «Игрок» → «╤В╨е╨╕…» в settings.json).
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Console.InputEncoding = utf8;
+        Console.OutputEncoding = utf8;
+
         var stdout = Console.Out;
         string? line;
         while ((line = Console.In.ReadLine()) != null)
