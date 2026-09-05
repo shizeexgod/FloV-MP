@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Держава RP Launcher</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@700;900&family=JetBrains+Mono:wght@500&display=swap');
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; height:100%; }
+  body{
+    background: transparent;
+    font-family: 'JetBrains Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+  #shell{
+    width:100vw; height:100vh;
+    background: radial-gradient(ellipse 500px 400px at 50% 30%, rgba(253,208,21,.10), transparent 65%), #0c0c0c;
+    border:1px solid rgba(255,255,255,.09);
+    border-radius:14px;
+    overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px;
+  }
+  .mark{
+    width:64px; height:64px; border-radius:16px;
+    background: linear-gradient(135deg,#ffe873,#fdd015 55%,#fc8c06);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 10px 26px -6px rgba(253,208,21,.5);
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  .mark img{ width:38px; height:38px; }
+  @keyframes pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.06); } }
+  .word{ font-family:'Unbounded',sans-serif; font-weight:900; font-size:20px; color:#f4f2ec; letter-spacing:.01em; }
+  .status{
+    display:flex; align-items:center; gap:10px;
+    font-size:11.5px; color:#a8a4a0; letter-spacing:.03em;
+  }
+  .spinner{
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid rgba(253,208,21,.25); border-top-color:#fdd015;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div id="shell">
+    <div class="mark"><img src="assets/logo.png" alt=""></div>
+    <div class="word">ДЕРЖАВА RP</div>
+    <div class="status"><span class="spinner"></span><span id="status-text">Запуск лаунчера…</span></div>
+  </div>
+</body>
+</html>

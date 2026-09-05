@@ -6,8 +6,33 @@ const { NativeBridge } = require('./native-bridge');
 
 const native = new NativeBridge();
 let mainWindow = null;
+let splashWindow = null;
+
+// Показываем сразу после запуска .exe, пока грузится нативный помощник и
+// первый рендер главного окна — как заставка "Проверка обновлений" у
+// Majestic, только честная: время показа = реальное время загрузки
+// (плюс небольшой минимум, чтобы не мигало на быстрых машинах), а не
+// искусственная задержка.
+const SPLASH_MIN_MS = process.env.FLOVMP_SPLASH_MIN ? parseInt(process.env.FLOVMP_SPLASH_MIN, 10) : 700;
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 380,
+    height: 280,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    center: true,
+    show: true,
+    skipTaskbar: true,
+    webPreferences: { sandbox: true },
+  });
+  splashWindow.removeMenu();
+  splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'));
+}
 
 function createWindow() {
+  const splashShownAt = Date.now();
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 720,
@@ -17,7 +42,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    show: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -32,8 +57,17 @@ function createWindow() {
 
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWindow.show();
-  mainWindow.focus();
+
+  mainWindow.once('ready-to-show', () => {
+    const elapsed = Date.now() - splashShownAt;
+    const wait = Math.max(0, SPLASH_MIN_MS - elapsed);
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+      splashWindow = null;
+      mainWindow.show();
+      mainWindow.focus();
+    }, wait);
+  });
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:state', 'maximized'));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:state', 'normal'));
@@ -69,6 +103,7 @@ ipcMain.handle('native:setAutostart', (_e, enabled) => {
 ipcMain.handle('native:getAutostart', () => app.getLoginItemSettings().openAtLogin);
 
 app.whenReady().then(() => {
+  createSplash();
   try {
     native.start();
   } catch (err) {

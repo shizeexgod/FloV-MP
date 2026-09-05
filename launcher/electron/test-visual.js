@@ -9,7 +9,18 @@ const OUT = process.argv[2] || '.';
 
 (async () => {
   const app = await electron.launch({ args: ['.'], cwd: __dirname });
-  const win = await app.firstWindow();
+
+  // Теперь при старте сначала появляется отдельное окно-заставка (splash.html),
+  // потом главное (index.html) — firstWindow() может поймать заставку.
+  // Ждём именно окно с index.html, опрашивая app.windows().
+  let win = null;
+  for (let i = 0; i < 50; i++) {
+    const pages = app.windows();
+    win = pages.find((p) => p.url().includes('renderer/index.html'));
+    if (win) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!win) throw new Error('Не дождался главного окна (index.html) — осталась только заставка?');
   await win.waitForLoadState('domcontentloaded');
   await win.waitForTimeout(600);
 
