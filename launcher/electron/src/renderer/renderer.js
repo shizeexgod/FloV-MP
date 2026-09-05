@@ -250,7 +250,6 @@ function applySettingsToUI() {
 const SIMPLE_TOGGLES = [
   ['set-language', 'language', 'value'],
   ['set-animations', 'animations', 'checked'],
-  ['set-autostart', 'autostart', 'checked'],
   ['set-minimizeonplay', 'minimizeOnPlay', 'checked'],
   ['set-notif-news', 'notifNews', 'checked'],
   ['set-notif-status', 'notifStatus', 'checked'],
@@ -261,6 +260,15 @@ SIMPLE_TOGGLES.forEach(([id, key, prop]) => {
     settings[key] = e.target[prop];
     saveSettingsDebounced();
   });
+});
+
+// Автозапуск — настоящая системная настройка (реестр Run через Electron),
+// не просто галочка в settings.json. Источник истины — сама ОС, не файл.
+document.getElementById('set-autostart').addEventListener('change', async (e) => {
+  const actual = await window.floridaV.setAutostart(e.target.checked);
+  settings.autostart = actual;
+  e.target.checked = actual;
+  saveSettingsDebounced();
 });
 
 function doLogout() {
@@ -491,6 +499,7 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
   renderAccentPicker();
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
+  settings.autostart = await window.floridaV.getAutostart().catch(() => settings.autostart);
   applySettingsToUI();
 
   if (settings.nickname && settings.nickname !== 'Игрок') {

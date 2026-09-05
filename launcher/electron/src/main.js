@@ -58,6 +58,16 @@ ipcMain.handle('native:serverStatus', (_e, host, port) => native.call('serverSta
 ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) =>
   native.call('play', { gtaPath, host, port, nickname }));
 
+// ─── Автозапуск с Windows — настоящая системная настройка (не просто чекбокс),
+// через встроенный Electron API поверх реестра Run/Startup, ничего своего
+// в реестр не пишем напрямую (та же дисциплина, что и для BattlEye — не
+// трогать системные вещи руками там, где есть официальный API).
+ipcMain.handle('native:setAutostart', (_e, enabled) => {
+  app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath });
+  return app.getLoginItemSettings().openAtLogin;
+});
+ipcMain.handle('native:getAutostart', () => app.getLoginItemSettings().openAtLogin);
+
 app.whenReady().then(() => {
   try {
     native.start();
