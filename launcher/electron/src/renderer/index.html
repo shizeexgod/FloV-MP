@@ -20,37 +20,25 @@
 
   <div class="body">
 
-    <!-- ─── Рельс (статичный): лого · игровое меню · лента новостей ·
-         ресурсы · профиль. Компоновка — вариант A. ─── -->
+    <!-- ─── Узкий рельс (только иконки): лого · Играть/Новости · Ресурсы
+         (флайаут вниз) · Настройки · профиль ─── -->
     <nav class="rail" id="rail">
       <div class="rail-logo">
         <div class="rail-mark"><img src="assets/logo.png" alt="Держава RP"></div>
-        <div class="rail-name"><b class="text-gradient">Держава RP</b><span>RolePlay</span></div>
       </div>
 
       <div class="rail-sep"></div>
 
       <div class="rail-nav">
-        <button class="rail-item active" data-page="play"><span class="icon icon-gamepad"></span><span class="lb">Играть</span></button>
-        <button class="rail-item" id="btn-open-settings"><span class="icon icon-settings"></span><span class="lb">Настройки</span></button>
-      </div>
-
-      <div class="rail-sep"></div>
-
-      <div class="rail-news">
-        <div class="rail-news-head">
-          <span class="rail-news-title">Новости</span>
-          <button class="rail-news-all" data-page="news">Все</button>
-        </div>
-        <div class="rail-news-list" id="rail-news-list"></div>
+        <button class="rail-item active" data-page="play" title="Играть"><span class="icon icon-gamepad"></span></button>
+        <button class="rail-item" data-page="news" title="Новости"><span class="icon icon-newspaper"></span></button>
       </div>
 
       <div class="rail-sep"></div>
 
       <div class="rail-resources">
-        <button class="rail-item" id="btn-resources" type="button" aria-expanded="false">
-          <span class="icon icon-link"></span><span class="lb">Ресурсы</span>
-          <span class="icon icon-chevron-down rail-res-caret"></span>
+        <button class="rail-item" id="btn-resources" type="button" title="Ресурсы" aria-expanded="false">
+          <span class="icon icon-link"></span>
         </button>
         <div class="res-flyout hidden" id="res-flyout">
           <div class="res-group">
@@ -68,12 +56,18 @@
         </div>
       </div>
 
-      <button class="rail-account" id="btn-open-cabinet" type="button">
+      <div class="rail-spacer"></div>
+
+      <div class="rail-nav">
+        <button class="rail-item" id="btn-open-settings" title="Настройки"><span class="icon icon-settings"></span></button>
+      </div>
+
+      <div class="rail-sep"></div>
+
+      <button class="rail-account" id="btn-open-cabinet" type="button" title="Профиль">
         <div class="rail-avatar" id="avatar-initial">И</div>
-        <div class="rail-account-name"><b id="account-nick">Игрок</b><span>Профиль</span></div>
-        <span class="icon icon-chevron-right rail-account-arrow"></span>
+        <b class="rail-nick" id="account-nick">Игрок</b>
       </button>
-      <div class="rail-version">Держава RP Launcher v1.0.0 · FloV:MP</div>
     </nav>
 
     <!-- ─── Личный кабинет (модалка: рельс-вкладки слева + контент справа,
@@ -111,25 +105,29 @@
     <!-- ─── Контент ─── -->
     <main class="content">
 
-      <!-- Играть -->
+      <!-- Играть: список серверов слева + новости справа (по образцу Majestic) -->
       <section class="page active" id="page-play">
-        <div class="hero">
-          <div class="glow"></div>
-          <div class="skyline" id="skyline"></div>
-          <div class="fade"></div>
-          <div class="hero-top">
-            <div class="hero-kicker">GTA V &middot; РУССКИЙ RP &middot; ОНЛАЙН</div>
-            <div class="hero-headline">Твоя история начинается здесь</div>
-          </div>
-          <div class="hero-bottom">
-            <div class="status-pill"><span class="status-dot" id="status-dot"></span><span id="status-text">Офлайн</span>&nbsp;&middot;&nbsp;<span id="status-online" style="color:var(--text-dim)">нет данных</span></div>
-            <div class="server-name text-gradient">Держава RP</div>
-            <div class="server-desc">Российский ролевой сервер &middot; FloV:MP</div>
-            <div class="play-row">
+        <div class="play-grid">
+          <div class="play-servers">
+            <h2 class="page-h">Выберите сервер</h2>
+            <div class="srv-group">
+              <div class="srv-group-head">Все сервера</div>
+              <div class="server-row" id="server-row">
+                <span class="srv-status" id="status-dot"></span>
+                <span class="srv-icon"><span class="icon icon-gamepad"></span></span>
+                <div class="srv-info">
+                  <b>Басманный</b>
+                  <span><span id="status-text">Офлайн</span> · <span id="status-online">нет данных</span></span>
+                </div>
+                <button class="srv-play" id="btn-play">Играть</button>
+              </div>
               <div class="status-msg" id="play-status"></div>
-              <button class="btn-play" id="btn-play">ИГРАТЬ</button>
             </div>
           </div>
+          <aside class="play-news">
+            <div class="play-news-head">Последние обновления</div>
+            <div class="play-news-list" id="play-news-list"></div>
+          </aside>
         </div>
       </section>
 

@@ -160,16 +160,21 @@ function countIcon(name) {
 }
 
 function renderNewsShort() {
-  const short = document.getElementById('news-list-short');
+  const short = document.getElementById('play-news-list');
   if (!short) return;
   short.innerHTML = NEWS.slice(0, 4).map((n) => `
-    <div class="news-card" data-news-id="${n.id}">
-      <div class="news-thumb"></div>
-      <div>
-        <div class="t">${n.title}</div>
-        <div class="d">${n.date}</div>
+    <button class="pnews-card" data-news-id="${n.id}" type="button">
+      <div class="pnews-thumb"></div>
+      <div class="pnews-body">
+        <span class="pnews-tag">${n.badge}</span>
+        <div class="pnews-t">${n.title}</div>
+        <div class="pnews-meta">
+          <span>${n.date}</span>
+          <span class="news-count">${countIcon('heart')} ${n.likes ?? 0}</span>
+          <span class="news-count">${countIcon('eye')} ${n.views ?? 0}</span>
+        </div>
       </div>
-    </div>
+    </button>
   `).join('');
 }
 
@@ -192,9 +197,9 @@ function renderNewsFull() {
   }
 
   full.innerHTML = items.map((n) => `
-    <div class="news-full-card" data-news-id="${n.id}">
+    <button class="news-full-card" data-news-id="${n.id}" type="button">
       <div class="news-thumb"></div>
-      <div style="flex:1">
+      <div class="nfc-body">
         <span class="news-tag">${n.badge}</span>
         <div class="t">${n.title}</div>
         <div class="summary">${n.summary}</div>
@@ -204,18 +209,6 @@ function renderNewsFull() {
           <span class="news-count">${countIcon('eye')} ${n.views ?? 0}</span>
         </div>
       </div>
-    </div>
-  `).join('');
-}
-
-function renderRailNews() {
-  const el = document.getElementById('rail-news-list');
-  if (!el) return;
-  el.innerHTML = NEWS.slice(0, 4).map((n) => `
-    <button class="rail-news-item" data-news-id="${n.id}" type="button">
-      <span class="rail-news-badge">${n.badge}</span>
-      <span class="rail-news-t">${n.title}</span>
-      <span class="rail-news-d">${n.date}</span>
     </button>
   `).join('');
 }
@@ -223,7 +216,6 @@ function renderRailNews() {
 function renderNews() {
   renderNewsShort();
   renderNewsFull();
-  renderRailNews();
 
   document.body.addEventListener('click', (e) => {
     const el = e.target.closest('[data-news-id]');
@@ -249,6 +241,7 @@ renderNews();
 // ─── Силуэт города (декоративный) ───────────────────────────────────────────
 (function buildSkyline() {
   const el = document.getElementById('skyline');
+  if (!el) return;
   const n = 34;
   for (let i = 0; i < n; i++) {
     const b = document.createElement('i');

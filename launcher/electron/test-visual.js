@@ -39,8 +39,8 @@ const OUT = process.argv[2] || '.';
   await win.keyboard.press('Escape');
   await win.waitForTimeout(150);
 
-  // 3. Новости — переход по кнопке «Все» в блоке новостей рельса
-  await win.click('.rail-news-all');
+  // 3. Новости — иконка рельса
+  await win.click('.rail-item[data-page="news"]');
   await win.mouse.move(700, 500);
   await win.waitForTimeout(200);
   await shot('03-news');
