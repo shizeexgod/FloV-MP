@@ -259,17 +259,69 @@ let settings = {
   serverHost: '127.0.0.1',
   serverPort: 7788,
   autoUpdate: true,
+  updateChannel: 'stable',
   clientEdition: 'Legacy',
   accentColor: 'gold',
   language: 'ru',
   animations: true,
+  compactMode: false,
+  rememberTab: true,
+  lastSettingsTab: 'general',
   autostart: false,
   minimizeOnPlay: true,
+  region: 'auto',
+  anonStats: false,
+  procPriority: 'normal',
+  launchArgs: '',
+  graphicsPreset: 'untouched',
+  fpsLimit: 0,
+  disableAmbient: true,
+  dlSpeed: 0,
+  dlThreads: 4,
+  cacheDir: '',
+  voiceInput: '',
+  voiceOutput: '',
+  voiceMode: 'ptt',
+  voiceThreshold: 50,
   notifNews: true,
   notifStatus: true,
+  notifEvents: true,
   notifSound: false,
   accountCreatedUtc: '',
 };
+
+// id → [ключ настройки, свойство элемента]
+const SETTINGS_MAP = [
+  ['set-nickname', 'nickname', 'value'],
+  ['set-gtapath', 'gtaPath', 'value'],
+  ['set-host', 'serverHost', 'value'],
+  ['set-port', 'serverPort', 'value'],
+  ['set-autoupdate', 'autoUpdate', 'checked'],
+  ['set-update-channel', 'updateChannel', 'value'],
+  ['set-language', 'language', 'value'],
+  ['set-animations', 'animations', 'checked'],
+  ['set-compact', 'compactMode', 'checked'],
+  ['set-remember-tab', 'rememberTab', 'checked'],
+  ['set-minimizeonplay', 'minimizeOnPlay', 'checked'],
+  ['set-region', 'region', 'value'],
+  ['set-anon-stats', 'anonStats', 'checked'],
+  ['set-proc-priority', 'procPriority', 'value'],
+  ['set-launch-args', 'launchArgs', 'value'],
+  ['set-graphics-preset', 'graphicsPreset', 'value'],
+  ['set-fps-limit', 'fpsLimit', 'value'],
+  ['set-disable-ambient', 'disableAmbient', 'checked'],
+  ['set-dl-speed', 'dlSpeed', 'value'],
+  ['set-dl-threads', 'dlThreads', 'value'],
+  ['set-cache-dir', 'cacheDir', 'value'],
+  ['set-voice-input', 'voiceInput', 'value'],
+  ['set-voice-output', 'voiceOutput', 'value'],
+  ['set-voice-mode', 'voiceMode', 'value'],
+  ['set-voice-threshold', 'voiceThreshold', 'value'],
+  ['set-notif-news', 'notifNews', 'checked'],
+  ['set-notif-status', 'notifStatus', 'checked'],
+  ['set-notif-events', 'notifEvents', 'checked'],
+  ['set-notif-sound', 'notifSound', 'checked'],
+];
 
 // ─── Акцентный цвет — пресеты. Меняем ТОЛЬКО --accent-color и
 // --accent-color-rgb; всё остальное в styles.css выведено из них. ──────────
@@ -315,40 +367,106 @@ function renderAccentPicker() {
   });
 }
 
+function dlSpeedLabel(v) { return Number(v) === 0 ? 'Без ограничения' : `${v} МБ/с`; }
+function voiceThrLabel(v) { v = Number(v); return v < 33 ? 'Низкий' : v < 66 ? 'Средний' : 'Высокий'; }
+
 function applySettingsToUI() {
-  document.getElementById('set-nickname').value = settings.nickname;
-  document.getElementById('set-gtapath').value = settings.gtaPath;
-  document.getElementById('set-host').value = settings.serverHost;
-  document.getElementById('set-port').value = settings.serverPort;
-  document.getElementById('set-autoupdate').checked = settings.autoUpdate;
-  document.getElementById('set-language').value = settings.language;
-  document.getElementById('set-animations').checked = settings.animations;
-  document.getElementById('set-autostart').checked = settings.autostart;
-  document.getElementById('set-minimizeonplay').checked = settings.minimizeOnPlay;
-  document.getElementById('set-notif-news').checked = settings.notifNews;
-  document.getElementById('set-notif-status').checked = settings.notifStatus;
-  document.getElementById('set-notif-sound').checked = settings.notifSound;
+  SETTINGS_MAP.forEach(([id, key, prop]) => {
+    const el = document.getElementById(id);
+    if (el) el[prop] = settings[key];
+  });
   setEditionToggle(settings.clientEdition);
   applyAccent(settings.accentColor);
+  document.documentElement.classList.toggle('compact', !!settings.compactMode);
+  document.documentElement.classList.toggle('no-anim', !settings.animations);
+
+  const s = document.getElementById('dl-speed-val'); if (s) s.textContent = dlSpeedLabel(settings.dlSpeed);
+  const t = document.getElementById('dl-threads-val'); if (t) t.textContent = String(settings.dlThreads);
+  const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
 
   document.getElementById('account-nick').textContent = settings.nickname;
   document.getElementById('avatar-initial').textContent = (settings.nickname || 'И')[0].toUpperCase();
 }
 
-// ─── Доп. переключатели вкладки «Внешний вид» / автозапуск / уведомления ──
-const SIMPLE_TOGGLES = [
-  ['set-language', 'language', 'value'],
-  ['set-animations', 'animations', 'checked'],
-  ['set-minimizeonplay', 'minimizeOnPlay', 'checked'],
-  ['set-notif-news', 'notifNews', 'checked'],
-  ['set-notif-status', 'notifStatus', 'checked'],
-  ['set-notif-sound', 'notifSound', 'checked'],
-];
-SIMPLE_TOGGLES.forEach(([id, key, prop]) => {
-  document.getElementById(id).addEventListener(prop === 'checked' ? 'change' : 'input', (e) => {
-    settings[key] = e.target[prop];
+// ─── Единая привязка всех контролов настроек к settings + сохранение ──────
+SETTINGS_MAP.forEach(([id, key, prop]) => {
+  if (id === 'set-nickname' || id === 'set-gtapath') return; // у них свои обработчики ниже
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener(prop === 'checked' ? 'change' : 'input', (e) => {
+    let v = e.target[prop];
+    if (prop === 'value' && el.type === 'number') v = Number(v);
+    if (prop === 'value' && el.type === 'range') v = Number(v);
+    settings[key] = v;
+    if (id === 'set-compact') document.documentElement.classList.toggle('compact', v);
+    if (id === 'set-animations') document.documentElement.classList.toggle('no-anim', !v);
+    if (id === 'set-dl-speed') document.getElementById('dl-speed-val').textContent = dlSpeedLabel(v);
+    if (id === 'set-dl-threads') document.getElementById('dl-threads-val').textContent = String(v);
+    if (id === 'set-voice-threshold') document.getElementById('voice-thr-val').textContent = voiceThrLabel(v);
     saveSettingsDebounced();
   });
+});
+
+// ─── Аудиоустройства для вкладки «Голос» (реальные, из системы) ───────────
+async function fillAudioDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const fill = (selId, kind) => {
+      const sel = document.getElementById(selId);
+      if (!sel) return;
+      const cur = settings[selId === 'set-voice-input' ? 'voiceInput' : 'voiceOutput'];
+      devs.filter((d) => d.kind === kind).forEach((d) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId; o.textContent = d.label || (kind === 'audioinput' ? 'Микрофон' : 'Динамики');
+        sel.appendChild(o);
+      });
+      if (cur) sel.value = cur;
+    };
+    fill('set-voice-input', 'audioinput');
+    fill('set-voice-output', 'audiooutput');
+  } catch {}
+}
+let _audioDevicesFilled = false;
+
+// ─── Проверка микрофона — реальный уровень громкости ─────────────────────
+document.getElementById('btn-mic-test')?.addEventListener('click', async () => {
+  const meter = document.getElementById('mic-meter-fill');
+  if (!meter || !navigator.mediaDevices) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: settings.voiceInput ? { deviceId: { exact: settings.voiceInput } } : true,
+    });
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const started = Date.now();
+    (function loop() {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b, 0) / data.length;
+      meter.style.width = Math.min(100, avg * 1.6) + '%';
+      if (Date.now() - started < 5000) requestAnimationFrame(loop);
+      else { stream.getTracks().forEach((t) => t.stop()); ctx.close(); meter.style.width = '0%'; }
+    })();
+  } catch {
+    meter.style.width = '0%';
+  }
+});
+
+// ─── Служебные ссылки в настройках ──────────────────────────────────────
+document.getElementById('btn-clear-cache')?.addEventListener('click', () => {
+  window.floridaV.clearCache?.();
+  try { localStorage.removeItem('flovmp_dev_settings'); } catch {}
+});
+document.getElementById('btn-verify-files')?.addEventListener('click', () => window.floridaV.verifyFiles?.());
+document.getElementById('btn-open-logs')?.addEventListener('click', () => window.floridaV.openLogs?.());
+document.getElementById('btn-open-changelog')?.addEventListener('click', () => openUrl('https://derzhava-rp.ru/changelog'));
+document.getElementById('btn-cache-browse')?.addEventListener('click', async () => {
+  const dir = await window.floridaV.browseFolder();
+  if (dir) { settings.cacheDir = dir; document.getElementById('set-cache-dir').value = dir; saveSettingsDebounced(); }
 });
 
 // Автозапуск — настоящая системная настройка (реестр Run через Electron),
@@ -404,20 +522,34 @@ document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
 // открывается поверх текущего экрана (Играть/Новости), тот остаётся видимым
 // и блюрится позади, закрывается — крестиком, кликом мимо или Esc.
 const settingsOverlay = document.getElementById('settings-overlay');
-document.getElementById('btn-open-settings').addEventListener('click', () => settingsOverlay.classList.remove('hidden'));
+function selectSettingsTab(name) {
+  const btn = document.querySelector(`.settings-subnav [data-subtab="${name}"]`);
+  if (!btn) return;
+  document.querySelectorAll('.settings-subnav [data-subtab]').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.settings-tab').forEach((t) => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelector(`.settings-tab[data-subtab="${name}"]`).classList.add('active');
+  if (name === 'voice' && !_audioDevicesFilled) {
+    _audioDevicesFilled = true;
+    fillAudioDevices();
+  }
+}
+document.getElementById('btn-open-settings').addEventListener('click', () => {
+  if (settings.rememberTab && settings.lastSettingsTab) selectSettingsTab(settings.lastSettingsTab);
+  settingsOverlay.classList.remove('hidden');
+});
 document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.add('hidden'));
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.add('hidden'); });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !settingsOverlay.classList.contains('hidden')) settingsOverlay.classList.add('hidden');
 });
 
-// ─── Настройки: категории слева (Основное/Дополнительно/О программе) ───────
+// ─── Настройки: категории слева ──────────────────────────────────────────
 document.querySelectorAll('.settings-subnav [data-subtab]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.settings-subnav [data-subtab]').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.settings-tab').forEach((t) => t.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelector(`.settings-tab[data-subtab="${btn.dataset.subtab}"]`).classList.add('active');
+    selectSettingsTab(btn.dataset.subtab);
+    settings.lastSettingsTab = btn.dataset.subtab;
+    if (settings.rememberTab) saveSettingsDebounced();
   });
 });
 

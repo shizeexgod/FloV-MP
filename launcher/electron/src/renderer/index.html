@@ -163,123 +163,231 @@
       </div>
       <div class="settings-shell">
         <nav class="settings-subnav">
-          <button class="cabinet-item active" data-subtab="main" type="button"><span class="icon icon-sliders"></span>Основное</button>
-          <button class="cabinet-item" data-subtab="extra" type="button"><span class="icon icon-monitor"></span>Дополнительно</button>
+          <button class="cabinet-item active" data-subtab="general" type="button"><span class="icon icon-sliders"></span>Основное</button>
+          <button class="cabinet-item" data-subtab="game" type="button"><span class="icon icon-gamepad"></span>Игра</button>
+          <button class="cabinet-item" data-subtab="download" type="button"><span class="icon icon-download"></span>Загрузка</button>
+          <button class="cabinet-item" data-subtab="voice" type="button"><span class="icon icon-volume"></span>Голос</button>
+          <button class="cabinet-item" data-subtab="interface" type="button"><span class="icon icon-palette"></span>Интерфейс</button>
+          <button class="cabinet-item" data-subtab="notif" type="button"><span class="icon icon-bell"></span>Уведомления</button>
           <button class="cabinet-item" data-subtab="about" type="button"><span class="icon icon-info"></span>О программе</button>
         </nav>
         <div class="settings-panels">
 
-            <div class="settings-tab active" data-subtab="main">
-              <div class="settings-list">
-                <div class="card">
-                  <h4><span class="icon icon-user"></span>Профиль</h4>
-                  <span class="field-label">Никнейм</span>
-                  <input type="text" id="set-nickname" style="margin-bottom:14px">
-                  <div class="link-row" id="btn-logout"><span class="icon icon-logout"></span>Выйти из аккаунта</div>
+          <div class="settings-tab active" data-subtab="general">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-user"></span>Профиль</h4>
+                <span class="field-label">Никнейм</span>
+                <input type="text" id="set-nickname" style="margin-bottom:14px">
+                <div class="link-row" id="btn-logout"><span class="icon icon-logout"></span>Выйти из аккаунта</div>
+              </div>
+              <div class="card">
+                <h4><span class="icon icon-link"></span>Сервер</h4>
+                <div class="row">
+                  <div style="flex:1"><span class="field-label">Адрес</span><input type="text" id="set-host"></div>
+                  <div style="max-width:110px"><span class="field-label">Порт</span><input type="number" id="set-port"></div>
                 </div>
-
-                <div class="card">
-                  <h4><span class="icon icon-palette"></span>Внешний вид</h4>
-                  <span class="field-label">Акцентный цвет</span>
-                  <div class="accent-picker" id="accent-picker"></div>
-                  <div class="hint" style="margin-bottom:4px">По умолчанию — фирменный золотой Держава RP.</div>
-                  <div class="field-row">
-                    <div><div class="ft">Язык интерфейса</div></div>
-                    <select id="set-language">
-                      <option value="ru">Русский</option>
-                      <option value="en">English</option>
-                    </select>
-                  </div>
-                  <div class="field-row">
-                    <div><div class="ft">Анимации интерфейса</div><div class="fd">Плавное появление окон и переходов</div></div>
-                    <label class="switch"><input type="checkbox" id="set-animations" checked><span class="track"></span></label>
-                  </div>
-                </div>
-
-                <div class="card">
-                  <h4><span class="icon icon-refresh"></span>Автозапуск и обновления</h4>
-                  <div class="field-row">
-                    <div><div class="ft">Обновлять FloV:MP автоматически</div><div class="fd">Загружать патчи движка при запуске</div></div>
-                    <label class="switch"><input type="checkbox" id="set-autoupdate"><span class="track"></span></label>
-                  </div>
-                  <div class="field-row">
-                    <div><div class="ft">Запускать вместе с Windows</div></div>
-                    <label class="switch"><input type="checkbox" id="set-autostart"><span class="track"></span></label>
-                  </div>
-                  <div class="field-row">
-                    <div><div class="ft">Сворачивать лаунчер при запуске игры</div></div>
-                    <label class="switch"><input type="checkbox" id="set-minimizeonplay" checked><span class="track"></span></label>
-                  </div>
-                </div>
-
-                <div class="card">
-                  <h4><span class="icon icon-bell"></span>Уведомления</h4>
-                  <div class="field-row">
-                    <div><div class="ft">Новости сервера</div></div>
-                    <label class="switch"><input type="checkbox" id="set-notif-news" checked><span class="track"></span></label>
-                  </div>
-                  <div class="field-row">
-                    <div><div class="ft">Сервер онлайн / офлайн</div></div>
-                    <label class="switch"><input type="checkbox" id="set-notif-status" checked><span class="track"></span></label>
-                  </div>
-                  <div class="field-row">
-                    <div><div class="ft">Звук уведомлений</div></div>
-                    <label class="switch"><input type="checkbox" id="set-notif-sound"><span class="track"></span></label>
-                  </div>
+                <div class="field-row">
+                  <div><div class="ft">Регион подключения</div><div class="fd">Ближайший узел для меньшего пинга</div></div>
+                  <select id="set-region">
+                    <option value="auto">Автовыбор</option>
+                    <option value="ru">Россия</option>
+                    <option value="eu">Европа</option>
+                  </select>
                 </div>
               </div>
-            </div>
-
-            <div class="settings-tab" data-subtab="extra">
-              <div class="settings-list">
-                <div class="card">
-                  <h4><span class="icon icon-gamepad"></span>GTA V</h4>
-                  <span class="field-label">Папка игры</span>
-                  <div class="row" style="margin-bottom:12px">
-                    <input type="text" id="set-gtapath">
-                    <button class="btn-secondary" id="btn-browse">Обзор&hellip;</button>
-                    <button class="btn-secondary" id="btn-detect">Автоопределить</button>
-                  </div>
-                  <span class="field-label">Версия клиента</span>
-                  <div class="toggle-group">
-                    <button class="toggle-btn" id="toggle-legacy" data-edition="Legacy">Legacy</button>
-                    <button class="toggle-btn" id="toggle-enhanced" data-edition="Enhanced">Enhanced</button>
-                  </div>
-                  <div class="hint" id="settings-status"></div>
+              <div class="card">
+                <h4><span class="icon icon-refresh"></span>Автозапуск и обновления</h4>
+                <div class="field-row">
+                  <div><div class="ft">Обновлять FloV:MP автоматически</div><div class="fd">Загружать патчи движка при запуске</div></div>
+                  <label class="switch"><input type="checkbox" id="set-autoupdate"><span class="track"></span></label>
                 </div>
-
-                <div class="card">
-                  <h4><span class="icon icon-link"></span>Сервер</h4>
-                  <div class="row">
-                    <div>
-                      <span class="field-label">Адрес</span>
-                      <input type="text" id="set-host">
-                    </div>
-                    <div style="max-width:120px">
-                      <span class="field-label">Порт</span>
-                      <input type="number" id="set-port">
-                    </div>
-                  </div>
+                <div class="field-row">
+                  <div><div class="ft">Канал обновлений</div></div>
+                  <select id="set-update-channel">
+                    <option value="stable">Стабильный</option>
+                    <option value="beta">Бета</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Запускать вместе с Windows</div></div>
+                  <label class="switch"><input type="checkbox" id="set-autostart"><span class="track"></span></label>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Сворачивать лаунчер при запуске игры</div></div>
+                  <label class="switch"><input type="checkbox" id="set-minimizeonplay" checked><span class="track"></span></label>
                 </div>
               </div>
-            </div>
-
-            <div class="settings-tab" data-subtab="about">
-              <div class="settings-list">
-                <div class="card">
-                  <h4><span class="icon icon-info"></span>О программе</h4>
-                  <div class="field-row">
-                    <div class="ft">Версия лаунчера</div>
-                    <div class="about-version">1.0.0</div>
-                  </div>
-                  <div class="link-row" id="btn-check-update"><span class="icon icon-download"></span>Проверить обновления</div>
-                  <div class="link-row" id="btn-open-site"><span class="icon icon-globe"></span>Сайт сервера</div>
-                  <div class="link-row" id="btn-open-support"><span class="icon icon-help"></span>Поддержка</div>
+              <div class="card">
+                <h4><span class="icon icon-shield"></span>Приватность</h4>
+                <div class="field-row">
+                  <div><div class="ft">Анонимная статистика запусков</div><div class="fd">Помогает чинить баги запуска. Без личных данных</div></div>
+                  <label class="switch"><input type="checkbox" id="set-anon-stats"><span class="track"></span></label>
                 </div>
+                <div class="link-row" id="btn-clear-cache"><span class="icon icon-refresh"></span>Очистить кэш и логи</div>
               </div>
             </div>
-
           </div>
+
+          <div class="settings-tab" data-subtab="game">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-gamepad"></span>GTA V</h4>
+                <span class="field-label">Папка игры</span>
+                <div class="row" style="margin-bottom:12px">
+                  <input type="text" id="set-gtapath">
+                  <button class="btn-secondary" id="btn-browse">Обзор&hellip;</button>
+                  <button class="btn-secondary" id="btn-detect">Автоопределить</button>
+                </div>
+                <span class="field-label">Версия клиента</span>
+                <div class="toggle-group">
+                  <button class="toggle-btn" id="toggle-legacy" data-edition="Legacy">Legacy</button>
+                  <button class="toggle-btn" id="toggle-enhanced" data-edition="Enhanced">Enhanced</button>
+                </div>
+                <div class="hint" id="settings-status"></div>
+              </div>
+              <div class="card">
+                <h4><span class="icon icon-sliders"></span>Запуск</h4>
+                <div class="field-row">
+                  <div><div class="ft">Приоритет процесса игры</div><div class="fd">«Высокий» может дать чуть больше FPS</div></div>
+                  <select id="set-proc-priority">
+                    <option value="normal">Обычный</option>
+                    <option value="high">Высокий</option>
+                  </select>
+                </div>
+                <span class="field-label" style="margin-top:12px">Доп. аргументы запуска</span>
+                <input type="text" id="set-launch-args" placeholder="-windowed -noSplash">
+                <div class="hint">Передаются в GTA5.exe как есть. Оставьте пустым, если не уверены.</div>
+              </div>
+              <div class="card">
+                <h4><span class="icon icon-monitor"></span>Графика (пресет для игры)</h4>
+                <div class="field-row">
+                  <div><div class="ft">Пресет качества</div></div>
+                  <select id="set-graphics-preset">
+                    <option value="untouched">Не менять</option>
+                    <option value="low">Низкий (максимум FPS)</option>
+                    <option value="medium">Средний</option>
+                    <option value="high">Высокий</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Ограничение FPS</div></div>
+                  <select id="set-fps-limit">
+                    <option value="0">Без ограничения</option>
+                    <option value="60">60</option>
+                    <option value="120">120</option>
+                    <option value="144">144</option>
+                    <option value="240">240</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Отключить пешеходов и трафик</div><div class="fd">Чище RP-мир, выше FPS</div></div>
+                  <label class="switch"><input type="checkbox" id="set-disable-ambient" checked><span class="track"></span></label>
+                </div>
+                <div class="hint">Применяется при следующем запуске.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-subtab="download">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-download"></span>Загрузка файлов</h4>
+                <div class="field-row"><div><div class="ft">Ограничение скорости</div><div class="fd" id="dl-speed-val">Без ограничения</div></div></div>
+                <input type="range" id="set-dl-speed" min="0" max="100" step="5" value="0">
+                <div class="field-row" style="margin-top:14px"><div><div class="ft">Потоков загрузки</div><div class="fd" id="dl-threads-val">4</div></div></div>
+                <input type="range" id="set-dl-threads" min="1" max="16" step="1" value="4">
+              </div>
+              <div class="card">
+                <h4><span class="icon icon-folder"></span>Кэш ресурсов</h4>
+                <span class="field-label">Папка кэша</span>
+                <div class="row" style="margin-bottom:10px">
+                  <input type="text" id="set-cache-dir" placeholder="По умолчанию">
+                  <button class="btn-secondary" id="btn-cache-browse">Обзор&hellip;</button>
+                </div>
+                <div class="link-row" id="btn-verify-files"><span class="icon icon-check"></span>Проверить целостность файлов</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-subtab="voice">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-volume"></span>Голосовая связь</h4>
+                <div class="field-row"><div><div class="ft">Устройство ввода (микрофон)</div></div>
+                  <select id="set-voice-input"><option value="">По умолчанию</option></select></div>
+                <div class="field-row"><div><div class="ft">Устройство вывода</div></div>
+                  <select id="set-voice-output"><option value="">По умолчанию</option></select></div>
+                <div class="field-row"><div><div class="ft">Режим активации</div></div>
+                  <select id="set-voice-mode">
+                    <option value="ptt">По нажатию клавиши</option>
+                    <option value="voice">По голосу</option>
+                  </select></div>
+                <div class="field-row" style="margin-top:4px"><div><div class="ft">Порог активации</div><div class="fd" id="voice-thr-val">Средний</div></div></div>
+                <input type="range" id="set-voice-threshold" min="0" max="100" step="5" value="50">
+                <div class="link-row" id="btn-mic-test" style="margin-top:8px"><span class="icon icon-volume"></span>Проверить микрофон</div>
+                <div class="mic-meter"><div class="mic-meter-fill" id="mic-meter-fill"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-subtab="interface">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-palette"></span>Внешний вид</h4>
+                <span class="field-label">Акцентный цвет</span>
+                <div class="accent-picker" id="accent-picker"></div>
+                <div class="hint" style="margin-bottom:6px">По умолчанию — фирменный золотой Держава RP.</div>
+                <div class="field-row"><div><div class="ft">Язык интерфейса</div></div>
+                  <select id="set-language"><option value="ru">Русский</option><option value="en">English</option></select></div>
+                <div class="field-row">
+                  <div><div class="ft">Анимации интерфейса</div><div class="fd">Плавное появление окон и переходов</div></div>
+                  <label class="switch"><input type="checkbox" id="set-animations" checked><span class="track"></span></label>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Компактный режим</div><div class="fd">Плотнее списки и отступы</div></div>
+                  <label class="switch"><input type="checkbox" id="set-compact"><span class="track"></span></label>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Запоминать последнюю вкладку</div></div>
+                  <label class="switch"><input type="checkbox" id="set-remember-tab" checked><span class="track"></span></label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-subtab="notif">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-bell"></span>Уведомления</h4>
+                <div class="field-row"><div><div class="ft">Новости сервера</div></div>
+                  <label class="switch"><input type="checkbox" id="set-notif-news" checked><span class="track"></span></label></div>
+                <div class="field-row"><div><div class="ft">Сервер онлайн / офлайн</div></div>
+                  <label class="switch"><input type="checkbox" id="set-notif-status" checked><span class="track"></span></label></div>
+                <div class="field-row"><div><div class="ft">Старт вайпа и ивентов</div></div>
+                  <label class="switch"><input type="checkbox" id="set-notif-events" checked><span class="track"></span></label></div>
+                <div class="field-row"><div><div class="ft">Звук уведомлений</div></div>
+                  <label class="switch"><input type="checkbox" id="set-notif-sound"><span class="track"></span></label></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-subtab="about">
+            <div class="settings-list">
+              <div class="card">
+                <h4><span class="icon icon-info"></span>О программе</h4>
+                <div class="field-row"><div class="ft">Версия лаунчера</div><div class="about-version">1.0.0</div></div>
+                <div class="field-row"><div class="ft">Движок</div><div class="about-version">FloV:MP</div></div>
+                <div class="link-row" id="btn-check-update"><span class="icon icon-download"></span>Проверить обновления</div>
+                <div class="link-row" id="btn-open-changelog"><span class="icon icon-newspaper"></span>Список изменений</div>
+                <div class="link-row" id="btn-open-logs"><span class="icon icon-folder"></span>Открыть папку логов</div>
+                <div class="link-row" id="btn-open-site"><span class="icon icon-globe"></span>Сайт сервера</div>
+                <div class="link-row" id="btn-open-support"><span class="icon icon-help"></span>Поддержка</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
         </div>
       </div>
     </div>

@@ -8,13 +8,17 @@ const path = require('node:path');
 const OUT = process.argv[2] || '.';
 
 (async () => {
-  const app = await electron.launch({ args: ['.'], cwd: __dirname });
+  const app = await electron.launch({
+    args: ['.'],
+    cwd: __dirname,
+    env: { ...process.env, FLOVMP_SPLASH_MIN: '0' },
+  });
 
   // Теперь при старте сначала появляется отдельное окно-заставка (splash.html),
   // потом главное (index.html) — firstWindow() может поймать заставку.
   // Ждём именно окно с index.html, опрашивая app.windows().
   let win = null;
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 120; i++) {
     const pages = app.windows();
     win = pages.find((p) => p.url().includes('renderer/index.html'));
     if (win) break;
@@ -27,6 +31,14 @@ const OUT = process.argv[2] || '.';
   async function shot(name) {
     await win.screenshot({ path: path.join(OUT, `pw_${name}.png`) });
     console.log('shot:', name);
+  }
+
+  // 0. Модалка входа в лаунчере — необязательная, закрываем «Войти позже»,
+  //    чтобы она не перехватывала клики в остальных шагах.
+  const authOv = win.locator('#auth-overlay:not(.hidden)');
+  if (await authOv.count()) {
+    await win.click('#auth-skip');
+    await win.waitForTimeout(300);
   }
 
   // 1. Играть (рельс статичный)
@@ -59,11 +71,14 @@ const OUT = process.argv[2] || '.';
   await win.waitForTimeout(400);
   await shot('04-settings-modal-open');
 
-  // 4b. Вкладка «Дополнительно» внутри модалки
-  await win.click('.settings-subnav [data-subtab="extra"]');
+  // 4b. Вкладка «Игра» внутри модалки
+  await win.click('.settings-subnav [data-subtab="game"]');
   await win.waitForTimeout(200);
-  await shot('04b-settings-extra');
-  await win.click('.settings-subnav [data-subtab="main"]');
+  await shot('04b-settings-game');
+  await win.click('.settings-subnav [data-subtab="voice"]');
+  await win.waitForTimeout(200);
+  await shot('04c-settings-voice');
+  await win.click('.settings-subnav [data-subtab="general"]');
   await win.waitForTimeout(150);
 
   // 5. Настройки — прокрутка вниз (активная вкладка "Основное")
@@ -73,7 +88,10 @@ const OUT = process.argv[2] || '.';
   await win.waitForTimeout(150);
   await shot('05-settings-bottom');
 
-  // 6. Клик по акцентному пресету (blue) — живая перекраска
+  // 6. Клик по акцентному пресету (blue) — живая перекраска.
+  //    Пикер акцента живёт во вкладке «Интерфейс».
+  await win.click('.settings-subnav [data-subtab="interface"]');
+  await win.waitForTimeout(200);
   const blueSwatch = await win.$('.accent-swatch[data-accent="blue"]');
   if (blueSwatch) {
     await blueSwatch.click();

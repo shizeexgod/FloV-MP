@@ -30,3 +30,6 @@ Thumbs.db
 /tools/
 /IsolatedStorage/
 
+# Скриншоты визуальной проверки лаунчера (test-visual.js) — генерируются локально
+launcher/electron/pw_*.png
+
