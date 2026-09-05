@@ -57,21 +57,31 @@ button{ font-family: inherit; }
   color: transparent; -webkit-text-fill-color: transparent;
 }
 
-/* ---------- иконки Lucide (mask-технология — наследуют color родителя) --- */
+/* ---------- иконки (mask-технология — наследуют color родителя) --- */
+/* Решение по итогам живого сравнения с реальным Majestic Launcher (CDP-инспекция
+   24.09.05): у них ВСЕ иконки залитые (не обводка), 20x20, и цвет плавно
+   анимируется через transition:fill .2s — то есть смена состояния это ПЕРЕКРАСКА
+   одной и той же заливки, а не подмена картинки (подмену mask-image нельзя
+   анимировать плавно, откуда и ощущение "резкости", на которое жаловались).
+   Решил остаться на одном пакете для иконок рельса (не гибрид): категории
+   рельса — Phosphor Icons вес fill (те же по смыслу имена, что и раньше),
+   размер уменьшен под их 20/14=1.43em пропорцию. Остальной пак (Lucide,
+   титлбар, карточки настроек) не трогаю — не "иконки категорий". */
 .icon{
   display:inline-block; flex:0 0 auto;
   width:18px; height:18px;
   background-color: currentColor;
+  transition: background-color .2s ease;
   -webkit-mask-size: contain; mask-size: contain;
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
 }
-.icon-gamepad{ -webkit-mask-image:url('assets/icons/gamepad-2.svg'); mask-image:url('assets/icons/gamepad-2.svg'); }
-.icon-newspaper{ -webkit-mask-image:url('assets/icons/newspaper.svg'); mask-image:url('assets/icons/newspaper.svg'); }
-.icon-settings{ -webkit-mask-image:url('assets/icons/settings.svg'); mask-image:url('assets/icons/settings.svg'); }
-.icon-discord{ -webkit-mask-image:url('assets/icons/message-circle.svg'); mask-image:url('assets/icons/message-circle.svg'); }
-.icon-forum{ -webkit-mask-image:url('assets/icons/users.svg'); mask-image:url('assets/icons/users.svg'); }
-.icon-donate{ -webkit-mask-image:url('assets/icons/coins.svg'); mask-image:url('assets/icons/coins.svg'); }
+.icon-gamepad{ -webkit-mask-image:url('assets/icons/game-controller-fill.svg'); mask-image:url('assets/icons/game-controller-fill.svg'); }
+.icon-newspaper{ -webkit-mask-image:url('assets/icons/newspaper-fill.svg'); mask-image:url('assets/icons/newspaper-fill.svg'); }
+.icon-settings{ -webkit-mask-image:url('assets/icons/gear-fill.svg'); mask-image:url('assets/icons/gear-fill.svg'); }
+.icon-discord{ -webkit-mask-image:url('assets/icons/chat-circle-fill.svg'); mask-image:url('assets/icons/chat-circle-fill.svg'); }
+.icon-forum{ -webkit-mask-image:url('assets/icons/users-fill.svg'); mask-image:url('assets/icons/users-fill.svg'); }
+.icon-donate{ -webkit-mask-image:url('assets/icons/coins-fill.svg'); mask-image:url('assets/icons/coins-fill.svg'); }
 .icon-minus{ -webkit-mask-image:url('assets/icons/minus.svg'); mask-image:url('assets/icons/minus.svg'); }
 .icon-square{ -webkit-mask-image:url('assets/icons/square.svg'); mask-image:url('assets/icons/square.svg'); }
 .icon-x{ -webkit-mask-image:url('assets/icons/x.svg'); mask-image:url('assets/icons/x.svg'); }
@@ -124,14 +134,13 @@ button{ font-family: inherit; }
   font-family:'JetBrains Mono',monospace; font-size:11px; color: var(--text-faint);
   letter-spacing:.04em;
 }
-.win-controls{
-  margin-left:auto; display:flex; gap:4px; -webkit-app-region: no-drag;
-  background: var(--surface); border:1px solid var(--line-soft); border-radius:10px; padding:3px;
-}
+/* Как у реального Majestic Launcher (сверено CDP-инспекцией): отдельные
+   иконки-кнопки прямо на титлбаре, без капсулы-подложки вокруг всей группы. */
+.win-controls{ margin-left:auto; display:flex; gap:2px; -webkit-app-region: no-drag; }
 .win-btn{
-  width:28px; height:26px; border:none; background:transparent; color: var(--text-faint);
-  cursor:pointer; border-radius:7px; display:flex; align-items:center; justify-content:center;
-  transition: background .12s, color .12s;
+  width:30px; height:30px; border:none; background:transparent; color: var(--text-faint);
+  cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  transition: background-color .2s ease, color .2s ease;
 }
 .win-btn .icon{ width:13px; height:13px; }
 .win-btn:hover{ background: var(--surface-3); color: var(--text); }
@@ -148,7 +157,7 @@ button{ font-family: inherit; }
   display:flex; flex-direction:column;
   padding: 20px 0 16px;
   position: relative; z-index: 20;
-  transition: width .16s cubic-bezier(.2,.8,.3,1);
+  transition: width .28s cubic-bezier(.16,1,.3,1), box-shadow .28s ease;
   overflow: hidden;
 }
 .rail:hover{ width: var(--rail-expanded); box-shadow: 12px 0 32px -12px rgba(0,0,0,.6); }
@@ -161,14 +170,19 @@ button{ font-family: inherit; }
 }
 .rail-mark img{ width:100%; height:100%; object-fit:contain; }
 .rail-name{
-  margin-top:10px; text-align:center; opacity:0; transition: opacity .12s;
+  margin-top:10px; text-align:center; opacity:0; transition: opacity .2s ease;
   white-space: nowrap;
 }
 .rail:hover .rail-name{ opacity:1; }
 .rail-name b{ display:block; font-family:'Unbounded',sans-serif; font-weight:700; font-size:15px; }
 .rail-name span{ font-size:10px; color: var(--accent-soft); font-weight:600; }
 
-.rail-sep{ height:1px; background:var(--line-soft); margin: 20px 16px; }
+/* Линия-разделитель с плавным затуханием по краям — не глухая полоса
+   через весь рельс, читается мягче (в духе Majestic). */
+.rail-sep{
+  height:1px; margin: 20px 16px;
+  background: linear-gradient(90deg, transparent, var(--line) 15%, var(--line) 85%, transparent);
+}
 
 .rail-nav{ display:flex; flex-direction:column; gap:4px; padding: 4px 10px; }
 /* Без заливки за иконкой/строкой (как у Majestic) — активный пункт держится
@@ -177,30 +191,21 @@ button{ font-family: inherit; }
   display:flex; align-items:center; height:38px; border-radius:8px; padding:0 12px;
   color: var(--text-dim); cursor:pointer; white-space:nowrap; position:relative;
   background: transparent; border:none; text-align:left; width:100%;
-  transition: color .12s;
+  transition: color .2s ease;
 }
 .rail-item:hover{ color: var(--text); }
 .rail-item.active{ color: var(--text); font-weight:700; }
 .rail-item.active .icon{ color: var(--accent); }
-/* Точечный компромисс с Majestic: у них иконки залитые, у нас обводка
-   (Lucide) — вместо смены всего пака заливаем только 3 иконки главных
-   разделов, и только когда пункт активен/наведён (как вкладки в iOS —
-   обводка в покое, заливка при внимании). Остальной пак остаётся Lucide. */
-.rail-item.active .icon-gamepad, .rail-item:hover .icon-gamepad{
-  -webkit-mask-image:url('assets/icons/game-controller-fill.svg'); mask-image:url('assets/icons/game-controller-fill.svg');
-}
-.rail-item.active .icon-newspaper, .rail-item:hover .icon-newspaper{
-  -webkit-mask-image:url('assets/icons/newspaper-fill.svg'); mask-image:url('assets/icons/newspaper-fill.svg');
-}
-.rail-item.active .icon-settings, .rail-item:hover .icon-settings{
-  -webkit-mask-image:url('assets/icons/gear-fill.svg'); mask-image:url('assets/icons/gear-fill.svg');
-}
-.rail-item.active::before{
+.rail-item::before{
   content:""; position:absolute; left:-10px; top:8px; bottom:8px; width:3px; border-radius:3px;
   background: var(--accent);
+  transform: scaleY(.4); opacity:0;
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), opacity .18s ease;
 }
+.rail-item.active::before{ transform: scaleY(1); opacity:1; }
+.rail-item .icon{ width:16px; height:16px; }
 .rail-item .ic{ width:22px; flex:0 0 auto; font-size:15px; text-align:center; }
-.rail-item .lb{ margin-left:10px; opacity:0; transition: opacity .1s; font-size:13px; font-weight:inherit; }
+.rail-item .lb{ margin-left:10px; opacity:0; transition: opacity .2s ease; font-size:13px; font-weight:inherit; }
 .rail:hover .rail-item .lb{ opacity:1; }
 
 .rail-spacer{ flex:1; }
@@ -214,13 +219,13 @@ button{ font-family: inherit; }
   display:flex; align-items:center; justify-content:center;
   font-family:'Unbounded',sans-serif; font-weight:700; font-size:13px; color: var(--accent-ink);
 }
-.rail-account-name{ margin-top:8px; text-align:center; opacity:0; transition:opacity .12s; white-space:nowrap; }
+.rail-account-name{ margin-top:8px; text-align:center; opacity:0; transition:opacity .2s ease; white-space:nowrap; }
 .rail:hover .rail-account-name{ opacity:1; }
 .rail-account-name b{ display:block; font-size:12.5px; font-weight:600; }
 .rail-account-name span{ font-size:10px; color: var(--text-faint); }
 .rail-version{
   margin-top:10px; font-size:9px; color: var(--text-faint); text-align:center; opacity:0;
-  transition:opacity .12s; white-space:nowrap;
+  transition:opacity .2s ease; white-space:nowrap;
 }
 .rail:hover .rail-version{ opacity:1; }
 
@@ -265,8 +270,15 @@ button{ font-family: inherit; }
   display:inline-flex; align-items:center; gap:7px; background: rgba(16,16,16,.55);
   border-radius:7px; padding:6px 11px; font-size:11.5px; margin-bottom:10px;
 }
-.status-dot{ width:7px; height:7px; border-radius:50%; background: var(--bad); }
-.status-dot.online{ background: var(--good); box-shadow:0 0 8px var(--good); }
+/* "Halo + core" — как их двухслойный статус-индикатор: сплошная точка
+   (core) + мягкое пульсирующее кольцо (halo), а не статичное свечение. */
+.status-dot{ width:7px; height:7px; border-radius:50%; background: var(--bad); flex-shrink:0; }
+.status-dot.online{ background: var(--good); animation: statusHalo 2.2s ease-out infinite; }
+@keyframes statusHalo{
+  0%   { box-shadow: 0 0 0 0 rgba(53,209,154,.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(53,209,154,0); }
+  100% { box-shadow: 0 0 0 0 rgba(53,209,154,0); }
+}
 .server-name{
   font-family:'Unbounded',sans-serif; font-weight:900; font-size:36px; margin:0 0 4px;
   text-shadow: 0 6px 20px rgba(0,0,0,.65);
@@ -280,7 +292,7 @@ button{ font-family: inherit; }
   background: linear-gradient(135deg, var(--accent-soft), var(--accent));
   color: var(--accent-ink); font-family:'Unbounded',sans-serif; font-weight:800; font-size:15px;
   box-shadow: 0 12px 28px -8px var(--accent-shadow);
-  transition: transform .1s, box-shadow .1s;
+  transition: transform .18s ease, box-shadow .18s ease;
 }
 .btn-play:hover{ transform: translateY(-1px); box-shadow: 0 16px 34px -8px var(--accent-shadow-strong); }
 .btn-play:active{ transform: translateY(0); }
@@ -328,7 +340,7 @@ button{ font-family: inherit; }
 .news-full-list{ overflow-y:auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:14px; padding-right:8px; }
 .news-full-card{
   background: var(--surface); border:1px solid var(--line-soft); border-radius:10px; padding:16px 20px;
-  display:flex; gap:16px; align-items:center; transition: border-color .15s, transform .15s;
+  display:flex; gap:16px; align-items:center; transition: border-color .2s ease, transform .2s ease;
 }
 .news-full-card:hover{ border-color: var(--line-hover); transform: translateY(-1px); }
 .news-full-card .news-thumb{ width:64px; height:64px; border-radius:10px; flex-shrink:0; }
@@ -426,12 +438,12 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .accent-swatch{
   width:30px; height:30px; border-radius:50%; cursor:pointer; position:relative;
   border:none; padding:0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
-  transition: transform .12s;
+  transition: transform .18s ease;
 }
 .accent-swatch:hover{ transform: scale(1.08); }
 .accent-swatch::before{
   content:""; position:absolute; inset:-5px; border-radius:50%;
-  border:2px solid transparent; transition: border-color .15s;
+  border:2px solid transparent; transition: border-color .2s ease;
 }
 .accent-swatch.selected::before{ border-color: var(--text); }
 .accent-swatch .icon{ display:none; }
