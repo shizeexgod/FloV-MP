@@ -1,27 +1,26 @@
-/* Запасной свободный шрифт (близок к Proxima Nova). Основной — ProximaNova
-   из @font-face ниже; .ttf в репо не кладём (коммерческий), см.
-   assets/fonts/README.md. */
+/* Proxima Nova — шрифты предоставлены владельцем (C:\Users\User\Downloads\
+   Proxima Nova, с Copyright.txt), см. assets/fonts/. Mulish — запасной. */
 @import url('https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&display=swap');
 
 @font-face{
   font-family: ProximaNova;
   src: url("./assets/fonts/ProximaNova-Regular.ttf") format("truetype");
-  font-weight: 400; font-display: swap;
+  font-weight: 400 500; font-display: swap;
 }
 @font-face{
   font-family: ProximaNova;
-  src: url("./assets/fonts/ProximaNova-Semibold.ttf") format("truetype");
-  font-weight: 500 600; font-display: swap;
+  src: url("./assets/fonts/ProximaNova-Bold.otf") format("opentype");
+  font-weight: 600 700; font-display: swap;
 }
 @font-face{
   font-family: ProximaNova;
-  src: url("./assets/fonts/ProximaNova-Bold.ttf") format("truetype");
-  font-weight: 700; font-display: swap;
+  src: url("./assets/fonts/ProximaNova-ExtraBold.otf") format("opentype");
+  font-weight: 800; font-display: swap;
 }
 @font-face{
   font-family: ProximaNova;
-  src: url("./assets/fonts/ProximaNova-Black.ttf") format("truetype");
-  font-weight: 800 900; font-display: swap;
+  src: url("./assets/fonts/ProximaNova-Black.otf") format("opentype");
+  font-weight: 900; font-display: swap;
 }
 
 :root{
@@ -92,11 +91,7 @@ body{
 ::selection{ background: var(--accent-color); color: var(--accent-ink); }
 
 /* Тонкий градиент белый → акцент для заголовков (умеренно, как просил владелец). */
-.text-gradient{
-  background: linear-gradient(100deg, #ffffff 45%, var(--accent-color));
-  -webkit-background-clip: text; background-clip: text;
-  color: transparent; -webkit-text-fill-color: transparent;
-}
+.text-gradient{ color:#fff; }
 
 /* ---------- иконки (mask-технология — наследуют color родителя) --- */
 /* Финальное решение владельца (2026-09-05): везде Lucide (обводка), не
@@ -178,12 +173,13 @@ body{
   position: absolute; top: 0; left: 0; right: 0; z-index: 30;
   background: transparent;
 }
-.titlebar .brand{
-  display:none;
+.titlebar .brand{ display:none; }
+/* Отдельные иконки-кнопки прямо на титлбаре + версия слева от них. */
+.win-controls{ margin-left:auto; display:flex; align-items:center; gap:2px; -webkit-app-region: no-drag; }
+.win-version{
+  font-family: var(--ui-font); font-size:12px; color: var(--white-400);
+  margin-right:12px; letter-spacing:.01em;
 }
-/* Как у реального Majestic Launcher (сверено CDP-инспекцией): отдельные
-   иконки-кнопки прямо на титлбаре, без капсулы-подложки вокруг всей группы. */
-.win-controls{ margin-left:auto; display:flex; gap:2px; -webkit-app-region: no-drag; }
 .win-btn{
   width:30px; height:30px; border:none; background:transparent; color: var(--text-faint);
   cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center;
@@ -229,13 +225,15 @@ body{
   background: transparent; border:none;
   transition: color .2s ease, background-color .2s ease;
 }
-.rail-item:hover{ color: var(--text-dim); background: var(--surface); }
-.rail-item.active{ color: var(--accent); }
+.rail-item:hover{ color: var(--white-700); }
+.rail-item:hover .icon{ transform: scale(1.08); }
+.rail-item.active{ color: var(--accent-color); }
+.rail-item.active .icon{ transform: scale(1.12); }
 .rail-item.active::before{
   content:""; position:absolute; left:-12px; top:11px; bottom:11px; width:3px; border-radius:3px;
   background: var(--accent);
 }
-.rail-item .icon{ width:19px; height:19px; }
+.rail-item .icon{ width:19px; height:19px; transition: background-color .2s ease, transform .22s cubic-bezier(.34,1.56,.64,1); }
 
 /* ---------- Ресурсы: иконка + флайаут ВНИЗ ---------- */
 .rail-resources{ position:relative; }
@@ -289,14 +287,11 @@ body{
 /* ===== Играть — список серверов слева, новости справа (как у Majestic) ===== */
 #page-play{ padding:24px 28px; }
 .play-grid{
-  display:grid; grid-template-columns: minmax(320px, 1fr) minmax(300px, 380px);
-  gap:28px; height:100%; align-items:start;
+  display:grid; grid-template-columns: 340px 1fr;
+  gap:26px; height:100%; align-items:start;
 }
 .page-h{
-  font-family: var(--ui-font); font-weight:700; font-size:19px; margin:0 0 18px;
-  background: linear-gradient(100deg,#ffffff 40%,var(--accent-soft));
-  -webkit-background-clip:text; background-clip:text;
-  color:transparent; -webkit-text-fill-color:transparent;
+  font-family: var(--ui-font); font-weight:700; font-size:18px; margin:0 0 16px; color:#fff;
 }
 .srv-group{ display:flex; flex-direction:column; gap:10px; }
 .srv-group-head{
@@ -304,17 +299,15 @@ body{
   text-transform:uppercase; color: var(--text-faint); margin-bottom:2px;
 }
 .server-row{
-  display:flex; align-items:center; gap:14px;
-  background:
-    linear-gradient(180deg, rgba(var(--accent-color-rgb), .06) 0%, transparent 80%),
-    var(--bg-secondary-color);
-  border:1px solid var(--white-100); border-radius: var(--r-lg);
-  padding:14px 16px; position:relative; overflow:hidden;
-  transition: border-color .2s ease;
+  display:flex; align-items:center; gap:10px;
+  background: var(--bg-secondary-color);
+  border:1px solid var(--white-100); border-radius: var(--r-md);
+  padding:9px 12px; position:relative; overflow:hidden;
+  transition: border-color .18s ease, background-color .18s ease;
 }
-.server-row:hover{ border-color: var(--white-200); }
+.server-row:hover{ border-color: var(--white-200); background: var(--surface-color); }
 .server-row::before{
-  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  content:""; position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:0 3px 3px 0;
   background: var(--accent-color); opacity:0; transition: opacity .2s ease;
 }
 .server-row.is-recommended::before{ opacity:1; }
@@ -326,20 +319,20 @@ body{
   100%{ box-shadow:0 0 0 0 rgba(63,185,80,0); }
 }
 .srv-icon{
-  width:38px; height:38px; border-radius: var(--r-sm); flex:0 0 auto;
+  width:30px; height:30px; border-radius: var(--r-sm); flex:0 0 auto;
   background: var(--surface-color); border:1px solid var(--white-100);
   display:flex; align-items:center; justify-content:center;
 }
-.srv-icon .icon{ width:18px; height:18px; color: var(--accent-color); }
+.srv-icon .icon{ width:15px; height:15px; color: var(--white-700); }
 .srv-info{ flex:1; min-width:0; }
-.srv-info b{ display:block; font-size:15px; font-weight:600; color:#fff; }
+.srv-info b{ display:block; font-size:13.5px; font-weight:600; color:#fff; }
 .srv-play{
   flex:0 0 auto; border:none; cursor:pointer; border-radius: var(--r-sm);
-  background: var(--accent-color); color: var(--accent-ink);
-  font-family: var(--ui-font); font-weight:700; font-size:13px; text-transform:uppercase;
-  letter-spacing:.02em; padding:10px 24px; transition: filter .16s ease, transform .16s ease;
+  background: var(--surface-color); color:#fff;
+  font-family: var(--ui-font); font-weight:700; font-size:11px; text-transform:uppercase;
+  letter-spacing:.04em; padding:7px 16px; transition: background-color .16s ease, color .16s ease;
 }
-.srv-play:hover{ filter: brightness(1.08); }
+.srv-play:hover{ background: var(--accent-color); color: var(--accent-ink); }
 .srv-play:active{ transform: scale(.98); }
 .srv-play:disabled{ opacity:.5; cursor:default; }
 .status-msg{ font-size:11px; color: var(--text-dim); }
@@ -354,20 +347,22 @@ body{
 .play-news-list{ display:flex; flex-direction:column; gap:12px; overflow-y:auto; padding-right:4px; }
 .pnews-card{
   display:flex; flex-direction:column; text-align:left; cursor:pointer; width:100%;
-  background: var(--surface); border:1px solid var(--line-soft); border-radius: var(--r-md);
-  overflow:hidden; font:inherit;
+  background: var(--bg-secondary-color); border:1px solid var(--white-100); border-radius: var(--r-lg);
+  overflow:hidden; position:relative; font:inherit;
   transition: border-color .2s ease, transform .2s ease;
 }
-.pnews-card:hover{ border-color: var(--line); transform: translateY(-2px); }
+.pnews-card:hover{ border-color: var(--white-200); transform: translateY(-2px); }
 .pnews-thumb{
-  height:96px; background: linear-gradient(135deg, var(--accent-dim), var(--surface-3) 70%);
-  border-bottom:1px solid var(--line-soft);
+  height:110px; width:100%;
+  background: linear-gradient(135deg, rgba(var(--accent-color-rgb),.28), var(--surface-3) 70%);
 }
-.pnews-body{ padding:12px 14px 13px; display:flex; flex-direction:column; gap:7px; }
+.pnews-body{ padding:14px; display:flex; flex-direction:column; gap:7px; }
 .pnews-tag{
-  align-self:flex-start; font-family: var(--ui-font); font-size:8.5px; font-weight:700;
-  letter-spacing:.06em; text-transform:uppercase; color: var(--accent);
-  background: var(--surface-3); border-radius: var(--r-sm); padding:3px 7px;
+  position:absolute; top:10px; left:10px; z-index:2;
+  font-family: var(--ui-font); font-size:9px; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase; color: var(--accent-ink);
+  background: var(--accent-color); border-radius: var(--r-sm); padding:3px 8px;
+  box-shadow: 0 4px 12px -4px rgba(0,0,0,.5);
 }
 .pnews-t{ font-size:13px; font-weight:600; line-height:1.35; color:#fff; }
 .pnews-meta{
@@ -394,13 +389,10 @@ body{
 }
 
 #page-news h2, .settings-box-head h2{
-  font-family: var(--ui-font); font-weight:700; font-size:19px; margin:0;
-  display:flex; align-items:center; gap:10px;
-  background: linear-gradient(100deg,#ffffff 40%,var(--accent-soft));
-  -webkit-background-clip:text; background-clip:text;
-  color:transparent; -webkit-text-fill-color:transparent;
+  font-family: var(--ui-font); font-weight:700; font-size:18px; margin:0; color:#fff;
+  display:flex; align-items:center; gap:12px;
 }
-#page-news h2 .icon, .settings-box-head h2 .icon{ -webkit-text-fill-color: initial; color: var(--accent); }
+#page-news h2 .icon, .settings-box-head h2 .icon{ width:18px; height:18px; flex:0 0 auto; color: var(--accent-color); }
 /* 2-3 карточки в строку, картинка сверху — почти как у Majestic */
 .news-full-list{
   overflow-y:auto; display:grid;
@@ -409,15 +401,18 @@ body{
 }
 .news-full-card{
   display:flex; flex-direction:column; text-align:left; cursor:pointer; width:100%; font:inherit;
-  background: var(--surface); border:1px solid var(--line-soft); border-radius: var(--r-md);
-  overflow:hidden; transition: border-color .2s ease, transform .2s ease;
+  background: var(--bg-secondary-color); border:1px solid var(--white-100); border-radius: var(--r-lg);
+  overflow:hidden; position:relative; transition: border-color .2s ease, transform .2s ease;
 }
-.news-full-card:hover{ border-color: var(--line); transform: translateY(-2px); }
+.news-full-card:hover{ border-color: var(--white-200); transform: translateY(-2px); }
 .news-full-card .news-thumb{
-  height:150px; width:100%; border-bottom:1px solid var(--line-soft);
-  background: linear-gradient(135deg, var(--accent-dim), var(--surface-3) 70%);
+  height:160px; width:100%;
+  background: linear-gradient(135deg, rgba(var(--accent-color-rgb),.28), var(--surface-3) 70%);
 }
-.nfc-body{ padding:14px 16px 15px; display:flex; flex-direction:column; gap:8px; flex:1; }
+.news-full-card .news-tag{
+  position:absolute; top:12px; left:12px; z-index:2; margin:0;
+}
+.nfc-body{ padding:16px; display:flex; flex-direction:column; gap:8px; flex:1; }
 .news-full-card .t{ font-size:14.5px; font-weight:600; line-height:1.3; color:#fff; }
 .news-full-card .d{ font-size:11px; color: var(--text-faint); }
 .news-full-meta{ display:flex; align-items:center; gap:14px; margin-top:auto; padding-top:4px; }
@@ -433,9 +428,9 @@ body{
   flex:1; min-width:200px; position:relative; display:flex; align-items:center;
 }
 .news-search-wrap .icon{
-  position:absolute; left:12px; width:14px; height:14px; color: var(--text-faint); pointer-events:none;
+  position:absolute; left:14px; width:15px; height:15px; color: var(--white-400); pointer-events:none;
 }
-.news-search-wrap input{ padding-left:34px; }
+.news-search-wrap input{ padding-left:40px; }
 .news-toolbar select{ min-width:150px; }
 
 /* ===== Настройки ===== */
@@ -451,9 +446,10 @@ body{
 .settings-overlay{
   position:fixed; inset:0; z-index:70; background: rgba(5,5,5,.55);
   backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
-  padding:24px; animation: modalFadeIn .2s ease forwards;
+  padding:24px;
 }
-.settings-overlay.hidden{ display:none; }
+.settings-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
+.settings-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 .settings-box{
   width:920px; max-width:96%; height:640px; max-height:90vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; flex-direction:column;
@@ -551,7 +547,8 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   position:absolute; inset:0; z-index:50; background: rgba(6,6,6,.9);
   display:flex; align-items:center; justify-content:center;
 }
-.auth-overlay.hidden{ display:none; }
+.auth-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
+.auth-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 .auth-box{
   width:380px; background: var(--surface); border:1px solid var(--line); border-radius:12px; padding:32px;
   position:relative;
@@ -598,9 +595,10 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 
 /* ---------- карточки новостей (теги и текст) ---------- */
 .news-tag{
-  display:inline-block; font-family: var(--ui-font); font-size:9.5px; font-weight:700;
-  letter-spacing:.06em; color: var(--accent); background: var(--surface-3);
-  padding:3px 8px; border-radius: var(--r-sm); margin-bottom:6px; text-transform:uppercase;
+  display:inline-block; font-family: var(--ui-font); font-size:10px; font-weight:700;
+  letter-spacing:.04em; color: var(--accent-ink); background: var(--accent-color);
+  padding:4px 10px; border-radius: var(--r-sm); text-transform:uppercase;
+  box-shadow: 0 4px 12px -4px rgba(0,0,0,.5);
 }
 .news-full-card .summary{
   font-size:12px; color: var(--text-dim); margin:4px 0 6px; line-height:1.4;
@@ -610,9 +608,10 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .cabinet-overlay{
   position:fixed; inset:0; z-index:70; background: rgba(5,5,5,.8);
   backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
-  padding:24px; animation: modalFadeIn .2s ease forwards;
+  padding:24px;
 }
-.cabinet-overlay.hidden{ display:none; }
+.cabinet-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
+.cabinet-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 .cabinet-box{
   width:720px; max-width:94%; height:520px; max-height:88vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; overflow:hidden;
@@ -660,9 +659,10 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .news-modal-overlay{
   position:absolute; inset:0; z-index:60; background: rgba(5,5,5,.8);
   backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
-  padding:24px; animation: modalFadeIn .2s ease forwards;
+  padding:24px;
 }
-.news-modal-overlay.hidden{ display:none; }
+.news-modal-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
+.news-modal-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 .news-modal-box{
   width:640px; max-width:92%; max-height:85vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; flex-direction:column;
@@ -740,7 +740,8 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 
 /* ─── Модалка запуска / загрузки файлов ─── */
 .launch-overlay{ position:fixed; inset:0; z-index:1000; display:grid; place-items:center; }
-.launch-overlay.hidden{ display:none; }
+.launch-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
+.launch-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 .launch-backdrop{
   position:absolute; inset:0; background: rgba(11,11,11,.55); backdrop-filter: blur(8px);
 }

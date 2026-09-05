@@ -303,7 +303,7 @@ function renderAccentPicker() {
   const el = document.getElementById('accent-picker');
   el.innerHTML = ACCENTS.map(
     (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}"
-      style="background:linear-gradient(135deg, ${a.soft}, ${a.accent} 55%, ${a.deep})">
+      style="background:${a.accent}">
       <span class="icon icon-check"></span></button>`
   ).join('');
   el.querySelectorAll('.accent-swatch').forEach((btn) => {
