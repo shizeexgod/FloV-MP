@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,10 +36,11 @@ if (opts is null) return 1;
 
 var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname) = opts.Value;
 
-var altvExe = Path.Combine(clientDir, "altv.exe");
+var flovmpExe = Path.Combine(clientDir, "flovmp.exe");
+var altvExe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(clientDir, "altv.exe");
 if (!File.Exists(altvExe))
 {
-    Console.Error.WriteLine($"[err] Не найден altv.exe в папке {clientDir}");
+    Console.Error.WriteLine($"[err] Не найден исполняемый файл клиента в папке {clientDir} (ожидался flovmp.exe или altv.exe)");
     return 2;
 }
 
@@ -194,16 +197,26 @@ try
 
     // 4) Ждём завершения
     var gtaSeen = false;
+    const string windowTitle = "Держава Онлайн (FloV:MP)";
     while (true)
     {
-        var altvUp = IsUp("altv.exe");
+        var altvUp = IsUp("altv.exe") || IsUp("flovmp.exe");
         var gtaUp = IsUp("GTA5.exe") || IsUp("GTA5_Enhanced.exe");
-        if (gtaUp) gtaSeen = true;
+        if (gtaUp)
+        {
+            gtaSeen = true;
+            UpdateGameWindowTitle(windowTitle);
+        }
+        else if (altvUp)
+        {
+            UpdateGameWindowTitle(windowTitle);
+        }
+
         if (gtaSeen && !gtaUp) break;
         if (!gtaSeen && !altvUp)
         {
             await Task.Delay(3000);
-            if (!IsUp("altv.exe") && !IsUp("GTA5.exe") && !IsUp("GTA5_Enhanced.exe")) break;
+            if (!IsUp("altv.exe") && !IsUp("flovmp.exe") && !IsUp("GTA5.exe") && !IsUp("GTA5_Enhanced.exe")) break;
         }
         await Task.Delay(500);
     }
@@ -217,6 +230,47 @@ if (keepOpen) { Console.WriteLine("Нажмите Enter для выхода...")
 return 0;
 
 // --- helpers ---------------------------------------------------------
+
+[DllImport("user32.dll", EntryPoint = "SetWindowTextW", CharSet = CharSet.Unicode, SetLastError = true)]
+static extern bool SetWindowText(IntPtr hWnd, string lpString);
+
+[DllImport("user32.dll", SetLastError = true)]
+static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+[DllImport("user32.dll")]
+static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+static void UpdateGameWindowTitle(string newTitle)
+{
+    try
+    {
+        var targetPids = new HashSet<int>();
+        foreach (var name in new[] { "GTA5", "GTA5_Enhanced", "flovmp", "altv" })
+        {
+            foreach (var p in Process.GetProcessesByName(name))
+            {
+                targetPids.Add(p.Id);
+                if (p.MainWindowHandle != IntPtr.Zero)
+                {
+                    SetWindowText(p.MainWindowHandle, newTitle);
+                }
+            }
+        }
+
+        if (targetPids.Count > 0)
+        {
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (GetWindowThreadProcessId(hWnd, out var pid) != 0 && targetPids.Contains((int)pid))
+                {
+                    SetWindowText(hWnd, newTitle);
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+    }
+    catch { }
+}
 
 static bool IsUp(string name)
 {
@@ -363,3 +417,6 @@ static string? PromptUserForGtaFolder()
     thread.Join();
     return selected;
 }
+
+delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
