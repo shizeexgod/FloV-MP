@@ -21,6 +21,7 @@ namespace FloVMP.Gamemode;
 /// </summary>
 public sealed class AuthSystem
 {
+    private readonly IAccountStore _store;
     private readonly AuthService _auth;
     private readonly ConcurrentDictionary<uint, Account> _authed = new();
     // accountId → playerId: не пускаем один аккаунт с двух клиентов
@@ -29,13 +30,19 @@ public sealed class AuthSystem
 
     public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
     {
-        _auth = new AuthService(new JsonAccountStore(accountsPath));
+        _store = new JsonAccountStore(accountsPath);
+        _auth = new AuthService(_store);
         _onAuthed = onAuthed;
     }
 
     /// <summary>Аккаунт вошедшего игрока, либо null.</summary>
     public Account? AccountOf(IPlayer player) =>
         _authed.TryGetValue(player.Id, out var a) ? a : null;
+
+    /// <summary>Сохранить изменения аккаунта (мут, бан, уровень админа, баланс).</summary>
+    public void SaveAccount(Account acc) => _store.Update(acc);
+
+    public Account? FindByName(string username) => _store.FindByUsername(username);
 
     public void Attach()
     {

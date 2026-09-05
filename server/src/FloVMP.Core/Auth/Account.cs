@@ -14,6 +14,25 @@ public sealed class Account
 
     public const long StartingCash = 5000;
 
+    /// <summary>Уровень администратора от 0 (игрок) до 8 (Руководитель проекта).</summary>
+    public int AdminLevel { get; set; } = 0;
+
+    /// <summary>Флаг блокировки аккаунта.</summary>
+    public bool IsBanned { get; set; } = false;
+    public string BanReason { get; set; } = "";
+    public string BanUntilUtc { get; set; } = "";
+
+    /// <summary>Время окончания блокировки чата (ISO 8601 string, пустая если мута нет).</summary>
+    public string MuteUntilUtc { get; set; } = "";
+
+    public bool IsMuted(DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(MuteUntilUtc)) return false;
+        if (DateTime.TryParse(MuteUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var until))
+            return nowUtc < until;
+        return false;
+    }
+
     /// <summary>Правила имени пользователя (общие для клиента и сервера).</summary>
     public static bool IsValidUsername(string? name) =>
         !string.IsNullOrWhiteSpace(name)

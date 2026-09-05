@@ -51,7 +51,10 @@ public class GamemodeResource : Resource
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
 
-        _chat = new ChatSystem(p => _auth.AccountOf(p));
+        _chat = new ChatSystem(
+            accountOf: p => _auth.AccountOf(p),
+            saveAccount: acc => _auth.SaveAccount(acc),
+            findAccountByName: name => _auth.FindByName(name));
         _chat.Attach();
 
         _console = new ConsoleCommands(

@@ -10,18 +10,18 @@ public static class ServerStatusService
 
     public static async Task<ServerStatusResult> CheckAsync(string host, int port)
     {
-        try
+        var urls = new[] { $"http://{host}:{port}/info", $"http://{host}/info" };
+        foreach (var url in urls)
         {
-            var url = $"http://{host}:{port}/info";
-            var response = await Http.GetStringAsync(url).ConfigureAwait(false);
-            var players = ExtractInt(response, "\"players\"");
-            var maxPlayers = ExtractInt(response, "\"maxPlayers\"");
-            return new ServerStatusResult(true, players, maxPlayers);
+            try
+            {
+                var response = await Http.GetStringAsync(url).ConfigureAwait(false);
+                var players = ExtractInt(response, "\"players\"");
+                var maxPlayers = ExtractInt(response, "\"maxPlayers\"");
+                return new ServerStatusResult(true, players, maxPlayers > 0 ? maxPlayers : 128);
+            }
+            catch { }
         }
-        catch (HttpRequestException) { }
-        catch (TaskCanceledException) { }
-        catch (SocketException) { }
-        catch { }
         return new ServerStatusResult(false, 0, 0);
     }
 

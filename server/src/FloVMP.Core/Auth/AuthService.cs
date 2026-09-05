@@ -9,6 +9,7 @@ public enum AuthOutcome
     UserNotFound,
     WrongPassword,
     RateLimited,
+    Banned,
 }
 
 public sealed record AuthResult(AuthOutcome Outcome, string Message, Account? Account = null)
@@ -69,6 +70,12 @@ public sealed class AuthService
 
         if (!PasswordHasher.Verify(password, acc.PasswordHash))
             return Fail(throttleKey, AuthOutcome.WrongPassword, "неверный пароль");
+
+        if (acc.IsBanned)
+        {
+            var reason = string.IsNullOrEmpty(acc.BanReason) ? "нарушение правил сервера" : acc.BanReason;
+            return new AuthResult(AuthOutcome.Banned, $"Аккаунт заблокирован: {reason}", acc);
+        }
 
         ClearAttempts(throttleKey);
         acc.LastLoginUtc = _now().ToString("O");

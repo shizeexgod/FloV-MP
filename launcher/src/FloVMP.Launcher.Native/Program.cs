@@ -64,14 +64,16 @@ internal static class Program
         "browseFolder" => BrowseFolder(),
 
         "serverStatus" => ServerStatusService
-            .CheckAsync(req?["host"]?.GetValue<string>() ?? "127.0.0.1", req?["port"]?.GetValue<int>() ?? 7788)
+            .CheckAsync(req?["host"]?.GetValue<string>() ?? "188.127.229.224", req?["port"]?.GetValue<int>() ?? 7788)
             .GetAwaiter().GetResult(),
 
         "play" => PlayService.Launch(
             req?["gtaPath"]?.GetValue<string>() ?? "",
-            req?["host"]?.GetValue<string>() ?? "127.0.0.1",
+            req?["host"]?.GetValue<string>() ?? "188.127.229.224",
             req?["port"]?.GetValue<int>() ?? 7788,
             req?["nickname"]?.GetValue<string>() ?? "Игрок"),
+
+        "deviceInfo" => DeviceInfoService.Collect(),
 
         "ping" => new { pong = true },
 
@@ -115,16 +117,21 @@ internal static class Program
         return dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK ? dlg.SelectedPath : null;
     }
 
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private static void WriteResult(TextWriter stdout, int? id, object? result)
     {
-        var payload = JsonSerializer.Serialize(new { id, ok = true, result });
+        var payload = JsonSerializer.Serialize(new { id, ok = true, result }, JsonOpts);
         stdout.WriteLine(payload);
         stdout.Flush();
     }
 
     private static void WriteError(TextWriter stdout, int? id, string error)
     {
-        var payload = JsonSerializer.Serialize(new { id, ok = false, error });
+        var payload = JsonSerializer.Serialize(new { id, ok = false, error }, JsonOpts);
         stdout.WriteLine(payload);
         stdout.Flush();
     }
