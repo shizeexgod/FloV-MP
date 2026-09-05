@@ -345,9 +345,21 @@ button{ font-family: inherit; }
 .news-full-card .d{ font-size:11px; color: var(--text-faint); margin-top:8px; }
 
 /* ===== Настройки ===== */
+/* Категории слева (Основное/Дополнительно/О программе) — по образцу
+   настоящего Majestic (CDP-инспекция показала именно такую вложенную
+   структуру внутри "Настроек", не плоский список карточек). */
+.settings-shell{ flex:1; display:flex; gap:20px; min-height:0; }
+.settings-subnav{
+  width:190px; flex:0 0 auto; display:flex; flex-direction:column; gap:2px;
+  border-right:1px solid var(--line-soft); padding-right:16px;
+}
+.settings-panels{ flex:1; min-width:0; min-height:0; position:relative; }
+.settings-tab{ display:none; height:100%; }
+.settings-tab.active{ display:block; }
+
 /* Сетка вместо фикс.колонки — карточки перестраиваются под ширину/растяг окна */
 .settings-list{
-  overflow-y:auto; display:grid; align-content:start;
+  height:100%; overflow-y:auto; display:grid; align-content:start;
   grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:14px; padding-right:8px;
 }
 .card{ background: var(--surface); border:1px solid var(--line-soft); border-radius:12px; padding:20px; }

@@ -132,12 +132,266 @@ LogEntry { id, ts_utc, category, action, actor (admin/system/player), target,
    - `/ainvite [fractionId]` (или `/ainvite [targetAdminId, fractionId]`) — инвайт администратора во фракцию сразу на **максимальный ранг** с установкой префикса его админ-уровня в рации/планшете фракции (например, `[Admin 3]`, `[Curator]`). Позволяет следящим мгновенно получать доступ к фракционному функционалу и рации без нарушения стандартной кадровой цепочки.
 
 5. **Разграничение КПЗ и Деморгана (Terminological Standard):**
-   - **`/prison [staticId, minutes, reason]`** / **`/unprison`** — **Деморган** (OOC административное наказание за нарушение правил сервера).
-   - **`/jail [playerId, minutes, reason]`** / **`/unjail`** — **КПЗ** (IC полицейский арест / камера предварительного заключения).
+   - **`/prison [id, minutes, reason]`** / **`/unprison [target, reason]`** — **Деморган** (OOC административное наказание за нарушение правил сервера). Выдается **строго по динамическому `id` онлайн игрока** в игре для молниеносной реакции на нарушение в оверхеде без необходимости искать статик. Сервер автоматически связывает `id` с постоянным `staticId` и пишет наказание в базу данных.
+   - **`/jail [id, minutes, reason]`** / **`/unjail [target, reason]`** — **КПЗ** (IC полицейский арест / камера предварительного заключения). Выполняется силами фракций МВД/Шерифов или администрацией по IC-причинам.
 
 ---
 
-### 3. Единая веб-админка на сайте проекта
+### 3. Архитектура банов и цифровая идентификация (SayonaraRP vs FloV:MP)
+
+#### 3.1. Уровни блокировок (Матрица жесткости)
+
+В экосистеме FloV:MP блокировки разделены на 5 изолированных уровней. Обычный бан персонажа не спасает от читеров и нарушителей, поэтому каждый тип блокировки бьет по строго определённому пространству идентификаторов:
+
+1. **Character Punishment (`/prison`, `/warn`, `/mute`, `/gunban`)** — привязка к персонажу (`characters.uuid` / `staticId`):
+   - Наказуемый не может играть данным персонажем (находится в изоляции деморгана или с ограничением действий), но доступ к учетной записи и другим персонажам сохраняется.
+2. **Account Ban (`/ban [target, days, reason]`)** — блокировка учетной записи (`accounts.id`):
+   - Блокирует вход по логину/паролю на сервере и в лаунчере.
+   - Сервер автоматически извлекает привязанный Social Club и заносит его во временную таблицу блокировок на тот же срок, предотвращая немедленный релог с нового свежезарегистрированного логина с того же клиента.
+3. **Social Club Ban (`/bansc [target/license, days, reason]`)** — блокировка уникального идентификатора лицензии GTA V (Rockstar Social Club ID / License):
+   - **Главное оружие против вредителей:** блокирует саму копию игры GTA V.
+   - Нарушитель не сможет зайти на сервер ни под каким аккаунтом (новым, купленным, чужим), пока физически не сменит лицензионный ключ GTA V с другим Social Club.
+4. **Hardware & Network Ban (`/banhwid`, `/macban [mac, reason]`, `/banip [ip, reason]`)** — точечная изоляция оборудования и сетевых шлюзов:
+   - `/banhwid [hwidHash, reason]` — блокировка цифрового отпечатка комплектующих ПК (материнская плата, серийные номера накопителей SSD/HDD, BIOS UUID).
+   - `/macban [macAddress, reason]` — блокировка физического адреса сетевой карты.
+   - `/banip [ipAddress, reason]` — блокировка IP/подсети (актуально при рейдах, бот-атаках и спаме VPN-пулов).
+5. **HARDBAN (`/hardban [target, reason]`) — Высшая мера наказания (Тотальная ликвидация / ЧСП):**
+   - Бьет одновременно по ВСЕМ цифровым следам нарушителя:
+     $$\text{HARDBAN} = \text{SocialClub} + \text{HWID} + \text{MAC} + \text{IP} + \text{Account} + \text{Discord ID}$$
+   - **Механизм мгновенного каскадного авто-кика мультиаккаунтов:** в тот же серверный тик, когда выписывается `/hardban`, фоновый воркер сканирует весь пул подключенных сессий (`Players.All`). Если у любого другого онлайн-игрока на сервере совпадает ХОТЯ БЫ ОДИН из хэшей (тот же HWID, тот же MAC или тот же SocialClub) — он немедленно дропается с сервера с кодом причины `Hardban Association`.
+
+---
+
+#### 3.2. Детальная спецификация команды `/bansc` (Social Club Ban)
+
+Команда называется строго **`/bansc`** (написание `/scban` запрещено и не используется).
+
+##### Синтаксис:
+```
+/bansc [target/license] [days] [reason]
+```
+
+##### Параметры:
+- `target/license` (обязательный) — полиморфный аргумент, обрабатываемый через `TargetResolver`:
+  - **Динамический ID онлайн-игрока** (например: `15`);
+  - **Статический ID персонажа** (например: `10842`);
+  - **Имя персонажа** (например: `Ivan_Petrov`);
+  - **Сырой идентификатор Social Club** (числовой SC ID или хэш лицензии).
+- `days` (обязательный) — срок блокировки в днях. Значение `0` или `-1` означает перманентный бан.
+- `reason` (обязательный) — развернутая текстовая причина бана.
+
+##### Алгоритм исполнения:
+1. **Если передан онлайн-игрок:**
+   - Из живого сокета клиента alt:V (`IPlayer`) извлекается `player.SocialClubId` (числовой идентификатор Rockstar) и сетевые реквизиты.
+   - Вычисляется `expires_at = DateTime.UtcNow.AddDays(days)` (или `NULL` при перманентном бане).
+   - Запись добавляется в таблицу `banned_social` и в кэш активных блокировок оперативной памяти.
+   - Фиксируется запись в аудит-логе: `GameLog.Punishment("bansc", admin, target, details)`.
+   - Клиент получает событие `client:showBanScreen` с отображением окна блокировки (причина, кем выдан, срок), после чего через 500 мс сокет игрока разрывается (`player.Kick("Social Club Banned")`).
+2. **Если передан офлайн-персонаж (по статику или имени):**
+   - `TargetResolver` находит запись персонажа в БД `characters`.
+   - Через `characters.account_id` извлекается учетная запись `accounts`.
+   - Из поля `accounts.social_club_id` берется лицензия нарушителя.
+   - Добавляется запись в `banned_social`.
+3. **Если передана сырая строка лицензии (Direct License Ban):**
+   - Резолвер определяет, что аргумент не является активным игроком или персонажем, а представляет собой чистый Social Club ID.
+   - Блокировка вносится напрямую в `banned_social` без необходимости привязки к аккаунту (полезно при банах по жалобам с логов античита сторонних сервисов).
+
+---
+
+#### 3.3. Архитектура разбанов (Строго по сырым значениям)
+
+Команды разбана **НЕ используют резолвер игроков**. Они принимают **сырое строковое значение** идентификатора, который был заблокирован. Это критически важно: если аккаунт нарушителя был удален, очищен или переименован, администратор всё равно должен иметь возможность снять бан с конкретного хэша:
+- **`/unban [login/static]`** — снятие блокировки с аккаунта / персонажа в `banned_accounts`.
+- **`/unbansc [socialClubId]`** — удаление записи из `banned_social`.
+- **`/unbanhwid [hwidHash]`** — удаление цифрового отпечатка из `banned_hardware`.
+- **`/unbanip [ipAddress]`** — удаление IP из таблицы сетевых блокировок.
+
+---
+
+#### 3.4. Реляционная схема базы данных (Таблицы блокировок)
+
+```sql
+-- Блокировки Rockstar Social Club
+CREATE TABLE IF NOT EXISTS banned_social (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    social_club_id VARCHAR(64) NOT NULL,
+    admin_static INT NOT NULL,
+    admin_name VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    banned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NULL, -- NULL = перманентно
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    INDEX idx_sc (social_club_id),
+    INDEX idx_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Блокировки оборудования (HWID / MAC)
+CREATE TABLE IF NOT EXISTS banned_hardware (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    hwid_hash VARCHAR(128) NOT NULL,
+    mac_address VARCHAR(32) NULL,
+    admin_static INT NOT NULL,
+    admin_name VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    banned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    INDEX idx_hwid (hwid_hash),
+    INDEX idx_mac (mac_address)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Блокировки IP-адресов и подсетей
+CREATE TABLE IF NOT EXISTS banned_ip (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ip_address VARCHAR(45) NOT NULL,
+    admin_static INT NOT NULL,
+    admin_name VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    banned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    INDEX idx_ip (ip_address)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Полная история наказаний (неудаляемый аудит)
+CREATE TABLE IF NOT EXISTS punishment_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    target_static INT NULL,
+    target_name VARCHAR(64) NOT NULL,
+    target_social_club VARCHAR(64) NULL,
+    target_hwid VARCHAR(128) NULL,
+    admin_static INT NOT NULL,
+    admin_name VARCHAR(64) NOT NULL,
+    punishment_type ENUM('prison','jail','warn','mute','gunban','ban','bansc','banhwid','hardban') NOT NULL,
+    duration_minutes INT NOT NULL, -- 0 = перманентно
+    reason VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    removed_by VARCHAR(64) NULL,
+    removed_at DATETIME NULL,
+    remove_reason VARCHAR(255) NULL,
+    INDEX idx_target (target_static),
+    INDEX idx_sc (target_social_club)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+---
+
+#### 3.5. Жизненный цикл подключения игрока (Security Handshake Pipeline)
+
+Проверка блокировок выполняется на самом раннем этапе до загрузки ресурсов клиентом (`Alt.OnPlayerConnect` / очередь подключений):
+
+```
+Подключение клиента (alt:V Client Handshake):
+   │
+   ├─ 1. IP Check:
+   │    Проверка client.Ip в in-memory кэше `banned_ip`.
+   │    Совпадение? ──ДА──> Отклонить соединение: "Ваш IP заблокирован. Причина: {reason}"
+   │
+   ├─ 2. Hardware Check:
+   │    Проверка client.HardwareIdHash и client.HardwareIdExHash в `banned_hardware`.
+   │    Совпадение? ──ДА──> Отклонить соединение: "Ваше устройство заблокировано (HWID Ban)"
+   │
+   ├─ 3. Social Club Check:
+   │    Проверка client.SocialClubId в `banned_social`.
+   │    Совпадение? ──ДА──> Отклонить соединение: "Лицензия GTA V заблокирована (/bansc)"
+   │
+   ├─ 4. Account Ban Check (при попытке авторизации):
+   │    Проверка accounts.id в `banned_accounts`.
+   │    Совпадение? ──ДА──> Ошибка авторизации: "Аккаунт заблокирован до {date}. Причина: {reason}"
+   │
+   └─ 5. Проверки пройдены успешно:
+        Выдача токена сессии, загрузка персонажей.
+```
+
+---
+
+### 4. Универсальный резолвер целей (`TargetResolver`)
+
+В SayonaraRP присутствовал критический дефект: чат-команды не умели находить офлайн-игрока по числовому `static`, а искали число только среди онлайна, требуя для офлайна вводить имя. В то же время поиск в UI искал по числу в базе данных.
+
+Во **FloV:MP** внедряется единый, отказоустойчивый алгоритм резолва, общий для:
+- Чат-команд в игре;
+- Игровой NUI-панели (F7);
+- Закрытой веб-админки на сайте;
+- Discord-бота администрации.
+
+```
+Входная строка аргумента (rawTarget):
+
+1. Аргумент парсится как целое число N?
+   ├─ ДА:
+   │   ├─ 1.1. Есть ли онлайн-игрок с dynamic Player.Id == N?
+   │   │       └─ ДА → Возвращаем онлайн-цель (приоритет оперативных команд в игре: /prison, /goto, /slap)
+   │   │
+   │   ├─ 1.2. Есть ли онлайн-игрок с CharacterId (staticId) == N?
+   │   │       └─ ДА → Возвращаем онлайн-цель по статику
+   │   │
+   │   └─ 1.3. Ищем в БД: SELECT * FROM characters WHERE uuid = N AND isdelete = 0;
+   │           ├─ НАЙДЕН → Возвращаем валидный TargetContext { IsOnline = false, StaticId = N, AccountId = ... }
+   │           └─ НЕ НАЙДЕН → Ошибка "Персонаж со статическим ID N не существует"
+   │
+2. Аргумент — текстовая строка "Firstname_Lastname" (или логин):
+   ├─ 2.1. Ищем совпадение среди активных сессий онлайн (без учета регистра, пробел == подчёркивание).
+   │       └─ НАЙДЕН → Возвращаем онлайн-цель
+   │
+   └─ 2.2. Ищем в БД: SELECT * FROM characters WHERE CONCAT(firstname, '_', lastname) LIKE @raw LIMIT 1;
+           ├─ НАЙДЕН → Возвращаем офлайн-цель по имени
+           └─ НЕ НАЙДЕН → Ошибка "Игрок не найден"
+```
+
+---
+
+### 5. Интеграция с Discord-ботом администрации
+
+Механика из SayonaraRP переносится в FloV:MP и усиливается: выдача наказаний через Discord-бота в выделенной закрытой категории — это проверенный и максимально удобный инструмент управления сервером для старшей администрации.
+
+#### 5.1. Структура Discord-сервера (Категория `🔒 АДМИНИСТРАЦИЯ`)
+Доступ выдается строго по ролям Discord, привязанным к уровню админки:
+- **`#admin-commands`** — закрытый текстовый канал для ввода слэш-команд.
+- **`#ban-logs`** — автоматический стрим всех выданных наказаний (богатые Embed-сообщения со всеми деталями).
+- **`#reports-feed`** — трансляция репортов с сервера в реальном времени с возможностью ответа через модальное окно.
+- **`#admin-audit`** — логи финансово значимых действий администрации (ТП, выдача имущества, смена прав).
+
+#### 5.2. Спецификация слэш-команд Discord-бота
+- **`/bansc [target] [days] [reason]`** — выдача Social Club бана нарушителю (онлайн или офлайн).
+- **`/hardban [target] [reason]`** — выдача тотального перманентного бана по всем параметрам с каскадным авто-киком.
+- **`/prison [target] [minutes] [reason]`** — отправка игрока в деморган.
+- **`/unbansc [socialclub_id] [reason]`** — амнистия Social Club по сырому ID.
+- **`/unban [static_or_login] [reason]`** — снятие блокировки аккаунта.
+- **`/history [target]`** — выгрузка полного послужного списка наказаний игрока прямо в Embed Discord.
+- **`/check [target]`** — полное досье: статус онлайн/офлайн, статик, логин, Social Club ID, HWID хэш, IP, сумма денег (наличные + банк), фракция и ранг.
+- **`/adminstats [period]`** — сводка по работе админ-состава (репорты, баны, муты, онлайн).
+
+#### 5.3. Двусторонний сетевой мост (Discord Bridge)
+Бот и игровой сервер синхронизируются через локальный REST/WebSocket сокет с взаимной авторизацией по HMAC-токену:
+
+```
+[Discord User] ──> [/bansc target:1042 days:30 reason:Читы]
+       │
+       ▼
+[FloV:MP Discord Bot]
+       │
+       ├── Проверка прав отправителя (Роль >= Уровень 3 / Уровень 4)
+       │
+       ├── Игровой сервер ОНЛАЙН?
+       │     ├─ ДА:
+       │     │   ├─ Отправка подписанного POST /api/admin/punish { type: "bansc", target, days, reason, admin }
+       │     │   ├─ Игровой сервер исполняет наказание в том же тике;
+       │     │   ├─ Если цель в игре — вызов CEF-экрана бана и мгновенный сокет-кик;
+       │     │   └─ Сервер возвращает JSON-ответ { success: true, targetData: { ... } };
+       │     │
+       │     └─ НЕТ (Сервер на рестарте / техработах):
+       │         ├─ Fallback на прямое подключение к БД MySQL/PostgreSQL;
+       │         ├─ Запись в `banned_social` и `punishment_history`;
+       │         └─ При старте сервера нарушитель гарантированно не сможет войти.
+       │
+       ▼
+[Публикация в #ban-logs] (Embed: Нарушитель, Администратор, Тип бана, SC ID, Срок, Причина)
+```
+
+---
+
+### 6. Единая веб-админка на сайте проекта
 
 Веб-панель выносится как защищенный раздел официального сайта проекта:
 - **Единая точка входа:** администратор авторизуется на сайте (логин + пароль + обязательный 2FA / Telegram Bot confirmation).

@@ -311,6 +311,16 @@ document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
   });
 });
 
+// ─── Настройки: категории слева (Основное/Дополнительно/О программе) ───────
+document.querySelectorAll('.settings-subnav [data-subtab]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.settings-subnav [data-subtab]').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.settings-tab').forEach((t) => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`.settings-tab[data-subtab="${btn.dataset.subtab}"]`).classList.add('active');
+  });
+});
+
 // Честно: реального сервера обновлений (CDN-раздачи манифестов) пока нет,
 // поэтому кнопка не притворяется, что что-то проверила — просто говорит,
 // что проверять пока нечего, и возвращает исходный текст через паузу.
