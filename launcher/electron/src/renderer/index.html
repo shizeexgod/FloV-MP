@@ -331,15 +331,19 @@
   <div class="auth-overlay" id="auth-overlay">
     <div class="auth-box">
       <button class="cabinet-close" id="auth-skip" type="button" title="Войти позже"><span class="icon icon-x"></span></button>
-      <div class="auth-mark"><img src="assets/logo.png" alt="Держава RP"></div>
-      <h2 class="text-gradient">Держава RP</h2>
+      <img class="auth-mark" src="assets/logo.png" alt="Держава RP">
+      <h2>Держава RP</h2>
       <div class="sub" id="auth-sub">Войдите в аккаунт или зарегистрируйтесь</div>
-      <label>Логин</label>
-      <input type="text" id="auth-login">
-      <label>Пароль</label>
-      <input type="password" id="auth-password">
+      <div class="auth-field">
+        <label for="auth-login">Логин</label>
+        <input type="text" id="auth-login" autocomplete="username" placeholder="Ваш логин">
+      </div>
+      <div class="auth-field">
+        <label for="auth-password">Пароль</label>
+        <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••">
+      </div>
       <div class="auth-error" id="auth-error"></div>
-      <button class="btn-play" style="width:100%" id="btn-auth-submit">ВОЙТИ</button>
+      <button class="btn-primary" id="btn-auth-submit">Войти</button>
       <button class="btn-toggle-mode" id="btn-toggle-mode">У меня ещё нет аккаунта</button>
     </div>
   </div>
