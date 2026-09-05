@@ -364,7 +364,7 @@ button{ font-family: inherit; }
 .settings-box{
   width:920px; max-width:96%; height:640px; max-height:90vh; background: var(--surface);
   border:1px solid var(--line); border-radius:14px; display:flex; flex-direction:column;
-  overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
+  overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9);
   animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
 }
 .settings-box-head{
@@ -534,7 +534,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .cabinet-box{
   width:720px; max-width:94%; height:520px; max-height:88vh; background: var(--surface);
   border:1px solid var(--line); border-radius:14px; display:flex; overflow:hidden;
-  box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
+  box-shadow: 0 24px 60px -10px rgba(0,0,0,.9);
   animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
   position:relative;
 }
@@ -561,7 +561,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   font-size:13px; transition: color .2s ease;
 }
 .cabinet-item:hover{ color: var(--text); }
-.cabinet-item.active{ color: var(--text); font-weight:600; background: var(--accent-wash); }
+.cabinet-item.active{ color: var(--text); font-weight:600; }
 .cabinet-item.active .icon{ color: var(--accent); }
 .cabinet-spacer{ flex:1; }
 .cabinet-content{ flex:1; padding:28px; overflow-y:auto; }
@@ -584,7 +584,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .news-modal-box{
   width:640px; max-width:92%; max-height:85vh; background: var(--surface);
   border:1px solid var(--line); border-radius:14px; display:flex; flex-direction:column;
-  overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
+  overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9);
   animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
 }
 .news-modal-banner{
