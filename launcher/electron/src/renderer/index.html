@@ -24,7 +24,7 @@
          (флайаут вниз) · Настройки · профиль ─── -->
     <nav class="rail" id="rail">
       <div class="rail-logo">
-        <div class="rail-mark"><img src="assets/logo.png" alt="Держава RP"></div>
+        <img class="rail-mark" src="assets/logo.png" alt="Держава RP">
       </div>
 
       <div class="rail-sep"></div>
@@ -112,13 +112,12 @@
             <h2 class="page-h">Выберите сервер</h2>
             <div class="srv-group">
               <div class="srv-group-head">Все сервера</div>
-              <div class="server-row" id="server-row">
+              <div class="server-row is-recommended" id="server-row">
                 <span class="srv-status" id="status-dot"></span>
-                <span class="srv-icon"><span class="icon icon-gamepad"></span></span>
-                <div class="srv-info">
-                  <b>Басманный</b>
-                  <span><span id="status-text">Офлайн</span> · <span id="status-online">нет данных</span></span>
-                </div>
+                <span class="srv-icon"><span class="icon icon-mappin"></span></span>
+                <div class="srv-info"><b>Басманный</b></div>
+                <span id="status-online" hidden></span>
+                <span id="status-text" hidden></span>
                 <button class="srv-play" id="btn-play">Играть</button>
               </div>
               <div class="status-msg" id="play-status"></div>

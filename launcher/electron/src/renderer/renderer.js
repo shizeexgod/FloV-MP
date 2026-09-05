@@ -271,35 +271,28 @@ let settings = {
   accountCreatedUtc: '',
 };
 
-// ─── Акцентный цвет: фирменный золотой + пресеты на выбор ──────────────────
+// ─── Акцентный цвет — пресеты. Меняем ТОЛЬКО --accent-color и
+// --accent-color-rgb; всё остальное в styles.css выведено из них. ──────────
 const ACCENTS = [
-  { id: 'gold',   name: 'Золотой (по умолчанию)', accent: '#fdd015', soft: '#ffe873', deep: '#fc8c06', ink: '#1a1206' },
-  { id: 'pink',   name: 'Розовый',                accent: '#ff3d8a', soft: '#ff7ab3', deep: '#c21e63', ink: '#1a0410' },
-  { id: 'blue',   name: 'Голубой',                accent: '#4ac3ff', soft: '#8ddcff', deep: '#2e8fdb', ink: '#031420' },
-  { id: 'green',  name: 'Зелёный',                accent: '#3fd98a', soft: '#8af0bc', deep: '#22b86b', ink: '#031b10' },
-  { id: 'purple', name: 'Фиолетовый',              accent: '#c084fc', soft: '#ddb4ff', deep: '#9d5cf0', ink: '#1a0f26' },
-  { id: 'red',    name: 'Красный',                accent: '#ff5d5d', soft: '#ff9a9a', deep: '#e63946', ink: '#210404' },
+  { id: 'gold',   name: 'Золотой (по умолчанию)', accent: '#fdd015', ink: '#1a1206' },
+  { id: 'pink',   name: 'Розовый',                accent: '#ff3d8a', ink: '#1a0410' },
+  { id: 'blue',   name: 'Голубой',                accent: '#4ac3ff', ink: '#031420' },
+  { id: 'green',  name: 'Зелёный',                accent: '#3fd98a', ink: '#031b10' },
+  { id: 'purple', name: 'Фиолетовый',             accent: '#c084fc', ink: '#1a0f26' },
+  { id: 'red',    name: 'Красный',                accent: '#ff5d5d', ink: '#210404' },
 ];
 
-function hexToRgb(hex) {
+function hexToRgbList(hex) {
   const n = parseInt(hex.slice(1), 16);
-  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
 }
 
 function applyAccent(id) {
   const preset = ACCENTS.find((a) => a.id === id) || ACCENTS[0];
   const root = document.documentElement.style;
-  const rgb = hexToRgb(preset.accent);
-  root.setProperty('--accent', preset.accent);
-  root.setProperty('--accent-soft', preset.soft);
-  root.setProperty('--accent-deep', preset.deep);
+  root.setProperty('--accent-color', preset.accent);
+  root.setProperty('--accent-color-rgb', hexToRgbList(preset.accent));
   root.setProperty('--accent-ink', preset.ink);
-  root.setProperty('--accent-dim', preset.deep);
-  root.setProperty('--accent-wash', `rgba(${rgb},.14)`);
-  root.setProperty('--accent-hover', `rgba(${rgb},.1)`);
-  root.setProperty('--accent-glow', `rgba(${rgb},.18)`);
-  root.setProperty('--accent-shadow', `rgba(${rgb},.55)`);
-  root.setProperty('--accent-shadow-strong', `rgba(${rgb},.7)`);
 
   document.querySelectorAll('.accent-swatch').forEach((el) => {
     el.classList.toggle('selected', el.dataset.accent === preset.id);

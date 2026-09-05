@@ -1,64 +1,99 @@
-@import url('https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800;900&family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Запасной свободный шрифт (близок к Proxima Nova). Основной — ProximaNova
+   из @font-face ниже; .ttf в репо не кладём (коммерческий), см.
+   assets/fonts/README.md. */
+@import url('https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&display=swap');
+
+@font-face{
+  font-family: ProximaNova;
+  src: url("./assets/fonts/ProximaNova-Regular.ttf") format("truetype");
+  font-weight: 400; font-display: swap;
+}
+@font-face{
+  font-family: ProximaNova;
+  src: url("./assets/fonts/ProximaNova-Semibold.ttf") format("truetype");
+  font-weight: 500 600; font-display: swap;
+}
+@font-face{
+  font-family: ProximaNova;
+  src: url("./assets/fonts/ProximaNova-Bold.ttf") format("truetype");
+  font-weight: 700; font-display: swap;
+}
+@font-face{
+  font-family: ProximaNova;
+  src: url("./assets/fonts/ProximaNova-Black.ttf") format("truetype");
+  font-weight: 800 900; font-display: swap;
+}
 
 :root{
-  /* Нейтрально-серые, не сине-чёрные (R=G=B, как на реальном сайте Majestic:
-     rgb(14,14,14)/rgb(15,15,15)/rgb(19,19,19)/rgb(24,24,24) — сверено
-     get_color_palette 2026-09-04). Раньше здесь был лёгкий синий подтон
-     (#08080d — канал B выше R/G), из-за которого фон читался "тёмно-синим". */
-  --ink:#0c0c0c;
-  --surface:#141414;
-  --surface-2:#1c1c1c;
-  --surface-3:#262626;
-  --line: rgba(255,255,255,.09);
-  --line-soft: rgba(255,255,255,.05);
-  --text:#f4f2ec;
-  --text-dim:#a8a4a0;
-  --text-faint:#6e6a66;
-  /* Держава RP — золотой акцент (из LOGO.svg). Меняется в рантайме через
-     applyAccent() в renderer.js при выборе пресета в Настройках. */
-  --accent:#fdd015;
-  --accent-soft:#ffe873;
-  --accent-deep:#fc8c06;
+  /* ── База Majestic ── */
+  --bg-primary-color:#161616;
+  --bg-secondary-color:#1b1b1b;
+  --surface-color:#252525;
+  --white-050: rgba(255,255,255,.05);
+  --white-100: rgba(255,255,255,.1);
+  --white-200: rgba(255,255,255,.2);
+  --white-400: rgba(255,255,255,.4);
+  --white-500: rgba(255,255,255,.5);
+  --white-700: rgba(255,255,255,.7);
+
+  /* ── Динамический акцент — applyAccent() обновляет обе строки ── */
+  --accent-color:#fdd015;
+  --accent-color-rgb: 253, 208, 21;
   --accent-ink:#1a1206;
-  --accent-dim:#5c4708;
-  --accent-wash: rgba(253,208,21,.14);
-  --accent-hover: rgba(253,208,21,.1);
-  --accent-glow: rgba(253,208,21,.18);
-  --accent-shadow: rgba(253,208,21,.55);
-  --accent-shadow-strong: rgba(253,208,21,.7);
-  --good:#35d19a;
-  --bad:#e74c3c;
+
+  --ui-font: ProximaNova, Mulish, -apple-system, 'Segoe UI', sans-serif;
+
+  /* ── Радиусы: 12 большие карточки, 8 кнопки/инпуты ── */
+  --r-lg: 12px;
+  --r-md: 10px;
+  --r-sm: 8px;
+
+  /* ── Совместимость: старые имена → новые значения ── */
+  --ink: var(--bg-primary-color);
+  --surface: var(--bg-secondary-color);
+  --surface-2: var(--surface-color);
+  --surface-3: #2e2e2e;
+  --line: var(--white-100);
+  --line-soft: var(--white-050);
+  --line-hover: var(--white-200);
+  --text:#ffffff;
+  --text-dim: var(--white-500);
+  --text-faint: var(--white-400);
+  --accent: var(--accent-color);
+  --accent-soft: var(--accent-color);
+  --accent-deep: var(--accent-color);
+  --accent-dim: rgba(var(--accent-color-rgb), .35);
+  --accent-wash: rgba(var(--accent-color-rgb), .12);
+  --accent-hover: rgba(var(--accent-color-rgb), .1);
+  --accent-glow: rgba(var(--accent-color-rgb), .18);
+  --accent-shadow: rgba(var(--accent-color-rgb), .45);
+  --accent-shadow-strong: rgba(var(--accent-color-rgb), .6);
+  --good:#3fb950;
+  --bad:#e5484d;
   --bad-soft:#ff6b6b;
   --bad-strong:#c0392b;
 
   --rail-collapsed: 64px;
   --rail-expanded: 246px;
-
-  /* Радиусы — единая шкала, чуть мягче прежних ad-hoc значений (владелец
-     просил "совсем чуть-чуть больше"). Правь здесь — применяется везде. */
-  --r-sm: 8px;
-  --r-md: 10px;
-  --r-lg: 13px;
 }
 
 *{ box-sizing: border-box; }
 html,body{ margin:0; padding:0; height:100%; }
+body, button, input, select{
+  font-family: var(--ui-font);
+}
 body{
   background: transparent;
   color: var(--text);
-  font-family: 'Golos Text', -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;
 }
-button{ font-family: inherit; }
-::selection{ background: var(--accent); color: var(--accent-ink); }
+::selection{ background: var(--accent-color); color: var(--accent-ink); }
 
-/* Градиентный текст — для брендовых надписей (не для всего подряд:
-   плоский текст лучше читается там, где мало контраста с фоном, поэтому
-   на .hero-headline поверх сцены оставлен обычный белый). */
+/* Тонкий градиент белый → акцент для заголовков (умеренно, как просил владелец). */
 .text-gradient{
-  background: linear-gradient(135deg, var(--accent-soft), var(--accent) 55%, var(--accent-deep));
+  background: linear-gradient(100deg, #ffffff 45%, var(--accent-color));
   -webkit-background-clip: text; background-clip: text;
   color: transparent; -webkit-text-fill-color: transparent;
 }
@@ -107,6 +142,7 @@ button{ font-family: inherit; }
 .icon-video{ -webkit-mask-image:url('assets/icons/monitor-play.svg'); mask-image:url('assets/icons/monitor-play.svg'); }
 .icon-chevron-down{ -webkit-mask-image:url('assets/icons/chevron-down.svg'); mask-image:url('assets/icons/chevron-down.svg'); }
 .icon-download{ -webkit-mask-image:url('assets/icons/download.svg'); mask-image:url('assets/icons/download.svg'); }
+.icon-mappin{ -webkit-mask-image:url('assets/icons/map-pin.svg'); mask-image:url('assets/icons/map-pin.svg'); }
 .icon-gauge{ -webkit-mask-image:url('assets/icons/gauge.svg'); mask-image:url('assets/icons/gauge.svg'); }
 .icon-keyboard{ -webkit-mask-image:url('assets/icons/keyboard.svg'); mask-image:url('assets/icons/keyboard.svg'); }
 .icon-logout{ -webkit-mask-image:url('assets/icons/log-out.svg'); mask-image:url('assets/icons/log-out.svg'); }
@@ -176,12 +212,9 @@ button{ font-family: inherit; }
 
 .rail-logo{ display:flex; justify-content:center; }
 .rail-mark{
-  width:40px; height:40px; flex:0 0 auto; border-radius: var(--r-lg);
-  background: linear-gradient(135deg,var(--accent-soft),var(--accent) 55%,var(--accent-deep));
-  display:flex; align-items:center; justify-content:center;
-  box-shadow: 0 5px 14px -4px var(--accent-shadow);
+  width:38px; height:38px; flex:0 0 auto; object-fit:contain;
+  filter: drop-shadow(0 4px 12px rgba(var(--accent-color-rgb), .35));
 }
-.rail-mark img{ width:26px; height:26px; object-fit:contain; }
 
 .rail-sep{
   width:36px; height:1px; margin: 14px 0;
@@ -217,7 +250,7 @@ button{ font-family: inherit; }
 @keyframes resIn{ from{ opacity:0; transform: translateX(-6px); } to{ opacity:1; transform:none; } }
 .res-group{ display:flex; flex-direction:column; gap:1px; }
 .res-group-title{
-  font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em;
+  font-family: var(--ui-font); font-size:9px; letter-spacing:.1em;
   text-transform:uppercase; color: var(--text-faint); padding:4px 8px 5px;
 }
 .res-link{
@@ -241,7 +274,7 @@ button{ font-family: inherit; }
 .rail-avatar{
   width:40px; height:40px; border-radius: var(--r-lg); background: linear-gradient(135deg,var(--accent-soft),var(--accent)); flex:0 0 auto;
   display:flex; align-items:center; justify-content:center;
-  font-family:'Golos Text',sans-serif; font-weight:700; font-size:15px; color: var(--accent-ink);
+  font-family: var(--ui-font); font-weight:700; font-size:15px; color: var(--accent-ink);
 }
 .rail-nick{
   font-size:9.5px; font-weight:600; color: var(--text-dim); max-width:60px;
@@ -260,60 +293,62 @@ button{ font-family: inherit; }
   gap:28px; height:100%; align-items:start;
 }
 .page-h{
-  font-family:'Golos Text',sans-serif; font-weight:700; font-size:19px; margin:0 0 18px;
+  font-family: var(--ui-font); font-weight:700; font-size:19px; margin:0 0 18px;
   background: linear-gradient(100deg,#ffffff 40%,var(--accent-soft));
   -webkit-background-clip:text; background-clip:text;
   color:transparent; -webkit-text-fill-color:transparent;
 }
 .srv-group{ display:flex; flex-direction:column; gap:10px; }
 .srv-group-head{
-  font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.1em;
+  font-family: var(--ui-font); font-size:10.5px; letter-spacing:.1em;
   text-transform:uppercase; color: var(--text-faint); margin-bottom:2px;
 }
 .server-row{
-  display:flex; align-items:center; gap:12px;
-  background: var(--surface); border:1px solid var(--line-soft); border-radius: var(--r-md);
-  padding:12px 14px; position:relative;
-  transition: border-color .2s ease, background-color .2s ease;
+  display:flex; align-items:center; gap:14px;
+  background:
+    linear-gradient(180deg, rgba(var(--accent-color-rgb), .06) 0%, transparent 80%),
+    var(--bg-secondary-color);
+  border:1px solid var(--white-100); border-radius: var(--r-lg);
+  padding:14px 16px; position:relative; overflow:hidden;
+  transition: border-color .2s ease;
 }
-.server-row:hover{ border-color: var(--line); background: var(--surface-2); }
+.server-row:hover{ border-color: var(--white-200); }
 .server-row::before{
-  content:""; position:absolute; left:0; top:10px; bottom:10px; width:3px; border-radius:3px;
-  background: var(--accent); opacity:0; transition: opacity .2s ease;
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background: var(--accent-color); opacity:0; transition: opacity .2s ease;
 }
 .server-row.is-recommended::before{ opacity:1; }
-.srv-status{ width:8px; height:8px; border-radius:50%; background: var(--bad); flex:0 0 auto; }
-.srv-status.online{ background: var(--good); animation: statusHalo 2.2s ease-out infinite; }
+.srv-status{ width:9px; height:9px; border-radius:50%; background: var(--bad); flex:0 0 auto; }
+.srv-status.online{ background: var(--good); animation: statusHalo 2.4s ease-out infinite; }
 @keyframes statusHalo{
-  0%{ box-shadow:0 0 0 0 rgba(53,209,154,.55); }
-  70%{ box-shadow:0 0 0 7px rgba(53,209,154,0); }
-  100%{ box-shadow:0 0 0 0 rgba(53,209,154,0); }
+  0%{ box-shadow:0 0 0 0 rgba(63,185,80,.5); }
+  70%{ box-shadow:0 0 0 7px rgba(63,185,80,0); }
+  100%{ box-shadow:0 0 0 0 rgba(63,185,80,0); }
 }
 .srv-icon{
-  width:36px; height:36px; border-radius: var(--r-sm); flex:0 0 auto;
-  background: linear-gradient(135deg, var(--accent-dim), var(--surface-3) 75%);
+  width:38px; height:38px; border-radius: var(--r-sm); flex:0 0 auto;
+  background: var(--surface-color); border:1px solid var(--white-100);
   display:flex; align-items:center; justify-content:center;
 }
-.srv-icon .icon{ width:17px; height:17px; color: var(--accent-soft); }
+.srv-icon .icon{ width:18px; height:18px; color: var(--accent-color); }
 .srv-info{ flex:1; min-width:0; }
-.srv-info b{ display:block; font-size:14px; font-weight:600; color:#fff; }
-.srv-info span{ font-size:11px; color: var(--text-faint); font-family:'JetBrains Mono',monospace; }
+.srv-info b{ display:block; font-size:15px; font-weight:600; color:#fff; }
 .srv-play{
   flex:0 0 auto; border:none; cursor:pointer; border-radius: var(--r-sm);
-  background: linear-gradient(135deg, var(--accent-soft), var(--accent));
-  color: var(--accent-ink); font-family:'Golos Text',sans-serif; font-weight:700; font-size:12.5px;
-  padding:9px 20px; transition: transform .16s ease, box-shadow .16s ease;
+  background: var(--accent-color); color: var(--accent-ink);
+  font-family: var(--ui-font); font-weight:700; font-size:13px; text-transform:uppercase;
+  letter-spacing:.02em; padding:10px 24px; transition: filter .16s ease, transform .16s ease;
 }
-.srv-play:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px -8px var(--accent-shadow); }
-.srv-play:active{ transform: translateY(0); }
-.srv-play:disabled{ opacity:.6; cursor:default; transform:none; }
+.srv-play:hover{ filter: brightness(1.08); }
+.srv-play:active{ transform: scale(.98); }
+.srv-play:disabled{ opacity:.5; cursor:default; }
 .status-msg{ font-size:11px; color: var(--text-dim); }
 .status-msg.error{ color: var(--bad-soft); }
 
 /* правая колонка новостей на «Играть» */
 .play-news{ display:flex; flex-direction:column; min-height:0; }
 .play-news-head{
-  font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.1em;
+  font-family: var(--ui-font); font-size:10.5px; letter-spacing:.1em;
   text-transform:uppercase; color: var(--text-faint); margin-bottom:14px;
 }
 .play-news-list{ display:flex; flex-direction:column; gap:12px; overflow-y:auto; padding-right:4px; }
@@ -330,14 +365,14 @@ button{ font-family: inherit; }
 }
 .pnews-body{ padding:12px 14px 13px; display:flex; flex-direction:column; gap:7px; }
 .pnews-tag{
-  align-self:flex-start; font-family:'JetBrains Mono',monospace; font-size:8.5px; font-weight:700;
+  align-self:flex-start; font-family: var(--ui-font); font-size:8.5px; font-weight:700;
   letter-spacing:.06em; text-transform:uppercase; color: var(--accent);
   background: var(--surface-3); border-radius: var(--r-sm); padding:3px 7px;
 }
 .pnews-t{ font-size:13px; font-weight:600; line-height:1.35; color:#fff; }
 .pnews-meta{
   display:flex; align-items:center; gap:12px; font-size:10px; color: var(--text-faint);
-  font-family:'JetBrains Mono',monospace; margin-top:2px;
+  font-family: var(--ui-font); margin-top:2px;
 }
 
 /* ===== Новости (страница) ===== */
@@ -359,7 +394,7 @@ button{ font-family: inherit; }
 }
 
 #page-news h2, .settings-box-head h2{
-  font-family:'Golos Text',sans-serif; font-weight:700; font-size:19px; margin:0;
+  font-family: var(--ui-font); font-weight:700; font-size:19px; margin:0;
   display:flex; align-items:center; gap:10px;
   background: linear-gradient(100deg,#ffffff 40%,var(--accent-soft));
   -webkit-background-clip:text; background-clip:text;
@@ -388,7 +423,7 @@ button{ font-family: inherit; }
 .news-full-meta{ display:flex; align-items:center; gap:14px; margin-top:auto; padding-top:4px; }
 .news-count{
   display:inline-flex; align-items:center; gap:5px;
-  font-size:11px; color: var(--text-faint); font-family:'JetBrains Mono',monospace;
+  font-size:11px; color: var(--text-faint); font-family: var(--ui-font);
 }
 .news-count .icon{ width:12px; height:12px; }
 
@@ -446,7 +481,7 @@ button{ font-family: inherit; }
 }
 .card{ background: var(--surface); border:1px solid var(--line-soft); border-radius:12px; padding:20px; }
 .card h4{
-  font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; letter-spacing:.08em;
+  font-family: var(--ui-font); font-size:11px; font-weight:700; letter-spacing:.08em;
   color: var(--text-faint); text-transform:uppercase; margin:0 0 16px;
   display:flex; align-items:center; gap:8px;
 }
@@ -485,7 +520,7 @@ select{
 }
 .link-row:hover{ color: var(--accent-soft); }
 .link-row .icon{ width:14px; height:14px; }
-.about-version{ font-size:12px; color: var(--text-faint); font-family:'JetBrains Mono',monospace; }
+.about-version{ font-size:12px; color: var(--text-faint); font-family: var(--ui-font); }
 .field-label{ font-size:11px; color: var(--text-dim); margin-bottom:6px; display:block; }
 input[type="text"], input[type="number"], input[type="password"]{
   width:100%; background: var(--surface-2); border:1px solid var(--line); border-radius:7px;
@@ -549,7 +584,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   color: rgba(0,0,0,.6);
 }
 .auth-box h2{
-  font-family:'Unbounded',sans-serif; font-size:22px; text-align:center; margin:0 0 4px;
+  font-family: var(--ui-font); font-size:22px; text-align:center; margin:0 0 4px;
 }
 .auth-box .sub{ text-align:center; font-size:12px; color: var(--text-dim); margin-bottom:22px; }
 .auth-box label{ font-size:11px; color: var(--text-dim); margin-bottom:4px; display:block; }
@@ -563,7 +598,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 
 /* ---------- карточки новостей (теги и текст) ---------- */
 .news-tag{
-  display:inline-block; font-family:'JetBrains Mono',monospace; font-size:9.5px; font-weight:700;
+  display:inline-block; font-family: var(--ui-font); font-size:9.5px; font-weight:700;
   letter-spacing:.06em; color: var(--accent); background: var(--surface-3);
   padding:3px 8px; border-radius:5px; margin-bottom:6px; text-transform:uppercase;
 }
@@ -614,7 +649,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .cabinet-content{ flex:1; padding:28px; overflow-y:auto; }
 .cabinet-tab{ display:none; }
 .cabinet-tab.active{ display:block; }
-.cabinet-tab h3{ font-family:'Golos Text',sans-serif; font-weight:700; font-size:18px; margin:0 0 18px; }
+.cabinet-tab h3{ font-family: var(--ui-font); font-weight:700; font-size:18px; margin:0 0 18px; }
 .cabinet-row{
   display:flex; justify-content:space-between; align-items:center;
   padding:12px 0; border-bottom:1px solid var(--line-soft); font-size:13px;
@@ -646,7 +681,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   pointer-events:none;
 }
 .news-modal-badge{
-  font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:800;
+  font-family: var(--ui-font); font-size:10.5px; font-weight:800;
   letter-spacing:.08em; color: var(--accent); background: rgba(0,0,0,.5);
   border:1px solid var(--line); padding:5px 12px; border-radius:20px;
   position:relative; z-index:2; text-transform:uppercase;
@@ -665,11 +700,11 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   padding:24px; overflow-y:auto; flex:1;
 }
 .news-modal-content h2{
-  font-family:'Golos Text',sans-serif; font-weight:700; font-size:20px; line-height:1.25; margin:0 0 10px;
+  font-family: var(--ui-font); font-weight:700; font-size:20px; line-height:1.25; margin:0 0 10px;
 }
 .news-modal-meta{
   display:flex; align-items:center; gap:8px; font-size:11.5px; color: var(--text-faint);
-  font-family:'JetBrains Mono',monospace; margin-bottom:18px;
+  font-family: var(--ui-font); margin-bottom:18px;
 }
 .news-modal-dot{ opacity:.4; }
 .news-modal-divider{
