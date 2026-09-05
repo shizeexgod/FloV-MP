@@ -212,7 +212,7 @@ button{ font-family: inherit; }
 
 .rail-account{
   display:flex; flex-direction:column; align-items:center; padding: 16px 10px 0;
-  border-top:1px solid var(--line-soft);
+  border-top:1px solid var(--line-soft); position:relative; font:inherit;
 }
 .rail-avatar{
   width:32px; height:32px; border-radius:50%; background: var(--accent);
@@ -473,6 +473,67 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .news-full-card .summary{
   font-size:12px; color: var(--text-dim); margin:4px 0 6px; line-height:1.4;
 }
+
+/* ---------- личный кабинет (модалка: рельс-вкладки + контент, Majestic-style) --- */
+.rail-account{
+  cursor:pointer; border:none; background:transparent; width:100%;
+  transition: background-color .2s ease;
+}
+.rail-account:hover{ background: var(--accent-hover); border-radius:10px; }
+.rail-account-arrow{
+  position:absolute; right:10px; top:14px; width:13px; height:13px; color: var(--text-faint);
+  opacity:0; transition: opacity .2s ease;
+}
+.rail:hover .rail-account-arrow{ opacity:1; }
+
+.cabinet-overlay{
+  position:fixed; inset:0; z-index:70; background: rgba(5,5,5,.8);
+  backdrop-filter: blur(16px); display:flex; align-items:center; justify-content:center;
+  padding:24px; animation: modalFadeIn .2s ease forwards;
+}
+.cabinet-overlay.hidden{ display:none; }
+.cabinet-box{
+  width:720px; max-width:94%; height:520px; max-height:88vh; background: var(--surface);
+  border:1px solid var(--line); border-radius:16px; display:flex; overflow:hidden;
+  box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
+  animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
+  position:relative;
+}
+.cabinet-close{
+  position:absolute; right:14px; top:14px; z-index:2;
+  width:32px; height:32px; border-radius:50%; border:1px solid var(--line-soft);
+  background: rgba(0,0,0,.4); color: var(--text-dim); display:flex; align-items:center;
+  justify-content:center; cursor:pointer;
+  transition: background-color .2s ease, color .2s ease, transform .2s cubic-bezier(.16,1,.3,1);
+}
+.cabinet-close:hover{ background: var(--surface-3); color: var(--text); transform: rotate(90deg) scale(1.08); }
+.cabinet-close .icon{ width:16px; height:16px; }
+.cabinet-nav{
+  width:210px; flex:0 0 auto; background: var(--surface-2); border-right:1px solid var(--line-soft);
+  display:flex; flex-direction:column; padding:20px 14px;
+}
+.cabinet-who{ display:flex; align-items:center; gap:10px; padding:0 4px 16px; }
+.cabinet-who b{ display:block; font-size:13px; font-weight:600; }
+.cabinet-who span{ font-size:10.5px; color: var(--text-faint); }
+.cabinet-sep{ height:1px; margin:0 4px 12px; background: linear-gradient(90deg, transparent, var(--line) 15%, var(--line) 85%, transparent); }
+.cabinet-item{
+  display:flex; align-items:center; gap:10px; height:36px; border-radius:8px; padding:0 10px;
+  color: var(--text-dim); background:transparent; border:none; cursor:pointer; text-align:left;
+  font-size:13px; transition: color .2s ease;
+}
+.cabinet-item:hover{ color: var(--text); }
+.cabinet-item.active{ color: var(--text); font-weight:600; background: var(--accent-wash); }
+.cabinet-item.active .icon{ color: var(--accent); }
+.cabinet-spacer{ flex:1; }
+.cabinet-content{ flex:1; padding:28px; overflow-y:auto; }
+.cabinet-tab{ display:none; }
+.cabinet-tab.active{ display:block; }
+.cabinet-tab h3{ font-family:'Golos Text',sans-serif; font-weight:700; font-size:18px; margin:0 0 18px; }
+.cabinet-row{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 0; border-bottom:1px solid var(--line-soft); font-size:13px;
+}
+.cabinet-row:last-of-type{ border-bottom:none; }
 
 /* ---------- модальное окно новости (Majestic-style) ---------- */
 .news-modal-overlay{

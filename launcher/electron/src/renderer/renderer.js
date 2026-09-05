@@ -172,6 +172,7 @@ let settings = {
   notifNews: true,
   notifStatus: true,
   notifSound: false,
+  accountCreatedUtc: '',
 };
 
 // ─── Акцентный цвет: фирменный золотой + пресеты на выбор ──────────────────
@@ -262,13 +263,44 @@ SIMPLE_TOGGLES.forEach(([id, key, prop]) => {
   });
 });
 
-document.getElementById('btn-logout').addEventListener('click', () => {
+function doLogout() {
   settings.nickname = 'Игрок';
+  settings.accountCreatedUtc = '';
   applySettingsToUI();
   saveSettingsDebounced();
+  document.getElementById('cabinet-overlay').classList.add('hidden');
   document.getElementById('auth-overlay').classList.remove('hidden');
   document.getElementById('auth-login').value = '';
   document.getElementById('auth-password').value = '';
+}
+document.getElementById('btn-logout').addEventListener('click', doLogout);
+document.getElementById('cabinet-logout').addEventListener('click', doLogout);
+
+// ─── Личный кабинет: модалка со вкладками (профиль/баланс) ─────────────────
+const cabinetOverlay = document.getElementById('cabinet-overlay');
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+function openCabinet() {
+  document.getElementById('cabinet-nick').textContent = settings.nickname;
+  document.getElementById('cabinet-avatar').textContent = (settings.nickname || 'И')[0].toUpperCase();
+  document.getElementById('cab-nick').textContent = settings.nickname;
+  document.getElementById('cab-created').textContent = formatDate(settings.accountCreatedUtc);
+  cabinetOverlay.classList.remove('hidden');
+}
+document.getElementById('btn-open-cabinet').addEventListener('click', openCabinet);
+document.getElementById('cabinet-close').addEventListener('click', () => cabinetOverlay.classList.add('hidden'));
+cabinetOverlay.addEventListener('click', (e) => { if (e.target === cabinetOverlay) cabinetOverlay.classList.add('hidden'); });
+document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.cabinet-item[data-tab]').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.cabinet-tab').forEach((t) => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`.cabinet-tab[data-tab="${btn.dataset.tab}"]`).classList.add('active');
+  });
 });
 
 document.getElementById('btn-check-update').addEventListener('click', () => {
@@ -396,7 +428,11 @@ async function pollServerStatus() {
   }
 }
 
-// ─── Авторизация (локальная заглушка — как и было в WPF-версии) ───────────
+// ─── Авторизация — реальный запрос к /api/auth/{register,login} на том же
+// AuthService/accounts.json, что и в игре (см. FloVMP.ServerLauncher/Program.cs).
+// Требует запущенного alt:V-сервера (владелец это принял осознанно, 2026-09-05:
+// один аккаунт для лаунчера и игры важнее, чем офлайн-логин без сервера).
+const AUTH_API = 'http://127.0.0.1:7799/api/auth';
 let isRegisterMode = false;
 const authOverlay = document.getElementById('auth-overlay');
 
@@ -411,6 +447,7 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
   const login = document.getElementById('auth-login').value.trim();
   const password = document.getElementById('auth-password').value;
   const errorEl = document.getElementById('auth-error');
+  const submitBtn = document.getElementById('btn-auth-submit');
   errorEl.textContent = '';
 
   if (!login || !password) {
@@ -422,10 +459,31 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
     return;
   }
 
-  settings.nickname = login;
-  applySettingsToUI();
-  await window.floridaV.saveSettings(settings);
-  authOverlay.classList.add('hidden');
+  submitBtn.disabled = true;
+  const prevText = submitBtn.textContent;
+  submitBtn.textContent = 'Проверка...';
+  try {
+    const res = await fetch(`${AUTH_API}/${isRegisterMode ? 'register' : 'login'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: login, password }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      errorEl.textContent = data.message || 'Не удалось выполнить вход';
+      return;
+    }
+    settings.nickname = data.username || login;
+    settings.accountCreatedUtc = data.createdUtc || settings.accountCreatedUtc || '';
+    applySettingsToUI();
+    await window.floridaV.saveSettings(settings);
+    authOverlay.classList.add('hidden');
+  } catch (e) {
+    errorEl.textContent = 'Сервер сейчас недоступен — запусти FloV:MP и попробуй снова';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = prevText;
+  }
 });
 
 // ─── Инициализация ──────────────────────────────────────────────────────────

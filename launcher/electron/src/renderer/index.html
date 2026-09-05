@@ -39,12 +39,45 @@
         <button class="rail-item" id="btn-donate"><span class="icon icon-donate"></span><span class="lb">Донат</span></button>
       </div>
       <div class="rail-spacer"></div>
-      <div class="rail-account">
+      <button class="rail-account" id="btn-open-cabinet" type="button">
         <div class="rail-avatar" id="avatar-initial">И</div>
         <div class="rail-account-name"><b id="account-nick">Игрок</b><span>Игрок</span></div>
+        <span class="icon icon-chevron-right rail-account-arrow"></span>
         <div class="rail-version">Держава RP Launcher v1.0.0 | FloV:MP</div>
-      </div>
+      </button>
     </nav>
+
+    <!-- ─── Личный кабинет (модалка: рельс-вкладки слева + контент справа,
+         по образцу Majestic) ─── -->
+    <div class="cabinet-overlay hidden" id="cabinet-overlay">
+      <div class="cabinet-box">
+        <button class="cabinet-close" id="cabinet-close" type="button"><span class="icon icon-x"></span></button>
+        <nav class="cabinet-nav">
+          <div class="cabinet-who">
+            <div class="rail-avatar" id="cabinet-avatar">И</div>
+            <div><b id="cabinet-nick">Игрок</b><span>Изменить аватар</span></div>
+          </div>
+          <div class="cabinet-sep"></div>
+          <button class="cabinet-item active" data-tab="profile" type="button"><span class="icon icon-user"></span>Профиль</button>
+          <button class="cabinet-item" data-tab="balance" type="button"><span class="icon icon-donate"></span>Баланс</button>
+          <div class="cabinet-spacer"></div>
+          <div class="link-row" id="cabinet-logout"><span class="icon icon-logout"></span>Выйти</div>
+        </nav>
+        <div class="cabinet-content">
+          <section class="cabinet-tab active" data-tab="profile">
+            <h3>Профиль</h3>
+            <div class="cabinet-row"><span class="field-label">Никнейм</span><span id="cab-nick">—</span></div>
+            <div class="cabinet-row"><span class="field-label">Аккаунт зарегистрирован</span><span id="cab-created">—</span></div>
+            <div class="hint" style="margin-top:14px">Один аккаунт для лаунчера и игры — вход здесь работает и в игре.</div>
+          </section>
+          <section class="cabinet-tab" data-tab="balance">
+            <h3>Баланс</h3>
+            <div class="cabinet-row"><span class="field-label">Донат-баланс</span><span>0 ₽</span></div>
+            <div class="hint" style="margin-top:10px">Оплата пока не подключена — раздел появится вместе с донат-магазином.</div>
+          </section>
+        </div>
+      </div>
+    </div>
 
     <!-- ─── Контент ─── -->
     <main class="content">

@@ -21,4 +21,7 @@ public class LauncherSettings
     [JsonPropertyName("notifNews")] public bool NotifNews { get; set; } = true;
     [JsonPropertyName("notifStatus")] public bool NotifStatus { get; set; } = true;
     [JsonPropertyName("notifSound")] public bool NotifSound { get; set; } = false;
+
+    /// <summary>Дата регистрации аккаунта (ISO, из ответа /api/auth/*) — для «Личного кабинета».</summary>
+    [JsonPropertyName("accountCreatedUtc")] public string AccountCreatedUtc { get; set; } = "";
 }
