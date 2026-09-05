@@ -450,6 +450,12 @@ const AUTH_API = 'http://127.0.0.1:7799/api/auth';
 let isRegisterMode = false;
 const authOverlay = document.getElementById('auth-overlay');
 
+// Вход в лаунчере — по желанию, не обязательный шаг: можно пропустить и
+// войти уже в самой игре (тот же аккаунт, экран авторизации там свой).
+document.getElementById('auth-skip').addEventListener('click', () => {
+  authOverlay.classList.add('hidden');
+});
+
 document.getElementById('btn-toggle-mode').addEventListener('click', () => {
   isRegisterMode = !isRegisterMode;
   document.getElementById('auth-error').textContent = '';

@@ -188,7 +188,7 @@ button{ font-family: inherit; }
 /* Без заливки за иконкой/строкой (как у Majestic) — активный пункт держится
    только на левой полоске-индикаторе + цвете/весе текста и иконки. */
 .rail-item{
-  display:flex; align-items:center; height:38px; border-radius:8px; padding:0 12px;
+  display:flex; align-items:center; height:38px; border-radius:4px; padding:0 12px;
   color: var(--text-dim); cursor:pointer; white-space:nowrap; position:relative;
   background: transparent; border:none; text-align:left; width:100%;
   transition: color .2s ease;
@@ -203,7 +203,7 @@ button{ font-family: inherit; }
   transition: transform .22s cubic-bezier(.34,1.56,.64,1), opacity .18s ease;
 }
 .rail-item.active::before{ transform: scaleY(1); opacity:1; }
-.rail-item .icon{ width:16px; height:16px; }
+.rail-item .icon{ width:14px; height:14px; }
 .rail-item .ic{ width:22px; flex:0 0 auto; font-size:15px; text-align:center; }
 .rail-item .lb{ margin-left:10px; opacity:0; transition: opacity .2s ease; font-size:13px; font-weight:inherit; }
 .rail:hover .rail-item .lb{ opacity:1; }
@@ -372,19 +372,22 @@ select{
   padding:8px 10px; color: var(--text); font-size:12.5px; font-family:inherit; cursor:pointer;
 }
 /* Переключатель-пилюля (вместо квадратного чекбокса) */
-.switch{ position:relative; width:40px; height:23px; flex:0 0 auto; }
+/* Размеры и поведение сверены с реальным Majestic (CDP: input чекбокс
+   36x20, radius 10px = ровно половина высоты, transition:background-color
+   .2s, кружок всегда белый — у них меняется только цвет дорожки). */
+.switch{ position:relative; width:36px; height:20px; flex:0 0 auto; }
 .switch input{ position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; z-index:1; }
 .switch .track{
-  position:absolute; inset:0; background: var(--surface-3); border-radius:20px;
-  border:1px solid var(--line); transition: background .15s, border-color .15s;
+  position:absolute; inset:0; background: var(--surface-3); border-radius:10px;
+  transition: background-color .2s ease;
 }
 .switch .track::before{
-  content:""; position:absolute; top:2px; left:2px; width:17px; height:17px; border-radius:50%;
-  background: var(--text-dim); box-shadow:0 1px 3px rgba(0,0,0,.4);
-  transition: transform .15s, background .15s;
+  content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.4);
+  transition: transform .2s ease;
 }
-.switch input:checked + .track{ background: var(--accent); border-color: var(--accent); }
-.switch input:checked + .track::before{ transform: translateX(17px); background: var(--accent-ink); box-shadow:none; }
+.switch input:checked + .track{ background: var(--accent); }
+.switch input:checked + .track::before{ transform: translateX(16px); }
 .link-row{
   display:flex; align-items:center; gap:8px; color: var(--text-dim); font-size:12.5px;
   cursor:pointer; padding:8px 0;
@@ -393,11 +396,13 @@ select{
 .link-row .icon{ width:14px; height:14px; }
 .about-version{ font-size:12px; color: var(--text-faint); font-family:'JetBrains Mono',monospace; }
 .field-label{ font-size:11px; color: var(--text-dim); margin-bottom:6px; display:block; }
-input[type="text"], input[type="number"]{
+input[type="text"], input[type="number"], input[type="password"]{
   width:100%; background: var(--surface-2); border:1px solid var(--line); border-radius:7px;
   padding:10px 12px; color: var(--text); font-size:13px; font-family:inherit;
 }
-input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color: var(--accent-dim); }
+input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus{
+  outline:none; border-color: var(--accent-dim);
+}
 .row{ display:flex; gap:10px; }
 .row > *{ flex:1; }
 .btn-secondary{
@@ -423,6 +428,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .auth-overlay.hidden{ display:none; }
 .auth-box{
   width:380px; background: var(--surface); border:1px solid var(--line); border-radius:12px; padding:32px;
+  position:relative;
 }
 .auth-mark{
   width:64px; height:64px; margin:0 auto 16px;
@@ -479,7 +485,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
   cursor:pointer; border:none; background:transparent; width:100%;
   transition: background-color .2s ease;
 }
-.rail-account:hover{ background: var(--accent-hover); border-radius:10px; }
+.rail-account:hover{ background: var(--accent-hover); border-radius:4px; }
 .rail-account-arrow{
   position:absolute; right:10px; top:14px; width:13px; height:13px; color: var(--text-faint);
   opacity:0; transition: opacity .2s ease;
@@ -494,7 +500,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .cabinet-overlay.hidden{ display:none; }
 .cabinet-box{
   width:720px; max-width:94%; height:520px; max-height:88vh; background: var(--surface);
-  border:1px solid var(--line); border-radius:16px; display:flex; overflow:hidden;
+  border:1px solid var(--line); border-radius:14px; display:flex; overflow:hidden;
   box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
   animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
   position:relative;
@@ -517,7 +523,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .cabinet-who span{ font-size:10.5px; color: var(--text-faint); }
 .cabinet-sep{ height:1px; margin:0 4px 12px; background: linear-gradient(90deg, transparent, var(--line) 15%, var(--line) 85%, transparent); }
 .cabinet-item{
-  display:flex; align-items:center; gap:10px; height:36px; border-radius:8px; padding:0 10px;
+  display:flex; align-items:center; gap:10px; height:36px; border-radius:4px; padding:0 10px;
   color: var(--text-dim); background:transparent; border:none; cursor:pointer; text-align:left;
   font-size:13px; transition: color .2s ease;
 }
@@ -544,7 +550,7 @@ input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color
 .news-modal-overlay.hidden{ display:none; }
 .news-modal-box{
   width:640px; max-width:92%; max-height:85vh; background: var(--surface);
-  border:1px solid var(--line); border-radius:16px; display:flex; flex-direction:column;
+  border:1px solid var(--line); border-radius:14px; display:flex; flex-direction:column;
   overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9), 0 0 30px var(--accent-shadow);
   animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
 }
