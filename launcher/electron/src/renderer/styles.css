@@ -58,15 +58,12 @@ button{ font-family: inherit; }
 }
 
 /* ---------- иконки (mask-технология — наследуют color родителя) --- */
-/* Решение по итогам живого сравнения с реальным Majestic Launcher (CDP-инспекция
-   24.09.05): у них ВСЕ иконки залитые (не обводка), 20x20, и цвет плавно
-   анимируется через transition:fill .2s — то есть смена состояния это ПЕРЕКРАСКА
-   одной и той же заливки, а не подмена картинки (подмену mask-image нельзя
-   анимировать плавно, откуда и ощущение "резкости", на которое жаловались).
-   Решил остаться на одном пакете для иконок рельса (не гибрид): категории
-   рельса — Phosphor Icons вес fill (те же по смыслу имена, что и раньше),
-   размер уменьшен под их 20/14=1.43em пропорцию. Остальной пак (Lucide,
-   титлбар, карточки настроек) не трогаю — не "иконки категорий". */
+/* Финальное решение владельца (2026-09-05): везде Lucide (обводка), не
+   Phosphor fill — размер только уменьшен вслед за находкой из CDP-инспекции
+   реального Majestic Launcher (20x20 на их 14px тексте). Смена цвета между
+   состояниями по-прежнему анимируется плавно (transition:background-color
+   .2s на .icon) — это не завязано на то, обводка иконка или заливка: форма
+   SVG одна и та же во всех состояниях, меняется только currentColor. */
 .icon{
   display:inline-block; flex:0 0 auto;
   width:18px; height:18px;
@@ -76,12 +73,12 @@ button{ font-family: inherit; }
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
 }
-.icon-gamepad{ -webkit-mask-image:url('assets/icons/game-controller-fill.svg'); mask-image:url('assets/icons/game-controller-fill.svg'); }
-.icon-newspaper{ -webkit-mask-image:url('assets/icons/newspaper-fill.svg'); mask-image:url('assets/icons/newspaper-fill.svg'); }
-.icon-settings{ -webkit-mask-image:url('assets/icons/gear-fill.svg'); mask-image:url('assets/icons/gear-fill.svg'); }
-.icon-discord{ -webkit-mask-image:url('assets/icons/chat-circle-fill.svg'); mask-image:url('assets/icons/chat-circle-fill.svg'); }
-.icon-forum{ -webkit-mask-image:url('assets/icons/users-fill.svg'); mask-image:url('assets/icons/users-fill.svg'); }
-.icon-donate{ -webkit-mask-image:url('assets/icons/coins-fill.svg'); mask-image:url('assets/icons/coins-fill.svg'); }
+.icon-gamepad{ -webkit-mask-image:url('assets/icons/gamepad-2.svg'); mask-image:url('assets/icons/gamepad-2.svg'); }
+.icon-newspaper{ -webkit-mask-image:url('assets/icons/newspaper.svg'); mask-image:url('assets/icons/newspaper.svg'); }
+.icon-settings{ -webkit-mask-image:url('assets/icons/settings.svg'); mask-image:url('assets/icons/settings.svg'); }
+.icon-discord{ -webkit-mask-image:url('assets/icons/message-circle.svg'); mask-image:url('assets/icons/message-circle.svg'); }
+.icon-forum{ -webkit-mask-image:url('assets/icons/users.svg'); mask-image:url('assets/icons/users.svg'); }
+.icon-donate{ -webkit-mask-image:url('assets/icons/coins.svg'); mask-image:url('assets/icons/coins.svg'); }
 .icon-minus{ -webkit-mask-image:url('assets/icons/minus.svg'); mask-image:url('assets/icons/minus.svg'); }
 .icon-square{ -webkit-mask-image:url('assets/icons/square.svg'); mask-image:url('assets/icons/square.svg'); }
 .icon-x{ -webkit-mask-image:url('assets/icons/x.svg'); mask-image:url('assets/icons/x.svg'); }
