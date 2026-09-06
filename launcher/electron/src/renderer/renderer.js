@@ -127,20 +127,67 @@ const NEWS = [
   },
 ];
 
+// ─── Лайки новостей — состояние на клиенте (localStorage), реально меняет
+//     число под каждой новостью и в карточках ленты ───────────────────────
+const LIKED_KEY = 'flovmp:likedNews';
+let likedNews = new Set();
+try {
+  const raw = localStorage.getItem(LIKED_KEY);
+  if (raw) likedNews = new Set(JSON.parse(raw));
+} catch {}
+function saveLiked() {
+  try { localStorage.setItem(LIKED_KEY, JSON.stringify([...likedNews])); } catch {}
+}
+function isLiked(id) { return likedNews.has(id); }
+// n.likes — «чужие» лайки (база); свой лайк добавляет +1 поверх.
+function likeCount(n) { return (n.likes ?? 0) + (isLiked(n.id) ? 1 : 0); }
+
+let currentNewsItem = null;
+
+function syncLikeButton() {
+  const btn = document.getElementById('news-modal-like');
+  if (!btn || !currentNewsItem) return;
+  const liked = isLiked(currentNewsItem.id);
+  btn.classList.toggle('is-liked', liked);
+  btn.setAttribute('aria-pressed', liked ? 'true' : 'false');
+  document.getElementById('news-modal-likes').textContent = likeCount(currentNewsItem);
+}
+
+function toggleLike() {
+  if (!currentNewsItem) return;
+  const id = currentNewsItem.id;
+  if (likedNews.has(id)) likedNews.delete(id);
+  else {
+    likedNews.add(id);
+    const btn = document.getElementById('news-modal-like');
+    btn?.classList.remove('pop');
+    // рестарт анимации
+    void btn?.offsetWidth;
+    btn?.classList.add('pop');
+  }
+  saveLiked();
+  syncLikeButton();
+  // счётчики в ленте
+  renderNewsShort();
+  renderNewsFull();
+}
+
 function openNewsModal(newsItem) {
+  currentNewsItem = newsItem;
   const modal = document.getElementById('news-modal-overlay');
   document.getElementById('news-modal-badge').textContent = newsItem.badge || 'НОВОСТЬ';
   document.getElementById('news-modal-title').textContent = newsItem.title;
   document.getElementById('news-modal-date').textContent = newsItem.date;
   document.getElementById('news-modal-text').innerHTML = newsItem.body;
-  document.getElementById('news-modal-likes').textContent = newsItem.likes ?? 0;
   document.getElementById('news-modal-views').textContent = newsItem.views ?? 0;
+  syncLikeButton();
   modal.classList.remove('hidden');
 }
 
 function closeNewsModal() {
   document.getElementById('news-modal-overlay').classList.add('hidden');
 }
+document.getElementById('news-modal-like')?.addEventListener('click', toggleLike);
 
 document.getElementById('news-modal-close').addEventListener('click', closeNewsModal);
 document.getElementById('news-modal-overlay').addEventListener('click', (e) => {
@@ -170,7 +217,7 @@ function renderNewsShort() {
         <div class="pnews-t">${n.title}</div>
         <div class="pnews-meta">
           <span>${n.date}</span>
-          <span class="news-count">${countIcon('heart')} ${n.likes ?? 0}</span>
+          <span class="news-count${isLiked(n.id) ? ' is-liked' : ''}">${countIcon('heart')} ${likeCount(n)}</span>
           <span class="news-count">${countIcon('eye')} ${n.views ?? 0}</span>
         </div>
       </div>
@@ -205,7 +252,7 @@ function renderNewsFull() {
         <div class="summary">${n.summary}</div>
         <div class="news-full-meta">
           <span class="d">${n.date}</span>
-          <span class="news-count">${countIcon('heart')} ${n.likes ?? 0}</span>
+          <span class="news-count${isLiked(n.id) ? ' is-liked' : ''}">${countIcon('heart')} ${likeCount(n)}</span>
           <span class="news-count">${countIcon('eye')} ${n.views ?? 0}</span>
         </div>
       </div>

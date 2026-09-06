@@ -42,6 +42,7 @@ const OUT = process.argv[2] || '.';
   }
 
   // 1. Играть (рельс статичный)
+  await win.waitForSelector('#status-dot.online', { timeout: 4000 }).catch(() => null);
   await shot('01-play');
 
   // 2. Ресурсы — флайаут по одной иконке
