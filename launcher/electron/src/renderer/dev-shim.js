@@ -34,6 +34,7 @@ if (!window.floridaV) {
     toggleMaximize: async () => { fakeMaximized = !fakeMaximized; console.log('[dev-shim] toggleMaximize()'); },
     close: async () => console.log('[dev-shim] close() — недоступно в браузере (закрой вкладку)'),
     onWindowState: () => {},
+    setTrayOnClose: async (v) => { console.log('[dev-shim] setTrayOnClose()', v); return !!v; },
 
     getSettings: async () => {
       const s = loadStored();

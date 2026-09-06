@@ -335,6 +335,10 @@
                   <div><div class="ft">Сворачивать лаунчер при запуске игры</div></div>
                   <label class="switch"><input type="checkbox" id="set-minimizeonplay" checked><span class="track"></span></label>
                 </div>
+                <div class="field-row">
+                  <div><div class="ft">Сворачивать в трей вместо закрытия</div><div class="fd">Крестик прячет лаунчер в область уведомлений</div></div>
+                  <label class="switch"><input type="checkbox" id="set-tray-on-close"><span class="track"></span></label>
+                </div>
               </div>
               <div class="card">
                 <h4><span class="icon icon-shield"></span>Приватность</h4>
@@ -371,6 +375,15 @@
                   <select id="set-proc-priority">
                     <option value="normal">Обычный</option>
                     <option value="high">Высокий</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Режим окна GTA V</div><div class="fd">Как запускать игру</div></div>
+                  <select id="set-gta-window-mode">
+                    <option value="keep">Не менять</option>
+                    <option value="windowed">Оконный</option>
+                    <option value="borderless">Без рамки</option>
+                    <option value="fullscreen">Полный экран</option>
                   </select>
                 </div>
                 <span class="field-label" style="margin-top:12px">Доп. аргументы запуска</span>
@@ -423,7 +436,11 @@
                   <input type="text" id="set-cache-dir" placeholder="По умолчанию">
                   <button class="btn-secondary" id="btn-cache-browse">Обзор&hellip;</button>
                 </div>
-                <div class="link-row" id="btn-verify-files"><span class="icon icon-check"></span>Проверить целостность файлов</div>
+                <div class="field-row">
+                  <div><div class="ft">Проверять целостность после загрузки</div><div class="fd">Сверка хешей файлов сразу после скачивания</div></div>
+                  <label class="switch"><input type="checkbox" id="set-verify-after-dl" checked><span class="track"></span></label>
+                </div>
+                <div class="link-row" id="btn-verify-files"><span class="icon icon-check"></span>Проверить целостность файлов сейчас</div>
               </div>
             </div>
           </div>
@@ -452,15 +469,38 @@
           <div class="settings-tab" data-subtab="interface">
             <div class="settings-list">
               <div class="card">
-                <h4><span class="icon icon-palette"></span>Внешний вид</h4>
-                <span class="field-label">Акцентный цвет</span>
-                <div class="accent-picker" id="accent-picker"></div>
-                <div class="hint" style="margin-bottom:6px">По умолчанию — фирменный золотой Держава RP.</div>
+                <h4><span class="icon icon-palette"></span>Акцентный цвет</h4>
+                <div class="accent-row">
+                  <div class="accent-picker" id="accent-picker"></div>
+                  <div class="accent-indicator" id="accent-indicator">
+                    <span class="accent-indicator__chip"></span>
+                    <span class="accent-indicator__meta">
+                      <span class="accent-indicator__name" id="accent-ind-name">Золотой</span>
+                      <span class="accent-indicator__hex" id="accent-ind-hex">#FDD015</span>
+                    </span>
+                    <span class="accent-indicator__bar"></span>
+                  </div>
+                </div>
+                <div class="hint">Пресет или свой цвет через «+». Перекрашивается сразу везде — кнопки, тумблеры, рамки, свечения.</div>
+              </div>
+              <div class="card">
+                <h4><span class="icon icon-sliders"></span>Внешний вид</h4>
+                <div class="field-row">
+                  <div><div class="ft">Масштаб интерфейса</div><div class="fd">Размер всех элементов лаунчера</div></div>
+                  <div class="range-inline">
+                    <input type="range" id="set-ui-scale" min="80" max="140" step="5" value="100">
+                    <span class="range-val" id="ui-scale-val">100%</span>
+                  </div>
+                </div>
                 <div class="field-row"><div><div class="ft">Язык интерфейса</div></div>
                   <select id="set-language"><option value="ru">Русский</option><option value="en">English</option></select></div>
                 <div class="field-row">
                   <div><div class="ft">Анимации интерфейса</div><div class="fd">Плавное появление окон и переходов</div></div>
                   <label class="switch"><input type="checkbox" id="set-animations" checked><span class="track"></span></label>
+                </div>
+                <div class="field-row">
+                  <div><div class="ft">Звук в интерфейсе</div><div class="fd">Короткий клик при нажатии кнопок</div></div>
+                  <label class="switch"><input type="checkbox" id="set-ui-sounds"><span class="track"></span></label>
                 </div>
                 <div class="field-row">
                   <div><div class="ft">Компактный режим</div><div class="fd">Плотнее списки и отступы</div></div>
@@ -499,6 +539,7 @@
                 <div class="link-row" id="btn-check-update"><span class="icon icon-download"></span>Проверить обновления</div>
                 <div class="link-row" id="btn-open-changelog"><span class="icon icon-newspaper"></span>Список изменений</div>
                 <div class="link-row" id="btn-open-logs"><span class="icon icon-folder"></span>Открыть папку логов</div>
+                <div class="link-row" id="btn-copy-sysinfo"><span class="icon icon-monitor"></span>Скопировать сведения о системе</div>
                 <div class="link-row" id="btn-open-site"><span class="icon icon-globe"></span>Сайт сервера</div>
                 <div class="link-row" id="btn-open-support"><span class="icon icon-help"></span>Поддержка</div>
               </div>

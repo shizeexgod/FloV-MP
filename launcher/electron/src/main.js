@@ -1,10 +1,14 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { NativeBridge } = require('./native-bridge');
+
+let tray = null;
+let trayOnClose = false;   // из настроек: крестик → в трей вместо закрытия
+let quitting = false;      // true во время реального выхода (before-quit)
 
 // Общая с игрой папка (та же, что и settings.json). session.json пишет
 // сервер при входе в игре — лаунчер его читает для хэндоффа аккаунта.
@@ -90,6 +94,32 @@ function createWindow() {
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:state', 'maximized'));
   mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:state', 'normal'));
+
+  // Крестик → в трей, если так настроено (и это не реальный выход).
+  mainWindow.on('close', (e) => {
+    if (trayOnClose && !quitting) {
+      e.preventDefault();
+      mainWindow.hide();
+      ensureTray();
+    }
+  });
+}
+
+function ensureTray() {
+  if (tray) return;
+  let img;
+  try {
+    img = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'assets', 'logo.png'));
+    if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
+  } catch { img = nativeImage.createEmpty(); }
+  tray = new Tray(img);
+  tray.setToolTip('Держава RP Launcher');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Открыть', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
+    { type: 'separator' },
+    { label: 'Выход', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
 }
 
 // ─── Window chrome (кастомный титлбар в renderer) ─────────────────────────
@@ -100,6 +130,11 @@ ipcMain.handle('window:toggleMaximize', () => {
   else mainWindow.maximize();
 });
 ipcMain.handle('window:close', () => mainWindow?.close());
+ipcMain.handle('window:setTrayOnClose', (_e, enabled) => {
+  trayOnClose = !!enabled;
+  if (!trayOnClose && tray) { tray.destroy(); tray = null; }
+  return trayOnClose;
+});
 
 // ─── Мост к нативной логике (реестр / запуск игры) ─────────────────────────
 ipcMain.handle('native:getSettings', () => native.call('getSettings'));
@@ -182,4 +217,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => native.stop());
+app.on('before-quit', () => { quitting = true; native.stop(); });

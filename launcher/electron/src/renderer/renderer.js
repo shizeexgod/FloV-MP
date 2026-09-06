@@ -206,12 +206,28 @@ function countIcon(name) {
   return `<span class="icon icon-${name}"></span>`;
 }
 
+// Категория новости → иконка-водяной знак на обложке (пока настоящих
+// картинок нет — обложка это акцентный градиент + крупная иконка темы).
+const NEWS_CAT_ICON = {
+  'ОТКРЫТИЕ': 'sparkles',
+  'КАРТА': 'mappin',
+  'ОБНОВЛЕНИЕ': 'download',
+  'ФРАКЦИИ': 'forum',
+  'ИВЕНТ': 'gift',
+};
+function catIcon(badge) { return NEWS_CAT_ICON[badge] || 'newspaper'; }
+function newsThumb(n) {
+  return `<div class="news-thumb" data-badge="${n.badge}">
+    <span class="news-thumb__wm icon icon-${catIcon(n.badge)}"></span>
+  </div>`;
+}
+
 function renderNewsShort() {
   const short = document.getElementById('play-news-list');
   if (!short) return;
   short.innerHTML = NEWS.slice(0, 4).map((n) => `
     <button class="pnews-card" data-news-id="${n.id}" type="button">
-      <div class="pnews-thumb"></div>
+      ${newsThumb(n).replace('news-thumb', 'pnews-thumb news-thumb')}
       <div class="pnews-body">
         <span class="pnews-tag">${n.badge}</span>
         <div class="pnews-t">${n.title}</div>
@@ -231,7 +247,8 @@ function renderNewsFull() {
   const sortMode = document.getElementById('news-sort')?.value || 'new';
   const filterBadge = document.getElementById('news-filter')?.value || 'all';
 
-  let items = NEWS.filter((n) => !query || n.title.toLowerCase().includes(query));
+  const match = (n) => n.title.toLowerCase().includes(query) || (n.summary || '').toLowerCase().includes(query);
+  let items = NEWS.filter((n) => !query || match(n));
   if (filterBadge !== 'all') items = items.filter((n) => n.badge === filterBadge);
   items = items.slice().sort((a, b) => {
     const diff = parseRuDate(a.date) - parseRuDate(b.date);
@@ -239,13 +256,16 @@ function renderNewsFull() {
   });
 
   if (!items.length) {
-    full.innerHTML = `<div class="hint" style="padding:20px 0">Ничего не найдено по запросу.</div>`;
+    full.innerHTML = `<div class="news-empty">
+      <span class="icon icon-search"></span>
+      <div>Ничего не найдено${query ? ` по запросу «${query}»` : ''}</div>
+    </div>`;
     return;
   }
 
   full.innerHTML = items.map((n) => `
     <button class="news-full-card" data-news-id="${n.id}" type="button">
-      <div class="news-thumb"></div>
+      ${newsThumb(n)}
       <div class="nfc-body">
         <span class="news-tag">${n.badge}</span>
         <div class="t">${n.title}</div>
@@ -313,10 +333,14 @@ let settings = {
   updateChannel: 'stable',
   clientEdition: 'Legacy',
   accentColor: 'gold',
+  accentCustom: '#8b5cf6',
   language: 'ru',
   animations: true,
   compactMode: false,
   rememberTab: true,
+  uiScale: 100,
+  uiSounds: false,
+  trayOnClose: false,
   lastSettingsTab: 'general',
   autostart: false,
   minimizeOnPlay: true,
@@ -324,11 +348,13 @@ let settings = {
   anonStats: false,
   procPriority: 'normal',
   launchArgs: '',
+  gtaWindowMode: 'keep',
   graphicsPreset: 'untouched',
   fpsLimit: 0,
   disableAmbient: true,
   dlSpeed: 0,
   dlThreads: 4,
+  verifyAfterDl: true,
   cacheDir: '',
   voiceInput: '',
   voiceOutput: '',
@@ -352,16 +378,21 @@ const SETTINGS_MAP = [
   ['set-animations', 'animations', 'checked'],
   ['set-compact', 'compactMode', 'checked'],
   ['set-remember-tab', 'rememberTab', 'checked'],
+  ['set-ui-scale', 'uiScale', 'value'],
+  ['set-ui-sounds', 'uiSounds', 'checked'],
+  ['set-tray-on-close', 'trayOnClose', 'checked'],
   ['set-minimizeonplay', 'minimizeOnPlay', 'checked'],
   ['set-region', 'region', 'value'],
   ['set-anon-stats', 'anonStats', 'checked'],
   ['set-proc-priority', 'procPriority', 'value'],
   ['set-launch-args', 'launchArgs', 'value'],
+  ['set-gta-window-mode', 'gtaWindowMode', 'value'],
   ['set-graphics-preset', 'graphicsPreset', 'value'],
   ['set-fps-limit', 'fpsLimit', 'value'],
   ['set-disable-ambient', 'disableAmbient', 'checked'],
   ['set-dl-speed', 'dlSpeed', 'value'],
   ['set-dl-threads', 'dlThreads', 'value'],
+  ['set-verify-after-dl', 'verifyAfterDl', 'checked'],
   ['set-cache-dir', 'cacheDir', 'value'],
   ['set-voice-input', 'voiceInput', 'value'],
   ['set-voice-output', 'voiceOutput', 'value'],
@@ -373,48 +404,93 @@ const SETTINGS_MAP = [
   ['set-notif-sound', 'notifSound', 'checked'],
 ];
 
-// ─── Акцентный цвет — пресеты. Меняем ТОЛЬКО --accent-color и
-// --accent-color-rgb; всё остальное в styles.css выведено из них. ──────────
+// ─── Акцентный цвет — пресеты + свой цвет. applyAccent меняет ТОЛЬКО
+// --accent-color / --accent-color-rgb / --accent-ink; всё остальное в
+// styles.css выведено из них через var(), поэтому перекрашивается сразу
+// ВЕЗДЕ (кнопки, тумблеры, рамки, свечения, графики). ──────────────────────
 const ACCENTS = [
-  { id: 'gold',   name: 'Золотой (по умолчанию)', accent: '#fdd015', ink: '#1a1206' },
-  { id: 'pink',   name: 'Розовый',                accent: '#ff3d8a', ink: '#1a0410' },
-  { id: 'blue',   name: 'Голубой',                accent: '#4ac3ff', ink: '#031420' },
-  { id: 'green',  name: 'Зелёный',                accent: '#3fd98a', ink: '#031b10' },
-  { id: 'purple', name: 'Фиолетовый',             accent: '#c084fc', ink: '#1a0f26' },
-  { id: 'red',    name: 'Красный',                accent: '#ff5d5d', ink: '#210404' },
+  { id: 'gold',    name: 'Золотой',    accent: '#fdd015' },
+  { id: 'amber',   name: 'Янтарный',   accent: '#ff9f43' },
+  { id: 'red',     name: 'Красный',    accent: '#ff5d5d' },
+  { id: 'pink',    name: 'Розовый',    accent: '#ff3d8a' },
+  { id: 'purple',  name: 'Фиолетовый', accent: '#c084fc' },
+  { id: 'blue',    name: 'Голубой',    accent: '#4ac3ff' },
+  { id: 'teal',    name: 'Бирюзовый',  accent: '#2dd4bf' },
+  { id: 'green',   name: 'Зелёный',    accent: '#3fd98a' },
 ];
 
 function hexToRgbList(hex) {
   const n = parseInt(hex.slice(1), 16);
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
 }
+// Контрастный «чернильный» цвет для текста НА акценте: тёмный вариант
+// самого акцента, чтобы подпись на золотой кнопке была тёмно-золотой,
+// а не чёрной. Считаем из яркости.
+function inkFor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (lum > 0.6) return `#${[r, g, b].map((c) => Math.round(c * 0.16).toString(16).padStart(2, '0')).join('')}`;
+  return '#ffffff';
+}
+function accentHex() {
+  const c = settings.accentColor === 'custom'
+    ? (settings.accentCustom || '#fdd015')
+    : (ACCENTS.find((a) => a.id === settings.accentColor) || ACCENTS[0]).accent;
+  return /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#fdd015';
+}
+function accentName() {
+  if (settings.accentColor === 'custom') return 'Свой цвет';
+  return (ACCENTS.find((a) => a.id === settings.accentColor) || ACCENTS[0]).name;
+}
 
-function applyAccent(id) {
-  const preset = ACCENTS.find((a) => a.id === id) || ACCENTS[0];
+function applyAccent() {
+  const hex = accentHex();
   const root = document.documentElement.style;
-  root.setProperty('--accent-color', preset.accent);
-  root.setProperty('--accent-color-rgb', hexToRgbList(preset.accent));
-  root.setProperty('--accent-ink', preset.ink);
+  root.setProperty('--accent-color', hex);
+  root.setProperty('--accent-color-rgb', hexToRgbList(hex));
+  root.setProperty('--accent-ink', inkFor(hex));
 
   document.querySelectorAll('.accent-swatch').forEach((el) => {
-    el.classList.toggle('selected', el.dataset.accent === preset.id);
+    el.classList.toggle('selected', el.dataset.accent === settings.accentColor);
   });
+  const indName = document.getElementById('accent-ind-name');
+  const indHex = document.getElementById('accent-ind-hex');
+  if (indName) indName.textContent = accentName();
+  if (indHex) indHex.textContent = hex.toUpperCase();
+}
+
+function pickAccent(id, customHex) {
+  settings.accentColor = id;
+  if (id === 'custom' && customHex) settings.accentCustom = customHex;
+  applyAccent();
+  saveSettingsDebounced();
 }
 
 function renderAccentPicker() {
   const el = document.getElementById('accent-picker');
+  if (!el) return;
   el.innerHTML = ACCENTS.map(
-    (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}"
-      style="background:${a.accent}">
-      <span class="icon icon-check"></span></button>`
-  ).join('');
-  el.querySelectorAll('.accent-swatch').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      settings.accentColor = btn.dataset.accent;
-      applyAccent(settings.accentColor);
-      saveSettingsDebounced();
-    });
+    (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}" type="button"
+      style="--sw:${a.accent}"><span class="icon icon-check"></span></button>`
+  ).join('') + `
+    <label class="accent-swatch accent-swatch--custom" title="Свой цвет" data-accent="custom"
+      style="--sw:${settings.accentCustom || '#8b5cf6'}">
+      <span class="accent-swatch__plus">+</span>
+      <input type="color" id="accent-custom-input" value="${settings.accentCustom || '#8b5cf6'}">
+    </label>`;
+
+  el.querySelectorAll('.accent-swatch[data-accent]:not(.accent-swatch--custom)').forEach((btn) => {
+    btn.addEventListener('click', () => pickAccent(btn.dataset.accent));
   });
+  const custom = document.getElementById('accent-custom-input');
+  if (custom) {
+    custom.addEventListener('input', (e) => {
+      const hex = e.target.value;
+      e.target.closest('.accent-swatch').style.setProperty('--sw', hex);
+      pickAccent('custom', hex);
+    });
+  }
 }
 
 function dlSpeedLabel(v) { return Number(v) === 0 ? 'Без ограничения' : `${v} МБ/с`; }
@@ -426,13 +502,16 @@ function applySettingsToUI() {
     if (el) el[prop] = settings[key];
   });
   setEditionToggle(settings.clientEdition);
-  applyAccent(settings.accentColor);
+  renderAccentPicker();
+  applyAccent();
+  applyUiScale();
   document.documentElement.classList.toggle('compact', !!settings.compactMode);
   document.documentElement.classList.toggle('no-anim', !settings.animations);
 
   const s = document.getElementById('dl-speed-val'); if (s) s.textContent = dlSpeedLabel(settings.dlSpeed);
   const t = document.getElementById('dl-threads-val'); if (t) t.textContent = String(settings.dlThreads);
   const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
+  const us = document.getElementById('ui-scale-val'); if (us) us.textContent = `${settings.uiScale}%`;
 
   applyAccountUI();
 }
@@ -469,6 +548,34 @@ function applyAccountUI() {
   if (cabStatus) cabStatus.textContent = isLoggedIn() ? 'Вход выполнен' : 'Не выполнен вход';
 }
 
+// ─── Масштаб интерфейса (90–125%) — Chromium zoom на корне ───────────────
+function applyUiScale() {
+  const s = Math.max(80, Math.min(140, Number(settings.uiScale) || 100));
+  document.documentElement.style.zoom = String(s / 100);
+}
+
+// ─── Звук в интерфейсе — короткий клик через WebAudio (без файлов) ───────
+let _uiAudioCtx = null;
+function uiClick() {
+  if (!settings.uiSounds) return;
+  try {
+    _uiAudioCtx = _uiAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _uiAudioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(660, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.05);
+    g.gain.setValueAtTime(0.05, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.09);
+  } catch {}
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button, .rail-item, .cabinet-item, .link-row, .accent-swatch, .toggle-btn, .srv-play')) uiClick();
+}, true);
+
 // ─── Единая привязка всех контролов настроек к settings + сохранение ──────
 SETTINGS_MAP.forEach(([id, key, prop]) => {
   if (id === 'set-gtapath') return; // у него свой обработчик ниже
@@ -481,6 +588,8 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
     settings[key] = v;
     if (id === 'set-compact') document.documentElement.classList.toggle('compact', v);
     if (id === 'set-animations') document.documentElement.classList.toggle('no-anim', !v);
+    if (id === 'set-ui-scale') { applyUiScale(); document.getElementById('ui-scale-val').textContent = `${v}%`; }
+    if (id === 'set-tray-on-close') window.floridaV.setTrayOnClose?.(v);
     if (id === 'set-dl-speed') document.getElementById('dl-speed-val').textContent = dlSpeedLabel(v);
     if (id === 'set-dl-threads') document.getElementById('dl-threads-val').textContent = String(v);
     if (id === 'set-voice-threshold') document.getElementById('voice-thr-val').textContent = voiceThrLabel(v);
@@ -545,6 +654,29 @@ document.getElementById('btn-clear-cache')?.addEventListener('click', () => {
 document.getElementById('btn-verify-files')?.addEventListener('click', () => window.floridaV.verifyFiles?.());
 document.getElementById('btn-open-logs')?.addEventListener('click', () => window.floridaV.openLogs?.());
 document.getElementById('btn-open-changelog')?.addEventListener('click', () => openUrl('https://derzhava-rp.ru/changelog'));
+
+// «Скопировать сведения о системе» — для отправки в поддержку. Только то,
+// что уже отдаёт deviceInfo + версия лаунчера, без личных данных.
+document.getElementById('btn-copy-sysinfo')?.addEventListener('click', async (e) => {
+  const info = await loadDeviceInfo();
+  const lines = [
+    `Держава RP Launcher — сведения о системе`,
+    `Версия лаунчера: ${document.querySelector('.about-version')?.textContent || '—'}`,
+    `ОС: ${info?.os || '—'} (${info?.osArch || '—'})`,
+    `Устройство: ${info?.hostname || '—'}`,
+    `Локальный IP: ${info?.localIp || '—'}`,
+    `Аккаунт: ${isLoggedIn() ? settings.account.username : 'гость'}`,
+    `Папка GTA V: ${settings.gtaPath || 'не указана'} · клиент ${settings.clientEdition}`,
+    `Время: ${new Date().toISOString()}`,
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(lines);
+    const lbl = e.currentTarget.lastChild;
+    const orig = lbl.textContent;
+    lbl.textContent = ' Скопировано в буфер обмена';
+    setTimeout(() => { lbl.textContent = orig; }, 2000);
+  } catch {}
+});
 document.getElementById('btn-cache-browse')?.addEventListener('click', async () => {
   const dir = await window.floridaV.browseFolder();
   if (dir) { settings.cacheDir = dir; document.getElementById('set-cache-dir').value = dir; saveSettingsDebounced(); }
@@ -1123,6 +1255,8 @@ async function pollSession() {
   }
 
   if (!settings.gtaPath) detectGta();
+
+  window.floridaV.setTrayOnClose?.(settings.trayOnClose);
 
   pollServerStatus();
   setInterval(pollServerStatus, 10000);

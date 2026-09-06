@@ -11,13 +11,21 @@ public class LauncherSettings
     [JsonPropertyName("autoUpdate")] public bool AutoUpdate { get; set; } = true;
     /// <summary>"Legacy" или "Enhanced".</summary>
     [JsonPropertyName("clientEdition")] public string ClientEdition { get; set; } = "Legacy";
-    /// <summary>Id пресета акцентного цвета лаунчера (см. ACCENTS в renderer.js). По умолчанию — фирменный золотой.</summary>
+    /// <summary>Id пресета акцентного цвета лаунчера (см. ACCENTS в renderer.js) или "custom".</summary>
     [JsonPropertyName("accentColor")] public string AccentColor { get; set; } = "gold";
+    /// <summary>Свой акцентный цвет (#RRGGBB), когда accentColor == "custom".</summary>
+    [JsonPropertyName("accentCustom")] public string AccentCustom { get; set; } = "#8b5cf6";
 
     [JsonPropertyName("language")] public string Language { get; set; } = "ru";
     [JsonPropertyName("animations")] public bool Animations { get; set; } = true;
     [JsonPropertyName("compactMode")] public bool CompactMode { get; set; } = false;
     [JsonPropertyName("rememberTab")] public bool RememberTab { get; set; } = true;
+    /// <summary>Масштаб интерфейса лаунчера, % (80–140).</summary>
+    [JsonPropertyName("uiScale")] public int UiScale { get; set; } = 100;
+    /// <summary>Короткий звук клика в интерфейсе лаунчера.</summary>
+    [JsonPropertyName("uiSounds")] public bool UiSounds { get; set; } = false;
+    /// <summary>Крестик сворачивает лаунчер в трей вместо закрытия.</summary>
+    [JsonPropertyName("trayOnClose")] public bool TrayOnClose { get; set; } = false;
     [JsonPropertyName("lastSettingsTab")] public string LastSettingsTab { get; set; } = "general";
     [JsonPropertyName("autostart")] public bool Autostart { get; set; } = false;
     [JsonPropertyName("minimizeOnPlay")] public bool MinimizeOnPlay { get; set; } = true;
@@ -28,6 +36,8 @@ public class LauncherSettings
     // ── Игра / запуск ──
     [JsonPropertyName("procPriority")] public string ProcPriority { get; set; } = "normal";
     [JsonPropertyName("launchArgs")] public string LaunchArgs { get; set; } = "";
+    /// <summary>"keep" | "windowed" | "borderless" | "fullscreen".</summary>
+    [JsonPropertyName("gtaWindowMode")] public string GtaWindowMode { get; set; } = "keep";
     [JsonPropertyName("graphicsPreset")] public string GraphicsPreset { get; set; } = "untouched";
     [JsonPropertyName("fpsLimit")] public int FpsLimit { get; set; } = 0;
     [JsonPropertyName("disableAmbient")] public bool DisableAmbient { get; set; } = true;
@@ -35,6 +45,7 @@ public class LauncherSettings
     // ── Загрузка ──
     [JsonPropertyName("dlSpeed")] public int DlSpeed { get; set; } = 0;
     [JsonPropertyName("dlThreads")] public int DlThreads { get; set; } = 4;
+    [JsonPropertyName("verifyAfterDl")] public bool VerifyAfterDl { get; set; } = true;
     [JsonPropertyName("cacheDir")] public string CacheDir { get; set; } = "";
 
     // ── Голос ──

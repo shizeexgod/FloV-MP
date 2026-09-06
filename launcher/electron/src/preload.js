@@ -8,6 +8,7 @@ const api = {
   toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
   close: () => ipcRenderer.invoke('window:close'),
   onWindowState: (cb) => ipcRenderer.on('window:state', (_e, state) => cb(state)),
+  setTrayOnClose: (enabled) => ipcRenderer.invoke('window:setTrayOnClose', enabled),
 
   // Настройки / данные лаунчера (через нативный C#-помощник)
   getSettings: () => ipcRenderer.invoke('native:getSettings'),
