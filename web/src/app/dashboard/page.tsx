@@ -4,8 +4,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   Check,
+  CheckCircle2,
+  ChevronDown,
   CircleDot,
   Copy,
   Cpu,
@@ -16,15 +19,20 @@ import {
   Gauge,
   Globe,
   HardDrive,
+  HelpCircle,
   KeyRound,
   Layers,
   Percent,
+  Play,
   Plus,
+  Radio,
   RefreshCw,
   Rocket,
+  Send,
   Server,
   Settings2,
   ShieldCheck,
+  Square,
   Terminal,
   Users,
   Zap,
@@ -51,6 +59,39 @@ interface License {
   created_at: string;
   last_verified_at?: string;
 }
+
+export interface Project {
+  id: number;
+  user_id: number;
+  name: string;
+  slug: string;
+  license_key: string;
+  plan: string;
+  max_players: number;
+  api_key: string;
+  is_active: number;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface ServerInstance {
+  id: number;
+  project_id: number;
+  environment: 'production' | 'development' | 'test';
+  name: string;
+  ip: string;
+  port: number;
+  agent_token: string;
+  status: 'online' | 'offline' | 'restarting';
+  players_count: number;
+  max_players: number;
+  tick_rate: number;
+  memory_mb: number;
+  cpu_percent: number;
+  last_heartbeat?: string;
+  created_at: string;
+}
+
 interface UserProfile {
   id: number;
   username: string;
@@ -91,11 +132,15 @@ interface LauncherBuildResult {
   message: string;
 }
 
-type TabKey = 'overview' | 'telemetry' | 'builder' | 'billing' | 'affiliate';
+type TabKey = 'projects' | 'console' | 'troubleshoot' | 'overview' | 'telemetry' | 'sdk' | 'builder' | 'billing' | 'affiliate';
 
 const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+  { key: 'projects', label: 'Проекты и Серверы', icon: Server },
+  { key: 'console', label: 'txAdmin Консоль', icon: Terminal },
+  { key: 'troubleshoot', label: 'AI Диагностика', icon: Zap },
   { key: 'overview', label: 'Ключи и статус', icon: KeyRound },
   { key: 'telemetry', label: 'Телеметрия VDS', icon: Activity },
+  { key: 'sdk', label: 'Загрузки и SDK', icon: Download },
   { key: 'builder', label: 'Сборщик лаунчера', icon: Layers },
   { key: 'billing', label: 'Счета и биллинг', icon: CreditCard },
   { key: 'affiliate', label: 'Партнёрка (20%)', icon: Percent },
@@ -125,7 +170,30 @@ export default function DashboardPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [licenses, setLicenses] = useState<License[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabKey>('overview');
+  const [tab, setTab] = useState<TabKey>('projects');
+
+  /* Projects & Servers state */
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [servers, setServers] = useState<ServerInstance[]>([]);
+  const [loadingServers, setLoadingServers] = useState(false);
+  const [dispatchingAction, setDispatchingAction] = useState<string | null>(null);
+
+  /* txAdmin Console state */
+  const [consoleInput, setConsoleInput] = useState('');
+  const [consoleLogs, setConsoleLogs] = useState<Array<{ id: number; time: string; tag: string; text: string; tone: 'info' | 'warn' | 'error' | 'cmd' }>>([
+    { id: 1, time: '19:42:01', tag: 'Core', text: 'FloV:MP Server Runtime v1.0.4 started (Build b3307 unhooked)', tone: 'info' },
+    { id: 2, time: '19:42:02', tag: 'Network', text: 'UDP 7788 listening on 0.0.0.0:7788 (1500 max players)', tone: 'info' },
+    { id: 3, time: '19:42:03', tag: 'AntiCheat', text: 'FloV:Shield security invariants active (Speed, Teleport, Weapon whitelists)', tone: 'info' },
+    { id: 4, time: '19:42:04', tag: 'Database', text: 'MariaDB pool connected (derzhava_rp @ 188.127.229.224)', tone: 'info' },
+    { id: 5, time: '19:42:05', tag: 'Agent', text: 'RemoteServerAgent connected to Cloud Control Plane (Token: agnt_live_prod_99f48a)', tone: 'info' },
+    { id: 6, time: '19:42:15', tag: 'Telemetry', text: 'Heartbeat tick sent -> 60.0 Hz tickrate, 60.0 FPS, 384 MB CoreCLR', tone: 'info' },
+  ]);
+
+  /* AI Troubleshooter state */
+  const [troubleshootText, setTroubleshootText] = useState('');
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
 
   const [showKeyId, setShowKeyId] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -136,6 +204,13 @@ export default function DashboardPage() {
   const [ipName, setIpName] = useState('');
   const [ipErr, setIpErr] = useState('');
   const [savingIp, setSavingIp] = useState(false);
+
+  /* new project modal */
+  const [newProjOpen, setNewProjOpen] = useState(false);
+  const [newProjName, setNewProjName] = useState('');
+  const [newProjSlug, setNewProjSlug] = useState('');
+  const [newProjPlan, setNewProjPlan] = useState('enterprise');
+  const [creatingProj, setCreatingProj] = useState(false);
 
   /* new license modal */
   const [newLicOpen, setNewLicOpen] = useState(false);
@@ -199,10 +274,160 @@ export default function DashboardPage() {
         setLicenses(lics);
         if (lics[0]?.bound_ip && lics[0].bound_ip !== '0.0.0.0') setBIp(lics[0].bound_ip);
       }
+
+      const projRes = await fetch('/api/v1/projects');
+      if (projRes.ok) {
+        const projData = await projRes.json();
+        const projs: Project[] = projData.projects || [];
+        setProjects(projs);
+        if (projs.length > 0) {
+          setSelectedProject(projs[0]);
+          void loadServers(projs[0].id);
+        }
+      }
     } catch {
       show('Не удалось загрузить данные кабинета', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadServers = async (projectId: number) => {
+    setLoadingServers(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/servers`);
+      if (res.ok) {
+        const data = await res.json();
+        setServers(data.servers || []);
+      }
+    } catch {
+      show('Не удалось загрузить серверы проекта', 'error');
+    } finally {
+      setLoadingServers(false);
+    }
+  };
+
+  const handleSelectProject = (proj: Project) => {
+    setSelectedProject(proj);
+    void loadServers(proj.id);
+  };
+
+  const createProjectHandler = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingProj(true);
+    try {
+      const res = await fetch('/api/v1/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProjName.trim(),
+          slug: newProjSlug.trim() || newProjName.trim().toLowerCase().replace(/\s+/g, '-'),
+          plan: newProjPlan,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка создания проекта');
+      show('Новый проект успешно создан');
+      setNewProjOpen(false);
+      setNewProjName('');
+      setNewProjSlug('');
+      loadDashboard();
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setCreatingProj(false);
+    }
+  };
+
+  const handleDispatchCommand = async (
+    serverId: number,
+    command: 'restart' | 'stop' | 'broadcast',
+    payload?: any
+  ) => {
+    setDispatchingAction(`${serverId}_${command}`);
+    try {
+      const res = await fetch('/api/v1/agent/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serverId,
+          command,
+          payload:
+            payload ||
+            (command === 'broadcast'
+              ? { message: 'Внимание: техническая перезагрузка сервера через 60 секунд!' }
+              : undefined),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка отправки команды');
+      show(`Команда ${command.toUpperCase()} поставлена в очередь (ID: ${data.commandId})`);
+      const timeStr = new Date().toLocaleTimeString('ru-RU');
+      setConsoleLogs((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          time: timeStr,
+          tag: 'ControlPlane',
+          text: `Команда ${command.toUpperCase()} отправлена агенту сервера #${serverId}`,
+          tone: 'cmd',
+        },
+      ]);
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setDispatchingAction(null);
+    }
+  };
+
+  const sendConsoleCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!consoleInput.trim()) return;
+    const input = consoleInput.trim();
+    setConsoleInput('');
+
+    const targetServerId = servers[0]?.id || 1;
+    const timeStr = new Date().toLocaleTimeString('ru-RU');
+
+    setConsoleLogs((prev) => [
+      ...prev,
+      { id: Date.now(), time: timeStr, tag: 'Operator', text: `> ${input}`, tone: 'cmd' },
+    ]);
+
+    if (input.startsWith('say ') || input.startsWith('broadcast ')) {
+      const msg = input.replace(/^(say|broadcast)\s+/, '');
+      await handleDispatchCommand(targetServerId, 'broadcast', { message: msg });
+    } else if (input === 'restart') {
+      await handleDispatchCommand(targetServerId, 'restart');
+    } else if (input === 'stop') {
+      await handleDispatchCommand(targetServerId, 'stop');
+    } else {
+      await handleDispatchCommand(targetServerId, 'broadcast', { message: input });
+    }
+  };
+
+  const runTroubleshoot = async (sampleLogs?: string) => {
+    const textToAnalyze = sampleLogs || troubleshootText;
+    if (!textToAnalyze.trim()) {
+      show('Вставьте фрагмент логов сервера для анализа', 'error');
+      return;
+    }
+    setDiagnosing(true);
+    setDiagnosticResult(null);
+    try {
+      const res = await fetch('/api/v1/ai/troubleshoot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logs: textToAnalyze }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка анализа логов');
+      setDiagnosticResult(data.diagnosis);
+      show('AI Диагностика завершена');
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setDiagnosing(false);
     }
   };
 
@@ -488,6 +713,486 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* ============ PROJECTS & SERVERS ============ */}
+      {tab === 'projects' && (
+        <div className="relative space-y-8 animate-fade-in">
+          {/* Project Switcher Bar */}
+          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-brand" />
+                <h2 className="text-lg font-black text-white">Проекты экосистемы FloV:MP</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Иерархия: Аккаунт → Проект (Лицензия) → Игровые серверы (Prod / Dev / Test)
+              </p>
+            </div>
+            <button
+              onClick={() => setNewProjOpen(true)}
+              className="btn btn-primary h-10 px-4 text-xs"
+            >
+              <Plus className="h-4 w-4" />
+              Создать проект
+            </button>
+          </div>
+
+          {/* Projects Selector Pills */}
+          <div className="flex flex-wrap gap-3">
+            {projects.map((p) => {
+              const active = selectedProject?.id === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelectProject(p)}
+                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                    active
+                      ? 'border-brand bg-brand/10 shadow-neon-pink'
+                      : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+                  }`}
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl font-mono text-sm font-black uppercase ${
+                      active ? 'bg-brand text-white' : 'bg-white/5 text-slate-400'
+                    }`}
+                  >
+                    {p.name.slice(0, 2)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white">{p.name}</span>
+                      <Badge tone={planTone(p.plan)}>{p.plan}</Badge>
+                    </div>
+                    <div className="mt-0.5 font-mono text-[11px] text-slate-400">
+                      /{p.slug} · {p.max_players} слотов
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected Project Overview Card */}
+          {selectedProject && (
+            <div className="glass card-edge rounded-3xl p-6 sm:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <span className="eyebrow text-brand">Активный проект</span>
+                  <h3 className="mt-1 text-2xl font-black text-white">{selectedProject.name}</h3>
+                  <p className="mt-1 font-mono text-xs text-slate-400">
+                    ID: #{selectedProject.id} · Тариф: <span className="text-white uppercase">{selectedProject.plan}</span> · Лимит: <span className="text-brand">{selectedProject.max_players} слотов</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
+                    <span className="text-slate-500 mr-2">License:</span>
+                    <strong className="text-white">{selectedProject.license_key}</strong>
+                  </div>
+                  <button
+                    onClick={() => copy(selectedProject.license_key)}
+                    className="btn btn-ghost h-9 w-9 p-0"
+                    title="Скопировать License Key"
+                  >
+                    {copied === selectedProject.license_key ? (
+                      <Check className="h-4 w-4 text-emeraldx" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+
+                  <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
+                    <span className="text-slate-500 mr-2">Agent API Key:</span>
+                    <strong className="text-brand">{selectedProject.api_key.slice(0, 16)}…</strong>
+                  </div>
+                  <button
+                    onClick={() => copy(selectedProject.api_key)}
+                    className="btn btn-ghost h-9 w-9 p-0"
+                    title="Скопировать Agent API Key"
+                  >
+                    {copied === selectedProject.api_key ? (
+                      <Check className="h-4 w-4 text-emeraldx" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Environments & Servers Section */}
+          <div>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold text-white">
+                  <Cpu className="h-5 w-5 text-cyber" />
+                  Серверные среды (Environments)
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  txAdmin Cloud агент на каждом узле слушает команды и отсылает телеметрию
+                </p>
+              </div>
+              <span className="font-mono text-xs text-slate-500">Серверов: {servers.length}</span>
+            </div>
+
+            {loadingServers ? (
+              <div className="flex justify-center p-12 text-brand">
+                <Spinner className="h-6 w-6" />
+              </div>
+            ) : servers.length === 0 ? (
+              <div className="glass card-edge rounded-3xl p-10 text-center text-xs text-slate-400">
+                <Server className="mx-auto h-8 w-8 text-slate-600 mb-2" />
+                В этом проекте ещё нет запущенных серверов.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {servers.map((srv) => {
+                  const isProd = srv.environment === 'production';
+                  const isDev = srv.environment === 'development';
+                  const isRestarting = dispatchingAction === `${srv.id}_restart`;
+                  const isStopping = dispatchingAction === `${srv.id}_stop`;
+                  const isBroadcasting = dispatchingAction === `${srv.id}_broadcast`;
+
+                  return (
+                    <div
+                      key={srv.id}
+                      className="glass-panel card-edge flex flex-col justify-between rounded-3xl p-6 shadow-glass"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
+                              isProd
+                                ? 'border-emeraldx/30 bg-emeraldx/15 text-emeraldx'
+                                : isDev
+                                ? 'border-cyber/30 bg-cyber/15 text-cyber'
+                                : 'border-violetx/30 bg-violetx/15 text-violetx'
+                            }`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                            {srv.environment}
+                          </span>
+                          <span className="flex items-center gap-1 font-mono text-[10px] text-slate-400">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
+                            Agent Active
+                          </span>
+                        </div>
+
+                        <h4 className="mt-3 text-base font-bold text-white">{srv.name}</h4>
+                        <div className="mt-1 font-mono text-xs text-brand">
+                          {srv.ip}:{srv.port}
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-ink-950/50 p-3 font-mono text-[11px]">
+                          <div>
+                            <span className="text-slate-500">Слоты:</span>{' '}
+                            <strong className="text-white">{srv.max_players}</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Протокол:</span>{' '}
+                            <strong className="text-cyber">UDP 7788</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Агент:</span>{' '}
+                            <strong className="text-emeraldx">v1.0.4</strong>
+                          </div>
+                          <div>
+                            <span className="text-slate-500">FastDL:</span>{' '}
+                            <strong className="text-white">CDN Active</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Server Controls */}
+                      <div className="mt-5 space-y-2 border-t border-white/[0.08] pt-4">
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleDispatchCommand(srv.id, 'restart')}
+                            disabled={isRestarting}
+                            className="btn h-9 border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
+                          >
+                            {isRestarting ? <Spinner className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                            Перезапуск
+                          </button>
+                          <button
+                            onClick={() => handleDispatchCommand(srv.id, 'stop')}
+                            disabled={isStopping}
+                            className="btn h-9 border border-red-500/30 bg-red-500/10 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                          >
+                            {isStopping ? <Spinner className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                            Остановить
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => handleDispatchCommand(srv.id, 'broadcast')}
+                          disabled={isBroadcasting}
+                          className="btn btn-ghost h-9 w-full text-xs font-semibold text-slate-300"
+                        >
+                          {isBroadcasting ? <Spinner className="h-3.5 w-3.5" /> : <Radio className="h-3.5 w-3.5 text-brand" />}
+                          Анонс игрокам
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============ txAdmin CONSOLE ============ */}
+      {tab === 'console' && (
+        <div className="relative space-y-6 animate-fade-in">
+          {/* Header */}
+          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Terminal className="h-5 w-5 text-brand" />
+                <h2 className="text-lg font-black text-white">txAdmin Cloud Web Console</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Прямой двухсторонний канал управления сервером FloV:MP через RemoteServerAgent
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emeraldx/30 bg-emeraldx/15 px-3 py-1 font-mono text-[11px] font-bold text-emeraldx">
+                <span className="h-2 w-2 rounded-full bg-emeraldx animate-pulse" />
+                Agent Connected (UDP 7788)
+              </span>
+              <button
+                onClick={() =>
+                  setConsoleLogs([
+                    {
+                      id: Date.now(),
+                      time: new Date().toLocaleTimeString('ru-RU'),
+                      tag: 'System',
+                      text: 'Консоль очищена',
+                      tone: 'info',
+                    },
+                  ])
+                }
+                className="btn btn-ghost h-9 px-3 text-xs"
+              >
+                Очистить
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Command Chips */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: 'Перезагрузка с анонсом', cmd: 'broadcast Внимание: перезагрузка через 5 минут!' },
+              { label: 'Запросить статус игроков', cmd: 'status' },
+              { label: 'Принудительный GC', cmd: 'coreclr gc collect' },
+              { label: 'Проверить BattlEye', cmd: 'battleye status' },
+            ].map((qc) => (
+              <button
+                key={qc.label}
+                onClick={() => setConsoleInput(qc.cmd)}
+                className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 font-mono text-[11px] text-slate-300 transition hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
+              >
+                {qc.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Terminal Box */}
+          <div className="rounded-3xl border border-white/15 bg-ink-950/90 p-5 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 font-mono text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-red-500/80" />
+                <span className="h-3 w-3 rounded-full bg-amber-500/80" />
+                <span className="h-3 w-3 rounded-full bg-emeraldx/80" />
+                <span className="ml-2 text-slate-400">flovmp-control-plane://server-agent.flovmp.net</span>
+              </div>
+              <span className="text-[11px]">TTY-1 (C# CoreCLR)</span>
+            </div>
+
+            <div className="mt-4 max-h-[480px] min-h-[340px] space-y-2 overflow-y-auto font-mono text-xs leading-relaxed no-scrollbar">
+              {consoleLogs.map((log) => (
+                <div key={log.id} className="flex items-start gap-3">
+                  <span className="text-slate-600">{log.time}</span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] uppercase font-bold ${
+                      log.tone === 'cmd'
+                        ? 'bg-brand/20 text-brand'
+                        : log.tone === 'warn'
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : log.tone === 'error'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-white/10 text-cyber'
+                    }`}
+                  >
+                    {log.tag}
+                  </span>
+                  <span
+                    className={
+                      log.tone === 'cmd'
+                        ? 'font-bold text-white'
+                        : log.tone === 'error'
+                        ? 'text-red-400'
+                        : log.tone === 'warn'
+                        ? 'text-amber-300'
+                        : 'text-slate-300'
+                    }
+                  >
+                    {log.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Input Bar */}
+            <form onSubmit={sendConsoleCommand} className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4">
+              <span className="font-mono text-xs font-bold text-brand">txAdmin@flovmp:~$</span>
+              <input
+                value={consoleInput}
+                onChange={(e) => setConsoleInput(e.target.value)}
+                placeholder="broadcast [текст], restart, stop или команда сервера..."
+                className="flex-1 bg-transparent font-mono text-xs text-white placeholder-slate-600 focus:outline-none"
+              />
+              <button type="submit" className="btn btn-primary h-8 px-4 text-xs">
+                <Send className="h-3.5 w-3.5" />
+                Отправить
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============ AI TROUBLESHOOTER ============ */}
+      {tab === 'troubleshoot' && (
+        <div className="relative space-y-8 animate-fade-in">
+          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div>
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-brand" />
+                <h2 className="text-lg font-black text-white">FloV:AI Диагностика и Автоисправление сбоев</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Анализ логов запуска сервера, сбоев CoreCLR (.NET), портов UDP 7788, BattlEye и resource.toml
+              </p>
+            </div>
+          </div>
+
+          {/* Quick presets */}
+          <div>
+            <div className="mb-2 text-xs font-semibold text-slate-400">Пресеты типовых сбоев для быстрой проверки:</div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                {
+                  name: 'Сбой CoreCLR (.NET)',
+                  text: 'FATAL [CoreCLR] System.IO.FileNotFoundException: Could not load file or assembly FloVMP.Gamemode.dll',
+                },
+                {
+                  name: 'Блокировка UDP 7788',
+                  text: 'ERROR [Network] Failed to bind UDP socket on 0.0.0.0:7788: Address already in use / Firewall block',
+                },
+                {
+                  name: 'Отсутствие .bin файлов',
+                  text: 'ERROR [Server] Failed to load altv data file: data/release/data/vehicles.bin missing or corrupted',
+                },
+                {
+                  name: 'Ошибка resource.toml',
+                  text: 'ERROR [Resource] Failed to parse resource.toml: Invalid TOML syntax at line 14',
+                },
+              ].map((sample) => (
+                <button
+                  key={sample.name}
+                  onClick={() => {
+                    setTroubleshootText(sample.text);
+                    void runTroubleshoot(sample.text);
+                  }}
+                  className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 font-mono text-[11px] text-slate-300 transition hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
+                >
+                  {sample.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Input Area */}
+          <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
+            <FieldLabel>Фрагмент лога ошибки altv-server или исключения C#</FieldLabel>
+            <textarea
+              rows={5}
+              value={troubleshootText}
+              onChange={(e) => setTroubleshootText(e.target.value)}
+              placeholder="Вставьте сюда текст ошибки (например: FATAL [CoreCLR] System.Exception: ...)"
+              className="field w-full p-4 font-mono text-xs text-slate-200"
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => runTroubleshoot()}
+                disabled={diagnosing || !troubleshootText.trim()}
+                className="btn btn-primary h-10 px-6 text-xs disabled:opacity-50"
+              >
+                {diagnosing ? <Spinner className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
+                {diagnosing ? 'Нейроанализ логов…' : 'Диагностировать ошибку'}
+              </button>
+            </div>
+          </div>
+
+          {/* Diagnosis Result */}
+          {diagnosticResult && (
+            <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8 animate-fade-in space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl font-bold ${
+                      diagnosticResult.severity === 'CRITICAL'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-amber-500/20 text-amber-400'
+                    }`}
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">{diagnosticResult.title}</h3>
+                    <div className="font-mono text-xs text-slate-400">Категория: {diagnosticResult.category}</div>
+                  </div>
+                </div>
+                <Badge tone={diagnosticResult.severity === 'CRITICAL' ? 'red' : 'amber'}>
+                  {diagnosticResult.severity}
+                </Badge>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-ink-950/60 p-4">
+                <div className="text-xs font-semibold text-slate-400 mb-1">Причина инцидента:</div>
+                <p className="text-sm text-slate-200 leading-relaxed">{diagnosticResult.explanation}</p>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-brand mb-3 uppercase tracking-wider font-mono">
+                  Пошаговое решение проблемы:
+                </div>
+                <div className="space-y-3">
+                  {diagnosticResult.actionableFixes.map((step: string, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand/10 font-mono font-bold text-brand">
+                        {idx + 1}
+                      </span>
+                      <div className="text-slate-300 font-mono leading-relaxed pt-0.5">{step}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {diagnosticResult.docsReference && (
+                <div className="pt-2 font-mono text-xs text-slate-400">
+                  Документация:{' '}
+                  <span className="text-cyber underline cursor-pointer">{diagnosticResult.docsReference}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ============ OVERVIEW ============ */}
       {tab === 'overview' && (
         <div className="relative space-y-8 animate-fade-in">
@@ -736,6 +1441,100 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ============ DOWNLOADS & SDK ============ */}
+      {tab === 'sdk' && (
+        <div className="relative space-y-8 animate-fade-in">
+          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
+            <div>
+              <div className="flex items-center gap-2">
+                <Download className="h-5 w-5 text-brand" />
+                <h2 className="text-lg font-black text-white">Дистрибутивы и SDK FloV:MP</h2>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Автономный мультиплеерный рантайм, модули CoreCLR, библиотека C# SDK и утилиты FastDL
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                title: 'FloV:MP Server Core (Linux)',
+                desc: 'Автономный рантайм для VDS Ubuntu 22.04 / Debian 12. Включает coreclr-module, BattlEye и UDP стример.',
+                badge: 'Linux x64 · 85 MB',
+                badgeTone: 'cyber',
+                link: '/cdn/FloVMP-Server-x64-Linux.tar.gz',
+                btnText: 'Скачать tar.gz',
+              },
+              {
+                title: 'FloV:MP Server Core (Windows)',
+                desc: 'Локальный сервер для разработки под Windows 10/11/Server 2022. Полная изоляция от внешних бэкендов.',
+                badge: 'Win64 · 92 MB',
+                badgeTone: 'brand',
+                link: '/cdn/FloVMP-Server-x64-Windows.zip',
+                btnText: 'Скачать zip',
+              },
+              {
+                title: 'FloVMP.Core C# .NET 8 SDK',
+                desc: 'Пакет C# API: EntityStreamer, RemoteServerAgent, FactionEngine, LicensingService для создания гейммодов.',
+                badge: 'NuGet / DLL · 14 MB',
+                badgeTone: 'emeraldx',
+                link: '/cdn/FloVMP-SDK-v1.0.4.zip',
+                btnText: 'Скачать SDK',
+              },
+              {
+                title: 'FloV:MP Asset Packer (CLI)',
+                desc: 'Консольная утилита шифрования клиентских ресурсов и автогенерации манифестов FastDL перед релизом.',
+                badge: 'CLI Tool · 8 MB',
+                badgeTone: 'violetx',
+                link: '/cdn/flovmp-packer.exe',
+                btnText: 'Скачать Packer',
+              },
+              {
+                title: 'Electron Launcher Template',
+                desc: 'Исходный код брендированного лаунчера на Chromium UI + C# Native Bridge с аппаратным ускорением.',
+                badge: 'Source · 24 MB',
+                badgeTone: 'cyber',
+                link: '/cdn/FloVMP-Launcher-Template.zip',
+                btnText: 'Скачать шаблон',
+              },
+              {
+                title: 'Примеры гейммодов (Templates)',
+                desc: 'Готовые шаблоны ролевых проектов: RP Основа, Дрифт-сервер, DM Арена с полной C# типизацией.',
+                badge: 'Samples · 5 MB',
+                badgeTone: 'brand',
+                link: '/cdn/FloVMP-Gamemode-Samples.zip',
+                btnText: 'Скачать примеры',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="glass-panel card-edge flex flex-col justify-between rounded-3xl p-6 shadow-glass"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Badge tone={item.badgeTone as any}>{item.badge}</Badge>
+                    <Download className="h-4 w-4 text-slate-500" />
+                  </div>
+                  <h3 className="mt-4 text-base font-bold text-white">{item.title}</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.desc}</p>
+                </div>
+                <div className="mt-6 border-t border-white/[0.08] pt-4">
+                  <a
+                    href={item.link}
+                    download
+                    className="btn btn-ghost h-10 w-full text-xs font-semibold text-brand hover:bg-brand/10"
+                  >
+                    <Download className="h-4 w-4" />
+                    {item.btnText}
+                  </a>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1142,6 +1941,80 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <button type="submit" disabled={creatingLic} className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50">
               {creatingLic ? <Spinner className="h-4 w-4" /> : null}
               Активировать лицензию
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={newProjOpen}
+        onClose={() => setNewProjOpen(false)}
+        title="Создание нового проекта"
+        description="Проект объединяет единую лицензию и несколько сред: Production, Development, Test"
+      >
+        <form onSubmit={createProjectHandler} className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { id: 'business', name: 'RP Проект', slots: '512 слотов', tone: 'brand' },
+              { id: 'enterprise', name: 'Enterprise', slots: '1500+ слотов', tone: 'cyber' },
+            ].map((p) => (
+              <button
+                type="button"
+                key={p.id}
+                onClick={() => setNewProjPlan(p.id)}
+                className={`rounded-2xl border p-4 text-center transition-all ${
+                  newProjPlan === p.id
+                    ? p.tone === 'cyber'
+                      ? 'border-cyber/60 bg-cyber/10'
+                      : 'border-brand/60 bg-brand/10 shadow-neon-pink'
+                    : 'border-white/10 bg-white/[0.02]'
+                }`}
+              >
+                <div className="text-xs font-bold text-white">{p.name}</div>
+                <div className="mt-1 text-[10px] text-slate-400">{p.slots}</div>
+              </button>
+            ))}
+          </div>
+          <div>
+            <FieldLabel>Название проекта</FieldLabel>
+            <input
+              required
+              value={newProjName}
+              onChange={(e) => {
+                setNewProjName(e.target.value);
+                if (!newProjSlug || newProjSlug === newProjName.toLowerCase().replace(/\s+/g, '-')) {
+                  setNewProjSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'));
+                }
+              }}
+              placeholder="Florida V RolePlay"
+              className="field h-11 px-4"
+            />
+          </div>
+          <div>
+            <FieldLabel>Slug идентификатор (URL проекта)</FieldLabel>
+            <input
+              required
+              value={newProjSlug}
+              onChange={(e) => setNewProjSlug(e.target.value)}
+              placeholder="florida-v"
+              className="field h-11 px-4 font-mono"
+            />
+          </div>
+          <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
+            <button
+              type="button"
+              onClick={() => setNewProjOpen(false)}
+              className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={creatingProj}
+              className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50"
+            >
+              {creatingProj ? <Spinner className="h-4 w-4" /> : null}
+              Создать проект
             </button>
           </div>
         </form>
