@@ -22,6 +22,15 @@ public sealed class Account
     /// <summary>Номер банковского счёта (например, 4276...).</summary>
     public string BankAccountNumber { get; set; } = "";
 
+    /// <summary>Почта для восстановления доступа (пустая — не указана).</summary>
+    public string Email { get; set; } = "";
+
+    /// <summary>Секрет TOTP (Base32) для двухфакторной аутентификации.</summary>
+    public string TotpSecret { get; set; } = "";
+
+    /// <summary>Включена ли двухфакторная аутентификация (Google Authenticator).</summary>
+    public bool TwoFaEnabled { get; set; } = false;
+
     /// <summary>Уровень администратора от 0 (игрок) до 8 (Руководитель проекта).</summary>
     public int AdminLevel { get; set; } = 0;
 
@@ -49,4 +58,10 @@ public sealed class Account
 
     public static bool IsValidPassword(string? pw) =>
         !string.IsNullOrEmpty(pw) && pw.Length is >= 6 and <= 100;
+
+    /// <summary>Нестрогая проверка адреса почты (есть "@", точка после, без пробелов).</summary>
+    public static bool IsValidEmail(string? email) =>
+        !string.IsNullOrWhiteSpace(email)
+        && email.Length <= 128
+        && System.Text.RegularExpressions.Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 }

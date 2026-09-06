@@ -142,6 +142,11 @@ public sealed class AuthSystem
         Alt.Log($"[FloV:MP] auth: {player.Name} вошёл как '{account.Username}' (id {account.Id})");
         FloVMP.Core.Logging.GameLog.Account("login",
             FloVMP.Core.Logging.LogActor.Player(account.Id, account.Username), Ip(player));
+
+        // Хэндофф в лаунчер: если игрок зашёл в игру без входа в лаунчере,
+        // после этого лаунчер подхватит аккаунт из session.json.
+        SessionHandoff.Write(account);
+
         player.Emit("flovmp:auth:hide");
         _onAuthed(player, account);
     }

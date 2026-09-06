@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { signLicensePayload } from '@/lib/license';
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,8 +72,9 @@ export async function POST(req: NextRequest) {
     // Update last_verified_at
     await query('UPDATE portal_licenses SET last_verified_at = CURRENT_TIMESTAMP WHERE id = ?', [lic.id]);
 
-    return NextResponse.json({
+    const responsePayload = {
       valid: true,
+      licenseKey: lic.license_key,
       serverName: lic.server_name,
       plan: lic.plan,
       maxPlayers: lic.max_players,
@@ -86,6 +88,13 @@ export async function POST(req: NextRequest) {
         unlimitedEntities: lic.plan === 'enterprise',
       },
       verifiedAt: new Date().toISOString(),
+    };
+
+    const signature = signLicensePayload(responsePayload);
+
+    return NextResponse.json({
+      ...responsePayload,
+      signature,
     });
   } catch (err: any) {
     console.error('License verify error:', err);

@@ -99,7 +99,7 @@ _ = Task.Run(() =>
                 continue;
             }
 
-            if (path is "/api/auth/register" or "/api/auth/login" && ctx.Request.HttpMethod == "POST")
+            if (path.StartsWith("/api/auth/") && ctx.Request.HttpMethod == "POST")
             {
                 HandleAuthRequest(ctx, path, accountsPath, jsonOpts);
                 continue;
@@ -188,35 +188,51 @@ Console.ResetColor();
 listener.Stop();
 return 0;
 
-// ─── /api/auth/register, /api/auth/login — тот же AuthService/JsonAccountStore,
-// что и в игре (FloVMP.Gamemode/Systems/Auth/AuthSystem.cs), тот же accounts.json.
-// Один аккаунт для лаунчера и игры — решено с владельцем 2026-08-30.
+// ─── /api/auth/* — тот же AuthService/JsonAccountStore, что и в игре
+// (FloVMP.Gamemode/Systems/Auth/AuthSystem.cs), тот же accounts.json. Один
+// аккаунт для лаунчера и игры — решено с владельцем 2026-08-30. Эндпоинты:
+//   register, login            — вход/регистрация (login принимает code для 2FA);
+//   change-password, change-email — смена данных (нужен текущий пароль);
+//   2fa/enable, 2fa/disable    — Google Authenticator.
 static void HandleAuthRequest(HttpListenerContext ctx, string path, string accountsPath, JsonSerializerOptions jsonOpts)
 {
     try
     {
         using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
         var body = reader.ReadToEnd();
-        var req = JsonSerializer.Deserialize<AuthRequestDto>(body, jsonOpts);
-        var username = req?.Username?.Trim() ?? "";
-        var password = req?.Password ?? "";
+        var req = JsonSerializer.Deserialize<AuthRequestDto>(body, jsonOpts) ?? new AuthRequestDto(null, null, null, null, null, null);
+        var username = req.Username?.Trim() ?? "";
+        var password = req.Password ?? "";
+        var throttleKey = ctx.Request.RemoteEndPoint?.Address.ToString() ?? username;
 
         var auth = new AuthService(new JsonAccountStore(accountsPath));
-        var result = path == "/api/auth/register"
-            ? auth.Register(username, password)
-            : auth.Login(username, password, throttleKey: ctx.Request.RemoteEndPoint?.Address.ToString() ?? username);
+        var route = path["/api/auth/".Length..].TrimEnd('/');
+
+        var result = route switch
+        {
+            "register" => auth.Register(username, password),
+            "login" => auth.Login(username, password, throttleKey, req.Code),
+            "change-password" => auth.ChangePassword(username, password, req.NewPassword ?? ""),
+            "change-email" => auth.ChangeEmail(username, password, req.Email ?? ""),
+            "2fa/enable" => auth.Enable2fa(username, req.Secret ?? "", req.Code ?? ""),
+            "2fa/disable" => auth.Disable2fa(username, req.Code ?? ""),
+            _ => new AuthResult(AuthOutcome.BadUsername, "неизвестная операция"),
+        };
 
         var resp = new AuthResponseDto(
             result.Ok,
             result.Message,
             result.Account?.Username,
-            result.Account?.CreatedUtc);
+            result.Account?.CreatedUtc,
+            result.Account?.Email ?? "",
+            result.Account?.TwoFaEnabled ?? false,
+            result.Outcome == AuthOutcome.TwoFaRequired);
 
         WriteJson(ctx, result.Ok ? 200 : 400, resp, jsonOpts);
     }
     catch (Exception ex)
     {
-        WriteJson(ctx, 500, new AuthResponseDto(false, $"внутренняя ошибка: {ex.Message}", null, null), jsonOpts);
+        WriteJson(ctx, 500, new AuthResponseDto(false, $"внутренняя ошибка: {ex.Message}", null, null, "", false, false), jsonOpts);
     }
 }
 
@@ -229,5 +245,19 @@ static void WriteJson(HttpListenerContext ctx, int status, object payload, JsonS
     ctx.Response.Close();
 }
 
-record AuthRequestDto(string? Username, string? Password);
-record AuthResponseDto(bool Ok, string Message, string? Username, string? CreatedUtc);
+record AuthRequestDto(
+    string? Username,
+    string? Password,
+    string? NewPassword,
+    string? Email,
+    string? Secret,
+    string? Code);
+
+record AuthResponseDto(
+    bool Ok,
+    string Message,
+    string? Username,
+    string? CreatedUtc,
+    string Email,
+    bool TwoFa,
+    bool TwoFaRequired);

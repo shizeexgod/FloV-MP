@@ -30,11 +30,12 @@ public sealed class MySqlAccountStore : IAccountStore
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT id, username, password_hash, cash, bank, admin_level, 
-                   is_banned, ban_reason, ban_until_utc, mute_until_utc, 
-                   created_at, last_login_at
-            FROM accounts 
-            WHERE username = @username 
+            SELECT id, username, password_hash, cash, bank, admin_level,
+                   is_banned, ban_reason, ban_until_utc, mute_until_utc,
+                   created_at, last_login_at,
+                   email, totp_secret, two_fa_enabled
+            FROM accounts
+            WHERE username = @username
             LIMIT 1;";
         cmd.Parameters.AddWithValue("@username", username);
 
@@ -95,7 +96,7 @@ public sealed class MySqlAccountStore : IAccountStore
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            UPDATE accounts 
+            UPDATE accounts
             SET password_hash = @pw,
                 cash = @cash,
                 bank = @bank,
@@ -104,7 +105,10 @@ public sealed class MySqlAccountStore : IAccountStore
                 ban_reason = @ban_reason,
                 ban_until_utc = @ban_until,
                 mute_until_utc = @mute_until,
-                last_login_at = @last_login
+                last_login_at = @last_login,
+                email = @email,
+                totp_secret = @totp_secret,
+                two_fa_enabled = @two_fa_enabled
             WHERE id = @id OR username = @username;";
 
         cmd.Parameters.AddWithValue("@id", account.Id);
@@ -130,6 +134,10 @@ public sealed class MySqlAccountStore : IAccountStore
         if (!string.IsNullOrEmpty(account.LastLoginUtc) && DateTime.TryParse(account.LastLoginUtc, out var ldt))
             lastLoginVal = ldt;
         cmd.Parameters.AddWithValue("@last_login", lastLoginVal);
+
+        cmd.Parameters.AddWithValue("@email", string.IsNullOrEmpty(account.Email) ? (object)DBNull.Value : account.Email);
+        cmd.Parameters.AddWithValue("@totp_secret", string.IsNullOrEmpty(account.TotpSecret) ? (object)DBNull.Value : account.TotpSecret);
+        cmd.Parameters.AddWithValue("@two_fa_enabled", account.TwoFaEnabled ? 1 : 0);
 
         cmd.ExecuteNonQuery();
     }
@@ -163,6 +171,18 @@ public sealed class MySqlAccountStore : IAccountStore
         var loginIdx = r.GetOrdinal("last_login_at");
         if (!r.IsDBNull(loginIdx))
             acc.LastLoginUtc = r.GetDateTime(loginIdx).ToString("O");
+
+        var emailIdx = r.GetOrdinal("email");
+        if (!r.IsDBNull(emailIdx))
+            acc.Email = r.GetString(emailIdx);
+
+        var totpIdx = r.GetOrdinal("totp_secret");
+        if (!r.IsDBNull(totpIdx))
+            acc.TotpSecret = r.GetString(totpIdx);
+
+        var twoFaIdx = r.GetOrdinal("two_fa_enabled");
+        if (!r.IsDBNull(twoFaIdx))
+            acc.TwoFaEnabled = r.GetBoolean(twoFaIdx);
 
         return acc;
     }

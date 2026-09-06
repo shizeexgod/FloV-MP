@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS `accounts` (
   `password_hash` VARCHAR(255) NOT NULL,
   `salt` VARCHAR(255) NOT NULL,
   `email` VARCHAR(128) DEFAULT NULL,
+  `totp_secret` VARCHAR(64) DEFAULT NULL,
+  `two_fa_enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `hwid` VARCHAR(128) DEFAULT NULL,
   `social_club` VARCHAR(128) DEFAULT NULL,
   `last_ip` VARCHAR(45) DEFAULT NULL,

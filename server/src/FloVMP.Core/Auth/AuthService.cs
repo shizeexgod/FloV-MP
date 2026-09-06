@@ -10,6 +10,12 @@ public enum AuthOutcome
     WrongPassword,
     RateLimited,
     Banned,
+    /// <summary>Аккаунт с 2FA — при входе не передан или передан неверный код.</summary>
+    TwoFaRequired,
+    /// <summary>Неверный одноразовый код (2FA).</summary>
+    WrongCode,
+    /// <summary>Некорректный адрес почты.</summary>
+    EmailInvalid,
 }
 
 public sealed record AuthResult(AuthOutcome Outcome, string Message, Account? Account = null)
@@ -54,7 +60,7 @@ public sealed class AuthService
         return new AuthResult(AuthOutcome.Ok, "регистрация успешна", acc);
     }
 
-    public AuthResult Login(string username, string password, string throttleKey)
+    public AuthResult Login(string username, string password, string throttleKey, string? totpCode = null)
     {
         PruneAttempts();
 
@@ -77,10 +83,92 @@ public sealed class AuthService
             return new AuthResult(AuthOutcome.Banned, $"Аккаунт заблокирован: {reason}", acc);
         }
 
+        // Второй фактор: пароль верный, но аккаунт под 2FA — нужен код из
+        // приложения. Пустой код → просим ввести; неверный → считаем попыткой.
+        if (acc.TwoFaEnabled && !string.IsNullOrEmpty(acc.TotpSecret))
+        {
+            if (string.IsNullOrWhiteSpace(totpCode))
+                return new AuthResult(AuthOutcome.TwoFaRequired, "введите код из приложения-аутентификатора", acc);
+            if (!Totp.Verify(acc.TotpSecret, totpCode, _now()))
+                return Fail(throttleKey, AuthOutcome.WrongCode, "неверный код из приложения");
+        }
+
         ClearAttempts(throttleKey);
         acc.LastLoginUtc = _now().ToString("O");
         _store.Update(acc);
         return new AuthResult(AuthOutcome.Ok, "вход выполнен", acc);
+    }
+
+    // --- смена данных / 2FA -----------------------------------------------
+
+    /// <summary>Смена пароля: нужен текущий пароль и новый (6-100 символов).</summary>
+    public AuthResult ChangePassword(string username, string currentPassword, string newPassword)
+    {
+        var acc = _store.FindByUsername(username);
+        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (!PasswordHasher.Verify(currentPassword, acc.PasswordHash))
+            return new AuthResult(AuthOutcome.WrongPassword, "текущий пароль неверный");
+        if (!Account.IsValidPassword(newPassword))
+            return new AuthResult(AuthOutcome.BadPassword, "новый пароль: 6-100 символов");
+
+        acc.PasswordHash = PasswordHasher.Hash(newPassword);
+        _store.Update(acc);
+        return new AuthResult(AuthOutcome.Ok, "пароль изменён", acc);
+    }
+
+    /// <summary>Смена/установка почты: нужен пароль от аккаунта.</summary>
+    public AuthResult ChangeEmail(string username, string password, string email)
+    {
+        var acc = _store.FindByUsername(username);
+        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (!PasswordHasher.Verify(password, acc.PasswordHash))
+            return new AuthResult(AuthOutcome.WrongPassword, "пароль неверный");
+        if (!Account.IsValidEmail(email))
+            return new AuthResult(AuthOutcome.EmailInvalid, "некорректный адрес почты");
+
+        acc.Email = email.Trim();
+        _store.Update(acc);
+        return new AuthResult(AuthOutcome.Ok, "почта сохранена", acc);
+    }
+
+    /// <summary>
+    /// Включение 2FA: клиент сгенерировал секрет и показал QR, игрок ввёл
+    /// код — проверяем и, если сходится, сохраняем секрет и включаем флаг.
+    /// </summary>
+    public AuthResult Enable2fa(string username, string secretBase32, string code)
+    {
+        var acc = _store.FindByUsername(username);
+        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (acc.TwoFaEnabled)
+            return new AuthResult(AuthOutcome.Ok, "двухфакторная защита уже включена", acc);
+        if (string.IsNullOrWhiteSpace(secretBase32) || Totp.FromBase32Safe(secretBase32).Length < 10)
+            return new AuthResult(AuthOutcome.WrongCode, "некорректный секрет");
+        if (!Totp.Verify(secretBase32, code, _now()))
+            return new AuthResult(AuthOutcome.WrongCode, "неверный код — проверьте время на устройстве");
+
+        acc.TotpSecret = secretBase32.Trim();
+        acc.TwoFaEnabled = true;
+        _store.Update(acc);
+        return new AuthResult(AuthOutcome.Ok, "двухфакторная защита включена", acc);
+    }
+
+    /// <summary>Отключение 2FA: принимаем либо текущий код из приложения, либо пароль.</summary>
+    public AuthResult Disable2fa(string username, string codeOrPassword)
+    {
+        var acc = _store.FindByUsername(username);
+        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (!acc.TwoFaEnabled)
+            return new AuthResult(AuthOutcome.Ok, "двухфакторная защита уже выключена", acc);
+
+        var byCode = Totp.Verify(acc.TotpSecret, codeOrPassword, _now());
+        var byPassword = PasswordHasher.Verify(codeOrPassword, acc.PasswordHash);
+        if (!byCode && !byPassword)
+            return new AuthResult(AuthOutcome.WrongCode, "неверный код или пароль");
+
+        acc.TotpSecret = "";
+        acc.TwoFaEnabled = false;
+        _store.Update(acc);
+        return new AuthResult(AuthOutcome.Ok, "двухфакторная защита отключена", acc);
     }
 
     // --- throttle -----------------------------------------------------

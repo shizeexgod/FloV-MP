@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Shield, Server, Terminal, User, LogOut, Menu, X, Key, Zap, ArrowRight } from 'lucide-react';
 
 export default function Navbar() {
-  const [user, setUser] = useState<{ username: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ username: string; email: string; role?: string } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -68,10 +68,13 @@ export default function Navbar() {
             <a href="#process" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
               6 шагов запуска
             </a>
-            <a href="#pricing" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            <a href="/#pricing" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
               Тарифы
             </a>
-            <a href="#contacts" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            <Link href="/docs" className="text-sm font-medium text-brand hover:text-brand-hover transition-colors flex items-center gap-1">
+              <span>Документация</span>
+            </Link>
+            <a href="/#contacts" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
               Контакты
             </a>
           </div>
@@ -80,6 +83,14 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <div className="flex items-center gap-3">
+                {user.role === 'admin' && (
+                  <Link
+                    href="/admin"
+                    className="px-3 py-2 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 text-xs font-bold font-mono transition-colors"
+                  >
+                    Админ-панель
+                  </Link>
+                )}
                 <Link
                   href="/dashboard"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand/20 border border-brand/40 text-brand hover:bg-brand/30 transition-colors font-semibold text-sm shadow-neon-pink"
