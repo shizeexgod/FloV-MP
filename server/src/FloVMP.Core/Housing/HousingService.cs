@@ -63,6 +63,23 @@ public sealed class HousingService
         }
     }
 
+    public Property? GetNearbyEntrance(Vector3D pos, float radius = 3.0f)
+    {
+        lock (_lock)
+        {
+            return _properties.Values.FirstOrDefault(p => p.EntrancePosition.DistanceTo(pos) <= radius);
+        }
+    }
+
+    public Property? GetPropertyByDimension(int dimension)
+    {
+        if (dimension == 0) return null;
+        lock (_lock)
+        {
+            return _properties.Values.FirstOrDefault(p => p.Dimension == dimension);
+        }
+    }
+
     public bool TryBuy(Account account, int propertyId, out string error)
     {
         lock (_lock)
@@ -95,7 +112,10 @@ public sealed class HousingService
             account.Bank -= prop.Price;
             prop.OwnerAccountId = account.Id;
             prop.IsLocked = false;
-            prop.Roommates.Clear();
+            lock (prop.Roommates)
+            {
+                prop.Roommates.Clear();
+            }
             error = string.Empty;
             return true;
         }
@@ -126,7 +146,10 @@ public sealed class HousingService
             prop.OwnerAccountId = null;
             prop.IsLocked = true;
             prop.SafeCash = 0;
-            prop.Roommates.Clear();
+            lock (prop.Roommates)
+            {
+                prop.Roommates.Clear();
+            }
             error = string.Empty;
             return true;
         }
@@ -248,7 +271,13 @@ public sealed class HousingService
                 return false;
             }
 
-            if (!prop.Roommates.Add(roommateAccountId))
+            bool added;
+            lock (prop.Roommates)
+            {
+                added = prop.Roommates.Add(roommateAccountId);
+            }
+
+            if (!added)
             {
                 error = "Игрок уже заселён в этот объект";
                 return false;
@@ -275,7 +304,13 @@ public sealed class HousingService
                 return false;
             }
 
-            if (!prop.Roommates.Remove(roommateAccountId))
+            bool removed;
+            lock (prop.Roommates)
+            {
+                removed = prop.Roommates.Remove(roommateAccountId);
+            }
+
+            if (!removed)
             {
                 error = "Игрок не был заселён в этот объект";
                 return false;

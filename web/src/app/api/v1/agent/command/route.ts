@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'serverId and command are required' }, { status: 400 });
     }
 
-    const validCommands = ['restart', 'stop', 'broadcast', 'kick_all', 'execute'];
+    const validCommands = ['restart', 'stop', 'broadcast', 'kick_all', 'execute', 'resource_start', 'resource_stop', 'resource_restart'];
     if (!validCommands.includes(command)) {
       return NextResponse.json(
         { success: false, error: `Invalid command. Allowed: ${validCommands.join(', ')}` },

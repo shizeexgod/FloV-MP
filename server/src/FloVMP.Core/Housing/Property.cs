@@ -43,6 +43,12 @@ public sealed class Property
         IsLocked = true;
     }
 
-    public bool HasAccess(int accountId) =>
-        OwnerAccountId == accountId || Roommates.Contains(accountId);
+    public bool HasAccess(int accountId)
+    {
+        if (OwnerAccountId == accountId) return true;
+        lock (Roommates)
+        {
+            return Roommates.Contains(accountId);
+        }
+    }
 }
