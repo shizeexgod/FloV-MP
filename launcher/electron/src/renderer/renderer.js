@@ -693,27 +693,107 @@ function applyUiScale() {
   if (app) app.style.setProperty('--ui-scale', String(s / 100));
 }
 
-// ─── Звук в интерфейсе — короткий клик через WebAudio (без файлов) ───────
-let _uiAudioCtx = null;
-function uiClick() {
-  if (!settings.uiSounds) return;
-  try {
-    _uiAudioCtx = _uiAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = _uiAudioCtx;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
+// ─── Звук в интерфейсе ──────────────────────────────────────────────────
+// Архитектура по образцу Majestic: именованные звуки, общий master-gain,
+// decodeAudioData. Файлы кладутся в assets/sounds/<name>.ogg (или .mp3).
+// Пока файлов нет — короткий синтез через осциллятор, чтобы фича работала
+// сразу и было слышно, куда встанут настоящие сэмплы.
+const SND = (() => {
+  const DEFS = {
+    hover:   { vol: 0.30, tone: [520, 480, 0.035] },
+    click:   { vol: 0.55, tone: [660, 440, 0.07] },
+    select:  { vol: 0.5,  tone: [700, 900, 0.09] },
+    modal:   { vol: 0.55, tone: [300, 520, 0.12] },
+    modalOut:{ vol: 0.45, tone: [520, 300, 0.10] },
+    toggle:  { vol: 0.4,  tone: [600, 720, 0.05] },
+    error:   { vol: 0.6,  tone: [300, 180, 0.18] },
+  };
+  let ctx = null, master = null;
+  const buffers = new Map();
+
+  function ensure() {
+    if (ctx) return true;
+    try {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      master.gain.value = 0.9;
+      master.connect(ctx.destination);
+      ['pointerdown', 'keydown'].forEach((ev) =>
+        window.addEventListener(ev, () => ctx && ctx.resume(), { once: true }));
+    } catch { return false; }
+    return true;
+  }
+  async function preload(name) {
+    if (buffers.has(name) || !ensure()) return;
+    buffers.set(name, 'loading');
+    for (const ext of ['ogg', 'mp3']) {
+      try {
+        const res = await fetch(`assets/sounds/${name}.${ext}`);
+        if (!res.ok) continue;
+        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        buffers.set(name, buf);
+        return;
+      } catch {}
+    }
+    buffers.set(name, 'synth'); // файла нет — синтезируем
+  }
+  function synth([f1, f2, dur], vol) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
-    o.frequency.setValueAtTime(660, ctx.currentTime);
-    o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.05);
-    g.gain.setValueAtTime(0.05, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.09);
-  } catch {}
+    o.frequency.setValueAtTime(f1, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), ctx.currentTime + dur);
+    g.gain.setValueAtTime(vol * 0.12, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur + 0.02);
+    o.connect(g); g.connect(master);
+    o.start(); o.stop(ctx.currentTime + dur + 0.03);
+  }
+  function play(name) {
+    if (!settings.uiSounds || !DEFS[name] || !ensure()) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const b = buffers.get(name);
+    if (b instanceof AudioBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = b;
+      const g = ctx.createGain();
+      g.gain.value = DEFS[name].vol;
+      src.connect(g); g.connect(master);
+      src.start(0);
+    } else if (b === 'synth') {
+      synth(DEFS[name].tone, DEFS[name].vol);
+    } else {
+      preload(name).then(() => play(name));
+    }
+  }
+  return { play, preload };
+})();
+
+// автопривязка: клик/наведение по «кликабельному» (cursor:pointer), как в
+// Majestic; [data-no-sound] — отключить для поддерева
+function _snd_clickable(t) {
+  const el = t instanceof Element ? t : null;
+  if (!el || getComputedStyle(el).cursor !== 'pointer') return null;
+  return el.closest('[data-no-sound]') ? null : el;
 }
-document.addEventListener('click', (e) => {
-  if (e.target.closest('button, .rail-item, .cabinet-item, .link-row, .accent-swatch, .toggle-btn, .srv-play')) uiClick();
+document.addEventListener('click', (e) => { if (_snd_clickable(e.target)) SND.play('click'); }, { capture: true, passive: true });
+document.addEventListener('mouseover', (e) => {
+  const en = _snd_clickable(e.target);
+  if (en && _snd_clickable(e.relatedTarget) !== en) SND.play('hover');
+}, { capture: true, passive: true });
+document.addEventListener('change', (e) => {
+  if (e.target.matches('input[type="checkbox"], .switch input')) SND.play('toggle');
 }, true);
+
+// звук открытия/закрытия любых модалок — по появлению/снятию .hidden
+(function wireModalSounds() {
+  const sel = '.settings-overlay, .cabinet-overlay, .auth-overlay, .news-modal-overlay, .launch-overlay';
+  document.querySelectorAll(sel).forEach((ov) => {
+    let wasHidden = ov.classList.contains('hidden');
+    new MutationObserver(() => {
+      const now = ov.classList.contains('hidden');
+      if (now !== wasHidden) { SND.play(now ? 'modalOut' : 'modal'); wasHidden = now; }
+    }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
 
 // ─── Единая привязка всех контролов настроек к settings + сохранение ──────
 SETTINGS_MAP.forEach(([id, key, prop]) => {
