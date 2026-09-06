@@ -466,6 +466,19 @@ body{
   transition: transform .32s cubic-bezier(.16,1,.3,1);
   transform-origin: bottom right;
 }
+/* Обложка с настоящей картинкой */
+.news-thumb--img{
+  background-size:cover; background-position:center; background-repeat:no-repeat;
+}
+.news-thumb--img::after{
+  /* только затемнение сверху — чтобы бейдж-пилюля читалась; текстуру убираем */
+  background:
+    linear-gradient(to bottom, rgba(0,0,0,.45), transparent 42%),
+    linear-gradient(to top, rgba(0,0,0,.15), transparent 30%);
+}
+.news-full-card:hover .news-thumb--img,
+.pnews-card:hover .news-thumb--img{ background-size:112%; }
+.news-thumb--img{ transition: background-size .4s cubic-bezier(.16,1,.3,1); }
 .news-full-card:hover .news-thumb__wm,
 .pnews-card:hover .news-thumb__wm{ transform: scale(1.09) rotate(-5deg); }
 
@@ -565,6 +578,58 @@ select{
 }
 select:hover{ border-color: var(--accent-dim); }
 select:focus{ outline:none; border-color: var(--accent-dim); box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), .12); }
+
+/* ---------- кастомный выпадающий список (заменяет нативный <select>) ----------
+   Нативный select остаётся в DOM как источник значения (value + событие
+   change → вся привязка настроек работает как была), но визуально скрыт;
+   рядом рисуется .xselect с анимацией раскрытия И закрытия. */
+select.xs-native{ position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; margin:0; }
+.xselect{ position:relative; font-family: var(--ui-font); min-width:150px; }
+.field-row .xselect{ flex:0 0 auto; min-width:170px; }
+.row .xselect, .accent-row .xselect{ flex:1; }
+.xselect__btn{
+  width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
+  padding:9px 12px; color: var(--text); font-size:12.5px; cursor:pointer; text-align:left;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.xselect__btn:hover{ border-color: var(--accent-dim); }
+.xselect.open .xselect__btn{ border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), .12); }
+.xselect__label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.xselect__chev{
+  width:0; height:0; flex:0 0 auto;
+  border-left:4px solid transparent; border-right:4px solid transparent;
+  border-top:5px solid var(--text-faint);
+  transition: transform .2s cubic-bezier(.16,1,.3,1);
+}
+.xselect.open .xselect__chev{ transform: rotate(180deg); }
+.xselect__menu{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60;
+  background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
+  box-shadow: 0 16px 36px -12px rgba(0,0,0,.75);
+  padding:4px; max-height:240px; overflow-y:auto;
+  opacity:0; transform: translateY(-6px) scale(.98); transform-origin: top center;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.16,1,.3,1), visibility 0s linear .18s;
+  visibility:hidden; pointer-events:none;
+}
+.xselect.up .xselect__menu{ top:auto; bottom:calc(100% + 6px); transform-origin: bottom center; }
+.xselect.open .xselect__menu{
+  opacity:1; transform:none; visibility:visible; pointer-events:auto;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.16,1,.3,1);
+}
+.xselect__opt{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:8px 10px; border-radius:6px; font-size:12.5px; color: var(--text-dim); cursor:pointer;
+  transition: background-color .12s ease, color .12s ease;
+}
+.xselect__opt:hover{ background: rgba(var(--accent-color-rgb), .1); color:#fff; }
+.xselect__opt.sel{ color: var(--accent-color); }
+.xselect__opt.sel::after{
+  content:""; width:13px; height:13px; flex:0 0 auto;
+  background-color: currentColor;
+  -webkit-mask:url('assets/icons/check.svg') center/contain no-repeat;
+  mask:url('assets/icons/check.svg') center/contain no-repeat;
+}
 /* Переключатель-пилюля (вместо квадратного чекбокса) */
 /* Размеры и поведение сверены с реальным Majestic (CDP: input чекбокс
    36x20, radius 10px = ровно половина высоты, transition:background-color
@@ -727,9 +792,52 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
     conic-gradient(from 0deg, #ff5d5d, #fdd015, #3fd98a, #4ac3ff, #c084fc, #ff5d5d);
 }
 .accent-swatch__plus{ font-size:15px; font-weight:800; color:#fff; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.5); }
-.accent-swatch--custom input[type="color"]{
-  position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; border:none; padding:0;
+.accent-swatch--custom{ cursor:pointer; }
+
+/* ---------- кастомный HSV-пикер цвета (в нашем стиле) ---------- */
+.cpick{
+  position:absolute; z-index:120; width:232px;
+  background: var(--bg-secondary-color); border:1px solid var(--white-200);
+  border-radius: var(--r-lg); padding:14px;
+  box-shadow: 0 24px 60px -16px rgba(0,0,0,.8);
+  opacity:0; transform: translateY(-6px) scale(.97); transform-origin: top left;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.16,1,.3,1), visibility 0s linear .18s;
+  visibility:hidden; pointer-events:none;
+  user-select:none;
 }
+.cpick.open{
+  opacity:1; transform:none; visibility:visible; pointer-events:auto;
+  transition: opacity .16s ease, transform .18s cubic-bezier(.16,1,.3,1);
+}
+.cpick__sv{
+  position:relative; width:204px; height:132px; border-radius: var(--r-sm);
+  margin-bottom:12px; cursor:crosshair; overflow:hidden;
+  background:
+    linear-gradient(to top, #000, rgba(0,0,0,0)),
+    linear-gradient(to right, #fff, var(--cp-hue, #f00));
+}
+.cpick__knob{
+  position:absolute; width:14px; height:14px; border-radius:50%;
+  border:2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 2px 6px rgba(0,0,0,.5);
+  transform: translate(-50%, -50%); pointer-events:none;
+}
+.cpick__hue{
+  position:relative; height:14px; border-radius:7px; margin-bottom:12px; cursor:ew-resize;
+  background: linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);
+}
+.cpick__hue-knob{
+  position:absolute; top:50%; width:16px; height:16px; border-radius:50%;
+  background:#fff; border:2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.5);
+  transform: translate(-50%, -50%); pointer-events:none;
+}
+.cpick__row{ display:flex; align-items:center; gap:8px; }
+.cpick__prev{ width:28px; height:28px; border-radius:6px; flex:0 0 auto; box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+.cpick__hex{
+  flex:1; background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
+  padding:7px 10px; color: var(--text); font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+  font-family: var(--ui-font);
+}
+.cpick__hex:focus{ outline:none; border-color: var(--accent-dim); }
 
 .accent-indicator{
   display:flex; align-items:center; gap:11px; padding:8px 12px 8px 10px;
@@ -984,6 +1092,13 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   content:""; position:absolute; inset:0;
   background: radial-gradient(ellipse 400px 200px at 20% 40%, var(--accent-glow), transparent 70%);
   pointer-events:none;
+}
+.news-modal-banner--img{
+  height:160px;
+  background-size:cover !important; background-position:center;
+}
+.news-modal-banner--img::before{
+  background: linear-gradient(to bottom, rgba(0,0,0,.5), transparent 40%, rgba(0,0,0,.35));
 }
 .news-modal-badge{
   font-family: var(--ui-font); font-size:10.5px; font-weight:800;

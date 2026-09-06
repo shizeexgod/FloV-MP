@@ -62,6 +62,7 @@ const NEWS = [
     date: '30.08.2026',
     likes: 214,
     views: 3180,
+    image: 'assets/news/cover-opening.svg',
     summary: 'Долгожданный запуск сервера на независимом движке FloV:MP.',
     body: `<p>Мы рады приветствовать всех первопроходцев проекта <b>Держава RP</b>! Это масштабный мир на базе собственного высокопроизводительного мультиплеера <b>FloV:MP</b>, свободного от ограничений старых платформ.</p>
     <p>Что вас ждёт на старте:</p>
@@ -176,6 +177,11 @@ function openNewsModal(newsItem) {
   currentNewsItem = newsItem;
   const modal = document.getElementById('news-modal-overlay');
   document.getElementById('news-modal-badge').textContent = newsItem.badge || 'НОВОСТЬ';
+  const banner = document.getElementById('news-modal-banner');
+  if (banner) {
+    banner.classList.toggle('news-modal-banner--img', !!newsItem.image);
+    banner.style.backgroundImage = newsItem.image ? `url('${newsItem.image}')` : '';
+  }
   document.getElementById('news-modal-title').textContent = newsItem.title;
   document.getElementById('news-modal-date').textContent = newsItem.date;
   document.getElementById('news-modal-text').innerHTML = newsItem.body;
@@ -217,6 +223,10 @@ const NEWS_CAT_ICON = {
 };
 function catIcon(badge) { return NEWS_CAT_ICON[badge] || 'newspaper'; }
 function newsThumb(n) {
+  if (n.image) {
+    return `<div class="news-thumb news-thumb--img" data-badge="${n.badge}"
+      style="background-image:url('${n.image}')"></div>`;
+  }
   return `<div class="news-thumb" data-badge="${n.badge}">
     <span class="news-thumb__wm icon icon-${catIcon(n.badge)}"></span>
   </div>`;
@@ -474,24 +484,148 @@ function renderAccentPicker() {
     (a) => `<button class="accent-swatch" data-accent="${a.id}" title="${a.name}" type="button"
       style="--sw:${a.accent}"><span class="icon icon-check"></span></button>`
   ).join('') + `
-    <label class="accent-swatch accent-swatch--custom" title="Свой цвет" data-accent="custom"
-      style="--sw:${settings.accentCustom || '#8b5cf6'}">
-      <span class="accent-swatch__plus">+</span>
-      <input type="color" id="accent-custom-input" value="${settings.accentCustom || '#8b5cf6'}">
-    </label>`;
+    <button class="accent-swatch accent-swatch--custom" title="Свой цвет" data-accent="custom" type="button"
+      style="--sw:${settings.accentCustom || '#8b5cf6'}"><span class="accent-swatch__plus">+</span></button>`;
 
   el.querySelectorAll('.accent-swatch[data-accent]:not(.accent-swatch--custom)').forEach((btn) => {
     btn.addEventListener('click', () => pickAccent(btn.dataset.accent));
   });
-  const custom = document.getElementById('accent-custom-input');
-  if (custom) {
-    custom.addEventListener('input', (e) => {
-      const hex = e.target.value;
-      e.target.closest('.accent-swatch').style.setProperty('--sw', hex);
-      pickAccent('custom', hex);
+  const customBtn = el.querySelector('.accent-swatch--custom');
+  if (customBtn) {
+    customBtn.addEventListener('click', () => {
+      openColorPicker(customBtn, settings.accentCustom || accentHex(), (hex) => {
+        customBtn.style.setProperty('--sw', hex);
+        pickAccent('custom', hex);
+      });
     });
   }
 }
+
+// ─── Кастомный HSV-пикер цвета (свой акцент) ────────────────────────────
+let _cpick = null;
+function hsvToRgb(h, s, v) {
+  h /= 360;
+  const i = Math.floor(h * 6), f = h * 6 - i;
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [
+    [v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q],
+  ][i % 6];
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, max ? d / max : 0, max];
+}
+function hexToRgbArr(hex) {
+  const n = parseInt((hex || '').replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map((c) => Math.max(0, Math.min(255, c | 0)).toString(16).padStart(2, '0')).join('');
+}
+
+function openColorPicker(anchor, initialHex, onChange) {
+  closeColorPicker();
+  let [h, s, v] = rgbToHsv(...hexToRgbArr(/^#[0-9a-f]{6}$/i.test(initialHex) ? initialHex : '#8b5cf6'));
+
+  const box = document.createElement('div');
+  box.className = 'cpick';
+  box.innerHTML = `
+    <div class="cpick__sv"><div class="cpick__knob"></div></div>
+    <div class="cpick__hue"><div class="cpick__hue-knob"></div></div>
+    <div class="cpick__row">
+      <span class="cpick__prev"></span>
+      <input class="cpick__hex" type="text" maxlength="7" spellcheck="false">
+    </div>`;
+  (document.getElementById('app') || document.body).appendChild(box);
+  _cpick = box;
+
+  const svEl = box.querySelector('.cpick__sv');
+  const knob = box.querySelector('.cpick__knob');
+  const hueEl = box.querySelector('.cpick__hue');
+  const hueKnob = box.querySelector('.cpick__hue-knob');
+  const prev = box.querySelector('.cpick__prev');
+  const hexInput = box.querySelector('.cpick__hex');
+
+  const render = (fireChange = true) => {
+    const [r, g, bl] = hsvToRgb(h, s, v);
+    const hex = rgbToHex(r, g, bl);
+    svEl.style.setProperty('--cp-hue', `hsl(${h}, 100%, 50%)`);
+    knob.style.left = `${s * 100}%`;
+    knob.style.top = `${(1 - v) * 100}%`;
+    knob.style.background = hex;
+    hueKnob.style.left = `${(h / 360) * 100}%`;
+    prev.style.background = hex;
+    if (document.activeElement !== hexInput) hexInput.value = hex.toUpperCase();
+    if (fireChange) onChange(hex);
+  };
+
+  const dragSV = (e) => {
+    const r = svEl.getBoundingClientRect();
+    s = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    v = Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
+    render();
+  };
+  const dragHue = (e) => {
+    const r = hueEl.getBoundingClientRect();
+    h = Math.max(0, Math.min(359.9, ((e.clientX - r.left) / r.width) * 360));
+    render();
+  };
+  const bindDrag = (el, mover) => {
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      mover(e);
+      const mv = (ev) => mover(ev);
+      const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+      document.addEventListener('pointermove', mv);
+      document.addEventListener('pointerup', up);
+    });
+  };
+  bindDrag(svEl, dragSV);
+  bindDrag(hueEl, dragHue);
+  hexInput.addEventListener('input', () => {
+    let val = hexInput.value.trim();
+    if (!val.startsWith('#')) val = '#' + val;
+    if (/^#[0-9a-f]{6}$/i.test(val)) {
+      [h, s, v] = rgbToHsv(...hexToRgbArr(val));
+      render();
+    }
+  });
+
+  // позиционируем рядом с якорем, в пределах окна
+  const ar = anchor.getBoundingClientRect();
+  box.style.left = `${Math.min(ar.left, window.innerWidth - 250)}px`;
+  const below = ar.bottom + 8;
+  box.style.top = (below + 210 > window.innerHeight ? Math.max(8, ar.top - 218) : below) + 'px';
+
+  render(false);
+  // форсируем reflow и включаем анимацию открытия синхронно (rAF в фоновой
+  // вкладке может не сработать — тогда попап «молча» не появлялся)
+  void box.offsetWidth;
+  box.classList.add('open');
+
+  setTimeout(() => document.addEventListener('pointerdown', outsideClose, true), 0);
+  function outsideClose(e) {
+    if (!box.contains(e.target) && e.target !== anchor) closeColorPicker();
+  }
+  box._outsideClose = outsideClose;
+}
+function closeColorPicker() {
+  if (!_cpick) return;
+  const box = _cpick; _cpick = null;
+  document.removeEventListener('pointerdown', box._outsideClose, true);
+  box.classList.remove('open');
+  setTimeout(() => box.remove(), 200);
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeColorPicker(); });
 
 function dlSpeedLabel(v) { return Number(v) === 0 ? 'Без ограничения' : `${v} МБ/с`; }
 function voiceThrLabel(v) { v = Number(v); return v < 33 ? 'Низкий' : v < 66 ? 'Средний' : 'Высокий'; }
@@ -513,6 +647,7 @@ function applySettingsToUI() {
   const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
   const us = document.getElementById('ui-scale-val'); if (us) us.textContent = `${settings.uiScale}%`;
 
+  syncAllXSelects();
   applyAccountUI();
 }
 
@@ -632,8 +767,94 @@ async function fillAudioDevices() {
     fill('set-voice-input', 'audioinput');
     fill('set-voice-output', 'audiooutput');
   } catch {}
+  refreshXSelect(document.getElementById('set-voice-input'));
+  refreshXSelect(document.getElementById('set-voice-output'));
 }
 let _audioDevicesFilled = false;
+
+// ─── Кастомные выпадающие списки (замена нативного <select>) ─────────────
+// Нативный select остаётся источником значения; поверх — .xselect с
+// анимацией открытия И закрытия. Все существующие обработчики change/input
+// на select продолжают работать (клик по опции их и вызывает).
+let _openXSelect = null;
+function buildXSelect(select) {
+  if (select.dataset.xs === '1') return;
+  select.dataset.xs = '1';
+  select.classList.add('xs-native');
+  select.tabIndex = -1;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'xselect';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'xselect__btn';
+  btn.innerHTML = `<span class="xselect__label"></span><span class="xselect__chev"></span>`;
+  const menu = document.createElement('div');
+  menu.className = 'xselect__menu';
+  wrap.append(btn, menu);
+  select.after(wrap);
+  select._xs = { wrap, btn, menu };
+
+  const close = () => {
+    if (!wrap.classList.contains('open')) return;
+    wrap.classList.remove('open');
+    if (_openXSelect === wrap) _openXSelect = null;
+  };
+  const open = () => {
+    if (_openXSelect && _openXSelect !== wrap) _openXSelect.classList.remove('open');
+    // вверх, если снизу мало места
+    const spaceBelow = window.innerHeight - btn.getBoundingClientRect().bottom;
+    wrap.classList.toggle('up', spaceBelow < 260);
+    wrap.classList.add('open');
+    _openXSelect = wrap;
+    const sel = menu.querySelector('.xselect__opt.sel');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    wrap.classList.contains('open') ? close() : open();
+  });
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); btn.click(); }
+    if (e.key === 'Escape') close();
+  });
+  select._xs.close = close;
+  refreshXSelect(select);
+}
+function refreshXSelect(select) {
+  if (!select || !select._xs) return;
+  const { btn, menu } = select._xs;
+  const opts = [...select.options];
+  btn.querySelector('.xselect__label').textContent =
+    (select.selectedOptions[0] && select.selectedOptions[0].textContent) || '';
+  menu.innerHTML = '';
+  opts.forEach((o) => {
+    const row = document.createElement('div');
+    row.className = 'xselect__opt' + (o.selected ? ' sel' : '');
+    row.textContent = o.textContent;
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (select.value !== o.value) {
+        select.value = o.value;
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      refreshXSelect(select);
+      select._xs.close();
+    });
+    menu.appendChild(row);
+  });
+}
+function syncAllXSelects() {
+  document.querySelectorAll('select[data-xs="1"]').forEach(refreshXSelect);
+}
+function enhanceSelects() {
+  document.querySelectorAll('select:not([data-xs])').forEach(buildXSelect);
+}
+document.addEventListener('click', () => { if (_openXSelect) _openXSelect.classList.remove('open'), (_openXSelect = null); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _openXSelect) { _openXSelect.classList.remove('open'); _openXSelect = null; }
+});
 
 // ─── Проверка микрофона — реальный уровень громкости ─────────────────────
 document.getElementById('btn-mic-test')?.addEventListener('click', async () => {
@@ -1257,6 +1478,7 @@ async function pollSession() {
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
   renderAccentPicker();
+  enhanceSelects();
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
   settings.autostart = await window.floridaV.getAutostart().catch(() => settings.autostart);
