@@ -70,34 +70,158 @@
       </button>
     </nav>
 
-    <!-- ─── Личный кабинет (модалка: рельс-вкладки слева + контент справа,
-         по образцу Majestic) ─── -->
+    <!-- ─── Личный кабинет (модалка: вкладки слева + контент справа,
+         по образцу Majestic → HajesticLauncher/src/renderer/main/pages/profile) ─── -->
     <div class="cabinet-overlay hidden" id="cabinet-overlay">
       <div class="cabinet-box">
-        <button class="cabinet-close" id="cabinet-close" type="button"><span class="icon icon-x"></span></button>
+        <button class="cabinet-close" id="cabinet-close" type="button" title="Закрыть"><span class="icon icon-x"></span></button>
         <nav class="cabinet-nav">
-          <div class="cabinet-who">
-            <div class="rail-avatar" id="cabinet-avatar">И</div>
-            <div><b id="cabinet-nick">Игрок</b><span>Изменить аватар</span></div>
+          <div class="cab-user">
+            <div class="cab-user__avatar" id="cabinet-avatar">И</div>
+            <div class="cab-user__meta">
+              <span class="cab-user__nick" id="cabinet-nick">Игрок</span>
+              <span class="cab-user__sub" id="cabinet-sub">Гость — войдите в аккаунт</span>
+            </div>
           </div>
-          <div class="cabinet-sep"></div>
+          <div class="cab-nav-divider"></div>
           <button class="cabinet-item active" data-tab="profile" type="button"><span class="icon icon-user"></span>Профиль</button>
-          <button class="cabinet-item" data-tab="balance" type="button"><span class="icon icon-donate"></span>Баланс</button>
+          <button class="cabinet-item" data-tab="security" type="button"><span class="icon icon-lock"></span>Безопасность</button>
+          <button class="cabinet-item" data-tab="devices" type="button"><span class="icon icon-monitor"></span>Устройства</button>
+          <button class="cabinet-item" data-tab="history" type="button"><span class="icon icon-history"></span>История входов</button>
           <div class="cabinet-spacer"></div>
-          <div class="link-row" id="cabinet-logout"><span class="icon icon-logout"></span>Выйти</div>
+          <button class="cab-logout" id="cabinet-logout" type="button"><span>Выйти</span><span class="icon icon-logout"></span></button>
         </nav>
         <div class="cabinet-content">
+
           <section class="cabinet-tab active" data-tab="profile">
             <h3>Профиль</h3>
-            <div class="cabinet-row"><span class="field-label">Никнейм</span><span id="cab-nick">—</span></div>
-            <div class="cabinet-row"><span class="field-label">Аккаунт зарегистрирован</span><span id="cab-created">—</span></div>
-            <div class="hint" style="margin-top:14px">Один аккаунт для лаунчера и игры — вход здесь работает и в игре.</div>
+            <div class="cab-row"><span class="cab-row__label">Логин на сервере</span><span class="cab-row__value" id="cab-nick">—</span></div>
+            <div class="cab-row"><span class="cab-row__label">Аккаунт зарегистрирован</span><span class="cab-row__value" id="cab-created">—</span></div>
+            <div class="cab-row"><span class="cab-row__label">Статус</span><span class="cab-row__value" id="cab-status">Не выполнен вход</span></div>
+            <p class="cab-note">Один аккаунт для лаунчера и игры — вход здесь работает и на сервере. Если войти в игре, лаунчер подхватит аккаунт автоматически.</p>
           </section>
-          <section class="cabinet-tab" data-tab="balance">
-            <h3>Баланс</h3>
-            <div class="cabinet-row"><span class="field-label">Донат-баланс</span><span>0 ₽</span></div>
-            <div class="hint" style="margin-top:10px">Оплата пока не подключена — раздел появится вместе с донат-магазином.</div>
+
+          <section class="cabinet-tab" data-tab="security">
+            <h3>Безопасность</h3>
+            <div class="sec-row">
+              <div class="sec-row__text">
+                <div class="sec-row__label">Электронная почта</div>
+                <div class="sec-row__desc">Нужна для восстановления доступа и уведомлений безопасности</div>
+              </div>
+              <div class="sec-row__control">
+                <span class="sec-field" id="sec-email-value">не указана</span>
+                <button class="btn-secondary" id="sec-btn-email" type="button">Изменить</button>
+              </div>
+            </div>
+            <div class="sec-row">
+              <div class="sec-row__text">
+                <div class="sec-row__label">Пароль</div>
+                <div class="sec-row__desc">Меняйте пароль, если подозреваете, что его знает кто-то ещё</div>
+              </div>
+              <div class="sec-row__control">
+                <span class="sec-field">••••••••</span>
+                <button class="btn-secondary" id="sec-btn-password" type="button">Изменить</button>
+              </div>
+            </div>
+            <div class="sec-row">
+              <div class="sec-row__text">
+                <div class="sec-row__label">Google Authenticator</div>
+                <div class="sec-row__desc">Одноразовый код из приложения при каждом входе — второй фактор защиты</div>
+              </div>
+              <div class="sec-row__control">
+                <button class="btn-primary btn-sm" id="sec-btn-2fa" type="button">Подключить</button>
+                <span class="sec-2fa-status" id="sec-2fa-status" data-on="false">выключена</span>
+              </div>
+            </div>
           </section>
+
+          <section class="cabinet-tab" data-tab="devices">
+            <h3>Устройства</h3>
+            <p class="cab-desc">Устройства, с которых выполнялся вход в аккаунт. Полный список сессий ведётся на сервере — здесь показано текущее устройство.</p>
+            <div class="dev-section">
+              <div class="dev-section__title">Текущее устройство</div>
+              <div class="dev-row is-current" id="dev-current">
+                <span class="dev-row__icon"><span class="icon icon-monitor"></span></span>
+                <div class="dev-row__meta">
+                  <div class="dev-row__name" id="dev-current-name">Загрузка…</div>
+                  <div class="dev-row__sub" id="dev-current-sub">—</div>
+                </div>
+                <span class="dev-row__badge">активно сейчас</span>
+              </div>
+            </div>
+            <div class="dev-section">
+              <div class="dev-section__title">Другие устройства</div>
+              <div class="cab-empty" id="dev-others-empty">Других активных сессий не видно. Полная история — на сервере игры.</div>
+            </div>
+          </section>
+
+          <section class="cabinet-tab" data-tab="history">
+            <h3>История входов</h3>
+            <p class="cab-desc">Последние входы в аккаунт: устройство, IP и время. Если видите незнакомый вход — смените пароль и включите двухфакторную защиту.</p>
+            <div class="hist-list" id="hist-list">
+              <div class="hist-row" id="hist-current">
+                <span class="hist-row__icon"><span class="icon icon-mappin"></span></span>
+                <div class="hist-row__meta">
+                  <div class="hist-row__name" id="hist-current-name">Текущий сеанс</div>
+                  <div class="hist-row__sub" id="hist-current-sub">—</div>
+                </div>
+                <div class="hist-row__time" id="hist-current-time">—</div>
+              </div>
+            </div>
+            <div class="cab-empty" id="hist-empty">Более ранние входы хранятся на сервере игры.</div>
+          </section>
+
+        </div>
+      </div>
+
+      <!-- вложенные окна безопасности -->
+      <div class="cab-sub-overlay hidden" id="cab-sub-password">
+        <div class="cab-sub-box">
+          <button class="cabinet-close" data-cab-sub-close type="button"><span class="icon icon-x"></span></button>
+          <h3>Смена пароля</h3>
+          <p class="cab-sub-desc">Введите текущий пароль и новый — минимум 6 символов.</p>
+          <label class="auth-field"><span>Текущий пароль</span><input type="password" id="cab-pw-current" autocomplete="current-password"></label>
+          <label class="auth-field"><span>Новый пароль</span><input type="password" id="cab-pw-new" autocomplete="new-password"></label>
+          <label class="auth-field"><span>Повторите новый пароль</span><input type="password" id="cab-pw-repeat" autocomplete="new-password"></label>
+          <div class="auth-error" id="cab-pw-error"></div>
+          <button class="btn-primary" id="cab-pw-submit" type="button">Сменить пароль</button>
+        </div>
+      </div>
+
+      <div class="cab-sub-overlay hidden" id="cab-sub-email">
+        <div class="cab-sub-box">
+          <button class="cabinet-close" data-cab-sub-close type="button"><span class="icon icon-x"></span></button>
+          <h3>Электронная почта</h3>
+          <p class="cab-sub-desc">Почта используется для восстановления доступа и оповещений безопасности.</p>
+          <label class="auth-field"><span>Пароль от аккаунта</span><input type="password" id="cab-email-pw" autocomplete="current-password"></label>
+          <label class="auth-field"><span>Новый адрес</span><input type="email" id="cab-email-new" placeholder="example@mail.ru"></label>
+          <div class="auth-error" id="cab-email-error"></div>
+          <button class="btn-primary" id="cab-email-submit" type="button">Сохранить</button>
+        </div>
+      </div>
+
+      <div class="cab-sub-overlay hidden" id="cab-sub-2fa">
+        <div class="cab-sub-box cab-sub-box--wide">
+          <button class="cabinet-close" data-cab-sub-close type="button"><span class="icon icon-x"></span></button>
+          <h3 id="cab-2fa-title">Подключение Google Authenticator</h3>
+          <p class="cab-sub-desc" id="cab-2fa-desc">Отсканируйте QR-код в приложении Google Authenticator и введите 6-значный код для подтверждения.</p>
+          <div class="cab-2fa-body" id="cab-2fa-enable-body">
+            <div class="cab-2fa-qr" id="cab-2fa-qr"></div>
+            <div class="cab-2fa-right">
+              <div class="cab-2fa-manual">
+                <span>Код для ручного ввода</span>
+                <code id="cab-2fa-secret">—</code>
+              </div>
+              <label class="auth-field"><span>Код из приложения</span><input type="text" id="cab-2fa-code" inputmode="numeric" maxlength="6" placeholder="000000"></label>
+              <div class="auth-error" id="cab-2fa-error"></div>
+              <button class="btn-primary" id="cab-2fa-submit" type="button">Активировать</button>
+            </div>
+          </div>
+          <div class="cab-2fa-body hidden" id="cab-2fa-disable-body">
+            <label class="auth-field" style="width:100%"><span>Код из приложения или пароль</span><input type="text" id="cab-2fa-disable-code" placeholder="000000"></label>
+            <div class="auth-error" id="cab-2fa-disable-error"></div>
+            <button class="btn-primary" id="cab-2fa-disable-submit" type="button">Отключить</button>
+          </div>
         </div>
       </div>
     </div>
@@ -175,12 +299,6 @@
 
           <div class="settings-tab active" data-subtab="general">
             <div class="settings-list">
-              <div class="card">
-                <h4><span class="icon icon-user"></span>Профиль</h4>
-                <span class="field-label">Никнейм</span>
-                <input type="text" id="set-nickname" style="margin-bottom:14px">
-                <div class="link-row" id="btn-logout"><span class="icon icon-logout"></span>Выйти из аккаунта</div>
-              </div>
               <div class="card">
                 <h4><span class="icon icon-link"></span>Сервер</h4>
                 <div class="row">
@@ -438,7 +556,7 @@
   </div>
 
   <!-- ─── Оверлей авторизации ─── -->
-  <div class="auth-overlay" id="auth-overlay">
+  <div class="auth-overlay hidden" id="auth-overlay">
     <div class="auth-box">
       <button class="cabinet-close" id="auth-skip" type="button" title="Войти позже"><span class="icon icon-x"></span></button>
       <img class="auth-mark" src="assets/logo.png" alt="Держава RP">

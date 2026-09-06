@@ -25,6 +25,15 @@ const api = {
   // localIp, bootTimeUtc, nowUtc } — только то, что система отдаёт локально.
   deviceInfo: () => ipcRenderer.invoke('native:deviceInfo'),
 
+  // Авторизация / безопасность — один аккаунт для лаунчера и игры. mode:
+  // 'login' | 'register' | 'change-password' | 'change-email' | '2fa-enable' |
+  // '2fa-disable'. Возвращает { ok, message, username?, createdUtc?, ... }.
+  auth: (mode, payload) => ipcRenderer.invoke('native:auth', mode, payload),
+
+  // Хэндофф аккаунта из игры: session.json в %LOCALAPPDATA%\FloridaV\.
+  readSession: () => ipcRenderer.invoke('native:readSession'),
+  clearSession: () => ipcRenderer.invoke('native:clearSession'),
+
   // Автозапуск с Windows — настоящая системная настройка через Electron,
   // не просто галочка в settings.json.
   setAutostart: (enabled) => ipcRenderer.invoke('native:setAutostart', enabled),

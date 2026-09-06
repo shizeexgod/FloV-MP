@@ -33,6 +33,12 @@ const OUT = process.argv[2] || '.';
     console.log('shot:', name);
   }
 
+  // Слушаем консоль с самого начала, а не в конце — иначе ранние ошибки
+  // (инициализация, первые клики) не попадают в отчёт.
+  const errors = [];
+  win.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
+  win.on('pageerror', (e) => errors.push(String(e)));
+
   // 0. Модалка входа в лаунчере — необязательная, закрываем «Войти позже»,
   //    чтобы она не перехватывала клики в остальных шагах.
   const authOv = win.locator('#auth-overlay:not(.hidden)');
@@ -64,6 +70,42 @@ const OUT = process.argv[2] || '.';
   await shot('03b-news-modal');
   await win.click('#news-modal-close');
   await win.waitForTimeout(200);
+
+  // 3c. Профиль → окно входа/регистрации (гость). Регистрируемся, ник в
+  //     рельсе должен смениться с «Игрок» на логин.
+  await win.click('#btn-open-cabinet');
+  await win.waitForTimeout(300);
+  await shot('03c-auth-modal');
+  await win.click('#btn-toggle-mode'); // режим регистрации
+  await win.fill('#auth-login', 'pwtester');
+  await win.fill('#auth-password', 'pwtest123');
+  await win.click('#btn-auth-submit');
+  await win.waitForTimeout(600);
+  let nickAfter = await win.textContent('#account-nick').catch(() => '');
+  if (!/pwtester/i.test(nickAfter || '')) {
+    // Сервера авторизации в тесте нет — форсируем вход, чтобы снять кабинет.
+    console.log('note: ServerLauncher не запущен, форсирую вход для скриншотов кабинета');
+    await win.evaluate(() => {
+      settings.account = { username: 'pwtester', createdUtc: new Date().toISOString(), email: '', twoFa: false };
+      applyAccountUI();
+    });
+    await win.click('#auth-skip').catch(() => {});
+    await win.waitForTimeout(200);
+    nickAfter = await win.textContent('#account-nick').catch(() => '');
+  }
+  if (!/pwtester/i.test(nickAfter || '')) throw new Error('ник не сменился после входа: ' + JSON.stringify(nickAfter));
+
+  // 3d. Личный кабинет — 4 вкладки
+  await win.click('#btn-open-cabinet');
+  await win.waitForTimeout(300);
+  await shot('03d-cabinet-profile');
+  for (const tab of ['security', 'devices', 'history']) {
+    await win.click(`.cabinet-item[data-tab="${tab}"]`);
+    await win.waitForTimeout(250);
+    await shot(`03d-cabinet-${tab}`);
+  }
+  await win.click('#cabinet-close');
+  await win.waitForTimeout(250);
 
   // 4. Настройки — всплывающее окно поверх текущего экрана (не страница)
   await win.hover('#rail');
@@ -108,13 +150,12 @@ const OUT = process.argv[2] || '.';
   await win.waitForTimeout(300);
   await shot('06b-settings-closed');
 
-  // 7. Консоль на ошибки
-  const errors = [];
-  win.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
+  // 7. Консоль на ошибки (слушатель повешен в начале)
   await win.waitForTimeout(300);
   console.log('console errors:', JSON.stringify(errors));
 
   await app.close();
+  if (errors.length) process.exit(1);
 })().catch((err) => {
   console.error('TEST FAILED:', err);
   process.exit(1);

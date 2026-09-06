@@ -300,7 +300,11 @@ renderNews();
 })();
 
 // ─── Состояние настроек ─────────────────────────────────────────────────────
+// nickname НЕ редактируется вручную: гость → «Игрок», после входа → логин
+// аккаунта. Источник истины — settings.account ({ username, createdUtc } или
+// null); nickname держим синхронно как производное для удобства сохранения.
 let settings = {
+  account: null,
   nickname: 'Игрок',
   gtaPath: '',
   serverHost: '127.0.0.1',
@@ -339,7 +343,6 @@ let settings = {
 
 // id → [ключ настройки, свойство элемента]
 const SETTINGS_MAP = [
-  ['set-nickname', 'nickname', 'value'],
   ['set-gtapath', 'gtaPath', 'value'],
   ['set-host', 'serverHost', 'value'],
   ['set-port', 'serverPort', 'value'],
@@ -431,13 +434,44 @@ function applySettingsToUI() {
   const t = document.getElementById('dl-threads-val'); if (t) t.textContent = String(settings.dlThreads);
   const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
 
-  document.getElementById('account-nick').textContent = settings.nickname;
-  document.getElementById('avatar-initial').textContent = (settings.nickname || 'И')[0].toUpperCase();
+  applyAccountUI();
+}
+
+// ─── Аккаунт → всё, что зависит от «вошёл / не вошёл» ────────────────────
+// Ник в рельсе, буква аватара, шапка кабинета, вкладка «Профиль», класс
+// на <html> для стилей. Один аккаунт для лаунчера и игры.
+function isLoggedIn() { return !!(settings.account && settings.account.username); }
+
+function applyAccountUI() {
+  const nick = isLoggedIn() ? settings.account.username : 'Игрок';
+  settings.nickname = nick;
+  const initial = (nick || 'И')[0].toUpperCase();
+
+  const railNick = document.getElementById('account-nick');
+  if (railNick) railNick.textContent = nick;
+  const railAvatar = document.getElementById('avatar-initial');
+  if (railAvatar) railAvatar.textContent = initial;
+
+  document.documentElement.classList.toggle('logged-in', isLoggedIn());
+
+  const cabNick = document.getElementById('cabinet-nick');
+  if (cabNick) cabNick.textContent = nick;
+  const cabAvatar = document.getElementById('cabinet-avatar');
+  if (cabAvatar) cabAvatar.textContent = initial;
+  const cabSub = document.getElementById('cabinet-sub');
+  if (cabSub) cabSub.textContent = isLoggedIn() ? 'Аккаунт Держава RP' : 'Гость — войдите в аккаунт';
+
+  const cabProfileNick = document.getElementById('cab-nick');
+  if (cabProfileNick) cabProfileNick.textContent = isLoggedIn() ? settings.account.username : '—';
+  const cabCreated = document.getElementById('cab-created');
+  if (cabCreated) cabCreated.textContent = isLoggedIn() ? formatDate(settings.account.createdUtc) : '—';
+  const cabStatus = document.getElementById('cab-status');
+  if (cabStatus) cabStatus.textContent = isLoggedIn() ? 'Вход выполнен' : 'Не выполнен вход';
 }
 
 // ─── Единая привязка всех контролов настроек к settings + сохранение ──────
 SETTINGS_MAP.forEach(([id, key, prop]) => {
-  if (id === 'set-nickname' || id === 'set-gtapath') return; // у них свои обработчики ниже
+  if (id === 'set-gtapath') return; // у него свой обработчик ниже
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener(prop === 'checked' ? 'change' : 'input', (e) => {
@@ -526,19 +560,19 @@ document.getElementById('set-autostart').addEventListener('change', async (e) =>
 });
 
 function doLogout() {
-  settings.nickname = 'Игрок';
+  settings.account = null;
   settings.accountCreatedUtc = '';
-  applySettingsToUI();
+  applyAccountUI();
   saveSettingsDebounced();
+  try { window.floridaV.clearSession?.(); } catch {}
   document.getElementById('cabinet-overlay').classList.add('hidden');
-  document.getElementById('auth-overlay').classList.remove('hidden');
-  document.getElementById('auth-login').value = '';
-  document.getElementById('auth-password').value = '';
+  const al = document.getElementById('auth-login'); if (al) al.value = '';
+  const ap = document.getElementById('auth-password'); if (ap) ap.value = '';
 }
-document.getElementById('btn-logout').addEventListener('click', doLogout);
 document.getElementById('cabinet-logout').addEventListener('click', doLogout);
 
-// ─── Личный кабинет: модалка со вкладками (профиль/баланс) ─────────────────
+// ─── Личный кабинет: модалка со вкладками (Профиль / Безопасность /
+// Устройства / История входов), по образцу Majestic ──────────────────────
 const cabinetOverlay = document.getElementById('cabinet-overlay');
 function formatDate(iso) {
   if (!iso) return '—';
@@ -546,24 +580,210 @@ function formatDate(iso) {
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
 }
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+let _deviceInfo = null;
+async function loadDeviceInfo() {
+  if (_deviceInfo) return _deviceInfo;
+  try { _deviceInfo = await window.floridaV.deviceInfo?.(); } catch { _deviceInfo = null; }
+  return _deviceInfo;
+}
+function fillDeviceUI(info) {
+  const name = document.getElementById('dev-current-name');
+  const sub = document.getElementById('dev-current-sub');
+  const hName = document.getElementById('hist-current-name');
+  const hSub = document.getElementById('hist-current-sub');
+  const hTime = document.getElementById('hist-current-time');
+  if (!info) {
+    if (name) name.textContent = 'Это устройство';
+    if (sub) sub.textContent = 'Данные системы недоступны';
+    if (hName) hName.textContent = 'Текущий сеанс';
+    if (hSub) hSub.textContent = '—';
+    if (hTime) hTime.textContent = '—';
+    return;
+  }
+  const os = (info.os || '').replace(/\s+\d+\.\d+\.\d+.*/, '').trim() || info.os || 'ОС неизвестна';
+  const dev = `${info.hostname || 'ПК'} · ${os} (${info.osArch || '—'})`;
+  const ip = info.localIp && info.localIp !== 'недоступен' ? `IP ${info.localIp}` : 'IP локальной сети недоступен';
+  if (name) name.textContent = dev;
+  if (sub) sub.textContent = `${ip} · пользователь ${info.userName || '—'}`;
+  if (hName) hName.textContent = dev;
+  if (hSub) hSub.textContent = ip;
+  if (hTime) hTime.textContent = formatDateTime(info.nowUtc);
+}
+
+function selectCabinetTab(name) {
+  document.querySelectorAll('.cabinet-item[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.cabinet-tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  if (name === 'devices' || name === 'history') loadDeviceInfo().then(fillDeviceUI);
+}
+
 function openCabinet() {
-  document.getElementById('cabinet-nick').textContent = settings.nickname;
-  document.getElementById('cabinet-avatar').textContent = (settings.nickname || 'И')[0].toUpperCase();
-  document.getElementById('cab-nick').textContent = settings.nickname;
-  document.getElementById('cab-created').textContent = formatDate(settings.accountCreatedUtc);
+  applyAccountUI();
+  selectCabinetTab('profile');
+  loadDeviceInfo().then(fillDeviceUI);
   cabinetOverlay.classList.remove('hidden');
 }
-document.getElementById('btn-open-cabinet').addEventListener('click', openCabinet);
-document.getElementById('cabinet-close').addEventListener('click', () => cabinetOverlay.classList.add('hidden'));
-cabinetOverlay.addEventListener('click', (e) => { if (e.target === cabinetOverlay) cabinetOverlay.classList.add('hidden'); });
-document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.cabinet-item[data-tab]').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.cabinet-tab').forEach((t) => t.classList.remove('active'));
-    btn.classList.add('active');
-    document.querySelector(`.cabinet-tab[data-tab="${btn.dataset.tab}"]`).classList.add('active');
-  });
+function closeCabinet() { cabinetOverlay.classList.add('hidden'); }
+
+// Клик по профилю в рельсе: вошёл → кабинет, не вошёл → окно входа/регистрации
+document.getElementById('btn-open-cabinet').addEventListener('click', () => {
+  if (isLoggedIn()) openCabinet();
+  else openAuth();
 });
+document.getElementById('cabinet-close').addEventListener('click', closeCabinet);
+cabinetOverlay.addEventListener('click', (e) => { if (e.target === cabinetOverlay) closeCabinet(); });
+document.querySelectorAll('.cabinet-item[data-tab]').forEach((btn) => {
+  btn.addEventListener('click', () => selectCabinetTab(btn.dataset.tab));
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !cabinetOverlay.classList.contains('hidden')) {
+    const sub = cabinetOverlay.querySelector('.cab-sub-overlay:not(.hidden)');
+    if (sub) sub.classList.add('hidden');
+    else closeCabinet();
+  }
+});
+
+// ─── Безопасность: вложенные окна (пароль / почта / 2FA) ─────────────────
+cabinetOverlay.querySelectorAll('[data-cab-sub-close]').forEach((btn) => {
+  btn.addEventListener('click', () => btn.closest('.cab-sub-overlay').classList.add('hidden'));
+});
+cabinetOverlay.querySelectorAll('.cab-sub-overlay').forEach((ov) => {
+  ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.add('hidden'); });
+});
+function openCabSub(id) {
+  const ov = document.getElementById(id);
+  ov.querySelectorAll('input').forEach((i) => { i.value = ''; });
+  ov.querySelectorAll('.auth-error').forEach((e) => { e.textContent = ''; });
+  ov.classList.remove('hidden');
+}
+document.getElementById('sec-btn-password').addEventListener('click', () => openCabSub('cab-sub-password'));
+document.getElementById('sec-btn-email').addEventListener('click', () => openCabSub('cab-sub-email'));
+
+async function secSubmit(mode, payload, errorEl, okMsg) {
+  errorEl.textContent = '';
+  try {
+    const data = await window.floridaV.auth(mode, { username: settings.account?.username, ...payload });
+    if (!data || !data.ok) { errorEl.textContent = (data && data.message) || 'Раздел безопасности подключается вместе с сервером — попробуйте позже'; return false; }
+    errorEl.textContent = '';
+    return true;
+  } catch {
+    errorEl.textContent = 'Сервер недоступен — запустите Держава RP и попробуйте снова';
+    return false;
+  }
+}
+
+document.getElementById('cab-pw-submit').addEventListener('click', async () => {
+  const cur = document.getElementById('cab-pw-current').value;
+  const nw = document.getElementById('cab-pw-new').value;
+  const rep = document.getElementById('cab-pw-repeat').value;
+  const err = document.getElementById('cab-pw-error');
+  if (!cur || !nw) { err.textContent = 'Заполните все поля'; return; }
+  if (nw.length < 6) { err.textContent = 'Новый пароль слишком короткий (минимум 6 символов)'; return; }
+  if (nw !== rep) { err.textContent = 'Пароли не совпадают'; return; }
+  if (await secSubmit('change-password', { password: cur, newPassword: nw }, err)) {
+    document.getElementById('cab-sub-password').classList.add('hidden');
+  }
+});
+document.getElementById('cab-email-submit').addEventListener('click', async () => {
+  const pw = document.getElementById('cab-email-pw').value;
+  const email = document.getElementById('cab-email-new').value.trim();
+  const err = document.getElementById('cab-email-error');
+  if (!pw || !email) { err.textContent = 'Заполните все поля'; return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { err.textContent = 'Неверный адрес почты'; return; }
+  if (await secSubmit('change-email', { password: pw, email }, err)) {
+    settings.account.email = email;
+    document.getElementById('sec-email-value').textContent = email;
+    document.getElementById('cab-sub-email').classList.add('hidden');
+    saveSettingsDebounced();
+  }
+});
+
+// 2FA — генерируем секрет и otpauth-URI на клиенте (стандарт TOTP), QR
+// рисуем сами. Активация/проверка кода — на сервере (когда подключат);
+// пока сервер не отвечает — окно честно об этом сообщает.
+function base32Secret(len = 16) {
+  const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let out = '';
+  const rnd = new Uint8Array(len);
+  (crypto.getRandomValues ? crypto : window.msCrypto).getRandomValues(rnd);
+  for (let i = 0; i < len; i++) out += abc[rnd[i] % 32];
+  return out;
+}
+let _twoFaSecret = '';
+document.getElementById('sec-btn-2fa').addEventListener('click', () => {
+  const on = document.getElementById('sec-2fa-status').dataset.on === 'true';
+  document.getElementById('cab-2fa-enable-body').classList.toggle('hidden', on);
+  document.getElementById('cab-2fa-disable-body').classList.toggle('hidden', !on);
+  document.getElementById('cab-2fa-title').textContent = on ? 'Отключение Google Authenticator' : 'Подключение Google Authenticator';
+  document.getElementById('cab-2fa-desc').textContent = on
+    ? 'Введите код из приложения или пароль, чтобы отключить двухфакторную защиту.'
+    : 'Отсканируйте QR-код в приложении Google Authenticator и введите 6-значный код для подтверждения.';
+  if (!on) {
+    _twoFaSecret = base32Secret();
+    document.getElementById('cab-2fa-secret').textContent = _twoFaSecret.replace(/(.{4})/g, '$1 ').trim();
+    const label = encodeURIComponent(`Держава RP:${settings.account?.username || 'игрок'}`);
+    const uri = `otpauth://totp/${label}?secret=${_twoFaSecret}&issuer=Derzhava%20RP&digits=6&period=30`;
+    renderQr(document.getElementById('cab-2fa-qr'), uri);
+  }
+  openCabSub('cab-sub-2fa');
+});
+document.getElementById('cab-2fa-submit').addEventListener('click', async () => {
+  const code = document.getElementById('cab-2fa-code').value.trim();
+  const err = document.getElementById('cab-2fa-error');
+  if (!/^\d{6}$/.test(code)) { err.textContent = 'Введите 6-значный код из приложения'; return; }
+  if (await secSubmit('2fa-enable', { secret: _twoFaSecret, code }, err)) {
+    set2faStatus(true);
+    document.getElementById('cab-sub-2fa').classList.add('hidden');
+  }
+});
+document.getElementById('cab-2fa-disable-submit').addEventListener('click', async () => {
+  const code = document.getElementById('cab-2fa-disable-code').value.trim();
+  const err = document.getElementById('cab-2fa-disable-error');
+  if (!code) { err.textContent = 'Введите код или пароль'; return; }
+  if (await secSubmit('2fa-disable', { code }, err)) {
+    set2faStatus(false);
+    document.getElementById('cab-sub-2fa').classList.add('hidden');
+  }
+});
+function set2faStatus(on) {
+  const el = document.getElementById('sec-2fa-status');
+  el.dataset.on = String(on);
+  el.textContent = on ? 'включена' : 'выключена';
+  document.getElementById('sec-btn-2fa').textContent = on ? 'Отключить' : 'Подключить';
+  if (settings.account) settings.account.twoFa = on;
+  saveSettingsDebounced();
+}
+
+// QR рисуем через window.QRCode (vendored qrcode-generator, qr.js). Если по
+// какой-то причине не загрузился — показываем ключ для ручного ввода в
+// приложение (Google Authenticator принимает setup key без сканирования).
+function renderQr(box, text) {
+  box.innerHTML = '';
+  try {
+    if (!window.QRCode) throw new Error('no qr lib');
+    const qr = window.QRCode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    const n = qr.getModuleCount();
+    const cell = Math.max(3, Math.floor(176 / n));
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = n * cell;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.fillStyle = '#000';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (qr.isDark(y, x)) g.fillRect(x * cell, y * cell, cell, cell);
+    box.appendChild(cv);
+  } catch {
+    const secret = text.match(/secret=([A-Z2-7]+)/)?.[1] || '';
+    box.innerHTML = `<div class="cab-2fa-qr-fallback"><span>Добавьте ключ вручную в приложение:</span><code>${secret.replace(/(.{4})/g, '$1 ').trim()}</code></div>`;
+  }
+}
 
 // ─── Настройки: всплывающее окно (как у Majestic), не отдельная страница —
 // открывается поверх текущего экрана (Играть/Новости), тот остаётся видимым
@@ -625,12 +845,6 @@ function saveSettingsDebounced() {
   }, 300);
 }
 
-document.getElementById('set-nickname').addEventListener('input', (e) => {
-  settings.nickname = e.target.value;
-  document.getElementById('account-nick').textContent = settings.nickname;
-  document.getElementById('avatar-initial').textContent = (settings.nickname || 'И')[0].toUpperCase();
-  saveSettingsDebounced();
-});
 document.getElementById('set-host').addEventListener('input', (e) => {
   settings.serverHost = e.target.value;
   saveSettingsDebounced();
@@ -763,18 +977,33 @@ async function pollServerStatus() {
   }
 }
 
-// ─── Авторизация — реальный запрос к /api/auth/{register,login} на том же
-// AuthService/accounts.json, что и в игре (см. FloVMP.ServerLauncher/Program.cs).
-// Требует запущенного alt:V-сервера (владелец это принял осознанно, 2026-09-05:
-// один аккаунт для лаунчера и игры важнее, чем офлайн-логин без сервера).
-const AUTH_API = 'http://127.0.0.1:7799/api/auth';
+// ─── Авторизация — /api/auth/{register,login} на том же AuthService/
+// accounts.json, что и в игре. Один аккаунт для лаунчера и игры (решено с
+// владельцем). Запрос идёт через мост window.floridaV.auth(...) — в Electron
+// это реальный HTTP к локальному ServerLauncher, в браузерном превью —
+// заглушка из dev-shim. Вход в лаунчере необязателен: можно сразу играть и
+// войти в самой игре — лаунчер подхватит аккаунт из session.json.
 let isRegisterMode = false;
 const authOverlay = document.getElementById('auth-overlay');
 
-// Вход в лаунчере — по желанию, не обязательный шаг: можно пропустить и
-// войти уже в самой игре (тот же аккаунт, экран авторизации там свой).
-document.getElementById('auth-skip').addEventListener('click', () => {
-  authOverlay.classList.add('hidden');
+function openAuth() {
+  isRegisterMode = false;
+  document.getElementById('auth-error').textContent = '';
+  document.getElementById('btn-auth-submit').textContent = 'ВОЙТИ';
+  document.getElementById('btn-toggle-mode').textContent = 'У меня ещё нет аккаунта';
+  const al = document.getElementById('auth-login');
+  const ap = document.getElementById('auth-password');
+  if (al) al.value = '';
+  if (ap) ap.value = '';
+  authOverlay.classList.remove('hidden');
+  setTimeout(() => al && al.focus(), 60);
+}
+function closeAuth() { authOverlay.classList.add('hidden'); }
+
+document.getElementById('auth-skip').addEventListener('click', closeAuth);
+authOverlay.addEventListener('click', (e) => { if (e.target === authOverlay) closeAuth(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !authOverlay.classList.contains('hidden')) closeAuth();
 });
 
 document.getElementById('btn-toggle-mode').addEventListener('click', () => {
@@ -784,6 +1013,28 @@ document.getElementById('btn-toggle-mode').addEventListener('click', () => {
   document.getElementById('btn-toggle-mode').textContent = isRegisterMode ? 'У меня уже есть аккаунт' : 'У меня ещё нет аккаунта';
 });
 
+function adoptAccount(data, fallbackLogin) {
+  settings.account = {
+    username: data.username || fallbackLogin,
+    createdUtc: data.createdUtc || settings.account?.createdUtc || '',
+    email: data.email || settings.account?.email || '',
+    twoFa: !!(data.twoFa ?? settings.account?.twoFa),
+  };
+  settings.accountCreatedUtc = settings.account.createdUtc;
+  applyAccountUI();
+  const emailEl = document.getElementById('sec-email-value');
+  if (emailEl) emailEl.textContent = settings.account.email || 'не указана';
+  set2faStatusSilent(settings.account.twoFa);
+  saveSettingsDebounced();
+}
+function set2faStatusSilent(on) {
+  const el = document.getElementById('sec-2fa-status');
+  if (!el) return;
+  el.dataset.on = String(!!on);
+  el.textContent = on ? 'включена' : 'выключена';
+  document.getElementById('sec-btn-2fa').textContent = on ? 'Отключить' : 'Подключить';
+}
+
 document.getElementById('btn-auth-submit').addEventListener('click', async () => {
   const login = document.getElementById('auth-login').value.trim();
   const password = document.getElementById('auth-password').value;
@@ -791,41 +1042,44 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
   const submitBtn = document.getElementById('btn-auth-submit');
   errorEl.textContent = '';
 
-  if (!login || !password) {
-    errorEl.textContent = 'Введите логин и пароль';
-    return;
-  }
+  if (!login || !password) { errorEl.textContent = 'Введите логин и пароль'; return; }
   if (isRegisterMode && password.length < 6) {
     errorEl.textContent = 'Пароль слишком короткий (минимум 6 символов)';
     return;
   }
 
   submitBtn.disabled = true;
+  submitBtn.classList.add('is-busy');
   const prevText = submitBtn.textContent;
-  submitBtn.textContent = 'Проверка...';
+  submitBtn.textContent = 'Проверка…';
   try {
-    const res = await fetch(`${AUTH_API}/${isRegisterMode ? 'register' : 'login'}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: login, password }),
-    });
-    const data = await res.json();
-    if (!data.ok) {
-      errorEl.textContent = data.message || 'Не удалось выполнить вход';
+    const data = await window.floridaV.auth(isRegisterMode ? 'register' : 'login', { username: login, password });
+    if (!data || !data.ok) {
+      errorEl.textContent = (data && data.message) || 'Не удалось выполнить вход';
       return;
     }
-    settings.nickname = data.username || login;
-    settings.accountCreatedUtc = data.createdUtc || settings.accountCreatedUtc || '';
-    applySettingsToUI();
-    await window.floridaV.saveSettings(settings);
-    authOverlay.classList.add('hidden');
+    adoptAccount(data, login);
+    closeAuth();
   } catch (e) {
-    errorEl.textContent = 'Сервер сейчас недоступен — запусти FloV:MP и попробуй снова';
+    errorEl.textContent = 'Сервер сейчас недоступен — запусти Держава RP и попробуй снова';
   } finally {
     submitBtn.disabled = false;
+    submitBtn.classList.remove('is-busy');
     submitBtn.textContent = prevText;
   }
 });
+
+// ─── Хэндофф из игры: если игрок вошёл в самой игре, сервер пишет
+// session.json в общую папку (%LOCALAPPDATA%\FloridaV\), лаунчер его
+// подхватывает и тоже становится авторизованным под тем же аккаунтом.
+async function pollSession() {
+  if (isLoggedIn()) return;
+  let s = null;
+  try { s = await window.floridaV.readSession?.(); } catch { s = null; }
+  if (s && s.username) {
+    adoptAccount({ username: s.username, createdUtc: s.createdUtc, email: s.email, twoFa: s.twoFa }, s.username);
+  }
+}
 
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
@@ -833,16 +1087,22 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
   settings.autostart = await window.floridaV.getAutostart().catch(() => settings.autostart);
+
+  // Ник — производное от аккаунта, не из файла: чинит ситуацию, когда в
+  // settings.json остался старый/битый nickname без account.
   applySettingsToUI();
-
-  if (settings.nickname && settings.nickname !== 'Игрок') {
-    authOverlay.classList.add('hidden');
+  if (isLoggedIn()) {
+    const emailEl = document.getElementById('sec-email-value');
+    if (emailEl) emailEl.textContent = settings.account.email || 'не указана';
+    set2faStatusSilent(settings.account.twoFa);
   }
 
-  if (!settings.gtaPath) {
-    detectGta();
-  }
+  if (!settings.gtaPath) detectGta();
 
   pollServerStatus();
   setInterval(pollServerStatus, 10000);
+
+  pollSession();
+  setInterval(pollSession, 5000);
+  window.addEventListener('focus', pollSession);
 })();

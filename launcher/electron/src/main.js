@@ -2,7 +2,26 @@
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
 const { NativeBridge } = require('./native-bridge');
+
+// Общая с игрой папка (та же, что и settings.json). session.json пишет
+// сервер при входе в игре — лаунчер его читает для хэндоффа аккаунта.
+const SHARED_DIR = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'FloridaV');
+const SESSION_FILE = path.join(SHARED_DIR, 'session.json');
+const AUTH_API = 'http://127.0.0.1:7799/api/auth';
+
+// mode лаунчера → путь эндпоинта ServerLauncher. Пока сервер знает только
+// register/login; остальные вернут не-ok, и UI честно это покажет.
+const AUTH_ROUTES = {
+  login: 'login',
+  register: 'register',
+  'change-password': 'change-password',
+  'change-email': 'change-email',
+  '2fa-enable': '2fa/enable',
+  '2fa-disable': '2fa/disable',
+};
 
 const native = new NativeBridge();
 let mainWindow = null;
@@ -92,6 +111,40 @@ ipcMain.handle('native:serverStatus', (_e, host, port) => native.call('serverSta
 ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) =>
   native.call('play', { gtaPath, host, port, nickname }));
 ipcMain.handle('native:cancelPlay', () => native.call('cancelPlay').catch(() => null));
+ipcMain.handle('native:deviceInfo', () => native.call('deviceInfo').catch(() => null));
+
+// Авторизация / безопасность — HTTP к локальному ServerLauncher (тот же
+// accounts.json, что и в игре). fetch есть в Node начиная с 18 — отдельный
+// http-клиент не нужен.
+ipcMain.handle('native:auth', async (_e, mode, payload) => {
+  const route = AUTH_ROUTES[mode];
+  if (!route) return { ok: false, message: 'неизвестная операция' };
+  try {
+    const res = await fetch(`${AUTH_API}/${route}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+      signal: AbortSignal.timeout(8000),
+    });
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch { return { ok: false, message: res.ok ? 'некорректный ответ сервера' : `ошибка сервера (${res.status})` }; }
+  } catch {
+    return { ok: false, message: 'сервер недоступен' };
+  }
+});
+
+ipcMain.handle('native:readSession', () => {
+  try {
+    const raw = fs.readFileSync(SESSION_FILE, 'utf8');
+    const s = JSON.parse(raw);
+    return s && typeof s.username === 'string' && s.username ? s : null;
+  } catch { return null; }
+});
+ipcMain.handle('native:clearSession', () => {
+  try { fs.unlinkSync(SESSION_FILE); } catch {}
+  return true;
+});
 
 // Нативный слой (FloVMP.Connect через C#-помощник) шлёт события прогресса
 // загрузки строкой NDJSON {"event":"download","downloaded":..,"total":..,

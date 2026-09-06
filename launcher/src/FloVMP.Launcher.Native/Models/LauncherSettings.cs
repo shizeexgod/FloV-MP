@@ -50,4 +50,19 @@ public class LauncherSettings
 
     /// <summary>Дата регистрации аккаунта (ISO, из ответа /api/auth/*) — для «Личного кабинета».</summary>
     [JsonPropertyName("accountCreatedUtc")] public string AccountCreatedUtc { get; set; } = "";
+
+    /// <summary>
+    /// Аккаунт, под которым выполнен вход в лаунчере (null — гость «Игрок»).
+    /// Тот же аккаунт, что и в игре; может прийти из session.json (хэндофф).
+    /// </summary>
+    [JsonPropertyName("account")] public LauncherAccount? Account { get; set; }
+}
+
+/// <summary>Данные вошедшего аккаунта, хранимые в settings.json.</summary>
+public sealed class LauncherAccount
+{
+    [JsonPropertyName("username")] public string Username { get; set; } = "";
+    [JsonPropertyName("createdUtc")] public string CreatedUtc { get; set; } = "";
+    [JsonPropertyName("email")] public string Email { get; set; } = "";
+    [JsonPropertyName("twoFa")] public bool TwoFa { get; set; } = false;
 }
