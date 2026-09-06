@@ -173,8 +173,16 @@ const OUT = process.argv[2] || '.';
   }
   await shot('06b-settings-closed');
 
-  // 7. Консоль на ошибки (слушатель повешен в начале)
-  await win.waitForTimeout(300);
+  // 7. Прибираем за собой: тест форсировал вход (pwtester) и клики по
+  //    акценту сохранили его в реальный settings.json — возвращаем гостя.
+  await win.evaluate(async () => {
+    settings.account = null;
+    applyAccountUI();
+    await window.floridaV.saveSettings(settings);
+  });
+  await win.waitForTimeout(200);
+
+  // 8. Консоль на ошибки (слушатель повешен в начале)
   console.log('console errors:', JSON.stringify(errors));
 
   await app.close();
