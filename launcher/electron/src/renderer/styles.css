@@ -155,7 +155,12 @@ body{
 .icon-search{ -webkit-mask-image:url('assets/icons/search.svg'); mask-image:url('assets/icons/search.svg'); }
 
 #app{
-  width: 100vw; height: 100vh;
+  /* Масштаб интерфейса: zoom на #app + компенсация размеров через calc,
+     иначе 100vw/100vh при zoom!=1 не совпадают с окном и всё вылезает. */
+  --ui-scale: 1;
+  zoom: var(--ui-scale);
+  width: calc(100vw / var(--ui-scale));
+  height: calc(100vh / var(--ui-scale));
   background: var(--ink);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -626,10 +631,15 @@ input[type="range"]::-webkit-slider-thumb:hover{ transform: scale(1.15); }
 .link-row .icon{ width:14px; height:14px; }
 .about-version{ font-size:12px; color: var(--text-faint); font-family: var(--ui-font); }
 .field-label{ font-size:11px; color: var(--text-dim); margin-bottom:6px; display:block; }
-input[type="text"], input[type="number"], input[type="password"]{
+input[type="text"], input[type="number"], input[type="password"], input[type="email"]{
   width:100%; background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
   padding:10px 12px; color: var(--text); font-size:13px; font-family:inherit;
 }
+/* Убираем стрелки-спиннер у number (порт и т.п.) — они рисуют вертикальную
+   черту у края поля, которая читается как «разделитель, наезжающий на ввод». */
+input[type="number"]{ -moz-appearance:textfield; appearance:textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
 input[type="text"], input[type="number"], input[type="password"], input[type="email"]{
   transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }

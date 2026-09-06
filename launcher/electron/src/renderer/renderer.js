@@ -548,10 +548,14 @@ function applyAccountUI() {
   if (cabStatus) cabStatus.textContent = isLoggedIn() ? 'Вход выполнен' : 'Не выполнен вход';
 }
 
-// ─── Масштаб интерфейса (90–125%) — Chromium zoom на корне ───────────────
+// ─── Масштаб интерфейса — zoom на #app (с компенсацией размеров в CSS).
+// НЕ на documentElement: тогда 100vw/100vh не совпадают с окном и всё
+// вылезает за край. Применяем по 'change' (отпустил ползунок), а не по
+// 'input' — иначе перекомпоновка на каждый кадр и ползунок «убегает».
 function applyUiScale() {
   const s = Math.max(80, Math.min(140, Number(settings.uiScale) || 100));
-  document.documentElement.style.zoom = String(s / 100);
+  const app = document.getElementById('app');
+  if (app) app.style.setProperty('--ui-scale', String(s / 100));
 }
 
 // ─── Звук в интерфейсе — короткий клик через WebAudio (без файлов) ───────
@@ -581,20 +585,32 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
   if (id === 'set-gtapath') return; // у него свой обработчик ниже
   const el = document.getElementById(id);
   if (!el) return;
-  el.addEventListener(prop === 'checked' ? 'change' : 'input', (e) => {
+  // Масштаб интерфейса: во время перетаскивания (input) только меняем
+  // подпись, сам zoom применяем по change — иначе перекомпоновка на каждый
+  // кадр «выкидывает» ползунок из-под курсора.
+  const isUiScale = id === 'set-ui-scale';
+  const evName = prop === 'checked' ? 'change' : (isUiScale ? 'change' : 'input');
+
+  el.addEventListener(evName, (e) => {
     let v = e.target[prop];
     if (prop === 'value' && el.type === 'number') v = Number(v);
     if (prop === 'value' && el.type === 'range') v = Number(v);
     settings[key] = v;
     if (id === 'set-compact') document.documentElement.classList.toggle('compact', v);
     if (id === 'set-animations') document.documentElement.classList.toggle('no-anim', !v);
-    if (id === 'set-ui-scale') { applyUiScale(); document.getElementById('ui-scale-val').textContent = `${v}%`; }
+    if (isUiScale) { document.getElementById('ui-scale-val').textContent = `${v}%`; applyUiScale(); }
     if (id === 'set-tray-on-close') window.floridaV.setTrayOnClose?.(v);
     if (id === 'set-dl-speed') document.getElementById('dl-speed-val').textContent = dlSpeedLabel(v);
     if (id === 'set-dl-threads') document.getElementById('dl-threads-val').textContent = String(v);
     if (id === 'set-voice-threshold') document.getElementById('voice-thr-val').textContent = voiceThrLabel(v);
     saveSettingsDebounced();
   });
+  if (isUiScale) {
+    // живая подпись при перетаскивании, без применения zoom
+    el.addEventListener('input', (e) => {
+      document.getElementById('ui-scale-val').textContent = `${e.target.value}%`;
+    });
+  }
 });
 
 // ─── Аудиоустройства для вкладки «Голос» (реальные, из системы) ───────────
