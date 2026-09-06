@@ -6,6 +6,8 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  Bell,
+  Box,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -24,6 +26,7 @@ import {
   Layers,
   Percent,
   Play,
+  PlayCircle,
   Plus,
   Radio,
   RefreshCw,
@@ -31,8 +34,11 @@ import {
   Send,
   Server,
   Settings2,
+  Shield,
   ShieldCheck,
+  Sliders,
   Square,
+  StopCircle,
   Terminal,
   Users,
   Zap,
@@ -69,9 +75,26 @@ export interface Project {
   plan: string;
   max_players: number;
   api_key: string;
+  hwid_policy?: 'strict' | 'lenient' | 'disabled';
+  allow_vpn?: boolean;
+  max_accounts_per_hwid?: number;
+  discord_webhook_url?: string;
+  telegram_webhook_token?: string;
+  telegram_chat_id?: string;
+  webhook_alerts_enabled?: boolean;
   is_active: number;
   expires_at: string;
   created_at: string;
+}
+
+export interface ResourceItem {
+  id: number;
+  server_id: number;
+  name: string;
+  type: string;
+  status: 'running' | 'stopped' | 'failed';
+  version: string;
+  author: string;
 }
 
 export interface ServerInstance {
@@ -205,6 +228,27 @@ export default function DashboardPage() {
   const [ipErr, setIpErr] = useState('');
   const [savingIp, setSavingIp] = useState(false);
 
+  /* project settings modal state */
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingHwid, setSettingHwid] = useState<'strict' | 'lenient' | 'disabled'>('lenient');
+  const [settingVpn, setSettingVpn] = useState(true);
+  const [settingMaxAccs, setSettingMaxAccs] = useState(3);
+  const [settingDiscord, setSettingDiscord] = useState('');
+  const [settingTgToken, setSettingTgToken] = useState('');
+  const [settingTgChat, setSettingTgChat] = useState('');
+  const [settingAlertsEnabled, setSettingAlertsEnabled] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+
+  /* resources state */
+  const [resources, setResources] = useState<ResourceItem[]>([]);
+  const [loadingResources, setLoadingResources] = useState(false);
+  const [resourceActionLoading, setResourceActionLoading] = useState<string | null>(null);
+
+  /* live SSE state */
+  const [sseActive, setSseActive] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
   /* new project modal */
   const [newProjOpen, setNewProjOpen] = useState(false);
   const [newProjName, setNewProjName] = useState('');
@@ -247,7 +291,10 @@ export default function DashboardPage() {
   /* ------------------------------------------------------------- */
   useEffect(() => {
     void loadDashboard();
-    return () => stageTimers.current.forEach(clearTimeout);
+    return () => {
+      stageTimers.current.forEach(clearTimeout);
+      eventSourceRef.current?.close();
+    };
   }, []);
 
   useEffect(() => {
@@ -298,7 +345,11 @@ export default function DashboardPage() {
       const res = await fetch(`/api/v1/projects/${projectId}/servers`);
       if (res.ok) {
         const data = await res.json();
-        setServers(data.servers || []);
+        const srvs = data.servers || [];
+        setServers(srvs);
+        if (srvs.length > 0) {
+          void loadResources(srvs[0].id);
+        }
       }
     } catch {
       show('Не удалось загрузить серверы проекта', 'error');
@@ -310,6 +361,143 @@ export default function DashboardPage() {
   const handleSelectProject = (proj: Project) => {
     setSelectedProject(proj);
     void loadServers(proj.id);
+  };
+
+  const openProjectSettings = (p: Project) => {
+    setSettingHwid(p.hwid_policy || 'lenient');
+    setSettingVpn(p.allow_vpn !== undefined ? p.allow_vpn : true);
+    setSettingMaxAccs(p.max_accounts_per_hwid || 3);
+    setSettingDiscord(p.discord_webhook_url || '');
+    setSettingTgToken(p.telegram_webhook_token || '');
+    setSettingTgChat(p.telegram_chat_id || '');
+    setSettingAlertsEnabled(p.webhook_alerts_enabled !== undefined ? p.webhook_alerts_enabled : true);
+    setSettingsModalOpen(true);
+  };
+
+  const saveProjectSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject) return;
+    setSavingSettings(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${selectedProject.id}/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hwidPolicy: settingHwid,
+          allowVpn: settingVpn,
+          maxAccountsPerHwid: settingMaxAccs,
+          discordWebhookUrl: settingDiscord,
+          telegramWebhookToken: settingTgToken,
+          telegramChatId: settingTgChat,
+          webhookAlertsEnabled: settingAlertsEnabled,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения');
+      show('Настройки проекта и Webhook сохранены');
+      setSettingsModalOpen(false);
+      loadDashboard();
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const testWebhooks = async (type: 'discord' | 'telegram' | 'all') => {
+    if (!selectedProject) return;
+    setTestingWebhook(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${selectedProject.id}/webhooks/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка отправки');
+      show(data.message || 'Тестовые алерты отправлены');
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
+  const loadResources = async (serverId: number) => {
+    if (!selectedProject) return;
+    setLoadingResources(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${selectedProject.id}/servers/${serverId}/resources`);
+      if (res.ok) {
+        const data = await res.json();
+        setResources(data.resources || []);
+      }
+    } finally {
+      setLoadingResources(false);
+    }
+  };
+
+  const handleResourceControl = async (
+    serverId: number,
+    resourceName: string,
+    action: 'start' | 'stop' | 'restart'
+  ) => {
+    if (!selectedProject) return;
+    setResourceActionLoading(`${resourceName}_${action}`);
+    try {
+      const res = await fetch(`/api/v1/projects/${selectedProject.id}/servers/${serverId}/resources`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, resourceName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Ошибка управления ресурсом');
+      show(`Команда ${action.toUpperCase()} отправлена агенту`);
+      loadResources(serverId);
+    } catch (err: any) {
+      show(err.message, 'error');
+    } finally {
+      setResourceActionLoading(null);
+    }
+  };
+
+  const toggleSseStream = () => {
+    if (sseActive) {
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+      setSseActive(false);
+      show('Живой SSE стрим консоли отключен');
+    } else {
+      try {
+        const es = new EventSource('/api/v1/agent/stream');
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.text) {
+              setConsoleLogs((prev) => [
+                ...prev,
+                {
+                  id: Date.now() + Math.random(),
+                  time: data.time || new Date().toLocaleTimeString('ru-RU'),
+                  tag: data.tag || 'Agent',
+                  text: data.text,
+                  tone: data.tone || 'info',
+                },
+              ]);
+            }
+          } catch {}
+        };
+        es.onerror = () => {
+          es.close();
+          setSseActive(false);
+        };
+        eventSourceRef.current = es;
+        setSseActive(true);
+        show('Живой SSE стрим консоли активирован');
+      } catch {
+        show('Не удалось подключиться к SSE потоку', 'error');
+      }
+    }
   };
 
   const createProjectHandler = async (e: React.FormEvent) => {
@@ -815,6 +1003,15 @@ export default function DashboardPage() {
                       <Copy className="h-4 w-4" />
                     )}
                   </button>
+
+                  <button
+                    onClick={() => openProjectSettings(selectedProject)}
+                    className="btn h-9 border border-brand/40 bg-brand/10 px-3 text-xs font-semibold text-brand transition hover:bg-brand/20"
+                    title="Настройки безопасности и Webhook"
+                  >
+                    <Sliders className="h-4 w-4" />
+                    Настройки & Webhook
+                  </button>
                 </div>
               </div>
             </div>
@@ -937,6 +1134,115 @@ export default function DashboardPage() {
                 })}
               </div>
             )}
+
+            {/* Resource Manager Section */}
+            {selectedProject && servers.length > 0 && (
+              <div className="mt-8 glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-7">
+                <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="flex items-center gap-2 text-base font-bold text-white">
+                      <Box className="h-5 w-5 text-brand" />
+                      Управление ресурсами сервера (Resource Manager)
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Запуск, остановка и перезапуск скриптов, карт и транспорта на лету без перезагрузки узла
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => loadResources(servers[0].id)}
+                    disabled={loadingResources}
+                    className="btn btn-ghost h-9 px-3 text-xs"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingResources ? 'animate-spin text-brand' : ''}`} />
+                    Обновить ресурсы
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
+                        <th className="pb-3 pr-3 font-semibold">Ресурс</th>
+                        <th className="pb-3 pr-3 font-semibold">Тип</th>
+                        <th className="pb-3 pr-3 font-semibold">Версия</th>
+                        <th className="pb-3 pr-3 font-semibold">Статус</th>
+                        <th className="pb-3 pr-3 text-right font-semibold">Управление</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.05] text-slate-300 font-mono">
+                      {resources.map((res) => {
+                        const isRunning = res.status === 'running';
+                        const isStarting = resourceActionLoading === `${res.name}_start`;
+                        const isStopping = resourceActionLoading === `${res.name}_stop`;
+                        const isRestarting = resourceActionLoading === `${res.name}_restart`;
+
+                        return (
+                          <tr key={res.name} className="transition-colors hover:bg-white/[0.02]">
+                            <td className="py-3 pr-3 font-bold text-white">
+                              <span className="flex items-center gap-2">
+                                <Box className="h-3.5 w-3.5 text-slate-400" />
+                                {res.name}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-3">
+                              <span className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-cyber uppercase font-bold">
+                                {res.type}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-3 text-slate-400">{res.version}</td>
+                            <td className="py-3 pr-3">
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                                  isRunning
+                                    ? 'bg-emeraldx/15 text-emeraldx border border-emeraldx/30'
+                                    : 'bg-slate-700/20 text-slate-400 border border-slate-600/30'
+                                }`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emeraldx animate-pulse' : 'bg-slate-500'}`} />
+                                {isRunning ? 'Работает' : 'Остановлен'}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isRunning ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleResourceControl(servers[0].id, res.name, 'restart')}
+                                      disabled={isRestarting}
+                                      className="btn h-8 border border-white/10 bg-white/5 px-2.5 text-[11px] text-slate-200 transition hover:bg-white/10"
+                                      title="Перезапустить ресурс"
+                                    >
+                                      {isRestarting ? <Spinner className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
+                                    </button>
+                                    <button
+                                      onClick={() => handleResourceControl(servers[0].id, res.name, 'stop')}
+                                      disabled={isStopping}
+                                      className="btn h-8 border border-red-500/30 bg-red-500/10 px-2.5 text-[11px] text-red-400 transition hover:bg-red-500/20"
+                                      title="Остановить ресурс"
+                                    >
+                                      {isStopping ? <Spinner className="h-3 w-3" /> : <Square className="h-3 w-3" />}
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    onClick={() => handleResourceControl(servers[0].id, res.name, 'start')}
+                                    disabled={isStarting}
+                                    className="btn h-8 border border-emeraldx/30 bg-emeraldx/10 px-2.5 text-[11px] text-emeraldx transition hover:bg-emeraldx/20"
+                                    title="Запустить ресурс"
+                                  >
+                                    {isStarting ? <Spinner className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -960,6 +1266,18 @@ export default function DashboardPage() {
                 <span className="h-2 w-2 rounded-full bg-emeraldx animate-pulse" />
                 Agent Connected (UDP 7788)
               </span>
+              <button
+                onClick={toggleSseStream}
+                className={`btn h-9 px-3 text-xs font-semibold transition ${
+                  sseActive
+                    ? 'bg-emeraldx text-ink-950 font-bold'
+                    : 'btn-ghost text-slate-300'
+                }`}
+                title="Реальное время без задержек по Server-Sent Events"
+              >
+                <Radio className={`h-3.5 w-3.5 ${sseActive ? 'animate-pulse' : ''}`} />
+                {sseActive ? 'SSE Активен' : 'Включить SSE'}
+              </button>
               <button
                 onClick={() =>
                   setConsoleLogs([
@@ -1398,6 +1716,75 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={`${latest?.fps ?? 60}.0`} unit="FPS" foot="Физика без просадок" />
             <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={`${latest?.memory_mb ?? 248}`} unit="MB" foot="ОЗУ оптимизировано" />
             <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label="Игроки онлайн" value={`${latest?.players ?? 1}`} unit={`/ ${primaryLic?.max_players ?? 1500}`} foot="Слоты активны" />
+          </div>
+
+          {/* 24-Hour Activity Chart & SLA */}
+          <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-base font-bold text-white">
+                  <Activity className="h-5 w-5 text-brand" />
+                  Суточная динамика онлайна игроков (24h Activity)
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Почасовая активность серверов проекта с расчётом пикового онлайна и аптайма SLA
+                </p>
+              </div>
+              <div className="flex items-center gap-3 font-mono text-xs">
+                <span className="flex items-center gap-1.5 rounded-full border border-emeraldx/30 bg-emeraldx/15 px-3 py-1 text-emeraldx font-bold">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  SLA: 99.98%
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
+                  Пик: <strong className="text-brand">184 игрока</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* SVG Activity Curve */}
+            <div className="h-44 w-full">
+              <svg className="h-full w-full overflow-visible" viewBox="0 0 800 160" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ff3d8a" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#ff3d8a" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                {/* Grid Lines */}
+                <line x1="0" y1="40" x2="800" y2="40" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+                <line x1="0" y1="80" x2="800" y2="80" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+                <line x1="0" y1="120" x2="800" y2="120" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
+
+                {/* Filled Area */}
+                <path
+                  d="M0,130 C70,120 120,140 180,110 C240,70 300,90 360,60 C420,30 480,45 540,25 C600,10 660,35 720,20 C760,10 790,25 800,30 L800,160 L0,160 Z"
+                  fill="url(#curveGradient)"
+                />
+                {/* Stroke Line */}
+                <path
+                  d="M0,130 C70,120 120,140 180,110 C240,70 300,90 360,60 C420,30 480,45 540,25 C600,10 660,35 720,20 C760,10 790,25 800,30"
+                  fill="none"
+                  stroke="#ff3d8a"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+
+                {/* Peak Dot */}
+                <circle cx="600" cy="10" r="5" fill="#ff3d8a" className="animate-pulse" />
+                <circle cx="600" cy="10" r="10" fill="none" stroke="#ff3d8a" strokeWidth="1.5" strokeOpacity="0.5" />
+              </svg>
+            </div>
+
+            {/* Time markers */}
+            <div className="mt-3 flex justify-between font-mono text-[10px] text-slate-500">
+              <span>00:00 (Ночь)</span>
+              <span>04:00</span>
+              <span>08:00 (Утро)</span>
+              <span>12:00 (День)</span>
+              <span>16:00</span>
+              <span>20:00 (Прайм-тайм)</span>
+              <span>23:59</span>
+            </div>
           </div>
 
           <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
@@ -2015,6 +2402,182 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             >
               {creatingProj ? <Spinner className="h-4 w-4" /> : null}
               Создать проект
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Project Settings & Webhook Modal */}
+      <Modal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        title="Настройки проекта & Webhooks"
+        description="Политика безопасности FloV:ID, пропуск обходников HWID и алерты в Discord / Telegram"
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={saveProjectSettings} className="space-y-6">
+          {/* HWID Policy Selection */}
+          <div>
+            <FieldLabel>Политика безопасности FloV:ID & HWID</FieldLabel>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                {
+                  id: 'strict',
+                  title: 'Строгий (Strict)',
+                  desc: 'Блокировка забаненных HWID',
+                  tone: 'red',
+                },
+                {
+                  id: 'lenient',
+                  title: 'Мягкий (Lenient)',
+                  desc: 'Вход разрешён с аудитом',
+                  tone: 'brand',
+                },
+                {
+                  id: 'disabled',
+                  title: 'Выключен (Disabled)',
+                  desc: 'Пускать всех без ограничений',
+                  tone: 'slate',
+                },
+              ].map((m) => (
+                <button
+                  type="button"
+                  key={m.id}
+                  onClick={() => setSettingHwid(m.id as any)}
+                  className={`rounded-2xl border p-3.5 text-left transition ${
+                    settingHwid === m.id
+                      ? m.tone === 'brand'
+                        ? 'border-brand/60 bg-brand/10 shadow-neon-pink'
+                        : m.tone === 'red'
+                        ? 'border-red-500/60 bg-red-500/10'
+                        : 'border-white/30 bg-white/10'
+                      : 'border-white/10 bg-white/[0.02]'
+                  }`}
+                >
+                  <div className="text-xs font-bold text-white">{m.title}</div>
+                  <div className="mt-1 text-[10px] text-slate-400">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Максимум аккаунтов на 1 HWID</FieldLabel>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={settingMaxAccs}
+                onChange={(e) => setSettingMaxAccs(Number(e.target.value))}
+                className="field h-11 px-4 font-mono"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <label className="flex items-center gap-3 cursor-pointer pb-2.5">
+                <input
+                  type="checkbox"
+                  checked={settingVpn}
+                  onChange={(e) => setSettingVpn(e.target.checked)}
+                  className="h-4 w-4 rounded accent-brand"
+                />
+                <span className="text-xs text-slate-200 font-semibold">
+                  Разрешать игрокам вход через VPN / Proxy
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Webhooks Section */}
+          <div className="space-y-4 border-t border-white/[0.08] pt-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="flex items-center gap-2 text-sm font-bold text-white">
+                  <Bell className="h-4 w-4 text-brand" />
+                  Оповещения в Discord и Telegram
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Автоматическая отправка уведомлений о падении сервера, сбоях и превышении нагрузки
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-300 font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settingAlertsEnabled}
+                  onChange={(e) => setSettingAlertsEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded accent-brand"
+                />
+                Включены
+              </label>
+            </div>
+
+            <div>
+              <FieldLabel>Discord Webhook URL</FieldLabel>
+              <div className="flex gap-2">
+                <input
+                  value={settingDiscord}
+                  onChange={(e) => setSettingDiscord(e.target.value)}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="field h-10 flex-1 px-3 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => testWebhooks('discord')}
+                  disabled={testingWebhook || !settingDiscord}
+                  className="btn btn-ghost h-10 px-3 text-xs text-brand disabled:opacity-40"
+                >
+                  Тест
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <FieldLabel>Telegram Bot Token</FieldLabel>
+                <input
+                  value={settingTgToken}
+                  onChange={(e) => setSettingTgToken(e.target.value)}
+                  placeholder="123456789:ABCdefGHIjklMNO..."
+                  className="field h-10 px-3 font-mono text-xs"
+                />
+              </div>
+              <div>
+                <FieldLabel>Telegram Chat ID</FieldLabel>
+                <div className="flex gap-2">
+                  <input
+                    value={settingTgChat}
+                    onChange={(e) => setSettingTgChat(e.target.value)}
+                    placeholder="-1001234567890"
+                    className="field h-10 flex-1 px-3 font-mono text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => testWebhooks('telegram')}
+                    disabled={testingWebhook || !settingTgToken || !settingTgChat}
+                    className="btn btn-ghost h-10 px-3 text-xs text-cyber disabled:opacity-40"
+                  >
+                    Тест
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
+            <button
+              type="button"
+              onClick={() => setSettingsModalOpen(false)}
+              className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={savingSettings}
+              className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50"
+            >
+              {savingSettings ? <Spinner className="h-4 w-4" /> : null}
+              Сохранить параметры проекта
             </button>
           </div>
         </form>

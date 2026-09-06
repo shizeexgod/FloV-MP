@@ -87,6 +87,13 @@ CREATE TABLE IF NOT EXISTS `portal_projects` (
   `plan` VARCHAR(32) NOT NULL DEFAULT 'enterprise' COMMENT 'indie, business, enterprise, lifetime',
   `max_players` INT UNSIGNED NOT NULL DEFAULT 1500,
   `api_key` VARCHAR(64) NOT NULL UNIQUE,
+  `hwid_policy` VARCHAR(16) NOT NULL DEFAULT 'lenient' COMMENT 'strict, lenient, disabled',
+  `allow_vpn` TINYINT(1) NOT NULL DEFAULT 1,
+  `max_accounts_per_hwid` INT UNSIGNED NOT NULL DEFAULT 3,
+  `discord_webhook_url` VARCHAR(255) DEFAULT NULL,
+  `telegram_webhook_token` VARCHAR(128) DEFAULT NULL,
+  `telegram_chat_id` VARCHAR(64) DEFAULT NULL,
+  `webhook_alerts_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `expires_at` DATETIME NOT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -121,7 +128,7 @@ CREATE TABLE IF NOT EXISTS `portal_servers` (
 CREATE TABLE IF NOT EXISTS `portal_agent_commands` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `server_id` INT UNSIGNED NOT NULL,
-  `command` VARCHAR(32) NOT NULL COMMENT 'restart, stop, broadcast, kick_all, execute',
+  `command` VARCHAR(32) NOT NULL COMMENT 'restart, stop, broadcast, kick_all, execute, resource_start, resource_stop, resource_restart',
   `payload` TEXT DEFAULT NULL,
   `status` VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending, executed, failed',
   `result` TEXT DEFAULT NULL,
@@ -129,4 +136,30 @@ CREATE TABLE IF NOT EXISTS `portal_agent_commands` (
   `executed_at` DATETIME DEFAULT NULL,
   CONSTRAINT `fk_pcmd_srv` FOREIGN KEY (`server_id`) REFERENCES `portal_servers` (`id`) ON DELETE CASCADE,
   INDEX `idx_pcmd_srv_status` (`server_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `portal_resources` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `server_id` INT UNSIGNED NOT NULL,
+  `name` VARCHAR(64) NOT NULL,
+  `type` VARCHAR(32) NOT NULL DEFAULT 'script' COMMENT 'gamemode, script, map, vehicles, ui',
+  `status` VARCHAR(16) NOT NULL DEFAULT 'running' COMMENT 'running, stopped, failed',
+  `version` VARCHAR(32) NOT NULL DEFAULT '1.0.0',
+  `author` VARCHAR(64) NOT NULL DEFAULT 'FloV:MP',
+  `started_at` DATETIME DEFAULT NULL,
+  CONSTRAINT `fk_pres_srv` FOREIGN KEY (`server_id`) REFERENCES `portal_servers` (`id`) ON DELETE CASCADE,
+  UNIQUE KEY `uk_srv_resource` (`server_id`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `portal_server_crashes` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `server_id` INT UNSIGNED NOT NULL,
+  `incident_id` VARCHAR(64) NOT NULL UNIQUE,
+  `reason` TEXT NOT NULL,
+  `stack_trace` TEXT DEFAULT NULL,
+  `memory_mb` INT UNSIGNED NOT NULL DEFAULT 0,
+  `auto_restart_triggered` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_pcrash_srv` FOREIGN KEY (`server_id`) REFERENCES `portal_servers` (`id`) ON DELETE CASCADE,
+  INDEX `idx_pcrash_time` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

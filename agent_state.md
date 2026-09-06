@@ -8,8 +8,9 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
 - **FloV:MP** — независимый мультиплеерный движок (сетевой стек на отвязанных бинарниках alt:V v16.4.39 release, протокол синхронизации, коннектор, рантайм). Невидим игроку, работает строго «под капотом». Это **движок**, а НЕ сам RP-проект.
 - **Держава Онлайн** (Держава RP) — **сам RP-проект** (карта реальной Москвы RMRP 2025, российская тематика, 8-уровневая админ-система, фракции, экономика, сайт с веб-админкой, база MariaDB, Discord-сообщество игроков).
 - **Лаунчер «Держава RP / Держава Онлайн»** — единая входная точка для игрока, запускающая проект через движок FloV:MP (Electron UI + C# Native Bridge FloVMP.Connect).
-- **SaaS Веб-Портал FloV:MP (`c:\FloV-MP\web`)** — коммерческая платформа лицензирования мультиплеера по модели icsnotify.ru (Next.js 14, личный кабинет, биллинг со счетами и моментальной оплатой, мониторинг телеметрии 60 Hz/60 FPS, генератор кастомных лаунчеров, HMAC-SHA256 криптографическая верификация ключей, 20% партнёрка).
-- **txAdmin Cloud Remote Control Plane & AI Troubleshooter** — двусторонний агент управления серверами (`RemoteServerAgent.cs`), очередь команд (`portal_agent_commands`), интерактивная веб-консоль и нейросетевая диагностика инцидентов.
+- **SaaS Веб-Портал FloV:MP (`c:\FloV-MP\web`)** — коммерческая платформа лицензирования мультиплеера по модели icsnotify.ru (Next.js 14, личный кабинет, биллинг со счетами и моментальной оплатой, мониторинг телеметрии 60 Hz/60 FPS, генератор кастомных лаунчеров, HMAC-SHA256 криптографическая верификация ключей, 20% партнёрка, менеджер ресурсов серверов, вебхук-алерты Discord/Telegram, Public Developer API).
+- **txAdmin Cloud Remote Control Plane & AI Troubleshooter** — двусторонний агент управления серверами (`RemoteServerAgent.cs`), очередь команд (`portal_agent_commands`), SSE стриминг логов в реальном времени, интерактивная веб-консоль и нейросетевая диагностика инцидентов.
+- **Enterprise Core Systems** — Dynamic Spatial Asset Streaming Protocol, Server Crash Watchdog (авторестарт при фризах >15s), Dynamic Resource Manager (горячий старт/стоп ресурсов), FloV:ID & HWID Enforcement с гибкими политиками (Strict, Lenient, Disabled).
 - **Иерархия Account -> Projects -> Servers** — лицензия привязывается к проекту, внутри которого запускаются изолированные среды (Production, Development, Test) без коллизии ключей.
 
 ## Архитектурный SaaS Blueprint (согласовано с концептом enterprise-экосистемы)
@@ -88,8 +89,9 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
 - **Схема базы данных (`sql/schema.sql`):**
   - Добавлены таблицы MariaDB: `factions`, `faction_members`, `player_documents`, `properties`.
 - **Тестовое покрытие:**
-  - **165 automated tests passing** (137 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
+  - **182 automated tests passing** (154 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
   - Тесты `FloVMP.Core.Tests` проверяют чистое ядро с независимыми тестовыми фикстурами без зависимости от гейммода или карты.
+  - Покрыты: `AssetStreamingManagerTests` (100% green), `ServerCrashWatchdogTests` (100% green), `DynamicResourceManagerTests` (100% green), `FlovIdPolicyServiceTests` (100% green).
 
 ## Лаунчер и нативный мост
 

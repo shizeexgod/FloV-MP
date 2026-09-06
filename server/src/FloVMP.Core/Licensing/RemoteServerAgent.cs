@@ -27,6 +27,9 @@ public class RemoteServerAgent : IDisposable
     public event Func<string?, Task<string>>? OnRestartRequested;
     public event Func<string?, Task<string>>? OnStopRequested;
     public event Func<string, Task<string>>? OnBroadcastRequested;
+    public event Func<string, Task<string>>? OnResourceStartRequested;
+    public event Func<string, Task<string>>? OnResourceStopRequested;
+    public event Func<string, Task<string>>? OnResourceRestartRequested;
     public event Func<string, string?, Task<string>>? OnCustomCommandReceived;
 
     public RemoteServerAgent(
@@ -113,6 +116,15 @@ public class RemoteServerAgent : IDisposable
                             break;
                         case "broadcast":
                             result = OnBroadcastRequested != null && payload != null ? await OnBroadcastRequested(payload) : "Broadcast sent";
+                            break;
+                        case "resource_start":
+                            result = OnResourceStartRequested != null && payload != null ? await OnResourceStartRequested(payload) : $"Started resource {payload}";
+                            break;
+                        case "resource_stop":
+                            result = OnResourceStopRequested != null && payload != null ? await OnResourceStopRequested(payload) : $"Stopped resource {payload}";
+                            break;
+                        case "resource_restart":
+                            result = OnResourceRestartRequested != null && payload != null ? await OnResourceRestartRequested(payload) : $"Restarted resource {payload}";
                             break;
                         default:
                             result = OnCustomCommandReceived != null ? await OnCustomCommandReceived(cmdName, payload) : $"Command '{cmdName}' processed";

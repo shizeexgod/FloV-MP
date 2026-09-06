@@ -47,6 +47,13 @@ export interface ProjectRecord {
   plan: string;
   max_players: number;
   api_key: string;
+  hwid_policy?: 'strict' | 'lenient' | 'disabled';
+  allow_vpn?: boolean;
+  max_accounts_per_hwid?: number;
+  discord_webhook_url?: string;
+  telegram_webhook_token?: string;
+  telegram_chat_id?: string;
+  webhook_alerts_enabled?: boolean;
   is_active: number;
   expires_at: string;
   created_at: string;
@@ -70,10 +77,29 @@ export interface ServerRecord {
   created_at: string;
 }
 
+export interface ResourceRecord {
+  id: number;
+  server_id: number;
+  name: string;
+  type: 'gamemode' | 'script' | 'map' | 'vehicles' | 'ui';
+  status: 'running' | 'stopped' | 'failed';
+  version: string;
+  author: string;
+  started_at?: string;
+}
+
 export interface AgentCommandRecord {
   id: number;
   server_id: number;
-  command: 'restart' | 'stop' | 'broadcast' | 'kick_all' | 'execute';
+  command:
+    | 'restart'
+    | 'stop'
+    | 'broadcast'
+    | 'kick_all'
+    | 'execute'
+    | 'resource_start'
+    | 'resource_stop'
+    | 'resource_restart';
   payload?: string;
   status: 'pending' | 'executed' | 'failed';
   result?: string;
@@ -915,7 +941,15 @@ export async function updateServerTelemetry(
 
 export async function queueAgentCommand(
   serverId: number,
-  command: 'restart' | 'stop' | 'broadcast' | 'kick_all' | 'execute',
+  command:
+    | 'restart'
+    | 'stop'
+    | 'broadcast'
+    | 'kick_all'
+    | 'execute'
+    | 'resource_start'
+    | 'resource_stop'
+    | 'resource_restart',
   payload?: string
 ): Promise<number> {
   const res: any = await query(
@@ -946,4 +980,98 @@ export async function completeAgentCommand(
     [status, result || null, now, commandId]
   );
   return res.affectedRows > 0;
+}
+
+export async function updateProjectSettings(
+  projectId: number,
+  settings: {
+    hwidPolicy?: 'strict' | 'lenient' | 'disabled';
+    allowVpn?: boolean;
+    maxAccountsPerHwid?: number;
+    discordWebhookUrl?: string;
+    telegramWebhookToken?: string;
+    telegramChatId?: string;
+    webhookAlertsEnabled?: boolean;
+  }
+): Promise<boolean> {
+  const fields: string[] = [];
+  const vals: any[] = [];
+
+  if (settings.hwidPolicy !== undefined) {
+    fields.push('hwid_policy = ?');
+    vals.push(settings.hwidPolicy);
+  }
+  if (settings.allowVpn !== undefined) {
+    fields.push('allow_vpn = ?');
+    vals.push(settings.allowVpn ? 1 : 0);
+  }
+  if (settings.maxAccountsPerHwid !== undefined) {
+    fields.push('max_accounts_per_hwid = ?');
+    vals.push(settings.maxAccountsPerHwid);
+  }
+  if (settings.discordWebhookUrl !== undefined) {
+    fields.push('discord_webhook_url = ?');
+    vals.push(settings.discordWebhookUrl || null);
+  }
+  if (settings.telegramWebhookToken !== undefined) {
+    fields.push('telegram_webhook_token = ?');
+    vals.push(settings.telegramWebhookToken || null);
+  }
+  if (settings.telegramChatId !== undefined) {
+    fields.push('telegram_chat_id = ?');
+    vals.push(settings.telegramChatId || null);
+  }
+  if (settings.webhookAlertsEnabled !== undefined) {
+    fields.push('webhook_alerts_enabled = ?');
+    vals.push(settings.webhookAlertsEnabled ? 1 : 0);
+  }
+
+  if (fields.length === 0) return true;
+
+  vals.push(projectId);
+  const res: any = await query(`UPDATE portal_projects SET ${fields.join(', ')} WHERE id = ?`, vals);
+  return res.affectedRows > 0;
+}
+
+export async function getResourcesByServer(serverId: number): Promise<ResourceRecord[]> {
+  const rows = await query('SELECT * FROM portal_resources WHERE server_id = ? ORDER BY name ASC', [serverId]);
+  const list = rows as ResourceRecord[];
+  if (list.length === 0) {
+    // Return standard default FloV:MP resource pack if none registered yet
+    return [
+      { id: 1, server_id: serverId, name: 'flovmp-core', type: 'gamemode', status: 'running', version: '1.0.4', author: 'FloV:MP' },
+      { id: 2, server_id: serverId, name: 'flovmp-factions', type: 'script', status: 'running', version: '1.0.0', author: 'FloV:MP' },
+      { id: 3, server_id: serverId, name: 'flovmp-vehicles', type: 'vehicles', status: 'running', version: '1.2.0', author: 'FloV:MP' },
+      { id: 4, server_id: serverId, name: 'flovmp-hud', type: 'ui', status: 'running', version: '1.0.0', author: 'FloV:MP' },
+      { id: 5, server_id: serverId, name: 'flovmp-map-stream', type: 'map', status: 'running', version: '2.0.0', author: 'FloV:MP' },
+    ];
+  }
+  return list;
+}
+
+export async function setResourceStatus(
+  serverId: number,
+  name: string,
+  status: 'running' | 'stopped' | 'failed'
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const res: any = await query(
+    'INSERT INTO portal_resources (server_id, name, status, started_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status), started_at = VALUES(started_at)',
+    [serverId, name, status, status === 'running' ? now : null]
+  );
+  return res.affectedRows > 0;
+}
+
+export async function recordServerCrash(
+  serverId: number,
+  incidentId: string,
+  reason: string,
+  stackTrace?: string,
+  memoryMb: number = 0
+): Promise<number> {
+  const res: any = await query(
+    'INSERT INTO portal_server_crashes (server_id, incident_id, reason, stack_trace, memory_mb) VALUES (?, ?, ?, ?, ?)',
+    [serverId, incidentId, reason, stackTrace || null, memoryMb]
+  );
+  return res.insertId;
 }

@@ -75,11 +75,11 @@ export default function HybridConcept() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <a href="#" className="px-2 text-[13px] text-white/55 hover:text-white">
+            <a href="/concepts/hybrid/app" className="px-2 text-[13px] text-white/55 hover:text-white">
               Login
             </a>
-            <a href="#pricing" className="hy-grad rounded-xl px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(255,20,147,0.5)]">
-              Get License
+            <a href="/concepts/hybrid/app" className="hy-grad rounded-xl px-3.5 py-1.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(255,20,147,0.5)]">
+              Open Dashboard
             </a>
           </div>
         </div>
