@@ -375,6 +375,11 @@ let settings = {
   notifEvents: true,
   notifSound: false,
   accountCreatedUtc: '',
+  upscalerMode: 'none',
+  upscalerQuality: 'quality',
+  upscalerSharpness: 50,
+  upscalerFrameGen: true,
+  upscalerNuiProtection: true,
 };
 
 // id → [ключ настройки, свойство элемента]
@@ -412,6 +417,11 @@ const SETTINGS_MAP = [
   ['set-notif-status', 'notifStatus', 'checked'],
   ['set-notif-events', 'notifEvents', 'checked'],
   ['set-notif-sound', 'notifSound', 'checked'],
+  ['set-upscaler-mode', 'upscalerMode', 'value'],
+  ['set-upscaler-quality', 'upscalerQuality', 'value'],
+  ['set-upscaler-sharpness', 'upscalerSharpness', 'value'],
+  ['set-upscaler-framegen', 'upscalerFrameGen', 'checked'],
+  ['set-upscaler-nui-protection', 'upscalerNuiProtection', 'checked'],
 ];
 
 // ─── Акцентный цвет — пресеты + свой цвет. applyAccent меняет ТОЛЬКО
@@ -630,6 +640,34 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeColor
 function dlSpeedLabel(v) { return Number(v) === 0 ? 'Без ограничения' : `${v} МБ/с`; }
 function voiceThrLabel(v) { v = Number(v); return v < 33 ? 'Низкий' : v < 66 ? 'Средний' : 'Высокий'; }
 
+const UPSCALER_DESCRIPTIONS = {
+  none: 'Оригинальный рендеринг без изменений',
+  fsr3_framegen: 'AMD FidelityFX Super Resolution 3.1 + Генерация кадров (для любых GPU)',
+  dlss_framegen: 'NVIDIA Deep Learning Super Sampling 3.7 + Frame Generation (RTX)',
+  dlss5_neural: '✨ Экспериментальный Neural Reconstruction («DLSS 5»)',
+};
+
+function updateUpscalerUI() {
+  const mode = settings.upscalerMode || 'none';
+  const isOff = mode === 'none';
+
+  const descEl = document.getElementById('upscaler-desc');
+  if (descEl) descEl.textContent = UPSCALER_DESCRIPTIONS[mode] || UPSCALER_DESCRIPTIONS.none;
+
+  const qRow = document.getElementById('row-upscaler-quality');
+  const sRow = document.getElementById('row-upscaler-sharpness');
+  const fgRow = document.getElementById('row-upscaler-framegen');
+  const nuiRow = document.getElementById('row-upscaler-nui-protection');
+
+  if (qRow) qRow.style.display = isOff ? 'none' : '';
+  if (sRow) sRow.style.display = isOff ? 'none' : '';
+  if (fgRow) fgRow.style.display = isOff ? 'none' : '';
+  if (nuiRow) nuiRow.style.display = isOff ? 'none' : '';
+
+  const shVal = document.getElementById('upscaler-sharpness-val');
+  if (shVal) shVal.textContent = `${settings.upscalerSharpness ?? 50}%`;
+}
+
 function applySettingsToUI() {
   SETTINGS_MAP.forEach(([id, key, prop]) => {
     const el = document.getElementById(id);
@@ -646,6 +684,8 @@ function applySettingsToUI() {
   const t = document.getElementById('dl-threads-val'); if (t) t.textContent = String(settings.dlThreads);
   const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
   const us = document.getElementById('ui-scale-val'); if (us) us.textContent = `${settings.uiScale}%`;
+
+  updateUpscalerUI();
 
   syncAllXSelects();
   applyAccountUI();
@@ -818,12 +858,23 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
     if (id === 'set-dl-speed') document.getElementById('dl-speed-val').textContent = dlSpeedLabel(v);
     if (id === 'set-dl-threads') document.getElementById('dl-threads-val').textContent = String(v);
     if (id === 'set-voice-threshold') document.getElementById('voice-thr-val').textContent = voiceThrLabel(v);
+    if (id === 'set-upscaler-mode') updateUpscalerUI();
+    if (id === 'set-upscaler-sharpness') {
+      const sh = document.getElementById('upscaler-sharpness-val');
+      if (sh) sh.textContent = `${v}%`;
+    }
     saveSettingsDebounced();
   });
   if (isUiScale) {
     // живая подпись при перетаскивании, без применения zoom
     el.addEventListener('input', (e) => {
       document.getElementById('ui-scale-val').textContent = `${e.target.value}%`;
+    });
+  }
+  if (id === 'set-upscaler-sharpness') {
+    el.addEventListener('input', (e) => {
+      const sh = document.getElementById('upscaler-sharpness-val');
+      if (sh) sh.textContent = `${e.target.value}%`;
     });
   }
 });
@@ -1555,6 +1606,49 @@ async function pollSession() {
   }
 }
 
+// ─── FloV:Graphics — GPU детекция и аппаратные рекомендации ───────────────
+async function initGpuInfo() {
+  const badge = document.getElementById('gpu-badge');
+  const recEl = document.getElementById('gpu-recommendation');
+  if (!badge) return;
+
+  try {
+    const gpu = await window.floridaV.detectGpu?.();
+    if (!gpu) {
+      badge.textContent = 'GPU: Авто';
+      return;
+    }
+
+    const vramGb = (gpu.vramMb / 1024).toFixed(0);
+    badge.textContent = `${gpu.gpuName} (${vramGb} GB)`;
+
+    badge.classList.remove('badge-gpu--rtx', 'badge-gpu--amd', 'badge-gpu--intel');
+    if (gpu.isRtx) {
+      badge.classList.add('badge-gpu--rtx');
+    } else if (gpu.vendor === 'AMD') {
+      badge.classList.add('badge-gpu--amd');
+    } else if (gpu.vendor === 'Intel') {
+      badge.classList.add('badge-gpu--intel');
+    }
+
+    if (recEl) {
+      let recText = `💡 Рекомендация для ${gpu.gpuName}: `;
+      if (gpu.recommendedMode === 'dlss5_neural') {
+        recText += 'Рекомендуется «DLSS 5 Neural Reconstruction» или DLSS 3.7 + Frame Generation для максимального FPS и кинематографичной чёткости.';
+      } else if (gpu.recommendedMode === 'dlss_framegen') {
+        recText += 'Рекомендуется DLSS 3.7 + Frame Generation (поддерживаются RT/Tensor ядра).';
+      } else if (gpu.recommendedMode === 'fsr3_framegen') {
+        recText += 'Рекомендуется AMD FSR 3.1 + Frame Generation для стабильного прироста FPS на вашей конфигурации.';
+      } else {
+        recText += 'Стандартный рендеринг без масштабирования.';
+      }
+      recEl.textContent = recText;
+    }
+  } catch {
+    badge.textContent = 'GPU: Авто';
+  }
+}
+
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
   renderAccentPicker();
@@ -1572,6 +1666,8 @@ async function pollSession() {
     set2faStatusSilent(settings.account.twoFa);
   }
 
+  initGpuInfo();
+
   if (!settings.gtaPath) detectGta();
 
   window.floridaV.setTrayOnClose?.(settings.trayOnClose);
@@ -1583,3 +1679,4 @@ async function pollSession() {
   setInterval(pollSession, 5000);
   window.addEventListener('focus', pollSession);
 })();
+

@@ -42,6 +42,18 @@ public class LauncherSettings
     [JsonPropertyName("fpsLimit")] public int FpsLimit { get; set; } = 0;
     [JsonPropertyName("disableAmbient")] public bool DisableAmbient { get; set; } = true;
 
+    // ── FloV:Graphics & Upscaler (DLSS 5 / FSR 3 / Frame Gen) ──
+    /// <summary>"none" | "fsr3_framegen" | "dlss_framegen" | "dlss5_neural"</summary>
+    [JsonPropertyName("upscalerMode")] public string UpscalerMode { get; set; } = "none";
+    /// <summary>"quality" | "balanced" | "performance" | "ultra_performance"</summary>
+    [JsonPropertyName("upscalerQuality")] public string UpscalerQuality { get; set; } = "quality";
+    /// <summary>Резкость масштабирования (0 - 100)</summary>
+    [JsonPropertyName("upscalerSharpness")] public int UpscalerSharpness { get; set; } = 50;
+    /// <summary>Включить аппаратную генерацию кадров (Frame Generation)</summary>
+    [JsonPropertyName("upscalerFrameGen")] public bool UpscalerFrameGen { get; set; } = true;
+    /// <summary>Защита NUI HUD / инвентаря от размытия и артефактов апскейлинга</summary>
+    [JsonPropertyName("upscalerNuiProtection")] public bool UpscalerNuiProtection { get; set; } = true;
+
     // ── Загрузка ──
     [JsonPropertyName("dlSpeed")] public int DlSpeed { get; set; } = 0;
     [JsonPropertyName("dlThreads")] public int DlThreads { get; set; } = 4;

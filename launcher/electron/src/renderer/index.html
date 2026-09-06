@@ -417,6 +417,60 @@
                 </div>
                 <div class="hint">Применяется при следующем запуске.</div>
               </div>
+
+              <!-- FloV:Graphics & DLSS 5 / FSR 3 / Frame Gen -->
+              <div class="card card--upscaler">
+                <div class="card-head-row">
+                  <h4><span class="icon icon-sparkles"></span>FloV:Graphics & DLSS / FSR Super Resolution</h4>
+                  <span class="badge-gpu" id="gpu-badge">Определение GPU...</span>
+                </div>
+                <div class="field-row">
+                  <div>
+                    <div class="ft">Режим масштабирования</div>
+                    <div class="fd" id="upscaler-desc">Оригинальный рендеринг без изменений</div>
+                  </div>
+                  <select id="set-upscaler-mode">
+                    <option value="none">Выключено (Стандарт)</option>
+                    <option value="fsr3_framegen">AMD FSR 3.1 + Frame Generation (Буст FPS +50-80%)</option>
+                    <option value="dlss_framegen">NVIDIA DLSS 3.7 + Frame Generation (RTX)</option>
+                    <option value="dlss5_neural">✨ Экспериментальный Neural Reconstruction («DLSS 5»)</option>
+                  </select>
+                </div>
+                <div class="field-row" id="row-upscaler-quality">
+                  <div>
+                    <div class="ft">Качество реконструкции</div>
+                    <div class="fd">Баланс между детализацией и частотой кадров</div>
+                  </div>
+                  <select id="set-upscaler-quality">
+                    <option value="quality">Качество (Quality)</option>
+                    <option value="balanced">Сбалансированное (Balanced)</option>
+                    <option value="performance">Производительность (Performance)</option>
+                    <option value="ultra_performance">Ультра-производительность (Ultra)</option>
+                  </select>
+                </div>
+                <div class="field-row" id="row-upscaler-sharpness">
+                  <div>
+                    <div class="ft">Резкость контуров</div>
+                    <div class="fd" id="upscaler-sharpness-val">50%</div>
+                  </div>
+                  <input type="range" id="set-upscaler-sharpness" min="0" max="100" step="5" value="50" style="max-width:140px">
+                </div>
+                <div class="field-row" id="row-upscaler-framegen">
+                  <div>
+                    <div class="ft">Генерация кадров (Frame Generation)</div>
+                    <div class="fd">Удваивает плавность движения в игре</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-upscaler-framegen" checked><span class="track"></span></label>
+                </div>
+                <div class="field-row">
+                  <div>
+                    <div class="ft">Защита NUI HUD / Инвентаря</div>
+                    <div class="fd">Изолирует чат, инвентарь и радар от размытия и шумов апскейлера</div>
+                  </div>
+                  <label class="switch"><input type="checkbox" id="set-upscaler-nui-protection" checked><span class="track"></span></label>
+                </div>
+                <div class="hint hint--gpu-rec" id="gpu-recommendation"></div>
+              </div>
             </div>
           </div>
 

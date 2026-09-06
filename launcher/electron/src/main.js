@@ -147,6 +147,9 @@ ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) =>
   native.call('play', { gtaPath, host, port, nickname }));
 ipcMain.handle('native:cancelPlay', () => native.call('cancelPlay').catch(() => null));
 ipcMain.handle('native:deviceInfo', () => native.call('deviceInfo').catch(() => null));
+ipcMain.handle('native:detectGpu', () => native.call('detectGpu').catch(() => null));
+ipcMain.handle('native:deployUpscaler', (_e, gtaPath) => native.call('deployUpscaler', { gtaPath }).catch(() => null));
+ipcMain.handle('native:cleanupUpscaler', (_e, gtaPath) => native.call('cleanupUpscaler', { gtaPath }).catch(() => null));
 
 // Авторизация / безопасность — HTTP к локальному ServerLauncher (тот же
 // accounts.json, что и в игре). fetch есть в Node начиная с 18 — отдельный

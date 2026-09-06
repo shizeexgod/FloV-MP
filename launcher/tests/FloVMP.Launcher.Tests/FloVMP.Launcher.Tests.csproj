@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FloVMP.Launcher.Core\FloVMP.Launcher.Core.csproj" />
+    <ProjectReference Include="..\..\src\FloVMP.Launcher.Native\FloVMP.Launcher.Native.csproj" />
   </ItemGroup>
 
 </Project>

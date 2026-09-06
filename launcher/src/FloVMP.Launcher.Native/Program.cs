@@ -75,6 +75,14 @@ internal static class Program
 
         "deviceInfo" => DeviceInfoService.Collect(),
 
+        "detectGpu" => GpuDetectionService.Detect(),
+
+        "deployUpscaler" => UpscalerDeploymentService.Deploy(
+            req?["gtaPath"]?.GetValue<string>() ?? "",
+            SettingsService.Load()),
+
+        "cleanupUpscaler" => new { success = UpscalerDeploymentService.Cleanup(req?["gtaPath"]?.GetValue<string>() ?? "") },
+
         "ping" => new { pong = true },
 
         _ => throw new InvalidOperationException($"unknown command: {cmd}"),

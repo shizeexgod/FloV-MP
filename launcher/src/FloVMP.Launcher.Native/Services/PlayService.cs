@@ -15,6 +15,21 @@ public static class PlayService
         if (!GtaLocatorService.IsValidGtaFolder(gtaPath))
             return new LaunchResult(false, "Папка GTA V не найдена или некорректна.");
 
+        // Подготовка и развертывание профиля масштабирования (DLSS / FSR 3 / Neural DLSS 5) перед стартом
+        try
+        {
+            var settings = SettingsService.Load();
+            if (settings != null && settings.UpscalerMode != "none")
+            {
+                UpscalerDeploymentService.Deploy(gtaPath, settings);
+            }
+            else
+            {
+                UpscalerDeploymentService.Cleanup(gtaPath);
+            }
+        }
+        catch { }
+
         var connectExe = FindConnectExe();
         if (connectExe == null)
             return new LaunchResult(false, "Не найден FloVMP.Connect.exe. Убедитесь что движок FloV:MP установлен.");

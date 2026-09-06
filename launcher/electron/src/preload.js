@@ -26,6 +26,11 @@ const api = {
   // localIp, bootTimeUtc, nowUtc } — только то, что система отдаёт локально.
   deviceInfo: () => ipcRenderer.invoke('native:deviceInfo'),
 
+  // Аппаратный инспектор видеокарты и профили масштабирования (DLSS 5 / FSR 3)
+  detectGpu: () => ipcRenderer.invoke('native:detectGpu'),
+  deployUpscaler: (gtaPath) => ipcRenderer.invoke('native:deployUpscaler', gtaPath),
+  cleanupUpscaler: (gtaPath) => ipcRenderer.invoke('native:cleanupUpscaler', gtaPath),
+
   // Авторизация / безопасность — один аккаунт для лаунчера и игры. mode:
   // 'login' | 'register' | 'change-password' | 'change-email' | '2fa-enable' |
   // '2fa-disable'. Возвращает { ok, message, username?, createdUtc?, ... }.

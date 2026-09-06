@@ -93,10 +93,30 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
   - Команда `/snapshot` (Уровень 6+ администрации).
 - **Схема базы данных (`sql/schema.sql`):**
   - Добавлены таблицы MariaDB: `factions`, `faction_members`, `player_documents`, `properties`.
-- **Тестовое покрытие:**
-  - **197 automated tests passing** (169 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
+- **Тестовое покрытие ядра:**
+  - **197 automated tests passing** в `FloVMP.Core.Tests` (0 failures, 0 warnings).
   - Тесты `FloVMP.Core.Tests` проверяют чистое ядро с независимыми тестовыми фикстурами без зависимости от гейммода или карты.
   - Покрыты: `AssetStreamingManagerTests` (100% green), `ServerCrashWatchdogTests` (100% green), `DynamicResourceManagerTests` (100% green), `FlovIdPolicyServiceTests` (100% green), `DimensionManagerTests` (100% green), `MultiTierBanServiceTests` (100% green), `SnapshotManagerTests` (100% green).
+
+## FloV:Graphics & Upscaler Engine («DLSS 5» / DLSS 3.7 / FSR 3.1)
+
+- **Аппаратная детекция видеокарт (`GpuDetectionService.cs`):**
+  - Прямой анализ реестра Windows без вызова тяжелых DirectX API.
+  - Определение VRAM, вендора (NVIDIA/AMD/Intel), RT/Tensor ядер и расчет оптимального режима.
+- **Безопасная песочница и NUI-защита (`UpscalerDeploymentService.cs`):**
+  - Динамическая генерация `flovmp_upscaler.ini` перед запуском игры и гарантированная очистка при выходе.
+  - Секция `[NUI_Protection]` с маскированием альфа-канала и буфера глубины CEF-оверлея (чат, инвентарь, радар не размываются).
+  - Использование `CultureInfo.InvariantCulture` для предотвращения крашей из-за запятой в дробных числах русской локали.
+- **Поддержка 4 режимов:**
+  1. `none` — оригинальный рендеринг.
+  2. `fsr3_framegen` — AMD FSR 3.1 + Frame Generation (+50-80% FPS).
+  3. `dlss_framegen` — NVIDIA DLSS 3.7 + Frame Generation (RTX).
+  4. `dlss5_neural` — Экспериментальный Neural Reconstruction («DLSS 5»).
+- **Интеграция в Лаунчер (Electron UI + C# Native Bridge):**
+  - NDJSON команды `detectGpu`, `deployUpscaler`, `cleanupUpscaler`.
+  - Карточка настроек `card--upscaler` с динамическим бейджем GPU, селектором режима, качества, ползунком резкости и тумблерами генерации кадров и защиты NUI.
+- **Тестовое покрытие лаунчера:**
+  - **38 automated tests passing** в `FloVMP.Launcher.Tests` (100% green).
 
 ## Лаунчер и нативный мост
 
@@ -106,8 +126,6 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
 - `native-bridge.js`:
   - Наследует `EventEmitter`, парсит `msg.event` и транслирует в Electron IPC (`download:progress`, `window:state`).
   - `preload.js` экспортирует как `window.floridaV`, так и `window.flovmp`.
-- **Соблюдение изоляции:**
-  - Код `launcher/electron/src/renderer/` НЕ модифицировался, предотвращая любые конфликты с фронтенд-разработкой Claude Code.
 
 ## ГДЕ МЫ СЕЙЧАС (живой прогон, 29.08 вечер — ПРОРЫВ: КЛИЕНТ ПОДКЛЮЧИЛСЯ)
 

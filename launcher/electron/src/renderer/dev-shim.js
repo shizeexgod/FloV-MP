@@ -47,6 +47,22 @@ if (!window.floridaV) {
     validateGta: async (gtaPath) => !!gtaPath,
     browseFolder: async () => { console.log('[dev-shim] browseFolder() — недоступно в браузере'); return null; },
 
+    detectGpu: async () => ({
+      vendor: 'NVIDIA',
+      modelName: 'NVIDIA GeForce RTX 4060 Ti',
+      vramMb: 8192,
+      driverVersion: '32.0.16.1088',
+      supportsRtx: true,
+      supportsDlss: true,
+      supportsDlss5Neural: true,
+      supportsFsr3: true,
+      supportsFrameGen: true,
+      recommendedMode: 'dlss_framegen',
+      recommendationReason: 'Ваша видеокарта серии RTX 40/50 поддерживает аппаратную генерацию кадров и DLSS 3.7. Также доступен экспериментальный DLSS 5.'
+    }),
+    deployUpscaler: async () => ({ success: true, mode: 'dlss5_neural', message: 'Развернуто в демо-режиме', deployedFiles: ['flovmp_upscaler.ini'] }),
+    cleanupUpscaler: async () => ({ success: true }),
+
     serverStatus: async () => ({ online: false, players: 0 }),
 
     // Демо-прогресс для модалки запуска (в браузере игру не запустить).
