@@ -570,6 +570,10 @@
         <label for="auth-password">Пароль</label>
         <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••">
       </div>
+      <div class="auth-field hidden" id="auth-2fa-field">
+        <label for="auth-2fa-code">Код из приложения</label>
+        <input type="text" id="auth-2fa-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+      </div>
       <div class="auth-error" id="auth-error"></div>
       <button class="btn-primary" id="btn-auth-submit">Войти</button>
       <button class="btn-toggle-mode" id="btn-toggle-mode">У меня ещё нет аккаунта</button>
@@ -577,6 +581,7 @@
   </div>
 
 </div>
+<script src="assets/qr.js"></script>
 <script src="dev-shim.js"></script>
 <script src="renderer.js"></script>
 </body>

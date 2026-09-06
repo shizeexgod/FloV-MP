@@ -766,8 +766,9 @@ function set2faStatus(on) {
 function renderQr(box, text) {
   box.innerHTML = '';
   try {
-    if (!window.QRCode) throw new Error('no qr lib');
-    const qr = window.QRCode(0, 'M');
+    const lib = window.qrcode || window.QRCode;
+    if (!lib) throw new Error('no qr lib');
+    const qr = lib(0, 'M');
     qr.addData(text);
     qr.make();
     const n = qr.getModuleCount();
@@ -986,15 +987,21 @@ async function pollServerStatus() {
 let isRegisterMode = false;
 const authOverlay = document.getElementById('auth-overlay');
 
+let auth2faStage = false; // сервер запросил код 2FA — второй submit шлёт code
 function openAuth() {
   isRegisterMode = false;
+  auth2faStage = false;
   document.getElementById('auth-error').textContent = '';
   document.getElementById('btn-auth-submit').textContent = 'ВОЙТИ';
   document.getElementById('btn-toggle-mode').textContent = 'У меня ещё нет аккаунта';
+  document.getElementById('auth-2fa-field').classList.add('hidden');
+  document.getElementById('btn-toggle-mode').classList.remove('hidden');
   const al = document.getElementById('auth-login');
   const ap = document.getElementById('auth-password');
+  const ac = document.getElementById('auth-2fa-code');
   if (al) al.value = '';
   if (ap) ap.value = '';
+  if (ac) ac.value = '';
   authOverlay.classList.remove('hidden');
   setTimeout(() => al && al.focus(), 60);
 }
@@ -1048,12 +1055,30 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
     return;
   }
 
+  const code2fa = document.getElementById('auth-2fa-code').value.trim();
+  if (auth2faStage && !/^\d{6}$/.test(code2fa)) {
+    errorEl.textContent = 'Введите 6-значный код из приложения';
+    return;
+  }
+
   submitBtn.disabled = true;
   submitBtn.classList.add('is-busy');
   const prevText = submitBtn.textContent;
   submitBtn.textContent = 'Проверка…';
   try {
-    const data = await window.floridaV.auth(isRegisterMode ? 'register' : 'login', { username: login, password });
+    const payload = { username: login, password };
+    if (auth2faStage) payload.code = code2fa;
+    const data = await window.floridaV.auth(isRegisterMode ? 'register' : 'login', payload);
+
+    // Аккаунт под 2FA: сервер просит код — показываем поле и ждём второй submit.
+    if (data && !data.ok && data.twoFaRequired) {
+      auth2faStage = true;
+      document.getElementById('auth-2fa-field').classList.remove('hidden');
+      document.getElementById('btn-toggle-mode').classList.add('hidden');
+      errorEl.textContent = data.message || 'Введите код из приложения-аутентификатора';
+      setTimeout(() => document.getElementById('auth-2fa-code').focus(), 40);
+      return;
+    }
     if (!data || !data.ok) {
       errorEl.textContent = (data && data.message) || 'Не удалось выполнить вход';
       return;

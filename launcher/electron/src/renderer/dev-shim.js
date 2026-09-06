@@ -96,19 +96,44 @@ if (!window.floridaV) {
     // заглушка: login/register принимает любые непустые данные и «создаёт»
     // аккаунт; смены пароля/почты/2FA — успех. Аккаунт кладём в localStorage,
     // чтобы «запоминание входа» тоже можно было проверить.
+    // Демо-«база аккаунтов» отдельно от session.json — чтобы clearSession
+    // (выход) не стирал 2FA/почту, как и на реальном сервере.
     auth: async (mode, payload) => {
+      const ACC_KEY = 'flovmp_dev_accounts';
       const p = payload || {};
+      const db = () => { try { return JSON.parse(localStorage.getItem(ACC_KEY) || '{}'); } catch { return {}; } };
+      const put = (u, a) => { try { const d = db(); d[u.toLowerCase()] = a; localStorage.setItem(ACC_KEY, JSON.stringify(d)); } catch {} };
+      const get = (u) => (u ? db()[u.toLowerCase()] : null);
+
       if (mode === 'login' || mode === 'register') {
         if (!p.username || !p.password) return { ok: false, message: 'Введите логин и пароль' };
         if (mode === 'register' && p.password.length < 6) return { ok: false, message: 'Пароль слишком короткий' };
-        const acc = { username: p.username, createdUtc: new Date().toISOString(), email: '', twoFa: false };
+        let acc = get(p.username);
+        if (mode === 'login' && acc && acc.twoFa) {
+          if (!p.code) return { ok: false, twoFaRequired: true, message: 'введите код из приложения-аутентификатора' };
+          if (!/^\d{6}$/.test(p.code)) return { ok: false, message: 'неверный код из приложения' };
+        }
+        if (!acc) { acc = { username: p.username, createdUtc: new Date().toISOString(), email: '', twoFa: false }; put(p.username, acc); }
         try { localStorage.setItem(SESSION_KEY, JSON.stringify(acc)); } catch {}
         return { ok: true, message: 'ok', ...acc };
       }
+
+      const acc = get(p.username);
+      if (!acc) return { ok: false, message: 'сначала войдите в аккаунт' };
       if (mode === 'change-password') return { ok: true, message: 'Пароль изменён (демо)' };
-      if (mode === 'change-email') return { ok: true, message: 'Почта сохранена (демо)' };
-      if (mode === '2fa-enable') return { ok: true, message: '2FA включена (демо)' };
-      if (mode === '2fa-disable') return { ok: true, message: '2FA выключена (демо)' };
+      if (mode === 'change-email') {
+        acc.email = p.email || ''; put(p.username, acc);
+        return { ok: true, message: 'Почта сохранена (демо)', email: acc.email, twoFa: acc.twoFa };
+      }
+      if (mode === '2fa-enable') {
+        if (!/^\d{6}$/.test(p.code || '')) return { ok: false, message: 'Введите 6-значный код' };
+        acc.twoFa = true; put(p.username, acc);
+        return { ok: true, message: '2FA включена (демо)', twoFa: true, email: acc.email };
+      }
+      if (mode === '2fa-disable') {
+        acc.twoFa = false; put(p.username, acc);
+        return { ok: true, message: '2FA выключена (демо)', twoFa: false, email: acc.email };
+      }
       return { ok: false, message: 'неизвестная операция' };
     },
     readSession: async () => {
