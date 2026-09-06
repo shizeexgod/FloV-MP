@@ -304,8 +304,8 @@ body{
 /* ===== Играть — список серверов слева, новости справа (как у Majestic) ===== */
 #page-play{ padding:24px 28px; }
 .play-grid{
-  display:grid; grid-template-columns: 340px 1fr;
-  gap:26px; height:100%; align-items:start;
+  display:grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap:28px; height:100%; align-items:start;
 }
 .page-h{
   font-family: var(--ui-font); font-weight:700; font-size:18px; margin:0 0 16px; color:#fff;
@@ -316,10 +316,10 @@ body{
   text-transform:uppercase; color: var(--text-faint); margin-bottom:2px;
 }
 .server-row{
-  display:flex; align-items:center; gap:10px;
+  display:flex; align-items:center; gap:12px;
   background: var(--bg-secondary-color);
   border:1px solid var(--white-100); border-radius: var(--r-md);
-  padding:9px 12px; position:relative; overflow:hidden;
+  padding:12px 14px; position:relative; overflow:hidden; max-width:460px;
   transition: border-color .18s ease, background-color .18s ease;
 }
 .server-row:hover{ border-color: var(--white-200); background: var(--surface-color); }
@@ -378,8 +378,8 @@ body{
   border-color: rgba(var(--accent-color-rgb), .4); transform: translateY(-2px);
   box-shadow: 0 14px 34px -20px rgba(0,0,0,.7);
 }
-.pnews-thumb{ height:104px; }
-.pnews-thumb .news-thumb__wm{ width:44px; height:44px; right:12px; bottom:10px; }
+.pnews-thumb{ height:84px; }
+.pnews-thumb .news-thumb__wm{ width:38px; height:38px; right:12px; bottom:9px; }
 .pnews-body{ padding:14px; display:flex; flex-direction:column; gap:7px; }
 .pnews-tag{
   position:absolute; top:10px; left:10px; z-index:2;
