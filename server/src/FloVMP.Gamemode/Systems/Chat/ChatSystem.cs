@@ -5,6 +5,8 @@ using AltV.Net.Elements.Entities;
 using FloVMP.Core.Admin;
 using FloVMP.Core.Auth;
 using FloVMP.Core.Chat;
+using FloVMP.Core.Documents;
+using FloVMP.Core.Factions;
 using FloVMP.Core.Logging;
 
 namespace FloVMP.Gamemode;
@@ -21,6 +23,8 @@ public sealed class ChatSystem
     private readonly Action<Account>? _saveAccount;
     private readonly Func<string, Account?>? _findAccountByName;
     private readonly FloVMP.Core.Economy.EconomyService? _economy;
+    private readonly FactionService? _factions;
+    private readonly DocumentService? _documents;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
@@ -29,12 +33,16 @@ public sealed class ChatSystem
         Func<IPlayer, Account?> accountOf,
         Action<Account>? saveAccount = null,
         Func<string, Account?>? findAccountByName = null,
-        FloVMP.Core.Economy.EconomyService? economy = null)
+        FloVMP.Core.Economy.EconomyService? economy = null,
+        FactionService? factions = null,
+        DocumentService? documents = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
         _findAccountByName = findAccountByName;
         _economy = economy;
+        _factions = factions;
+        _documents = documents;
     }
 
     public void Attach()
@@ -139,7 +147,7 @@ public sealed class ChatSystem
         switch (cmd)
         {
             case "help":
-                var helpMsg = "Игровые команды: /help, /me <действие>, /online, /pos";
+                var helpMsg = "Игровые команды:\n/help, /passport, /lic, /pay, /bank, /factions, /f, /d, /invite, /uninvite, /giverank, /cuff, /uncuff, /arrest, /me, /do, /try, /todo, /engine, /lock, /online, /pos";
                 if (acc.AdminLevel > 0)
                     helpMsg += $"\n[Админ] Доступно {AdminCommandRegistry.GetAvailableCommands(acc.AdminLevel).Count} команд. Введите /ahelp";
                 SendSystem(player, helpMsg);
@@ -267,6 +275,310 @@ public sealed class ChatSystem
                 else
                 {
                     SendSystem(player, "Вы должны находиться в транспортном средстве.");
+                }
+                return;
+
+            case "passport":
+                if (_documents != null)
+                {
+                    var passTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
+                    if (passTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (passTarget != player && player.Position.Distance(passTarget.Position) > 3.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко (максимум 3 метра).");
+                        return;
+                    }
+                    var targetAcc = _accountOf(passTarget);
+                    if (targetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    var pass = _documents.GetDocument(targetAcc.Id, DocumentType.Passport)
+                               ?? _documents.IssuePassport(targetAcc.Id, targetAcc.Username, DateTime.UtcNow.AddYears(-25), "Мужской", "г. Москва, ул. Тверская, д. 1");
+
+                    SendSystem(player, $"=== Паспорт гражданина РФ (№ {pass.DocumentNumber}) ===");
+                    SendSystem(player, $"ФИО: {pass.FullName} | Пол: {pass.GetMeta("Gender")} | Рождение: {pass.GetMeta("BirthDate")}");
+                    SendSystem(player, $"Прописка: {pass.GetMeta("Residence")} | Кем выдан: {pass.IssuedBy}");
+                    if (passTarget != player)
+                    {
+                        SendSystem(passTarget, $"{acc.Username} показал вам свой паспорт.");
+                    }
+                }
+                return;
+
+            case "lic":
+            case "licenses":
+                if (_documents != null)
+                {
+                    var licTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
+                    if (licTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (licTarget != player && player.Position.Distance(licTarget.Position) > 3.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко (максимум 3 метра).");
+                        return;
+                    }
+                    var targetAcc = _accountOf(licTarget);
+                    if (targetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    var drvLic = _documents.GetDocument(targetAcc.Id, DocumentType.DriverLicense)
+                                 ?? _documents.IssueDriverLicense(targetAcc.Id, targetAcc.Username, new[] { "B" });
+                    var wepLic = _documents.GetDocument(targetAcc.Id, DocumentType.WeaponLicense);
+                    var medCard = _documents.GetDocument(targetAcc.Id, DocumentType.MedicalCard);
+
+                    SendSystem(player, $"=== Пакет документов: {targetAcc.Username} ===");
+                    SendSystem(player, $"Водительские права: Категории [{drvLic.GetMeta("Categories")}] | Действует: {(drvLic.IsValid ? "Да" : "Нет/Истёк")}");
+                    SendSystem(player, $"Лицензия на оружие (РОХа): {(wepLic != null && wepLic.IsValid ? "Действует (" + wepLic.DocumentNumber + ")" : "Отсутствует")}");
+                    SendSystem(player, $"Медицинская карта: {(medCard != null && medCard.IsValid ? medCard.GetMeta("OverallStatus") : "Не пройдена")}");
+                    if (licTarget != player)
+                    {
+                        SendSystem(licTarget, $"{acc.Username} просмотрел ваш пакет документов.");
+                    }
+                }
+                return;
+
+            case "factions":
+                if (_factions != null)
+                {
+                    SendSystem(player, "=== Государственные и общественные организации ===");
+                    foreach (var f in _factions.GetAllFactions())
+                    {
+                        var count = _factions.GetFactionMembers(f.Id).Count;
+                        SendSystem(player, $"[{f.Id}] {f.Tag} — {f.Name} (Сотрудников: {count}, Казна: {f.TreasuryBalance:N0} руб.)");
+                    }
+                }
+                return;
+
+            case "f":
+            case "r":
+                if (args.Length == 0) { SendSystem(player, "Использование: /f <сообщение в рацию организации>"); return; }
+                if (_factions != null)
+                {
+                    var mem = _factions.GetMember(acc.Id);
+                    if (mem == null) { SendSystem(player, "Вы не состоите в организации."); return; }
+                    var fac = _factions.GetFaction(mem.FactionId);
+                    var rank = fac?.GetRank(mem.RankLevel);
+                    var fMsg = string.Join(' ', args);
+
+                    foreach (var p in Alt.GetAllPlayers())
+                    {
+                        if (!p.Exists) continue;
+                        var pAcc = _accountOf(p);
+                        if (pAcc != null && _factions.GetMember(pAcc.Id)?.FactionId == mem.FactionId)
+                        {
+                            p.Emit("flovmp:chat:msg", "cmd", $"[Р] {rank?.Name ?? "Сотрудник"} {acc.Username}", fMsg);
+                        }
+                    }
+                }
+                return;
+
+            case "d":
+                if (args.Length == 0) { SendSystem(player, "Использование: /d <сообщение в рацию департамента>"); return; }
+                if (_factions != null)
+                {
+                    var mem = _factions.GetMember(acc.Id);
+                    if (mem == null) { SendSystem(player, "Вы не состоите в государственной организации."); return; }
+                    var fac = _factions.GetFaction(mem.FactionId);
+                    if (fac == null || !fac.IsGovernment) { SendSystem(player, "Доступ к рации департамента есть только у государственных структур."); return; }
+                    if (!_factions.HasPermission(acc.Id, FactionPermissions.RadioDepartment))
+                    {
+                        SendSystem(player, "У вас нет допуска к общей волне департамента.");
+                        return;
+                    }
+                    var rank = fac.GetRank(mem.RankLevel);
+                    var dMsg = string.Join(' ', args);
+
+                    foreach (var p in Alt.GetAllPlayers())
+                    {
+                        if (!p.Exists) continue;
+                        var pAcc = _accountOf(p);
+                        if (pAcc != null)
+                        {
+                            var targetMem = _factions.GetMember(pAcc.Id);
+                            if (targetMem != null)
+                            {
+                                var targetFac = _factions.GetFaction(targetMem.FactionId);
+                                if (targetFac != null && targetFac.IsGovernment)
+                                {
+                                    p.Emit("flovmp:chat:msg", "cmd", $"[Департамент] [{fac.Tag}] {rank?.Name ?? "Офицер"} {acc.Username}", dMsg);
+                                }
+                            }
+                        }
+                    }
+                }
+                return;
+
+            case "invite":
+                if (args.Length == 0) { SendSystem(player, "Использование: /invite <ID/ник>"); return; }
+                if (_factions != null)
+                {
+                    var invTarget = FindPlayer(args[0]);
+                    if (invTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var invAcc = _accountOf(invTarget);
+                    if (invAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                    if (player.Position.Distance(invTarget.Position) > 5.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас.");
+                        return;
+                    }
+
+                    if (_factions.TryInvite(acc.Id, invAcc.Id, out var invErr))
+                    {
+                        var myMem = _factions.GetMember(acc.Id)!;
+                        var fac = _factions.GetFaction(myMem.FactionId);
+                        SendSystem(player, $"Вы приняли {invAcc.Username} в организацию {fac?.Name}.");
+                        SendSystem(invTarget, $"{acc.Username} принял вас в организацию {fac?.Name} на должность Рядовой/Стажёр.");
+                    }
+                    else
+                    {
+                        SendSystem(player, invErr);
+                    }
+                }
+                return;
+
+            case "uninvite":
+                if (args.Length == 0) { SendSystem(player, "Использование: /uninvite <ID/ник> [причина]"); return; }
+                if (_factions != null)
+                {
+                    var uninvTarget = FindPlayer(args[0]);
+                    if (uninvTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var uninvAcc = _accountOf(uninvTarget);
+                    if (uninvAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                    var reason = args.Length > 1 ? string.Join(' ', args.Skip(1)) : "Собственное желание / нарушение устава";
+
+                    if (_factions.TryKick(acc.Id, uninvAcc.Id, reason, out var uninvErr))
+                    {
+                        SendSystem(player, $"Вы уволили {uninvAcc.Username} из организации. Причина: {reason}");
+                        SendSystem(uninvTarget, $"Вы были уволены из организации офицером {acc.Username}. Причина: {reason}");
+                    }
+                    else
+                    {
+                        SendSystem(player, uninvErr);
+                    }
+                }
+                return;
+
+            case "giverank":
+                if (args.Length < 2 || !int.TryParse(args[1], out var newRank))
+                {
+                    SendSystem(player, "Использование: /giverank <ID/ник> <номер_ранга>");
+                    return;
+                }
+                if (_factions != null)
+                {
+                    var rankTarget = FindPlayer(args[0]);
+                    if (rankTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var rankAcc = _accountOf(rankTarget);
+                    if (rankAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+
+                    if (_factions.TrySetRank(acc.Id, rankAcc.Id, newRank, out var rankErr))
+                    {
+                        var targetMem = _factions.GetMember(rankAcc.Id)!;
+                        var fac = _factions.GetFaction(targetMem.FactionId)!;
+                        var rInfo = fac.GetRank(newRank);
+                        SendSystem(player, $"Вы установили ранг '{rInfo?.Name ?? newRank.ToString()}' ({newRank}) для {rankAcc.Username}.");
+                        SendSystem(rankTarget, $"Вам присвоен ранг '{rInfo?.Name ?? newRank.ToString()}' ({newRank}) сотрудником {acc.Username}.");
+                    }
+                    else
+                    {
+                        SendSystem(player, rankErr);
+                    }
+                }
+                return;
+
+            case "cuff":
+                if (args.Length == 0) { SendSystem(player, "Использование: /cuff <ID/ник>"); return; }
+                if (_factions != null)
+                {
+                    var cuffTarget = FindPlayer(args[0]);
+                    if (cuffTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Position.Distance(cuffTarget.Position) > 3.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас (максимум 3 метра).");
+                        return;
+                    }
+                    var cuffAcc = _accountOf(cuffTarget);
+                    if (cuffAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    if (_factions.TryCuff(acc.Id, cuffAcc.Id, out var cuffErr))
+                    {
+                        SendSystem(player, $"Вы надели наручники на {cuffAcc.Username}.");
+                        SendSystem(cuffTarget, $"{acc.Username} надел на вас наручники.");
+                        foreach (var p in Alt.GetAllPlayers())
+                        {
+                            if (p.Exists && p.Position.Distance(player.Position) <= 20.0f)
+                                p.Emit("flovmp:chat:msg", "me", acc.Username, $"достал наручники и зафиксировал руки {cuffAcc.Username}");
+                        }
+                    }
+                    else
+                    {
+                        SendSystem(player, cuffErr);
+                    }
+                }
+                return;
+
+            case "uncuff":
+                if (args.Length == 0) { SendSystem(player, "Использование: /uncuff <ID/ник>"); return; }
+                if (_factions != null)
+                {
+                    var uncuffTarget = FindPlayer(args[0]);
+                    if (uncuffTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Position.Distance(uncuffTarget.Position) > 3.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас (максимум 3 метра).");
+                        return;
+                    }
+                    var uncuffAcc = _accountOf(uncuffTarget);
+                    if (uncuffAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    if (_factions.TryUncuff(acc.Id, uncuffAcc.Id, out var uncuffErr))
+                    {
+                        SendSystem(player, $"Вы сняли наручники с {uncuffAcc.Username}.");
+                        SendSystem(uncuffTarget, $"{acc.Username} снял с вас наручники.");
+                        foreach (var p in Alt.GetAllPlayers())
+                        {
+                            if (p.Exists && p.Position.Distance(player.Position) <= 20.0f)
+                                p.Emit("flovmp:chat:msg", "me", acc.Username, $"достал ключ и расстегнул наручники на руках {uncuffAcc.Username}");
+                        }
+                    }
+                    else
+                    {
+                        SendSystem(player, uncuffErr);
+                    }
+                }
+                return;
+
+            case "arrest":
+                if (args.Length < 2 || !int.TryParse(args[1], out var arrestMinutes) || arrestMinutes <= 0)
+                {
+                    SendSystem(player, "Использование: /arrest <ID/ник> <минуты (1-120)> [статья/причина]");
+                    return;
+                }
+                if (_factions != null)
+                {
+                    var arrTarget = FindPlayer(args[0]);
+                    if (arrTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Position.Distance(arrTarget.Position) > 5.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас.");
+                        return;
+                    }
+                    var arrAcc = _accountOf(arrTarget);
+                    if (arrAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+                    var arrReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Нарушение УК РФ";
+                    var arrestSec = arrestMinutes * 60;
+
+                    if (_factions.TryArrest(acc.Id, arrAcc.Id, arrestSec, arrReason, out var arrErr))
+                    {
+                        // Перемещение в ИВС ГУ МВД
+                        arrTarget.Position = new Position(459.4f, -997.8f, 24.9f);
+                        arrTarget.RemoveAllWeapons(true);
+
+                        SendSystem(player, $"Вы оформили {arrAcc.Username} в КПЗ на {arrestMinutes} мин. Причина: {arrReason}");
+                        SendSystem(arrTarget, $"Вы помещены в камеру предварительного заключения на {arrestMinutes} мин. Причина: {arrReason}");
+                        Broadcast($"[ГУ МВД] {arrAcc.Username} был заключён под стражу сотрудником {acc.Username}. Статья: {arrReason}");
+                    }
+                    else
+                    {
+                        SendSystem(player, arrErr);
+                    }
                 }
                 return;
         }

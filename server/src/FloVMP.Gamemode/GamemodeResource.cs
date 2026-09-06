@@ -3,7 +3,9 @@ using System.IO;
 using AltV.Net;
 using AltV.Net.Elements.Entities;
 using FloVMP.Core.Auth;
+using FloVMP.Core.Licensing;
 using FloVMP.Core.Logging;
+using FloVMP.Gamemode.Systems.AntiCheat;
 
 namespace FloVMP.Gamemode;
 
@@ -28,9 +30,15 @@ public class GamemodeResource : Resource
     private ChatSystem? _chat;
     private ConsoleCommands? _console;
     private FloVMP.Core.Economy.EconomyService? _economy;
+    private LicenseClient? _licenseClient;
+    private TelemetryReporter? _telemetry;
+    private AntiCheatSystem? _antiCheat;
+    private FloVMP.Core.Factions.FactionService? _factions;
+    private FloVMP.Core.Documents.DocumentService? _documents;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
+    private long _lastArrestTickMs;
 
     public override void OnStart()
     {
@@ -53,6 +61,8 @@ public class GamemodeResource : Resource
         _auth.Attach();
 
         _economy = new FloVMP.Core.Economy.EconomyService();
+        _factions = new FloVMP.Core.Factions.FactionService(loadDefaultPresets: true);
+        _documents = new FloVMP.Core.Documents.DocumentService();
 
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
@@ -61,7 +71,9 @@ public class GamemodeResource : Resource
             accountOf: p => _auth.AccountOf(p),
             saveAccount: acc => _auth.SaveAccount(acc),
             findAccountByName: name => _auth.FindByName(name),
-            economy: _economy);
+            economy: _economy,
+            factions: _factions,
+            documents: _documents);
         _chat.Attach();
 
         _console = new ConsoleCommands(
@@ -71,6 +83,40 @@ public class GamemodeResource : Resource
         _console.Attach();
         Alt.Log($"[FloV:MP] core: data dir -> {dataDir}");
 
+        // Лицензирование и телеметрия платформы
+        var licConfig = LicenseConfig.FromEnvironment();
+        _licenseClient = new LicenseClient(licConfig, cacheDir: dataDir);
+        var licResult = _licenseClient.VerifyAsync().GetAwaiter().GetResult();
+        if (licResult.IsValid)
+        {
+            Alt.Log($"[FloV:MP] [Security] Лицензия активна: {licResult.Plan.ToUpper()} (Слоты: {licResult.MaxPlayers})");
+            if (licResult.IsCachedOffline)
+            {
+                Alt.Log($"[FloV:MP] [Security] Автономный режим: {licResult.ErrorMessage}");
+            }
+        }
+        else
+        {
+            Alt.Log($"[FloV:MP] [Security] ОШИБКА ЛИЦЕНЗИИ: {licResult.ErrorMessage}");
+            if (licConfig.StrictMode)
+            {
+                Alt.Log("[FloV:MP] [Security] Сервер остановлен из-за ошибки лицензии.");
+                System.Environment.Exit(1);
+            }
+        }
+
+        _telemetry = new TelemetryReporter(licConfig)
+        {
+            GetPlayerCount = () => Alt.GetAllPlayers().Count,
+            GetMaxPlayers = () => licResult.MaxPlayers,
+            GetTickRate = () => 60,
+            GetFps = () => 60,
+            GetMemoryMb = () => System.GC.GetTotalMemory(false) / (1024 * 1024)
+        };
+        _telemetry.Start();
+
+        _antiCheat = new AntiCheatSystem(p => _auth?.AccountOf(p));
+
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnServerStarted += OnServerStarted;
 
@@ -79,6 +125,11 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
+        _telemetry?.Stop();
+        _telemetry?.Dispose();
+        _telemetry = null;
+        _licenseClient?.Dispose();
+        _licenseClient = null;
 
         Safe.Run("core.OnStop.flush", () => _inv?.SaveAll());
         Safe.Run("core.OnStop.log", () =>
@@ -101,6 +152,9 @@ public class GamemodeResource : Resource
         _playerLifecycle = null;
         _hud = null;
         _economy = null;
+        _antiCheat = null;
+        _factions = null;
+        _documents = null;
 
         Alt.Log("[FloV:MP] core: gamemode stopped");
     }
@@ -108,8 +162,29 @@ public class GamemodeResource : Resource
     public override void OnTick()
     {
         _hud?.Tick();
+        _antiCheat?.Tick();
 
         var now = _clock.ElapsedMilliseconds;
+
+        // Ежесекундный тик арестов и освобождение заключённых
+        if (now - _lastArrestTickMs >= 1000)
+        {
+            _lastArrestTickMs = now;
+            var released = _factions?.TickArrests(1);
+            if (released != null && released.Count > 0)
+            {
+                foreach (var accId in released)
+                {
+                    var p = Alt.GetAllPlayers().FirstOrDefault(pl => pl.Exists && _auth?.AccountOf(pl)?.Id == accId);
+                    if (p != null && p.Exists)
+                    {
+                        p.Position = new AltV.Net.Data.Position(425.1f, -979.5f, 30.7f);
+                        p.Emit("flovmp:chat:system", "[ГУ МВД] Срок вашего ареста истёк. Вы освобождены из камеры предварительного заключения.");
+                    }
+                }
+            }
+        }
+
         if (now - _lastAutoSaveMs >= AutoSaveIntervalMs)
         {
             _lastAutoSaveMs = now;
@@ -124,10 +199,12 @@ public class GamemodeResource : Resource
         _hud?.OnAuthed(player, account);
         _inv?.OnAuthed(player, account);
         _chat?.OnPlayerAuthed(player, account);
+        _antiCheat?.OnAuthed(player, account);
     });
 
     private void OnPlayerDisconnect(IPlayer player, string reason) => Safe.Run("core.OnPlayerDisconnect", () =>
     {
+        _antiCheat?.OnDisconnect(player);
         _hud?.OnDisconnect(player);
     });
 

@@ -30,7 +30,8 @@ logs/
 *.log
 
 # Временные утилиты, кэши и дампы
-/tools/
+/tools/*
+!/tools/FloVMP.AssetPacker
 /IsolatedStorage/
 /.server-crashes-cache/
 /cache/
