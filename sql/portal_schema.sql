@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- FloV:MP SaaS Portal Database Schema (MariaDB / MySQL)
 -- =============================================================================
 
@@ -58,4 +58,18 @@ CREATE TABLE IF NOT EXISTS `portal_launcher_builds` (
   `download_url` VARCHAR(255) DEFAULT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_pbuild_lic` FOREIGN KEY (`license_id`) REFERENCES `portal_licenses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `portal_telemetry` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `license_key` VARCHAR(64) NOT NULL,
+  `players` INT UNSIGNED NOT NULL DEFAULT 0,
+  `max_players` INT UNSIGNED NOT NULL DEFAULT 1500,
+  `tick_rate` INT UNSIGNED NOT NULL DEFAULT 60,
+  `memory_mb` INT UNSIGNED NOT NULL DEFAULT 0,
+  `fps` INT UNSIGNED NOT NULL DEFAULT 60,
+  `server_ip` VARCHAR(45) NOT NULL DEFAULT '127.0.0.1',
+  `recorded_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_ptele_key` (`license_key`),
+  INDEX `idx_ptele_time` (`recorded_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
