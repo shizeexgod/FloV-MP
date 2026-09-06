@@ -3,12 +3,14 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Zap, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, Eye, EyeOff, KeyRound, Mail, ShieldCheck } from 'lucide-react';
+import { AuroraBlobs, FieldLabel, Spinner } from '@/components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -16,19 +18,14 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Ошибка входа');
-      }
-
+      if (!res.ok) throw new Error(data.error || 'Ошибка входа');
       router.push('/dashboard');
       router.refresh();
     } catch (err: any) {
@@ -39,85 +36,90 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="glass-panel p-8 rounded-3xl border border-white/10 shadow-glass">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex w-12 h-12 rounded-2xl bg-brand/20 border border-brand/40 items-center justify-center text-brand mb-4 shadow-neon-pink">
-              <Zap className="w-6 h-6" />
+    <div className="relative flex min-h-[calc(100vh-72px)] items-center justify-center px-4 py-16">
+      <AuroraBlobs />
+      <div className="relative w-full max-w-md">
+        <div className="glass-panel card-edge rounded-3xl p-8 shadow-glass sm:p-10">
+          <div className="text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-brand/40 bg-brand/10 text-brand shadow-neon-pink">
+              <KeyRound className="h-6 w-6" />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Вход в личный кабинет</h1>
-            <p className="text-sm text-gray-400 mt-2">
-              Управление лицензиями и серверами FloV:MP
-            </p>
+            <h1 className="mt-5 text-2xl font-bold text-white">Вход в личный кабинет</h1>
+            <p className="mt-2 text-sm text-slate-400">Управление лицензиями и серверами FloV:MP</p>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-3 text-red-400 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0" />
+            <div className="mt-6 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400 animate-slide-down">
+              <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="mt-7 space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 font-mono">
-                Email
-              </label>
+              <FieldLabel>Email</FieldLabel>
               <div className="relative">
-                <Mail className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@myproject.ru"
-                  className="w-full pl-11 pr-4 py-3 bg-surface-300 border border-white/10 rounded-xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-brand transition-colors"
+                  placeholder="owner@flovmp.ru"
+                  className="field h-11 pl-10 pr-4"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2 font-mono">
-                Пароль
-              </label>
+              <FieldLabel>Пароль</FieldLabel>
               <div className="relative">
-                <Lock className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
-                  type="password"
+                  type={showPass ? 'text' : 'password'}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-3 bg-surface-300 border border-white/10 rounded-xl text-white placeholder-gray-500 text-sm focus:outline-none focus:border-brand transition-colors"
+                  className="field h-11 pl-10 pr-11"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-white"
+                >
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-6 py-3.5 rounded-xl bg-gradient-to-r from-brand to-pink-600 hover:from-brand-hover hover:to-pink-500 text-white font-bold text-sm shadow-neon-pink flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-            >
+            <button type="submit" disabled={loading} className="btn btn-primary h-11 w-full text-sm disabled:opacity-50">
               {loading ? (
-                <span>Авторизация...</span>
+                <>
+                  <Spinner className="h-4 w-4" /> Авторизация…
+                </>
               ) : (
                 <>
-                  <span>Войти в аккаунт</span>
-                  <ArrowRight className="w-4 h-4" />
+                  Войти в аккаунт <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-white/10 text-center text-xs text-gray-400">
+          <div className="mt-7 border-t border-white/[0.08] pt-6 text-center text-xs text-slate-400">
             Нет аккаунта?{' '}
-            <Link href="/auth/register" className="text-brand font-semibold hover:underline">
+            <Link href="/auth/register" className="font-semibold text-brand hover:underline">
               Зарегистрироваться и получить ключ
             </Link>
           </div>
         </div>
+
+        <p className="mt-5 flex items-center justify-center gap-2 text-center font-mono text-[11px] text-slate-500">
+          <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
+          Сессия защищена JWT · cookie httpOnly
+        </p>
       </div>
     </div>
   );

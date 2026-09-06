@@ -39,3 +39,6 @@ logs/
 # Скриншоты визуальной проверки лаунчера
 launcher/electron/tests/screenshots/
 launcher/electron/pw_*.png
+
+# Tooling
+.claude/

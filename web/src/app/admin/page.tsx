@@ -1,23 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Shield,
-  Key,
-  Users,
   CreditCard,
-  Server,
+  KeyRound,
   RefreshCw,
-  Power,
-  Calendar,
-  Check,
-  AlertCircle,
-  Clock,
-  ArrowUpRight,
+  Server,
+  ShieldAlert,
   TrendingUp,
-  Activity
+  Users,
+  Wallet,
 } from 'lucide-react';
+import { AuroraBlobs, Badge, Spinner, useToast } from '@/components/ui';
 
 interface MetricOverview {
   totalUsers: number;
@@ -26,26 +21,30 @@ interface MetricOverview {
   totalRevenueRub: number;
 }
 
+const fmt = (n: number) => Number(n || 0).toLocaleString('ru-RU');
+const date = (s: string) => new Date(s).toLocaleDateString('ru-RU');
+
 export default function AdminPage() {
   const router = useRouter();
+  const { show, node } = useToast();
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<MetricOverview | null>(null);
   const [licenses, setLicenses] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    loadAdminData();
+    load();
   }, []);
 
-  const loadAdminData = async () => {
+  const load = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/v1/admin/stats');
       if (!res.ok) {
         if (res.status === 403) {
-          alert('Доступ запрещен: требуется аккаунт администратора');
+          show('Доступ запрещён: требуется аккаунт администратора', 'error');
           router.push('/dashboard');
           return;
         }
@@ -57,14 +56,15 @@ export default function AdminPage() {
       setLicenses(data.licenses || []);
       setUsers(data.users || []);
       setInvoices(data.invoices || []);
-    } catch (err) {
-      console.error('Failed to load admin stats:', err);
+    } catch {
+      show('Не удалось загрузить данные платформы', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleLicense = async (licenseId: number, currentActive: number) => {
+  const toggleLicense = async (licenseId: number, currentActive: number) => {
+    setBusyId(licenseId);
     try {
       const res = await fetch('/api/v1/admin/licenses/toggle', {
         method: 'POST',
@@ -73,16 +73,18 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setActionMessage(data.message);
-        setTimeout(() => setActionMessage(null), 3000);
-        loadAdminData();
+        show(data.message);
+        load();
+      } else {
+        show(data.error || 'Ошибка', 'error');
       }
-    } catch (err: any) {
-      alert(err.message);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const handleExtendLicense = async (licenseId: number, days: number) => {
+  const extendLicense = async (licenseId: number, days: number) => {
+    setBusyId(licenseId);
     try {
       const res = await fetch('/api/v1/admin/licenses/extend', {
         method: 'POST',
@@ -91,158 +93,135 @@ export default function AdminPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setActionMessage(data.message);
-        setTimeout(() => setActionMessage(null), 3000);
-        loadAdminData();
+        show(data.message);
+        load();
+      } else {
+        show(data.error || 'Ошибка', 'error');
       }
-    } catch (err: any) {
-      alert(err.message);
+    } finally {
+      setBusyId(null);
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
-        <RefreshCw className="w-8 h-8 text-brand animate-spin" />
-        <p className="text-gray-400 text-sm">Загрузка панели администратора...</p>
+      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 text-brand">
+        <Spinner className="h-8 w-8" />
+        <p className="text-sm text-slate-400">Загрузка панели администратора…</p>
       </div>
     );
   }
 
+  const cards = [
+    { label: 'Общий доход', value: `${fmt(metrics?.totalRevenueRub || 0)} ₽`, icon: TrendingUp, tone: 'text-brand', ring: 'border-brand/40 bg-brand/10' },
+    { label: 'Всего серверов', value: fmt(metrics?.totalLicenses || 0), icon: KeyRound, tone: 'text-cyber', ring: 'border-cyber/40 bg-cyber/10' },
+    { label: 'Активные лицензии', value: fmt(metrics?.activeServers || 0), icon: Server, tone: 'text-emeraldx', ring: 'border-emeraldx/40 bg-emeraldx/10' },
+    { label: 'Всего клиентов', value: fmt(metrics?.totalUsers || 0), icon: Users, tone: 'text-violetx', ring: 'border-violetx/40 bg-violetx/10' },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Admin Header */}
-      <div className="glass-panel p-8 rounded-3xl border border-white/10 mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-glass">
+    <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <AuroraBlobs />
+      {node}
+
+      {/* Header */}
+      <div className="relative glass-panel card-edge mb-8 flex flex-col gap-5 rounded-3xl p-7 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-mono font-bold uppercase tracking-wider mb-2">
-            <Shield className="w-3.5 h-3.5" />
-            <span>FloV:MP Master Admin Panel</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-white">
+          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-red-400">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Master Admin Panel
+          </span>
+          <h1 className="mt-3 text-2xl font-black text-white sm:text-3xl">
             Управление платформой и реестром серверов
           </h1>
-          <p className="text-xs text-gray-400 mt-1">
-            Контроль выданных лицензий, клиентов, платежей и статусов серверов
+          <p className="mt-1 text-xs text-slate-400">
+            Контроль лицензий, клиентов, платежей и статусов узлов
           </p>
         </div>
-
-        <button
-          onClick={loadAdminData}
-          className="px-4 py-2.5 rounded-xl bg-surface-300 border border-white/10 hover:border-brand/40 text-xs text-gray-300 hover:text-white font-bold flex items-center gap-2 transition-colors"
-        >
-          <RefreshCw className="w-4 h-4 text-brand" />
-          <span>Обновить данные</span>
+        <button onClick={load} className="btn btn-ghost h-10 px-4 text-xs font-semibold">
+          <RefreshCw className="h-4 w-4 text-brand" />
+          Обновить
         </button>
       </div>
 
-      {actionMessage && (
-        <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
-          <Check className="w-4 h-4" />
-          <span>{actionMessage}</span>
-        </div>
-      )}
-
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <div className="glass-panel p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase font-mono tracking-wider">Всего клиентов</span>
-            <Users className="w-5 h-5 text-blue-400" />
+      {/* Metrics */}
+      <div className="relative mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {cards.map((c) => (
+          <div key={c.label} className="glass card-edge rounded-2xl p-6">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{c.label}</span>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${c.ring} ${c.tone}`}>
+                <c.icon className="h-4 w-4" />
+              </span>
+            </div>
+            <div className="mt-3 font-mono text-3xl font-black text-white">{c.value}</div>
           </div>
-          <div className="text-3xl font-black text-white font-mono">{metrics?.totalUsers || 0}</div>
-        </div>
-
-        <div className="glass-panel p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase font-mono tracking-wider">Выдано лицензий</span>
-            <Key className="w-5 h-5 text-brand" />
-          </div>
-          <div className="text-3xl font-black text-white font-mono">{metrics?.totalLicenses || 0}</div>
-        </div>
-
-        <div className="glass-panel p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase font-mono tracking-wider">Активных узлов</span>
-            <Server className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="text-3xl font-black text-emerald-400 font-mono">{metrics?.activeServers || 0}</div>
-        </div>
-
-        <div className="glass-panel p-6 rounded-2xl border border-white/10">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase font-mono tracking-wider">Выручка платформы</span>
-            <TrendingUp className="w-5 h-5 text-cyan-neon" />
-          </div>
-          <div className="text-3xl font-black text-white font-mono">
-            {(metrics?.totalRevenueRub || 0).toLocaleString('ru-RU')} ₽
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Licenses Management Table */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 mb-10 shadow-glass">
-        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <Key className="w-5 h-5 text-brand" />
-          <span>Все выданные лицензии ({licenses.length})</span>
+      {/* Licenses */}
+      <div className="relative glass-panel card-edge mb-10 rounded-3xl p-6 shadow-glass sm:p-8">
+        <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
+          <KeyRound className="h-5 w-5 text-brand" />
+          Все выданные лицензии
+          <span className="font-mono text-xs font-normal text-slate-500">({licenses.length})</span>
         </h2>
-
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
+          <table className="w-full min-w-[900px] text-left text-xs">
             <thead>
-              <tr className="border-b border-white/10 text-gray-400 uppercase">
-                <th className="py-3 px-2">ID</th>
-                <th className="py-3 px-2">Сервер / Проект</th>
-                <th className="py-3 px-2">Ключ</th>
-                <th className="py-3 px-2">Тариф</th>
-                <th className="py-3 px-2">IP Привязка</th>
-                <th className="py-3 px-2">Статус</th>
-                <th className="py-3 px-2">Истекает</th>
-                <th className="py-3 px-2 text-right">Действия</th>
+              <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
+                <th className="pb-3 pr-3 font-semibold">ID</th>
+                <th className="pb-3 pr-3 font-semibold">Сервер / проект</th>
+                <th className="pb-3 pr-3 font-semibold">Ключ</th>
+                <th className="pb-3 pr-3 font-semibold">Тариф</th>
+                <th className="pb-3 pr-3 font-semibold">IP</th>
+                <th className="pb-3 pr-3 font-semibold">Статус</th>
+                <th className="pb-3 pr-3 font-semibold">Истекает</th>
+                <th className="pb-3 pr-3 text-right font-semibold">Действия</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-gray-300">
+            <tbody className="divide-y divide-white/[0.05]">
               {licenses.map((lic) => {
-                const isExpired = new Date(lic.expires_at).getTime() < Date.now();
+                const expired = new Date(lic.expires_at).getTime() < Date.now();
+                const active = lic.is_active && !expired;
                 return (
-                  <tr key={lic.id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-2 text-gray-400">#{lic.id}</td>
-                    <td className="py-3 px-2 font-bold text-white font-sans">{lic.server_name}</td>
-                    <td className="py-3 px-2 text-brand font-bold">{lic.license_key}</td>
-                    <td className="py-3 px-2 uppercase">{lic.plan} ({lic.max_players} сл.)</td>
-                    <td className="py-3 px-2">{lic.bound_ip}</td>
-                    <td className="py-3 px-2">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          lic.is_active && !isExpired
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-red-500/20 text-red-400'
-                        }`}
-                      >
-                        {lic.is_active && !isExpired ? 'АКТИВНА' : 'ПРИОСТАНОВЛЕНА'}
-                      </span>
+                  <tr key={lic.id} className="text-slate-300 transition-colors hover:bg-white/[0.03]">
+                    <td className="py-3 pr-3 font-mono text-slate-500">#{lic.id}</td>
+                    <td className="py-3 pr-3 font-semibold text-white">{lic.server_name}</td>
+                    <td className="py-3 pr-3 font-mono text-brand">{lic.license_key}</td>
+                    <td className="py-3 pr-3 font-mono uppercase">
+                      {lic.plan}
+                      <span className="text-slate-500"> · {lic.max_players}</span>
                     </td>
-                    <td className="py-3 px-2 text-gray-400">
-                      {new Date(lic.expires_at).toLocaleDateString('ru-RU')}
+                    <td className="py-3 pr-3 font-mono">{lic.bound_ip}</td>
+                    <td className="py-3 pr-3">
+                      <Badge tone={active ? 'emerald' : 'red'}>{active ? 'Активна' : 'Приостановлена'}</Badge>
                     </td>
-                    <td className="py-3 px-2 text-right space-x-2">
-                      <button
-                        onClick={() => handleToggleLicense(lic.id, lic.is_active)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors ${
-                          lic.is_active
-                            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                            : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                        }`}
-                        title={lic.is_active ? 'Приостановить' : 'Активировать'}
-                      >
-                        {lic.is_active ? 'Заморозить' : 'Активировать'}
-                      </button>
-                      <button
-                        onClick={() => handleExtendLicense(lic.id, 30)}
-                        className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold transition-colors"
-                        title="Продлить на 30 дней"
-                      >
-                        +30 дн.
-                      </button>
+                    <td className="py-3 pr-3 font-mono text-slate-400">{date(lic.expires_at)}</td>
+                    <td className="py-3 pr-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => toggleLicense(lic.id, lic.is_active)}
+                          disabled={busyId === lic.id}
+                          className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-colors disabled:opacity-40 ${
+                            lic.is_active
+                              ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+                              : 'bg-emeraldx/15 text-emeraldx hover:bg-emeraldx/25'
+                          }`}
+                        >
+                          {lic.is_active ? 'Заморозить' : 'Разморозить'}
+                        </button>
+                        {[30, 90, 365].map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => extendLicense(lic.id, d)}
+                            disabled={busyId === lic.id}
+                            className="rounded-lg bg-white/5 px-2 py-1 text-[10px] font-bold text-white transition-colors hover:bg-white/10 disabled:opacity-40"
+                          >
+                            +{d}
+                          </button>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -252,55 +231,87 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Invoices History Table */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 shadow-glass">
-        <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-          <CreditCard className="w-5 h-5 text-cyan-neon" />
-          <span>История счетов и платежей ({invoices.length})</span>
-        </h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs font-mono">
-            <thead>
-              <tr className="border-b border-white/10 text-gray-400 uppercase">
-                <th className="py-3 px-2">ID</th>
-                <th className="py-3 px-2">Клиент ID</th>
-                <th className="py-3 px-2">Сумма</th>
-                <th className="py-3 px-2">Тариф</th>
-                <th className="py-3 px-2">Способ</th>
-                <th className="py-3 px-2">Статус</th>
-                <th className="py-3 px-2">Дата создания</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-gray-300">
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-white/5 transition-colors">
-                  <td className="py-3 px-2 text-gray-400">#{inv.id}</td>
-                  <td className="py-3 px-2">User #{inv.user_id}</td>
-                  <td className="py-3 px-2 font-bold text-white font-mono">
-                    {Number(inv.amount_rub).toLocaleString('ru-RU')} ₽
-                  </td>
-                  <td className="py-3 px-2 uppercase">{inv.plan}</td>
-                  <td className="py-3 px-2 uppercase">{inv.payment_method}</td>
-                  <td className="py-3 px-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        inv.status === 'paid'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : 'bg-amber-500/20 text-amber-400'
-                      }`}
-                    >
-                      {inv.status === 'paid' ? 'ОПЛАЧЕН' : 'ОЖИДАЕТ'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-2 text-gray-400">
-                    {new Date(inv.created_at).toLocaleDateString('ru-RU')}
-                  </td>
+      {/* Users + Transactions */}
+      <div className="relative grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
+          <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
+            <Users className="h-5 w-5 text-violetx" />
+            Клиенты
+            <span className="font-mono text-xs font-normal text-slate-500">({users.length})</span>
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
+                  <th className="pb-3 pr-3 font-semibold">ID</th>
+                  <th className="pb-3 pr-3 font-semibold">Логин</th>
+                  <th className="pb-3 pr-3 font-semibold">Email</th>
+                  <th className="pb-3 pr-3 font-semibold">Роль</th>
+                  <th className="pb-3 pr-3 font-semibold">Создан</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-white/[0.05]">
+                {users.map((u) => (
+                  <tr key={u.id} className="text-slate-300 transition-colors hover:bg-white/[0.03]">
+                    <td className="py-3 pr-3 font-mono text-slate-500">#{u.id}</td>
+                    <td className="py-3 pr-3 font-semibold text-white">{u.username}</td>
+                    <td className="py-3 pr-3 font-mono text-slate-400">{u.email}</td>
+                    <td className="py-3 pr-3">
+                      <Badge tone={u.role === 'admin' ? 'red' : 'slate'}>{u.role}</Badge>
+                    </td>
+                    <td className="py-3 pr-3 font-mono text-slate-400">{u.created_at ? date(u.created_at) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
+
+        <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
+          <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
+            <CreditCard className="h-5 w-5 text-cyber" />
+            Реестр транзакций
+            <span className="font-mono text-xs font-normal text-slate-500">({invoices.length})</span>
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[460px] text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
+                  <th className="pb-3 pr-3 font-semibold">ID</th>
+                  <th className="pb-3 pr-3 font-semibold">Клиент</th>
+                  <th className="pb-3 pr-3 font-semibold">Сумма</th>
+                  <th className="pb-3 pr-3 font-semibold">Тариф</th>
+                  <th className="pb-3 pr-3 font-semibold">Статус</th>
+                  <th className="pb-3 pr-3 font-semibold">Дата</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.05]">
+                {invoices.map((inv) => (
+                  <tr key={inv.id} className="text-slate-300 transition-colors hover:bg-white/[0.03]">
+                    <td className="py-3 pr-3 font-mono text-slate-500">#{inv.id}</td>
+                    <td className="py-3 pr-3 font-mono">User&nbsp;#{inv.user_id}</td>
+                    <td className="py-3 pr-3 font-mono font-bold text-white">{fmt(inv.amount_rub)} ₽</td>
+                    <td className="py-3 pr-3 font-mono uppercase">{inv.plan}</td>
+                    <td className="py-3 pr-3">
+                      <Badge tone={inv.status === 'paid' ? 'emerald' : 'amber'}>
+                        {inv.status === 'paid' ? 'Оплачен' : 'Ожидает'}
+                      </Badge>
+                    </td>
+                    <td className="py-3 pr-3 font-mono text-slate-400">{date(inv.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {invoices.length === 0 && (
+            <p className="py-8 text-center text-xs text-slate-500">Транзакций пока нет.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="relative mt-8 flex items-center gap-2 font-mono text-[11px] text-slate-600">
+        <Wallet className="h-3.5 w-3.5" />
+        Все операции журналируются · owner@flovmp.ru
       </div>
     </div>
   );
