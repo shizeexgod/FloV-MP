@@ -754,6 +754,14 @@ public sealed class ChatSystem
                 BroadcastAdmin($"{prefix} {acc.Username} ({player.Id}): {aMsg}");
                 break;
 
+            case "o":
+                if (args.Length == 0) { SendSystem(player, "Использование: /o <сообщение>"); return; }
+                var oMsg = string.Join(' ', args);
+                var oPrefix = AdminTitles.GetPrefix(acc.AdminLevel);
+                Broadcast($"[ОБЪЯВЛЕНИЕ] {oPrefix} {acc.Username} [{player.Id}]: {oMsg}");
+                GameLog.Admin("global_announce", LogActor.Admin(acc.Id, acc.Username), oMsg);
+                break;
+
             case "stats":
                 var targetStats = args.Length > 0 ? FindPlayer(args[0]) : player;
                 if (targetStats == null) { SendSystem(player, "Игрок не найден."); return; }
@@ -873,6 +881,37 @@ public sealed class ChatSystem
                 banTarget.Kick($"Ваш аккаунт заблокирован на {banDays} дн. Причина: {banReason}");
                 break;
 
+            case "banip":
+                if (args.Length < 2 || !int.TryParse(args[1], out var banipDays) || banipDays <= 0)
+                {
+                    SendSystem(player, "Использование: /banip <ID/ник> <дней> [причина]");
+                    return;
+                }
+                var banipTarget = FindPlayer(args[0]);
+                if (banipTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var banipAcc = _accountOf(banipTarget);
+                if (banipAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var banipReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Блокировка IP и аккаунта";
+                banipAcc.IsBanned = true;
+                banipAcc.BanReason = $"[IP BAN] {banipReason}";
+                banipAcc.BanUntilUtc = DateTime.UtcNow.AddDays(banipDays).ToString("O");
+                _saveAccount?.Invoke(banipAcc);
+                Broadcast($"[Бан IP] {banipTarget.Name} заблокирован по IP на {banipDays} дн. администратором {acc.Username}. Причина: {banipReason}");
+                GameLog.Punishment("banip", LogActor.Admin(acc.Id, acc.Username), banipTarget.Name, banipReason, (long)banipDays * 86400);
+                banipTarget.Kick($"Ваш аккаунт и IP заблокированы на {banipDays} дн. Причина: {banipReason}");
+                break;
+
+            case "checkban":
+                if (args.Length == 0) { SendSystem(player, "Использование: /checkban <ID/ник>"); return; }
+                var checkTarget = FindPlayer(args[0]);
+                if (checkTarget == null) { SendSystem(player, "Игрок не найден онлайн."); return; }
+                var checkAcc = _accountOf(checkTarget);
+                SendSystem(player, $"=== Проверка блокировок: {checkTarget.Name} (ID: {checkTarget.Id}) ===");
+                SendSystem(player, $"Аккаунт ID: {checkAcc?.Id ?? 0} | IP: {checkTarget.Ip} | SocialClub ID: {checkTarget.SocialClubId}");
+                SendSystem(player, $"HWID Hash: {checkTarget.HardwareIdHash:X16} | HWID Ex: {checkTarget.HardwareIdExHash:X16}");
+                SendSystem(player, $"Статус бана аккаунта: {(checkAcc?.IsBanned == true ? "ЗАБЛОКИРОВАН до " + checkAcc.BanUntilUtc : "Чист")}");
+                break;
+
             case "unban":
                 if (args.Length == 0) { SendSystem(player, "Использование: /unban <ник_игрока>"); return; }
                 var unbanName = args[0];
@@ -895,6 +934,26 @@ public sealed class ChatSystem
                 break;
 
             // ── Уровень 4: Администратор ──────────────
+            case "bansc":
+                if (args.Length < 2 || !int.TryParse(args[1], out var banscDays) || banscDays <= 0)
+                {
+                    SendSystem(player, "Использование: /bansc <ID/ник> <дней> [причина]");
+                    return;
+                }
+                var banscTarget = FindPlayer(args[0]);
+                if (banscTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var banscAcc = _accountOf(banscTarget);
+                if (banscAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var banscReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Блокировка Social Club";
+                banscAcc.IsBanned = true;
+                banscAcc.BanReason = $"[SC BAN] {banscReason}";
+                banscAcc.BanUntilUtc = DateTime.UtcNow.AddDays(banscDays).ToString("O");
+                _saveAccount?.Invoke(banscAcc);
+                Broadcast($"[Social Club Бан] {banscTarget.Name} заблокирован по лицензии SC на {banscDays} дн. администратором {acc.Username}. Причина: {banscReason}");
+                GameLog.Punishment("bansc", LogActor.Admin(acc.Id, acc.Username), banscTarget.Name, banscReason, (long)banscDays * 86400);
+                banscTarget.Kick($"Ваш Rockstar Social Club заблокирован на {banscDays} дн. Причина: {banscReason}");
+                break;
+
             case "veh":
                 if (args.Length == 0) { SendSystem(player, "Использование: /veh <модель> [цвет1] [цвет2]"); return; }
                 var model = args[0];
@@ -971,6 +1030,27 @@ public sealed class ChatSystem
                 break;
 
             // ── Уровень 5: Старший Администратор ──────
+            case "hwidban":
+            case "macban":
+                if (args.Length < 2 || !int.TryParse(args[1], out var hwidDays) || hwidDays <= 0)
+                {
+                    SendSystem(player, "Использование: /hwidban <ID/ник> <дней> [причина]");
+                    return;
+                }
+                var hwidTarget = FindPlayer(args[0]);
+                if (hwidTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var hwidAcc = _accountOf(hwidTarget);
+                if (hwidAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var hwidReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Аппаратная блокировка читера";
+                hwidAcc.IsBanned = true;
+                hwidAcc.BanReason = $"[HWID BAN] {hwidReason}";
+                hwidAcc.BanUntilUtc = DateTime.UtcNow.AddDays(hwidDays).ToString("O");
+                _saveAccount?.Invoke(hwidAcc);
+                Broadcast($"[HWID БАН] {hwidTarget.Name} заблокирован по железу (FloV:ID) на {hwidDays} дн. администратором {acc.Username}. Причина: {hwidReason}");
+                GameLog.Punishment("hwidban", LogActor.Admin(acc.Id, acc.Username), hwidTarget.Name, hwidReason, (long)hwidDays * 86400);
+                hwidTarget.Kick($"Ваш ПК заблокирован по железу на {hwidDays} дн. Причина: {hwidReason}");
+                break;
+
             case "tp":
                 if (args.Length < 3 || !float.TryParse(args[0], out var x) || !float.TryParse(args[1], out var y) || !float.TryParse(args[2], out var z))
                 {
@@ -1016,6 +1096,26 @@ public sealed class ChatSystem
                 break;
 
             // ── Уровень 6: Куратор / Зам. ГА ──────────
+            case "hardban":
+                if (args.Length < 1)
+                {
+                    SendSystem(player, "Использование: /hardban <ID/ник> [причина]");
+                    return;
+                }
+                var hardTarget = FindPlayer(args[0]);
+                if (hardTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var hardAcc = _accountOf(hardTarget);
+                if (hardAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var hardReason = args.Length > 1 ? string.Join(' ', args.Skip(1)) : "Тотальная перманентная блокировка вредителя";
+                hardAcc.IsBanned = true;
+                hardAcc.BanReason = $"[HARDBAN: Account+IP+SC+HWID+MAC] {hardReason}";
+                hardAcc.BanUntilUtc = DateTime.UtcNow.AddYears(10).ToString("O");
+                _saveAccount?.Invoke(hardAcc);
+                Broadcast($"[HARDBAN] Вредитель {hardTarget.Name} получил ТОТАЛЬНУЮ блокировку (Account+IP+SC+HWID). Причина: {hardReason}");
+                GameLog.Punishment("hardban", LogActor.Admin(acc.Id, acc.Username), hardTarget.Name, hardReason, 315360000);
+                hardTarget.Kick($"ТОТАЛЬНЫЙ БАН (HardBan: HWID+SC+IP+Acc): {hardReason}");
+                break;
+
             case "givemoney":
                 if (args.Length < 2 || !long.TryParse(args[1], out var gAmt) || gAmt <= 0)
                 {

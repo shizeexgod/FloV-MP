@@ -14,6 +14,7 @@ public static class AdminCommandRegistry
     {
         // ── Уровень 1: Хелпер (Мл. Модератор) ──────────────────────
         Register("a", 1, "/a <текст>", "Внутренний чат администрации");
+        Register("o", 1, "/o <текст>", "Глобальный чат / объявление на весь сервер");
         Register("stats", 1, "/stats <ID/ник>", "Статистика и информация об игроке");
         Register("freeze", 1, "/freeze <ID/ник>", "Заморозить игрока на месте");
         Register("unfreeze", 1, "/unfreeze <ID/ник>", "Разморозить игрока");
@@ -31,13 +32,16 @@ public static class AdminCommandRegistry
         Register("unjail", 2, "/unjail <ID/ник>", "Выпустить из деморгана");
 
         // ── Уровень 3: Старший Модератор ──────────────────────────
-        Register("ban", 3, "/ban <ID/ник> <дней> [причина]", "Заблокировать аккаунт игрока");
-        Register("unban", 3, "/unban <ник>", "Разблокировать аккаунт");
+        Register("ban", 3, "/ban <ID/ник> <дней> [причина]", "Заблокировать аккаунт игрока (Standard)");
+        Register("banip", 3, "/banip <ID/ник> <дней> [причина]", "Заблокировать аккаунт и IP игрока");
+        Register("unban", 3, "/unban <ник/ID>", "Разблокировать аккаунт / железо");
+        Register("checkban", 3, "/checkban <ID/ник>", "Проверить статус блокировок и HWID");
         Register("warn", 3, "/warn <ID/ник> [причина]", "Выдать предупреждение (варн)");
         Register("unwarn", 3, "/unwarn <ID/ник>", "Снять предупреждение");
         Register("slap", 3, "/slap <ID/ник>", "Подбросить игрока (проверка на АФК/бот)");
 
         // ── Уровень 4: Администратор ──────────────────────────────
+        Register("bansc", 4, "/bansc <ID/ник> <дней> [причина]", "Заблокировать Rockstar Social Club игрока");
         Register("veh", 4, "/veh <модель> [цвет1] [цвет2]", "Создать временный транспорт");
         Register("dv", 4, "/dv [радиус]", "Удалить ближайший/занимаемый транспорт");
         Register("sethp", 4, "/sethp <ID/ник> <кол-во 0-100>", "Установить уровень здоровья игрока");
@@ -46,6 +50,8 @@ public static class AdminCommandRegistry
         Register("fuel", 4, "/fuel", "Заправить транспорт до 100%");
 
         // ── Уровень 5: Старший Администратор ──────────────────────
+        Register("hwidban", 5, "/hwidban <ID/ник> <дней> [причина]", "Аппаратная блокировка по железу (HWID + MAC)");
+        Register("macban", 5, "/macban <ID/ник> <дней> [причина]", "Аппаратная блокировка по сетевому MAC-адресу");
         Register("tp", 5, "/tp <X> <Y> <Z>", "Телепорт по точным координатам");
         Register("tpm", 5, "/tpm [redsquare|city|police|hospital]", "Быстрый телепорт по ключевым локациям Москвы");
         Register("setweather", 5, "/setweather <ID_погоды>", "Изменить погоду на сервере");
@@ -53,6 +59,7 @@ public static class AdminCommandRegistry
         Register("setskin", 5, "/setskin <ID/ник> <модель>", "Изменить модель персонажа (скин)");
 
         // ── Уровень 6: Куратор / Зам. ГА ──────────────────────────
+        Register("hardban", 6, "/hardban <ID/ник> [причина]", "Тотальная перманентная блокировка (Account+IP+SC+HWID+MAC)");
         Register("givemoney", 6, "/givemoney <ID/ник> <сумма>", "Выдать наличные средства игроку");
         Register("takemoney", 6, "/takemoney <ID/ник> <сумма>", "Изъять наличные средства у игрока");
         Register("giveitem", 6, "/giveitem <ID/ник> <item_id> <кол-во>", "Выдать предмет в инвентарь");
@@ -60,7 +67,6 @@ public static class AdminCommandRegistry
 
         // ── Уровень 7: Главный Администратор (ГА) ─────────────────
         Register("makeadmin", 7, "/makeadmin <ID/ник> <уровень 0-6>", "Назначить администратора (до 6 ранга)");
-        Register("banip", 7, "/banip <IP-адрес> [причина]", "Заблокировать IP-адрес на сервере");
         Register("clearadmin", 7, "/clearadmin <ник>", "Снять администратора");
 
         // ── Уровень 8: Руководитель проекта / Разработчик ─────────

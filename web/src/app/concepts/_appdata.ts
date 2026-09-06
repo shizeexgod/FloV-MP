@@ -217,3 +217,73 @@ export const ANALYTICS_SERIES = {
 };
 
 export const DAY_LABELS = ['00', '', '', '03', '', '', '06', '', '', '09', '', '', '12', '', '', '15', '', '', '18', '', '', '21', '', ''];
+
+export interface AppResource {
+  id: string;
+  name: string;
+  type: 'script' | 'map' | 'vehicle' | 'ui';
+  status: 'running' | 'stopped' | 'failed';
+  version: string;
+  dependencies: string[];
+  memoryMb: number;
+}
+
+export const APP_RESOURCES: AppResource[] = [
+  { id: 'r1', name: 'flovmp-core', type: 'script', status: 'running', version: '1.0.0', dependencies: [], memoryMb: 124 },
+  { id: 'r2', name: 'derzhava-auth-nui', type: 'ui', status: 'running', version: '0.9.4', dependencies: ['flovmp-core'], memoryMb: 18 },
+  { id: 'r3', name: 'derzhava-moscow-map', type: 'map', status: 'running', version: '2026.8', dependencies: [], memoryMb: 412 },
+  { id: 'r4', name: 'derzhava-vehicles-pack', type: 'vehicle', status: 'running', version: '2.4.1', dependencies: [], memoryMb: 350 },
+  { id: 'r5', name: 'derzhava-inventory', type: 'ui', status: 'running', version: '1.2.0', dependencies: ['flovmp-core'], memoryMb: 24 },
+  { id: 'r6', name: 'derzhava-economy', type: 'script', status: 'running', version: '1.1.5', dependencies: ['flovmp-core'], memoryMb: 45 },
+  { id: 'r7', name: 'casino-event-zone', type: 'script', status: 'stopped', version: '0.5.0', dependencies: ['flovmp-core'], memoryMb: 0 },
+];
+
+export interface AppCrashIncident {
+  id: string;
+  server: string;
+  time: string;
+  type: 'Freeze (>15s)' | 'CoreCLR Fatal Exception' | 'Memory Leak';
+  reason: string;
+  stackPreview: string;
+  autoRestarted: boolean;
+}
+
+export const APP_CRASHES: AppCrashIncident[] = [
+  {
+    id: 'INC-4091',
+    server: 'florida-prod-01',
+    time: '2026-09-06 04:12:19',
+    type: 'Freeze (>15s)',
+    reason: 'Main thread tick freeze (16.2s unresponsive)',
+    stackPreview: 'at FloVMP.Core.Economy.EconomyService.RecalculateTaxes() in EconomyService.cs:line 182\n   at System.Threading.Monitor.Enter(Object obj)',
+    autoRestarted: true,
+  },
+  {
+    id: 'INC-3982',
+    server: 'florida-dev',
+    time: '2026-09-05 19:40:02',
+    type: 'CoreCLR Fatal Exception',
+    reason: 'System.NullReferenceException: Object reference not set',
+    stackPreview: 'at Derzhava.CustomPeds.OnSpawnPed(IPlayer player) in CustomPeds.cs:line 44',
+    autoRestarted: true,
+  },
+];
+
+export interface AppInvoice {
+  id: string;
+  project: string;
+  plan: 'Starter' | 'Pro' | 'Enterprise';
+  slots: number;
+  amount: number;
+  status: 'paid' | 'pending';
+  date: string;
+  expires: string;
+}
+
+export const APP_INVOICES: AppInvoice[] = [
+  { id: 'INV-2026-0901', project: 'Florida V', plan: 'Enterprise', slots: 1500, amount: 24900, status: 'paid', date: '2026-09-01', expires: '2026-10-01' },
+  { id: 'INV-2026-0801', project: 'Florida V', plan: 'Enterprise', slots: 1500, amount: 24900, status: 'paid', date: '2026-08-01', expires: '2026-09-01' },
+  { id: 'INV-2026-0701', project: 'Florida V', plan: 'Enterprise', slots: 1500, amount: 24900, status: 'paid', date: '2026-07-01', expires: '2026-08-01' },
+  { id: 'INV-2026-0615', project: 'Sayonara RP', plan: 'Pro', slots: 500, amount: 11900, status: 'paid', date: '2026-06-15', expires: '2026-07-15' },
+];
+

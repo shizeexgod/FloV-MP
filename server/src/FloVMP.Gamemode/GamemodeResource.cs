@@ -37,6 +37,7 @@ public class GamemodeResource : Resource
     private FloVMP.Core.Documents.DocumentService? _documents;
     private FloVMP.Core.Housing.HousingService? _housing;
     private FloVMP.Core.Characters.FactionUniformService? _uniforms;
+    private RemoteServerAgent? _agent;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
@@ -124,6 +125,17 @@ public class GamemodeResource : Resource
         };
         _telemetry.Start();
 
+        var agentToken = Environment.GetEnvironmentVariable("FLOVMP_AGENT_TOKEN") ?? licConfig.LicenseKey;
+        var commandApiUrl = Environment.GetEnvironmentVariable("FLOVMP_COMMAND_URL") ?? "http://localhost:3000/api/v1/agent/command";
+        _agent = new RemoteServerAgent(agentToken, commandApiUrl);
+        _agent.OnBroadcastRequested += async msg =>
+        {
+            _chat?.Broadcast($"[ОБЪЯВЛЕНИЕ /o] {msg}");
+            Alt.Log($"[FloV:MP] [Dashboard] Broadcast: {msg}");
+            return await Task.FromResult("OK");
+        };
+        _agent.Start();
+
         _antiCheat = new AntiCheatSystem(p => _auth?.AccountOf(p));
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
@@ -134,6 +146,10 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
+        _agent?.Stop();
+        _agent?.Dispose();
+        _agent = null;
+
         _telemetry?.Stop();
         _telemetry?.Dispose();
         _telemetry = null;
