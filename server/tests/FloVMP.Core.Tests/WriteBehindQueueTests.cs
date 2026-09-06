@@ -97,5 +97,58 @@ namespace FloVMP.Core.Tests
             Assert.True(saved);
             Assert.Equal(1, queue.PendingCount); // Остался только ID 2
         }
+
+        [Fact]
+        public async Task FlushAllAsync_FlushesAllBatchesUntilEmpty()
+        {
+            var flushedIds = new List<int>();
+            using var queue = new WriteBehindQueue<int, TestPlayerData>(
+                persister: batch =>
+                {
+                    foreach (var item in batch)
+                        flushedIds.Add(item.Key);
+                    return Task.FromResult(true);
+                }
+            ) { MaxBatchSize = 2 };
+
+            for (int i = 1; i <= 5; i++)
+            {
+                var p = new TestPlayerData { Id = i, Name = $"Player{i}" };
+                queue.MarkDirty(i, p);
+            }
+
+            Assert.Equal(5, queue.PendingCount);
+
+            int totalFlushed = await queue.FlushAllAsync();
+
+            Assert.Equal(5, totalFlushed);
+            Assert.Equal(0, queue.PendingCount);
+            Assert.Equal(5, flushedIds.Count);
+        }
+
+        [Fact]
+        public async Task MarkDirty_UpdatesEntityReferenceWhenNewInstanceProvided()
+        {
+            TestPlayerData? persistedPlayer = null;
+            using var queue = new WriteBehindQueue<int, TestPlayerData>(
+                persister: batch =>
+                {
+                    persistedPlayer = batch[0].Entity;
+                    return Task.FromResult(true);
+                }
+            );
+
+            var p1 = new TestPlayerData { Id = 1, Name = "V1", Bank = 100 };
+            queue.MarkDirty(1, p1, "Bank");
+
+            var p2 = new TestPlayerData { Id = 1, Name = "V2", Bank = 500 };
+            queue.MarkDirty(1, p2, "Bank");
+
+            await queue.FlushAsync();
+
+            Assert.NotNull(persistedPlayer);
+            Assert.Equal("V2", persistedPlayer.Name);
+            Assert.Equal(500, persistedPlayer.Bank);
+        }
     }
 }

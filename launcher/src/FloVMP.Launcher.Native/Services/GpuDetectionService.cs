@@ -110,6 +110,10 @@ public static class GpuDetectionService
     /// </summary>
     public static GpuInfo AnalyzeGpu(string name, long vramBytes, string driverVersion, string provider)
     {
+        name ??= "";
+        driverVersion ??= "";
+        provider ??= "";
+
         var vramMb = (int)Math.Clamp(vramBytes / (1024 * 1024), 0, 131072);
         if (vramMb == 0) vramMb = 4096; // Фоллбек при неопределённом VRAM
 

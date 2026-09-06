@@ -1,4 +1,4 @@
-﻿namespace FloVMP.Core.Vehicles;
+namespace FloVMP.Core.Vehicles;
 
 /// <summary>
 /// Сервис управления активным автопарком сервера «Держава Онлайн».
@@ -11,12 +11,35 @@ public sealed class VehicleService
 
     public void RegisterVehicle(VehicleData vehicle)
     {
+        if (vehicle == null) return;
         lock (_lock)
         {
+            if (_byId.TryGetValue(vehicle.Id, out var existing) && !string.IsNullOrWhiteSpace(existing.Plate))
+            {
+                _byPlate.Remove(existing.Plate);
+            }
+
             _byId[vehicle.Id] = vehicle;
             if (!string.IsNullOrWhiteSpace(vehicle.Plate))
             {
                 _byPlate[vehicle.Plate] = vehicle;
+            }
+        }
+    }
+
+    public void UpdatePlate(int id, string newPlate)
+    {
+        lock (_lock)
+        {
+            if (!_byId.TryGetValue(id, out var vehicle)) return;
+            if (!string.IsNullOrWhiteSpace(vehicle.Plate))
+            {
+                _byPlate.Remove(vehicle.Plate);
+            }
+            vehicle.Plate = newPlate ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(newPlate))
+            {
+                _byPlate[newPlate] = vehicle;
             }
         }
     }
@@ -31,9 +54,10 @@ public sealed class VehicleService
 
     public VehicleData? FindByPlate(string plate)
     {
+        if (string.IsNullOrWhiteSpace(plate)) return null;
         lock (_lock)
         {
-            return _byPlate.TryGetValue(plate, out var v) ? v : null;
+            return _byPlate.TryGetValue(plate.Trim(), out var v) ? v : null;
         }
     }
 

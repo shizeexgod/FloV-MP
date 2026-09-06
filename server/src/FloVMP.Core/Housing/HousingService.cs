@@ -82,6 +82,12 @@ public sealed class HousingService
 
     public bool TryBuy(Account account, int propertyId, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         lock (_lock)
         {
             if (!_properties.TryGetValue(propertyId, out var prop))
@@ -123,9 +129,15 @@ public sealed class HousingService
 
     public bool TrySell(Account account, int propertyId, out long refundAmount, out string error)
     {
+        refundAmount = 0;
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         lock (_lock)
         {
-            refundAmount = 0;
             if (!_properties.TryGetValue(propertyId, out var prop))
             {
                 error = "Объект недвижимости не найден";
@@ -140,6 +152,12 @@ public sealed class HousingService
 
             refundAmount = (long)(prop.Price * SellRefundPercent);
             var safeRefund = prop.SafeCash;
+
+            if (long.MaxValue - account.Bank < refundAmount + safeRefund)
+            {
+                error = "Банковский счёт переполнен, невозможно зачислить средства";
+                return false;
+            }
 
             account.Bank += refundAmount + safeRefund;
 
@@ -181,6 +199,12 @@ public sealed class HousingService
 
     public bool TryDepositSafe(Account account, int propertyId, long amount, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма пополнения должна быть больше нуля";
@@ -207,6 +231,12 @@ public sealed class HousingService
                 return false;
             }
 
+            if (long.MaxValue - prop.SafeCash < amount)
+            {
+                error = "Сейф переполнен, невозможно вместить указанную сумму";
+                return false;
+            }
+
             account.Cash -= amount;
             prop.SafeCash += amount;
             error = string.Empty;
@@ -216,6 +246,12 @@ public sealed class HousingService
 
     public bool TryWithdrawSafe(Account account, int propertyId, long amount, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма снятия должна быть больше нуля";
@@ -239,6 +275,12 @@ public sealed class HousingService
             if (prop.SafeCash < amount)
             {
                 error = $"В сейфе недостаточно средств (доступно: {prop.SafeCash:N0} руб.)";
+                return false;
+            }
+
+            if (long.MaxValue - account.Cash < amount)
+            {
+                error = "Превышен максимальный лимит наличных средств";
                 return false;
             }
 

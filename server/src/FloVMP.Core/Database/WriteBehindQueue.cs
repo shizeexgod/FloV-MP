@@ -13,7 +13,7 @@ namespace FloVMP.Core.Database;
 public sealed class DirtyEntityRecord<TKey, TEntity>
 {
     public TKey Key { get; }
-    public TEntity Entity { get; }
+    public TEntity Entity { get; private set; }
     public HashSet<string> DirtyFields { get; }
     public DateTime FirstDirtiedUtc { get; }
     public DateTime LastDirtiedUtc { get; private set; }
@@ -24,6 +24,17 @@ public sealed class DirtyEntityRecord<TKey, TEntity>
         Entity = entity;
         DirtyFields = initialFields != null ? new HashSet<string>(initialFields, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         FirstDirtiedUtc = DateTime.UtcNow;
+        LastDirtiedUtc = DateTime.UtcNow;
+    }
+
+    public void UpdateEntity(TEntity entity)
+    {
+        Entity = entity;
+        LastDirtiedUtc = DateTime.UtcNow;
+    }
+
+    public void Touch()
+    {
         LastDirtiedUtc = DateTime.UtcNow;
     }
 
@@ -93,9 +104,14 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
         {
             if (_dirtyEntities.TryGetValue(key, out var record))
             {
+                record.UpdateEntity(entity);
                 if (changedField != null)
                 {
                     record.MarkDirty(changedField);
+                }
+                else
+                {
+                    record.Touch();
                 }
             }
             else
@@ -111,7 +127,22 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
     }
 
     /// <summary>
-    /// Принудительно сбрасывает все накопившиеся изменения в хранилище через указанный или встроенный персистер.
+    /// Полностью сбрасывает все накопившиеся изменения во всех пакетах до нуля (для штатного завершения работы сервера).
+    /// </summary>
+    public async Task<int> FlushAllAsync(Func<IReadOnlyList<DirtyEntityRecord<TKey, TEntity>>, Task<bool>>? customPersister = null)
+    {
+        int totalFlushed = 0;
+        while (PendingCount > 0)
+        {
+            int flushed = await FlushAsync(customPersister);
+            if (flushed == 0) break;
+            totalFlushed += flushed;
+        }
+        return totalFlushed;
+    }
+
+    /// <summary>
+    /// Принудительно сбрасывает накопившиеся изменения (размером до MaxBatchSize) в хранилище.
     /// </summary>
     public async Task<int> FlushAsync(Func<IReadOnlyList<DirtyEntityRecord<TKey, TEntity>>, Task<bool>>? customPersister = null)
     {

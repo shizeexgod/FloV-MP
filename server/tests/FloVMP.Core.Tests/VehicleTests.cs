@@ -1,4 +1,4 @@
-﻿using FloVMP.Core.Vehicles;
+using FloVMP.Core.Vehicles;
 using Xunit;
 
 namespace FloVMP.Core.Tests;
@@ -80,5 +80,22 @@ public sealed class VehicleTests
         svc.UnregisterVehicle(1);
         Assert.Null(svc.FindByPlate("M777MM77"));
         Assert.Single(svc.GetVehiclesByOwner(5));
+    }
+
+    [Fact]
+    public void VehicleService_UpdatePlate_UpdatesLookupAndRemovesStalePlate()
+    {
+        var svc = new VehicleService();
+        var v = new VehicleData { Id = 10, Plate = "OLD_PLATE", OwnerAccountId = 1 };
+        svc.RegisterVehicle(v);
+
+        Assert.Equal(v, svc.FindByPlate("OLD_PLATE"));
+
+        svc.UpdatePlate(v.Id, "NEW_PLATE");
+
+        Assert.Equal("NEW_PLATE", v.Plate);
+        Assert.Null(svc.FindByPlate("OLD_PLATE"));
+        Assert.Equal(v, svc.FindByPlate("NEW_PLATE"));
+        Assert.Equal(v, svc.FindByPlate("new_plate"));
     }
 }

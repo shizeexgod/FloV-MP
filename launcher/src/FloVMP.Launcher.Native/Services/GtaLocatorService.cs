@@ -51,16 +51,33 @@ public static class GtaLocatorService
         return null;
     }
 
-    public static bool IsValidGtaFolder(string path)
-        => Directory.Exists(path) &&
-           (File.Exists(Path.Combine(path, "GTA5.exe")) ||
-            File.Exists(Path.Combine(path, "GTA5_Enhanced.exe")) ||
-            File.Exists(Path.Combine(path, "PlayGTAV.exe")));
-
-    public static string DetectVersion(string path)
+    public static bool IsValidGtaFolder(string? path)
     {
-        if (File.Exists(Path.Combine(path, "GTA5_Enhanced.exe"))) return "Enhanced";
-        if (File.Exists(Path.Combine(path, "GTA5.exe"))) return "Legacy";
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        try
+        {
+            var cleanPath = path.Trim().Trim('"', '\'');
+            return Directory.Exists(cleanPath) &&
+                   (File.Exists(Path.Combine(cleanPath, "GTA5.exe")) ||
+                    File.Exists(Path.Combine(cleanPath, "GTA5_Enhanced.exe")) ||
+                    File.Exists(Path.Combine(cleanPath, "PlayGTAV.exe")));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static string DetectVersion(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "Неизвестная";
+        try
+        {
+            var cleanPath = path.Trim().Trim('"', '\'');
+            if (File.Exists(Path.Combine(cleanPath, "GTA5_Enhanced.exe"))) return "Enhanced";
+            if (File.Exists(Path.Combine(cleanPath, "GTA5.exe"))) return "Legacy";
+        }
+        catch { }
         return "Неизвестная";
     }
 

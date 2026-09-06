@@ -45,7 +45,7 @@ public sealed class DocumentService
     public PlayerDocument IssueDriverLicense(
         int accountId,
         string fullName,
-        IEnumerable<string> categories,
+        IEnumerable<string>? categories,
         int validityDays = 30,
         string? docNumber = null,
         string? issuedBy = null)
@@ -59,11 +59,15 @@ public sealed class DocumentService
                 accountId,
                 DocumentType.DriverLicense,
                 number,
-                fullName,
+                string.IsNullOrWhiteSpace(fullName) ? "Гражданин" : fullName.Trim(),
                 issuer,
                 DateTime.UtcNow.AddDays(validityDays));
 
-            var catList = categories.Select(c => c.Trim().ToUpperInvariant()).Distinct().ToList();
+            var catList = (categories ?? Array.Empty<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim().ToUpperInvariant())
+                .Distinct()
+                .ToList();
             doc.SetMeta("Categories", string.Join(",", catList));
 
             GetOrCreateDocs(accountId)[DocumentType.DriverLicense] = doc;
@@ -73,6 +77,8 @@ public sealed class DocumentService
 
     public bool HasDriverCategory(int accountId, string category)
     {
+        if (string.IsNullOrWhiteSpace(category)) return false;
+
         lock (_lock)
         {
             var doc = GetDocument(accountId, DocumentType.DriverLicense);
@@ -85,6 +91,12 @@ public sealed class DocumentService
 
     public bool TryAddDriverCategory(int accountId, string category, out string error)
     {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            error = "Категория не указана";
+            return false;
+        }
+
         lock (_lock)
         {
             var doc = GetDocument(accountId, DocumentType.DriverLicense);
@@ -118,6 +130,12 @@ public sealed class DocumentService
 
     public bool TryRevokeDriverCategory(int accountId, string category, out string error)
     {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            error = "Категория не указана";
+            return false;
+        }
+
         lock (_lock)
         {
             var doc = GetDocument(accountId, DocumentType.DriverLicense);

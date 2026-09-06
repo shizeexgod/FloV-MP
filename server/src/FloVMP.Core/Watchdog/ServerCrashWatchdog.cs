@@ -30,6 +30,7 @@ namespace FloVMP.Core.Watchdog
 
         private readonly DateTime _startTime;
         private DateTime _lastHeartbeat;
+        private bool _isHungIncidentActive;
 
         public int HeartbeatTimeoutSeconds { get; set; } = 15;
         public int MaxRestartsPerHour { get; set; } = 5;
@@ -47,6 +48,7 @@ namespace FloVMP.Core.Watchdog
         public void RecordHeartbeat(DateTime? time = null)
         {
             _lastHeartbeat = time ?? DateTime.UtcNow;
+            _isHungIncidentActive = false;
         }
 
         public bool CheckLiveness(DateTime? currentTime = null)
@@ -56,7 +58,11 @@ namespace FloVMP.Core.Watchdog
 
             if (elapsed > HeartbeatTimeoutSeconds)
             {
-                TriggerCrash("Watchdog: Server main thread frozen / hung (Heartbeat missed)", "Thread hang detected during frame tick");
+                if (!_isHungIncidentActive)
+                {
+                    _isHungIncidentActive = true;
+                    TriggerCrash("Watchdog: Server main thread frozen / hung (Heartbeat missed)", "Thread hang detected during frame tick");
+                }
                 return false;
             }
 

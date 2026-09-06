@@ -1,4 +1,4 @@
-﻿using FloVMP.Core.Auth;
+using FloVMP.Core.Auth;
 using FloVMP.Core.Logging;
 
 namespace FloVMP.Core.Economy;
@@ -23,6 +23,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryGiveCash(Account account, long amount, string reason, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма должна быть больше нуля";
@@ -31,6 +37,12 @@ public sealed class EconomyService
 
         lock (_txLock)
         {
+            if (long.MaxValue - account.Cash < amount)
+            {
+                error = "Превышен максимальный лимит наличных средств";
+                return false;
+            }
+
             account.Cash += amount;
             LogTx(null, account.Id, amount, TransactionType.AdminGrant, reason);
             error = string.Empty;
@@ -43,6 +55,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryTakeCash(Account account, long amount, string reason, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма должна быть больше нуля";
@@ -69,6 +87,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryDeposit(Account account, long amount, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма депозита должна быть положительной";
@@ -80,6 +104,12 @@ public sealed class EconomyService
             if (account.Cash < amount)
             {
                 error = "Недостаточно наличных для внесения на счёт";
+                return false;
+            }
+
+            if (long.MaxValue - account.Bank < amount)
+            {
+                error = "Превышен максимальный лимит банковского счёта";
                 return false;
             }
 
@@ -96,6 +126,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryWithdraw(Account account, long amount, out string error)
     {
+        if (account == null)
+        {
+            error = "Аккаунт не найден";
+            return false;
+        }
+
         if (amount <= 0)
         {
             error = "Сумма снятия должна быть положительной";
@@ -107,6 +143,12 @@ public sealed class EconomyService
             if (account.Bank < amount)
             {
                 error = "Недостаточно средств на банковском счёте";
+                return false;
+            }
+
+            if (long.MaxValue - account.Cash < amount)
+            {
+                error = "Превышен максимальный лимит наличных средств";
                 return false;
             }
 
@@ -123,6 +165,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryPayCash(Account from, Account to, long amount, out string error)
     {
+        if (from == null || to == null)
+        {
+            error = "Один из участников операции не найден";
+            return false;
+        }
+
         if (from == to || from.Id == to.Id)
         {
             error = "Нельзя передать деньги самому себе";
@@ -143,6 +191,12 @@ public sealed class EconomyService
                 return false;
             }
 
+            if (long.MaxValue - to.Cash < amount)
+            {
+                error = "Получатель не может вместить указанную сумму наличных";
+                return false;
+            }
+
             from.Cash -= amount;
             to.Cash += amount;
             LogTx(from.Id, to.Id, amount, TransactionType.PayCash, $"Передача наличных от {from.Username} к {to.Username}");
@@ -156,6 +210,12 @@ public sealed class EconomyService
     /// </summary>
     public bool TryTransferBank(Account from, Account to, long amount, string description, out string error)
     {
+        if (from == null || to == null)
+        {
+            error = "Один из участников операции не найден";
+            return false;
+        }
+
         if (from == to || from.Id == to.Id)
         {
             error = "Нельзя выполнить перевод на собственный счёт";
@@ -173,6 +233,12 @@ public sealed class EconomyService
             if (from.Bank < amount)
             {
                 error = "Недостаточно средств на банковском счёте для перевода";
+                return false;
+            }
+
+            if (long.MaxValue - to.Bank < amount)
+            {
+                error = "Превышен максимальный лимит банковского счёта получателя";
                 return false;
             }
 

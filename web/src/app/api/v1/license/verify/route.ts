@@ -4,8 +4,16 @@ import { signLicensePayload } from '@/lib/license';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { licenseKey, serverIp, version, slots } = body;
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { valid: false, reason: 'Некорректный формат JSON запроса' },
+        { status: 400 }
+      );
+    }
+    const { licenseKey, serverIp, version, slots } = body || {};
 
     if (!licenseKey) {
       return NextResponse.json(

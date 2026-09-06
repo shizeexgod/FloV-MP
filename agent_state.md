@@ -483,18 +483,44 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
    - Эрмитова кубическая сплайн-интерполяция (Cubic Hermite Spline) для устранения микро-рывков и телепортаций высокоскоростного транспорта ($C^1$ гладкость).
    - Механизм компенсации задержки (Lag Compensation / Time Rewind) с лучевой трассировкой попаданий пуль по хитбоксу цели в момент выстрела клиентом с ограничением максимальной отмотки (500мс) для исключения читерских манипуляций со временем.
 
-### 2. Результаты глубокого аудита кодовой базы и устранённые баги
-1. **HousingService & Property Concurrency Bug**:
-   - В `Property.cs` метод `HasAccess` и мутации `Roommates` (`HashSet<int>`) не были потокобезопасны, что могло приводить к `InvalidOperationException` при одновременной проверке прав на вход и заселении жильцов. Исправлено добавлением синхронизации `lock (Roommates)`.
-   - В `HousingService` добавлены прямые оптимизированные методы `GetPropertyByDimension(int dimension)` и `GetNearbyEntrance(Vector3D pos, float radius)`.
-2. **Proximity Chat & Dimension Leak in ChatSystem**:
-   - В `ChatSystem.cs` локальные RP-команды (`/me`, обычный чат, `/do`, `/try`, `/todo`, `/pay`) не проверяли виртуальный мир (`player.Dimension == target.Dimension`), из-за чего сообщения из интерьеров просачивались на улицу. Обычные сообщения и `/me` вовсе отправлялись всем игрокам на сервере без проверки дистанции.
-   - Исправлено: все локальные сообщения изолированы по дименшену и радиусу (25м). Добавлена классическая команда локального ООС-чата `/b` (`(( текст ))`).
-   - Оптимизированы входы/выходы из домов: заменён полный перебор `GetAllProperties().FirstOrDefault()` на `GetNearbyEntrance` и `GetPropertyByDimension`.
-3. **Agent Resource Command Mismatch in Next.js API**:
-   - В `v1/agent/command/route.ts` валидатор разрешённых команд отклонял `resource_start`, `resource_stop`, `resource_restart`, несмотря на то, что C# `RemoteServerAgent` и API ресурсов серверов поддерживали их. Список `validCommands` синхронизирован.
-4. **Статус тестов**:
-   - 197 / 197 тестов `FloVMP.Core.Tests` успешно пройдены (зелёные).
-   - 28 / 28 тестов `FloVMP.Launcher.Tests` успешно пройдены.
-   - Сборка Next.js 14 (`npm run build`) прошла без ошибок (34/34 маршрутов).
+### 2. Результаты глубокого аудита кодовой базы и устранённые баги (Спринт /goal «Ночной аудит»)
+1. **Watchdog Freeze Rapid Burnout**:
+   - В `ServerCrashWatchdog.cs` метод `CheckLiveness` при зависании сервера вызывался каждую секунду и на каждый тик инкрементировал счётчик рестартов и генерировал CrashReport, за 5 секунд сжигая всю часовую квоту `MaxRestartsPerHour` (5/час).
+   - Исправлено: добавлен триггерный флаг `_isHungIncidentActive`, дебаунсящий инцидент зависания до первого успешного хартбита. Добавлен юнит-тест `CheckLiveness_RepeatedCallsDuringSingleFreeze_TriggersRestartOnlyOnce`.
+2. **WriteBehindQueue Memory & Mutation Integrity**:
+   - В `WriteBehindQueue.cs` объект `DirtyEntityRecord` не обновлял ссылку на сущность при повторном вызове `MarkDirty` с новым экземпляром объекта, что приводило к потере мутаций.
+   - Метод `Touch()` теперь вызывается даже при отсутствии указания конкретного поля, предотвращая преждевременный сброс неактуальных данных.
+   - Добавлен метод `FlushAllAsync()` для гарантированного 100% сброса всех очередей при штатном выключении сервера.
+3. **SnapshotManager Player Leak**:
+   - В `SnapshotManager.cs` метод `PruneOlderThan` очищал старые снимки, но оставлял пустые ключи в словаре `_snapshots`, что вызывало постепенную утечку памяти. Исправлено удалением пустых ключей.
+4. **SpatialHashGrid Extreme Values & Thread Hang DOS Protection**:
+   - В `SpatialHashGrid.cs` добавлена строгая проверка на `float.IsNaN`, `float.IsInfinity`, отрицательные радиусы и лимит радиуса поиска до 5000м, предотвращающая зависание потоков синхронизации и переполнение стека ячеек.
+5. **DynamicResourceManager Concurrency Lock**:
+   - В `DynamicResourceManager.cs` методы `StartResource` и `StopResource` защищены блокировкой `_transitionLock`, исключающей race condition при одновременных вызовах старта/остановки ресурсов из разных потоков.
+6. **Faction Handcuff & Arrest Dimension Leaks**:
+   - В `ChatSystem.cs` команды `/cuff`, `/uncuff`, `/invite`, `/passport`, `/lic`, `/arrest` дополнены проверкой совпадения виртуального мира (`player.Dimension == target.Dimension`).
+   - Игровой радиус `/cuff` и `/uncuff` ограничен 3 метрами, а броадкаст анимации `me` ограничен тем же измерением, предотвращая утечку звука и анимаций наручников из интерьеров на улицу.
+   - При аресте (`/arrest`) виртуальный мир заключённого принудительно сбрасывается в `0` (основной мир камеры КПЗ), предотвращая спавн в чужом интерьере.
+   - В `FactionService.cs` запрещено надевать наручники сотруднику, который сам находится в наручниках или уже отбывает срок в камере.
+7. **Economy & Housing Boundary Overflow Protection**:
+   - В `EconomyService.cs` и `HousingService.cs` добавлены проверки на `null` аккаунтов и защита от переполнения `long.MaxValue` при крупных депозитах и переводах.
+8. **VehicleService Plate Index Desync**:
+   - В `VehicleService.cs` добавлен метод `UpdatePlate(int id, string newPlate)`, корректно удаляющий старый номер из индекса `_byPlate` при перерегистрации авто, исключая рассинхронизацию.
+9. **Launcher Native & Electron Hardening**:
+   - В `PlayService.cs` санированы пути GTA V и никнеймы игроков для предотвращения инъекций аргументов командной строки Windows; поддержан поиск `FloVMP.Connect.exe` как в Release, так и в Debug сборках.
+   - В `GtaLocatorService.cs` добавлена санитарная очистка кавычек и пробелов, перехват исключений при доступе к реестру.
+   - В `GpuDetectionService.cs` null-coalesce строковых аргументов для исключения `NullReferenceException`.
+   - В `LocalCdn.cs` исправлена HTTP-строка ответа на `HTTP/1.1 404 Not Found` (вместо `404 OK`) и защищены методы от `DirectoryNotFoundException` при отсутствии клиентской папки.
+   - В `main.js` Electron автозапуск (`setAutostart`) ограничен только продакшен-сборками (`app.isPackaged`), защищая реестр разработчика, а порт в `native:play` приведён к `int`.
+10. **SaaS Web Portal API Hardening**:
+    - В `v1/license/verify/route.ts` и `v1/billing/pay/route.ts` добавлен безопасный парсинг `req.json()` с возвратом 400 Bad Request при невалидном теле.
+    - В `v1/billing/pay/route.ts` создаваемый ID лицензии связывается со счётом в `portal_invoices.license_id`.
+11. **Исследование DLSS 5 Swapper & Upscaler Ecosystem**:
+    - Изучена архитектура `rakanki911/DLSS5-Swapper` (инжекция нейросетевого рендеринга через feeder/ReShade с генерацией векторов движения) и `beeradmoore/dlss-swapper` (DLL swapper для нативных игр).
+    - Развёртываемый сервис `UpscalerDeploymentService` лаунчера полностью согласован с этой структурой и обеспечивает безопасную инжекцию с изоляцией NUI UI.
+12. **Статус тестов**:
+    - **201 / 201 тестов `FloVMP.Core.Tests`** успешно пройдены (0 failures, 0 warnings).
+    - **38 / 38 тестов `FloVMP.Launcher.Tests`** успешно пройдены (0 failures, 0 warnings).
+    - **Итого 239 / 239 тестов** зелёные.
+    - TypeScript проверка Next.js 14 портала (`npx tsc --noEmit`) завершена с 0 ошибками.
 

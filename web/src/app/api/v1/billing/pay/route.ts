@@ -10,7 +10,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
     }
 
-    const { invoiceId } = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Некорректный формат запроса' }, { status: 400 });
+    }
+    const { invoiceId } = body || {};
     if (!invoiceId) {
       return NextResponse.json({ error: 'Укажите ID счёта' }, { status: 400 });
     }
@@ -59,7 +65,7 @@ export async function POST(req: NextRequest) {
         .slice(0, 19)
         .replace('T', ' ');
 
-      await query(
+      const insertRes = (await query(
         'INSERT INTO portal_licenses (user_id, license_key, server_name, bound_ip, plan, max_players, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [
           session.userId,
@@ -70,7 +76,10 @@ export async function POST(req: NextRequest) {
           planConfig.maxPlayers,
           newExpiry,
         ]
-      );
+      )) as any;
+      if (insertRes && insertRes.insertId) {
+        await query('UPDATE portal_invoices SET license_id = ? WHERE id = ?', [insertRes.insertId, inv.id]);
+      }
     }
 
     return NextResponse.json({

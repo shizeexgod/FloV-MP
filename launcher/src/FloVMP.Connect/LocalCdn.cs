@@ -87,7 +87,15 @@ public sealed class LocalCdn : IDisposable
                 var (status, contentType, body) = ProcessRequest(path, lower);
                 Console.WriteLine($"[cdn] {method} {path} -> {status}");
 
-                var headers = $"HTTP/1.1 {status} OK\r\n" +
+                var statusReason = status switch
+                {
+                    200 => "OK",
+                    404 => "Not Found",
+                    500 => "Internal Server Error",
+                    _ => "OK"
+                };
+
+                var headers = $"HTTP/1.1 {status} {statusReason}\r\n" +
                               $"Content-Type: {contentType}\r\n" +
                               $"Content-Length: {body.Length}\r\n" +
                               $"Access-Control-Allow-Origin: *\r\n" +
@@ -216,6 +224,8 @@ public sealed class LocalCdn : IDisposable
 
     private (int Status, string ContentType, byte[] Body) HandleClientFile(string path)
     {
+        if (!Directory.Exists(_clientDir)) return (404, "text/plain", "Not Found"u8.ToArray());
+
         var marker = "x64_win32/";
         var i = path.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
         string rel = i >= 0 ? path[(i + marker.Length)..] : Path.GetFileName(path);
@@ -233,6 +243,12 @@ public sealed class LocalCdn : IDisposable
 
     private string BuildClientManifest()
     {
+        if (!Directory.Exists(_clientDir))
+        {
+            return $"{{\"latestBuildNumber\":-1,\"version\":\"{Version}\",\"sdkVersion\":\"{SdkVersion}\"," +
+                   $"\"hashList\":{{}},\"sizeList\":{{}}}}";
+        }
+
         var hashes = new StringBuilder();
         var sizes = new StringBuilder();
         var first = true;

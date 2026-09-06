@@ -183,10 +183,19 @@ public sealed class SnapshotManager
 
         lock (_lock)
         {
-            foreach (var list in _snapshots.Values)
+            var emptyKeys = new List<ulong>();
+            foreach (var kvp in _snapshots)
             {
-                int removed = list.RemoveAll(s => s.CreatedAtUtc < cutoff);
+                int removed = kvp.Value.RemoveAll(s => s.CreatedAtUtc < cutoff);
                 prunedCount += removed;
+                if (kvp.Value.Count == 0)
+                {
+                    emptyKeys.Add(kvp.Key);
+                }
+            }
+            foreach (var key in emptyKeys)
+            {
+                _snapshots.TryRemove(key, out _);
             }
         }
 

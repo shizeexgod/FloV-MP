@@ -123,7 +123,9 @@ public sealed class SpatialHashGrid<T> where T : notnull
     /// </summary>
     public IReadOnlyList<T> FindInRadius(Vector3D center, float radius, int dimension = 0, bool use3D = true)
     {
-        if (radius <= 0) return Array.Empty<T>();
+        if (float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0) return Array.Empty<T>();
+        if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z)) return Array.Empty<T>();
+        if (radius > 5000f) radius = 5000f; // Предотвращение исчерпания памяти при экстремальных радиусах
 
         int minCellX = GetCellCoordinate(center.X - radius);
         int maxCellX = GetCellCoordinate(center.X + radius);
@@ -178,7 +180,9 @@ public sealed class SpatialHashGrid<T> where T : notnull
     /// </summary>
     public IReadOnlyList<(T Entity, float Distance)> FindInRadiusWithDistance(Vector3D center, float radius, int dimension = 0, bool use3D = true)
     {
-        if (radius <= 0) return Array.Empty<(T, float)>();
+        if (float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0) return Array.Empty<(T, float)>();
+        if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z)) return Array.Empty<(T, float)>();
+        if (radius > 5000f) radius = 5000f;
 
         int minCellX = GetCellCoordinate(center.X - radius);
         int maxCellX = GetCellCoordinate(center.X + radius);

@@ -9,6 +9,7 @@ node_modules/
 dist/
 .next/
 out/
+*.tsbuildinfo
 
 # Secrets — never commit
 secrets.local.md

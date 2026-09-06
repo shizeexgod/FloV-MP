@@ -41,6 +41,7 @@ namespace FloVMP.Core.Resources
     public class DynamicResourceManager
     {
         private readonly ConcurrentDictionary<string, ResourceInfo> _resources = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _transitionLock = new();
 
         public event Action<string, ResourceState, ResourceState>? OnResourceStateChanged;
 
@@ -79,35 +80,38 @@ namespace FloVMP.Core.Resources
                 return false;
             }
 
-            if (!_resources.TryGetValue(name.Trim(), out var res))
+            lock (_transitionLock)
             {
-                message = $"Resource '{name}' is not registered";
-                return false;
-            }
-
-            if (res.State == ResourceState.Running)
-            {
-                message = $"Resource '{name}' is already running";
-                return true;
-            }
-
-            // Verify dependencies
-            foreach (var dep in res.Dependencies)
-            {
-                if (!_resources.TryGetValue(dep, out var depInfo) || depInfo.State != ResourceState.Running)
+                if (!_resources.TryGetValue(name.Trim(), out var res))
                 {
-                    message = $"Dependency '{dep}' must be running before starting '{name}'";
+                    message = $"Resource '{name}' is not registered";
                     return false;
                 }
+
+                if (res.State == ResourceState.Running)
+                {
+                    message = $"Resource '{name}' is already running";
+                    return true;
+                }
+
+                // Verify dependencies
+                foreach (var dep in res.Dependencies)
+                {
+                    if (!_resources.TryGetValue(dep, out var depInfo) || depInfo.State != ResourceState.Running)
+                    {
+                        message = $"Dependency '{dep}' must be running before starting '{name}'";
+                        return false;
+                    }
+                }
+
+                var oldState = res.State;
+                res.State = ResourceState.Running;
+                res.StartedAt = DateTime.UtcNow;
+
+                OnResourceStateChanged?.Invoke(res.Name, oldState, ResourceState.Running);
+                message = $"Resource '{name}' started successfully";
+                return true;
             }
-
-            var oldState = res.State;
-            res.State = ResourceState.Running;
-            res.StartedAt = DateTime.UtcNow;
-
-            OnResourceStateChanged?.Invoke(res.Name, oldState, ResourceState.Running);
-            message = $"Resource '{name}' started successfully";
-            return true;
         }
 
         public bool StopResource(string name, out string message)
@@ -119,37 +123,40 @@ namespace FloVMP.Core.Resources
                 return false;
             }
 
-            if (!_resources.TryGetValue(name.Trim(), out var res))
+            lock (_transitionLock)
             {
-                message = $"Resource '{name}' is not registered";
-                return false;
-            }
+                if (!_resources.TryGetValue(name.Trim(), out var res))
+                {
+                    message = $"Resource '{name}' is not registered";
+                    return false;
+                }
 
-            if (res.State == ResourceState.Stopped)
-            {
-                message = $"Resource '{name}' is already stopped";
+                if (res.State == ResourceState.Stopped)
+                {
+                    message = $"Resource '{name}' is already stopped";
+                    return true;
+                }
+
+                // Check if any running resource depends on this one
+                var runningDependents = _resources.Values
+                    .Where(r => r.State == ResourceState.Running && r.Dependencies.Contains(res.Name, StringComparer.OrdinalIgnoreCase))
+                    .Select(r => r.Name)
+                    .ToList();
+
+                if (runningDependents.Count > 0)
+                {
+                    message = $"Cannot stop '{name}' because active resources depend on it: {string.Join(", ", runningDependents)}";
+                    return false;
+                }
+
+                var oldState = res.State;
+                res.State = ResourceState.Stopped;
+                res.StartedAt = null;
+
+                OnResourceStateChanged?.Invoke(res.Name, oldState, ResourceState.Stopped);
+                message = $"Resource '{name}' stopped";
                 return true;
             }
-
-            // Check if any running resource depends on this one
-            var runningDependents = _resources.Values
-                .Where(r => r.State == ResourceState.Running && r.Dependencies.Contains(res.Name, StringComparer.OrdinalIgnoreCase))
-                .Select(r => r.Name)
-                .ToList();
-
-            if (runningDependents.Count > 0)
-            {
-                message = $"Cannot stop '{name}' because active resources depend on it: {string.Join(", ", runningDependents)}";
-                return false;
-            }
-
-            var oldState = res.State;
-            res.State = ResourceState.Stopped;
-            res.StartedAt = null;
-
-            OnResourceStateChanged?.Invoke(res.Name, oldState, ResourceState.Stopped);
-            message = $"Resource '{name}' stopped";
-            return true;
         }
 
         public bool RestartResource(string name, out string message)

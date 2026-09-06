@@ -143,8 +143,10 @@ ipcMain.handle('native:detectGta', () => native.call('detectGta'));
 ipcMain.handle('native:validateGta', (_e, gtaPath) => native.call('validateGta', { path: gtaPath }));
 ipcMain.handle('native:browseFolder', () => native.call('browseFolder'));
 ipcMain.handle('native:serverStatus', (_e, host, port) => native.call('serverStatus', { host, port }));
-ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) =>
-  native.call('play', { gtaPath, host, port, nickname }));
+ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) => {
+  const numericPort = parseInt(port, 10) || 7788;
+  return native.call('play', { gtaPath, host, port: numericPort, nickname });
+});
 ipcMain.handle('native:cancelPlay', () => native.call('cancelPlay').catch(() => null));
 ipcMain.handle('native:deviceInfo', () => native.call('deviceInfo').catch(() => null));
 ipcMain.handle('native:detectGpu', () => native.call('detectGpu').catch(() => null));
@@ -196,6 +198,9 @@ native.on?.('download', (data) => {
 // в реестр не пишем напрямую (та же дисциплина, что и для BattlEye — не
 // трогать системные вещи руками там, где есть официальный API).
 ipcMain.handle('native:setAutostart', (_e, enabled) => {
+  if (!app.isPackaged) {
+    return !!enabled;
+  }
   app.setLoginItemSettings({ openAtLogin: !!enabled, path: process.execPath });
   return app.getLoginItemSettings().openAtLogin;
 });

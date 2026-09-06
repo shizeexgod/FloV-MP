@@ -302,6 +302,12 @@ public sealed class FactionService
                 return false;
             }
 
+            if (long.MaxValue - faction.TreasuryBalance < amount)
+            {
+                error = "Казна организации переполнена, невозможно зачислить средства";
+                return false;
+            }
+
             faction.TreasuryBalance += amount;
             error = string.Empty;
             return true;
@@ -360,9 +366,21 @@ public sealed class FactionService
                 return false;
             }
 
+            if (_cuffedAccounts.Contains(officerAccountId))
+            {
+                error = "Вы не можете применять наручники, находясь в наручниках";
+                return false;
+            }
+
             if (!HasPermission(officerAccountId, FactionPermissions.Cuffs))
             {
                 error = "У вас нет права применять специальные средства (наручники)";
+                return false;
+            }
+
+            if (_arrests.ContainsKey(targetAccountId))
+            {
+                error = "Гражданин уже отбывает срок в камере";
                 return false;
             }
 
@@ -382,6 +400,12 @@ public sealed class FactionService
     {
         lock (_lock)
         {
+            if (_cuffedAccounts.Contains(officerAccountId))
+            {
+                error = "Вы не можете снимать наручники, находясь в наручниках";
+                return false;
+            }
+
             if (!HasPermission(officerAccountId, FactionPermissions.Cuffs))
             {
                 error = "У вас нет права снимать специальные средства (наручники)";
@@ -472,6 +496,8 @@ public sealed class FactionService
     public List<int> TickArrests(int deltaSeconds)
     {
         var released = new List<int>();
+        if (deltaSeconds <= 0) return released;
+
         lock (_lock)
         {
             var keys = _arrests.Keys.ToList();
@@ -494,6 +520,8 @@ public sealed class FactionService
     public Dictionary<int, long> CalculateSalaries(IEnumerable<int> onlineAccountIds)
     {
         var payouts = new Dictionary<int, long>();
+        if (onlineAccountIds == null) return payouts;
+
         lock (_lock)
         {
             foreach (var accountId in onlineAccountIds)

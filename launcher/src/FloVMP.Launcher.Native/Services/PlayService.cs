@@ -34,7 +34,12 @@ public static class PlayService
         if (connectExe == null)
             return new LaunchResult(false, "Не найден FloVMP.Connect.exe. Убедитесь что движок FloV:MP установлен.");
 
-        var args = $"-connect {serverHost}:{serverPort} --gta \"{gtaPath}\" --nick \"{nickname}\"";
+        var safeGtaPath = gtaPath.Trim().Trim('"', '\'').TrimEnd('\\');
+        var safeNick = (nickname ?? "Player").Replace("\"", "").Trim();
+        var safeHost = (serverHost ?? "127.0.0.1").Trim();
+        var safePort = serverPort <= 0 ? 7788 : serverPort;
+
+        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\"";
 
         try
         {
@@ -68,9 +73,14 @@ public static class PlayService
         var dir = baseDir;
         for (var i = 0; i < 8; i++)
         {
-            var dev = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
+            var devRelease = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
                 "bin", "Release", "net8.0-windows", "FloVMP.Connect.exe");
-            if (File.Exists(dev)) return dev;
+            if (File.Exists(devRelease)) return devRelease;
+
+            var devDebug = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
+                "bin", "Debug", "net8.0-windows", "FloVMP.Connect.exe");
+            if (File.Exists(devDebug)) return devDebug;
+
             var parent = Directory.GetParent(dir);
             if (parent == null) break;
             dir = parent.FullName;

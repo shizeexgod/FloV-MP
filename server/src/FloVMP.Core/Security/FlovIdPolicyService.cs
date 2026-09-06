@@ -125,14 +125,14 @@ namespace FloVMP.Core.Security
         public int GetAssociatedAccountsCount(string hwidHash)
         {
             if (string.IsNullOrWhiteSpace(hwidHash)) return 0;
-            if (_hwidToAccounts.TryGetValue(hwidHash.Trim(), out var accounts))
+            lock (_lock)
             {
-                lock (_lock)
+                if (_hwidToAccounts.TryGetValue(hwidHash.Trim(), out var accounts))
                 {
                     return accounts.Count;
                 }
+                return 0;
             }
-            return 0;
         }
     }
 }

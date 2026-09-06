@@ -137,8 +137,10 @@ public sealed class ChatSystem
         }
 
         var msg = text.StartsWith("//", StringComparison.Ordinal) ? text[1..] : text;
+        var senderPos = player.Position;
+        var senderDim = player.Dimension;
         foreach (var p in Alt.GetAllPlayers())
-            if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+            if (p.Exists && _accountOf(p) is not null && p.Dimension == senderDim && p.Position.Distance(senderPos) <= 25.0f)
                 p.Emit("flovmp:chat:msg", "player", acc.Username, msg);
     });
 
@@ -167,16 +169,20 @@ public sealed class ChatSystem
             case "me":
                 if (args.Length == 0) { SendSystem(player, "Использование: /me <действие>"); return; }
                 var action = string.Join(' ', args);
+                var mePos = player.Position;
+                var meDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
-                    if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == meDim && p.Position.Distance(mePos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "me", acc.Username, action);
                 return;
 
             case "b":
                 if (args.Length == 0) { SendSystem(player, "Использование: /b <OOC сообщение>"); return; }
                 var oocMsg = string.Join(' ', args);
+                var bPos = player.Position;
+                var bDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
-                    if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == bDim && p.Position.Distance(bPos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "ooc", acc.Username, $"(( {oocMsg} ))");
                 return;
 
@@ -237,8 +243,10 @@ public sealed class ChatSystem
             case "do":
                 if (args.Length == 0) { SendSystem(player, "Использование: /do <описание>"); return; }
                 var doAction = string.Join(' ', args);
+                var doPos = player.Position;
+                var doDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
-                    if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == doDim && p.Position.Distance(doPos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "do", "", $"{doAction} (( {acc.Username} ))");
                 return;
 
@@ -247,8 +255,10 @@ public sealed class ChatSystem
                 var tryAction = string.Join(' ', args);
                 var isSuccess = Random.Shared.Next(0, 2) == 1;
                 var outcomeTag = isSuccess ? "[Удачно]" : "[Неудачно]";
+                var tryPos = player.Position;
+                var tryDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
-                    if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == tryDim && p.Position.Distance(tryPos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "try", acc.Username, $"{tryAction} | {outcomeTag}");
                 return;
 
@@ -258,8 +268,10 @@ public sealed class ChatSystem
                 var parts = rawTodo.Split('*', 2);
                 var speech = parts[0].Trim();
                 var actionPart = parts.Length > 1 ? parts[1].Trim() : "";
+                var todoPos = player.Position;
+                var todoDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
-                    if (p.Exists && _accountOf(p) is not null && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 25.0f)
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == todoDim && p.Position.Distance(todoPos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "todo", acc.Username, $"\"{speech}\", — сказал {acc.Username}, {actionPart}");
                 return;
 
@@ -294,7 +306,7 @@ public sealed class ChatSystem
                 {
                     var passTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
                     if (passTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                    if (passTarget != player && player.Position.Distance(passTarget.Position) > 3.0f)
+                    if (passTarget != player && (player.Dimension != passTarget.Dimension || player.Position.Distance(passTarget.Position) > 3.0f))
                     {
                         SendSystem(player, "Игрок находится слишком далеко (максимум 3 метра).");
                         return;
@@ -321,7 +333,7 @@ public sealed class ChatSystem
                 {
                     var licTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
                     if (licTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                    if (licTarget != player && player.Position.Distance(licTarget.Position) > 3.0f)
+                    if (licTarget != player && (player.Dimension != licTarget.Dimension || player.Position.Distance(licTarget.Position) > 3.0f))
                     {
                         SendSystem(player, "Игрок находится слишком далеко (максимум 3 метра).");
                         return;
@@ -424,7 +436,7 @@ public sealed class ChatSystem
                     if (invTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                     var invAcc = _accountOf(invTarget);
                     if (invAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
-                    if (player.Position.Distance(invTarget.Position) > 5.0f)
+                    if (player.Dimension != invTarget.Dimension || player.Position.Distance(invTarget.Position) > 5.0f)
                     {
                         SendSystem(player, "Игрок находится слишком далеко от вас.");
                         return;
@@ -500,7 +512,7 @@ public sealed class ChatSystem
                 {
                     var cuffTarget = FindPlayer(args[0]);
                     if (cuffTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                    if (player.Position.Distance(cuffTarget.Position) > 3.0f)
+                    if (player.Dimension != cuffTarget.Dimension || player.Position.Distance(cuffTarget.Position) > 3.0f)
                     {
                         SendSystem(player, "Игрок находится слишком далеко от вас (максимум 3 метра).");
                         return;
@@ -514,7 +526,7 @@ public sealed class ChatSystem
                         SendSystem(cuffTarget, $"{acc.Username} надел на вас наручники.");
                         foreach (var p in Alt.GetAllPlayers())
                         {
-                            if (p.Exists && p.Position.Distance(player.Position) <= 20.0f)
+                            if (p.Exists && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 20.0f)
                                 p.Emit("flovmp:chat:msg", "me", acc.Username, $"достал наручники и зафиксировал руки {cuffAcc.Username}");
                         }
                     }
@@ -531,7 +543,7 @@ public sealed class ChatSystem
                 {
                     var uncuffTarget = FindPlayer(args[0]);
                     if (uncuffTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                    if (player.Position.Distance(uncuffTarget.Position) > 3.0f)
+                    if (player.Dimension != uncuffTarget.Dimension || player.Position.Distance(uncuffTarget.Position) > 3.0f)
                     {
                         SendSystem(player, "Игрок находится слишком далеко от вас (максимум 3 метра).");
                         return;
@@ -545,7 +557,7 @@ public sealed class ChatSystem
                         SendSystem(uncuffTarget, $"{acc.Username} снял с вас наручники.");
                         foreach (var p in Alt.GetAllPlayers())
                         {
-                            if (p.Exists && p.Position.Distance(player.Position) <= 20.0f)
+                            if (p.Exists && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 20.0f)
                                 p.Emit("flovmp:chat:msg", "me", acc.Username, $"достал ключ и расстегнул наручники на руках {uncuffAcc.Username}");
                         }
                     }
@@ -566,7 +578,7 @@ public sealed class ChatSystem
                 {
                     var arrTarget = FindPlayer(args[0]);
                     if (arrTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                    if (player.Position.Distance(arrTarget.Position) > 5.0f)
+                    if (player.Dimension != arrTarget.Dimension || player.Position.Distance(arrTarget.Position) > 5.0f)
                     {
                         SendSystem(player, "Игрок находится слишком далеко от вас.");
                         return;
@@ -579,6 +591,7 @@ public sealed class ChatSystem
                     if (_factions.TryArrest(acc.Id, arrAcc.Id, arrestSec, arrReason, out var arrErr))
                     {
                         // Перемещение в ИВС ГУ МВД
+                        arrTarget.Dimension = 0;
                         arrTarget.Position = new Position(459.4f, -997.8f, 24.9f);
                         arrTarget.RemoveAllWeapons(true);
 
