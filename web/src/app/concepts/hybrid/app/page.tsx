@@ -10,6 +10,7 @@ import {
   Check,
   ChevronRight,
   Circle,
+  Command,
   Copy,
   Cpu,
   CreditCard,
@@ -29,6 +30,7 @@ import {
   Plug,
   Plus,
   Power,
+  Radio,
   RotateCw,
   Search,
   Send,
@@ -37,10 +39,17 @@ import {
   ShieldAlert,
   Sparkles,
   Terminal,
+  Timer,
   Trash2,
   Users,
 } from 'lucide-react';
 import { AreaChart, Donut, LineChart, Reveal } from '../../_ui';
+import {
+  ACTIVITY,
+  MONTH_LABELS,
+  SERIES,
+  SERVERS,
+} from '../../_data';
 import {
   AI_THREAD,
   ALERTS,
@@ -66,23 +75,23 @@ import {
 const PINK = '#ff1493';
 const PURPLE = '#a855f7';
 
-const NAV: { id: Module; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'projects', label: 'Projects', icon: Boxes },
-  { id: 'servers', label: 'Servers', icon: Server },
-  { id: 'resources', label: 'Resources', icon: FolderTree },
-  { id: 'watchdog', label: 'Watchdog & Crashes', icon: ShieldAlert },
-  { id: 'analytics', label: 'Analytics', icon: Activity },
-  { id: 'console', label: 'Console', icon: Terminal },
-  { id: 'logs', label: 'Logs', icon: Database },
-  { id: 'launcher', label: 'Launcher Builder', icon: Paintbrush },
-  { id: 'billing', label: 'Billing & Invoices', icon: CreditCard },
-  { id: 'api', label: 'API', icon: KeyRound },
-  { id: 'sdk', label: 'SDK', icon: Download },
-  { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'docs', label: 'Documentation', icon: BookOpen },
-  { id: 'ai', label: 'AI Assistant', icon: Sparkles },
-  { id: 'settings', label: 'Settings', icon: Settings },
+const NAV: { id: Module; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'servers', label: 'Servers' },
+  { id: 'resources', label: 'Resources' },
+  { id: 'watchdog', label: 'Watchdog' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'console', label: 'Console' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'launcher', label: 'Launcher Builder' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'api', label: 'API' },
+  { id: 'sdk', label: 'SDK' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'docs', label: 'Documentation' },
+  { id: 'ai', label: 'AI Assistant' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 type Module =
@@ -103,15 +112,6 @@ type Module =
   | 'ai'
   | 'settings';
 
-const STYLES = `
-.hyapp-card{background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);backdrop-filter:blur(18px) saturate(140%)}
-.hyapp-grad{background:linear-gradient(115deg,${PINK},${PURPLE})}
-.hyapp-gb{position:relative}
-.hyapp-gb::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;background:linear-gradient(130deg,rgba(255,20,147,.6),rgba(168,85,247,.5),transparent 70%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
-.hyapp-scroll::-webkit-scrollbar{width:8px;height:8px}
-.hyapp-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:8px}
-`;
-
 export default function HybridApp() {
   const [mod, setMod] = useState<Module>('dashboard');
   const [projectId, setProjectId] = useState(APP_PROJECTS[0].id);
@@ -121,120 +121,66 @@ export default function HybridApp() {
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [broadcastSent, setBroadcastSent] = useState(false);
 
+  const currentNav = NAV.find((n) => n.id === mod);
+
   return (
-    <div className="flex min-h-screen bg-[#0c0c12] font-sans text-[#e9eaee] antialiased">
-      <style dangerouslySetInnerHTML={{ __html: STYLES }} />
-
-      {/* ambient */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute left-[-6%] top-[-8%] h-[420px] w-[420px] rounded-full opacity-20 blur-[130px]" style={{ background: PINK }} />
-        <div className="absolute right-[-4%] top-[30%] h-[420px] w-[420px] rounded-full opacity-[0.16] blur-[140px]" style={{ background: PURPLE }} />
-      </div>
-
+    <div className="flex min-h-screen bg-[#08080a] font-sans text-[#e9eaee] antialiased">
       {/* ============ SIDEBAR ============ */}
-      <aside className="sticky top-0 hidden h-screen w-60 flex-none flex-col border-r border-white/[0.08] bg-[#0b0b10]/80 p-3 backdrop-blur-xl lg:flex">
-        <a href="/concepts/hybrid" className="flex items-center gap-2.5 px-2 py-2">
+      <aside className="sticky top-0 hidden h-screen w-56 flex-none flex-col border-r border-white/[0.07] bg-[#08080a] p-3 lg:flex">
+        <div className="flex items-center gap-2 px-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/branding/logo.jpg" alt="" className="h-7 w-7 rounded-lg" />
-          <span className="text-[14px] font-semibold tracking-tight">FloV:MP</span>
-          <span className="ml-auto rounded-md border border-white/10 px-1.5 py-0.5 font-mono text-[9px] text-white/40">app</span>
-        </a>
-
-        {/* project switcher */}
-        <div className="mt-2">
-          <div className="px-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-white/30">Проект</div>
-          <div className="hyapp-gb rounded-xl">
-            <div className="hyapp-card rounded-xl p-1">
-              {APP_PROJECTS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setProjectId(p.id)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] transition ${
-                    p.id === projectId ? 'bg-white/[0.06] text-white' : 'text-white/50 hover:text-white/80'
-                  }`}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ background: p.accent }} />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <img src="/branding/logo.jpg" alt="" className="h-5 w-5 rounded" />
+          <span className="text-[13px] font-semibold tracking-tight text-white">FloV:MP</span>
         </div>
 
-        <nav className="hyapp-scroll mt-3 flex-1 space-y-0.5 overflow-y-auto pr-1">
+        <nav className="mt-3 flex-1 space-y-0.5 overflow-y-auto">
           {NAV.map((n) => (
             <button
               key={n.id}
-              onClick={() => setMod(n.id)}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12.5px] transition ${
-                mod === n.id ? 'text-white' : 'text-white/45 hover:text-white/80'
+              onClick={() => setMod(n.id as Module)}
+              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                mod === n.id ? 'bg-white/[0.06] text-white font-medium' : 'text-white/45 hover:text-white/80'
               }`}
-              style={mod === n.id ? { background: `linear-gradient(120deg, ${PINK}22, ${PURPLE}22)`, border: '1px solid rgba(255,255,255,.1)' } : { border: '1px solid transparent' }}
             >
-              <n.icon className="h-4 w-4" style={{ color: mod === n.id ? PINK : undefined }} />
+              <span className="h-1 w-1 rounded-full" style={{ background: mod === n.id ? PINK : 'transparent' }} />
               {n.label}
             </button>
           ))}
         </nav>
-
-        <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-2">
-          <div className="grid h-7 w-7 place-items-center rounded-full text-[11px] font-bold text-white" style={{ background: `linear-gradient(135deg,${PINK},${PURPLE})` }}>
-            MD
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-medium">Mikhail D.</div>
-            <div className="truncate text-[10px] text-white/40">Owner · Lifetime</div>
-          </div>
-        </div>
       </aside>
 
       {/* ============ MAIN ============ */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* top bar */}
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-white/[0.08] bg-[#0c0c12]/80 px-4 backdrop-blur-xl sm:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-white/[0.07] bg-[#08080a] px-5">
           <div className="flex items-center gap-2 text-[13px] text-white/50">
-            <span className="text-white/80">{project.name}</span>
-            <ChevronRight className="h-3.5 w-3.5" />
-            <span className="capitalize">{NAV.find((n) => n.id === mod)?.label}</span>
+            <span className="text-white/80 font-medium">Florida V</span>
+            <ChevronRight className="h-3.5 w-3.5 text-white/30" />
+            <span>{currentNav?.label}</span>
           </div>
 
-          <div className="ml-auto flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setBroadcastOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-pink-500/40 bg-pink-500/10 px-2.5 py-1.5 text-[12px] font-medium text-pink-400 transition hover:bg-pink-500/20"
+              className="flex items-center gap-1.5 rounded-lg border border-pink-500/30 bg-pink-500/10 px-2.5 py-1 text-[11.5px] font-medium text-pink-400 hover:bg-pink-500/20 transition"
             >
-              <Megaphone className="h-3.5 w-3.5" />
+              <Megaphone className="h-3 w-3" />
               <span>Объявление /o</span>
             </button>
-
-            <div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-white/40 md:flex">
-              <Search className="h-3.5 w-3.5" />
-              Поиск…
-              <span className="ml-4 rounded border border-white/10 px-1 font-mono text-[10px]">⌘K</span>
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2 py-1 text-[11px] text-white/35">
+              <Command className="h-3 w-3" /> K
             </div>
-
-            <button className="relative rounded-lg border border-white/10 bg-white/[0.03] p-2 text-white/60 hover:text-white">
-              <Bell className="h-4 w-4" />
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
-            </button>
-
-            <a
-              href="/concepts/hybrid"
-              className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[12px] font-medium text-white/70 hover:text-white sm:block"
-            >
-              ← Лендинг
-            </a>
           </div>
         </header>
 
-        {/* mobile module switch */}
-        <div className="hyapp-scroll flex gap-1 overflow-x-auto border-b border-white/[0.08] px-3 py-2 lg:hidden">
+        {/* mobile nav */}
+        <div className="flex gap-1 overflow-x-auto border-b border-white/[0.07] px-3 py-2 lg:hidden">
           {NAV.map((n) => (
             <button
               key={n.id}
-              onClick={() => setMod(n.id)}
-              className={`flex-none rounded-lg px-3 py-1.5 text-[11px] font-medium transition ${
-                mod === n.id ? 'hyapp-grad text-white' : 'bg-white/[0.04] text-white/50'
+              onClick={() => setMod(n.id as Module)}
+              className={`flex-none rounded-lg px-2.5 py-1 text-[11.5px] transition ${
+                mod === n.id ? 'bg-white/[0.08] text-white font-medium' : 'text-white/45'
               }`}
             >
               {n.label}
@@ -242,7 +188,7 @@ export default function HybridApp() {
           ))}
         </div>
 
-        <main className="hyapp-scroll flex-1 overflow-y-auto p-4 sm:p-6">
+        <main className="flex-1 overflow-y-auto p-5">
           <Reveal key={mod + projectId}>
             {mod === 'dashboard' && <DashboardMod project={project} />}
             {mod === 'projects' && <ProjectsMod project={project} onSelect={setProjectId} />}
@@ -321,21 +267,17 @@ export default function HybridApp() {
 /* ================================================================= *
  *  Shared bits
  * ================================================================= */
-function Card({ children, className = '', grad = false }: { children: React.ReactNode; className?: string; grad?: boolean }) {
-  return grad ? (
-    <div className={`hyapp-gb rounded-2xl ${className}`}>
-      <div className="hyapp-card h-full rounded-2xl">{children}</div>
-    </div>
-  ) : (
-    <div className={`hyapp-card rounded-2xl ${className}`}>{children}</div>
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string; grad?: boolean }) {
+  return (
+    <div className={`rounded-xl border border-white/[0.08] bg-white/[0.015] ${className}`}>{children}</div>
   );
 }
 
 function H({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
-    <div className="mb-5">
-      <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{children}</h1>
-      {sub && <p className="mt-1 text-[13px] text-white/45">{sub}</p>}
+    <div className="mb-4">
+      <h1 className="text-lg font-semibold tracking-tight text-white">{children}</h1>
+      {sub && <p className="mt-0.5 text-[12px] text-white/45">{sub}</p>}
     </div>
   );
 }
@@ -344,7 +286,7 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = { online: '#3fb984', deploying: '#d8a13a', offline: '#e5484d', active: '#3fb984', paused: '#d8a13a' };
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] capitalize"
+      className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] capitalize font-medium"
       style={{ borderColor: `${map[status] || '#888'}44`, color: map[status] || '#aaa' }}
     >
       <Circle className="h-1.5 w-1.5 fill-current" />
@@ -379,97 +321,81 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 /* ================================================================= *
- *  Dashboard
+ *  Dashboard (1:1 with Concept Screenshot)
  * ================================================================= */
 function DashboardMod({ project }: { project: AppProject }) {
-  const kpis = [
-    { icon: Users, label: 'Игроков онлайн', value: project.online.toLocaleString('ru-RU'), sub: `пик ${project.peak.toLocaleString('ru-RU')}`, accent: PINK },
-    { icon: Cpu, label: 'CPU (avg)', value: '54%', sub: `${project.servers} сервера`, accent: PURPLE },
-    { icon: MemoryStick, label: 'RAM (avg)', value: '61%', sub: '128 / 210 GB', accent: PINK },
-    { icon: Gauge, label: 'Uptime', value: '99.98%', sub: '90 дней', accent: PURPLE },
-  ];
   return (
-    <>
-      <H sub={`Обзор проекта · ${project.servers} серверов · Lifetime license`}>Dashboard</H>
+    <div className="space-y-4">
+      {/* 4 Top KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((k) => (
-          <Card key={k.label} className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-white/50">{k.label}</span>
-              <k.icon className="h-4 w-4" style={{ color: k.accent }} />
-            </div>
-            <div className="mt-2 text-[1.7rem] font-bold tracking-tight">{k.value}</div>
-            <div className="text-[11px] text-white/35">{k.sub}</div>
-          </Card>
+        {[
+          { icon: Radio, label: 'Игроков онлайн', value: '9 340', sub: 'пик 12 480' },
+          { icon: Cpu, label: 'CPU (avg)', value: '54%', sub: '4 сервера' },
+          { icon: MemoryStick, label: 'RAM (avg)', value: '61%', sub: '128 / 210 GB' },
+          { icon: Timer, label: 'Uptime', value: '99.98%', sub: '90 дней' },
+        ].map((k) => (
+          <div key={k.label} className="rounded-xl border border-white/[0.08] bg-white/[0.015] p-4">
+            <k.icon className="h-4 w-4 text-white/35" />
+            <div className="mt-3 text-[1.5rem] font-semibold tracking-tight text-white">{k.value}</div>
+            <div className="text-[12px] text-white/45">{k.label}</div>
+            <div className="font-mono text-[10px] text-white/30">{k.sub}</div>
+          </div>
         ))}
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <Card className="p-4 text-white/70">
+      {/* Middle Row: Online Month Chart + Activity */}
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.015] p-4 text-white/70">
           <div className="mb-3 flex items-center justify-between text-[12px] text-white/50">
-            <span>Онлайн · CPU · RAM (24ч)</span>
-            <div className="flex gap-3 font-mono text-[10px]">
-              <span style={{ color: PINK }}>● online</span>
-              <span style={{ color: PURPLE }}>● cpu</span>
-              <span className="text-white/40">● ram</span>
-            </div>
+            <span>Онлайн за месяц</span>
+            <span className="font-mono text-[11px] tracking-widest text-white/30">{MONTH_LABELS.join(' ')}</span>
           </div>
-          <LineChart
-            series={[
-              { data: ANALYTICS_SERIES.onlineDay, color: PINK },
-              { data: ANALYTICS_SERIES.cpuDay, color: PURPLE },
-              { data: ANALYTICS_SERIES.ramDay, color: '#6b7280' },
-            ]}
-            height={190}
-          />
-        </Card>
-        <Card className="p-4">
-          <div className="mb-3 text-[12px] text-white/50">Алерты</div>
-          <div className="space-y-2.5">
-            {ALERTS.map((a) => (
-              <div key={a.title} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
-                <div className="flex items-center gap-2 text-[12.5px] font-medium">
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: a.level === 'error' ? '#e5484d' : a.level === 'warn' ? '#d8a13a' : '#3fb984' }}
-                  />
-                  {a.title}
-                  <span className="ml-auto font-mono text-[10px] text-white/30">{a.time}</span>
-                </div>
-                <div className="mt-1 text-[11.5px] text-white/45">{a.note}</div>
-              </div>
+          <AreaChart data={SERIES.onlineMonth} color={PINK} height={150} />
+        </div>
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.015] p-4">
+          <div className="mb-3 text-[12px] text-white/50">Последняя активность</div>
+          <ul className="space-y-2.5">
+            {ACTIVITY.map((a) => (
+              <li key={a.time} className="flex gap-2.5 text-[12px]">
+                <span className="font-mono text-white/30">{a.time}</span>
+                <span className="text-white/60">{a.text}</span>
+              </li>
             ))}
-          </div>
-        </Card>
+          </ul>
+        </div>
       </div>
 
-      <Card className="mt-4 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5 text-[12px] text-white/50">
-          <span>Серверы проекта</span>
-          <span className="font-mono text-[10px] text-white/30">{APP_SERVERS.length}</span>
+      {/* Bottom: Servers Table */}
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.015]">
+        <div className="border-b border-white/[0.07] px-4 py-2.5 text-[12px] font-medium text-white/50">
+          Серверы проекта
         </div>
         <table className="w-full text-left text-[12px]">
           <tbody className="divide-y divide-white/[0.05]">
-            {APP_SERVERS.map((s) => (
-              <tr key={s.id} className="text-white/60">
-                <td className="px-4 py-3 font-mono text-white/85">{s.name}</td>
-                <td className="px-4 py-3 capitalize text-white/35">{s.env}</td>
-                <td className="w-28 px-4 py-3">
-                  <div className="mb-1 flex justify-between text-[10px] text-white/40"><span>CPU</span><span>{s.cpu}%</span></div>
-                  <MiniBar v={s.cpu} color={PINK} />
+            {SERVERS.map((s) => (
+              <tr key={s.name} className="text-white/60 hover:bg-white/[0.02]">
+                <td className="px-4 py-2.5 font-mono font-medium text-white/80">{s.name}</td>
+                <td className="px-4 py-2.5 text-white/35">{s.env}</td>
+                <td className="px-4 py-2.5 tabular-nums text-white/75">{s.online} / {s.slots}</td>
+                <td className="px-4 py-2.5 tabular-nums text-white/60">CPU {s.cpu}%</td>
+                <td className="px-4 py-2.5 tabular-nums text-white/60">RAM {s.ram}%</td>
+                <td className="px-4 py-2.5">
+                  <span
+                    className="font-medium"
+                    style={{
+                      color:
+                        s.status === 'online' ? '#3fb984' : s.status === 'deploying' ? '#d8a13a' : '#e5484d',
+                    }}
+                  >
+                    {s.status}
+                  </span>
                 </td>
-                <td className="w-28 px-4 py-3">
-                  <div className="mb-1 flex justify-between text-[10px] text-white/40"><span>RAM</span><span>{s.ram}%</span></div>
-                  <MiniBar v={s.ram} color={PURPLE} />
-                </td>
-                <td className="px-4 py-3 tabular-nums">{s.online}/{s.slots}</td>
-                <td className="px-4 py-3"><StatusPill status={s.status} /></td>
               </tr>
             ))}
           </tbody>
         </table>
-      </Card>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -546,7 +472,7 @@ function ProjectsMod({ project, onSelect }: { project: AppProject; onSelect: (id
             </label>
           </div>
           <div className="mt-4 flex gap-2">
-            <button className="hyapp-grad rounded-lg px-4 py-2 text-[12px] font-semibold text-white">Сохранить</button>
+            <button className="rounded-lg bg-white px-4 py-2 text-[12px] font-semibold text-black hover:bg-white/90 transition">Сохранить</button>
             <button className="rounded-lg border border-white/10 px-4 py-2 text-[12px] text-white/60 hover:text-white">Отмена</button>
           </div>
         </Card>
@@ -623,7 +549,7 @@ function ServersMod() {
     <>
       <div className="mb-5 flex items-end justify-between">
         <H sub="Florida V · production / development / test">Servers</H>
-        <button className="hyapp-grad inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-[12px] font-semibold text-white">
+        <button className="inline-flex items-center gap-2 rounded-lg bg-white px-3.5 py-1.5 text-[12px] font-semibold text-black hover:bg-white/90 transition">
           <Plus className="h-4 w-4" /> Добавить сервер
         </button>
       </div>
@@ -703,7 +629,7 @@ function ResourcesMod() {
           <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 font-mono text-[11px] text-white/60">
             ОЗУ ресурсов: <b className="text-white">{totalMem} MB</b>
           </span>
-          <button className="hyapp-grad inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold text-white">
+          <button className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-1.5 text-[12px] font-semibold text-black hover:bg-white/90 transition">
             <Plus className="h-4 w-4" /> Добавить ресурс
           </button>
         </div>
@@ -716,7 +642,7 @@ function ResourcesMod() {
             key={t}
             onClick={() => setFilter(t)}
             className={`rounded-lg px-3 py-1.5 text-[12px] font-medium capitalize transition ${
-              filter === t ? 'hyapp-grad text-white' : 'border border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80'
+              filter === t ? 'bg-white/[0.08] text-white' : 'border border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80'
             }`}
           >
             {t === 'all' ? 'Все ресурсы' : t}
@@ -974,7 +900,7 @@ function ConsoleMod() {
           <button
             key={s.id}
             onClick={() => setSrv(s.id)}
-            className={`rounded-lg px-3 py-1.5 font-mono text-[11px] transition ${srv === s.id ? 'hyapp-grad text-white' : 'border border-white/10 bg-white/[0.03] text-white/50'}`}
+            className={`rounded-lg px-3 py-1.5 font-mono text-[11px] transition ${srv === s.id ? 'bg-white/[0.08] text-white font-medium' : 'border border-white/10 bg-white/[0.03] text-white/50'}`}
           >
             {s.name}
           </button>
@@ -985,7 +911,7 @@ function ConsoleMod() {
           <Terminal className="h-3.5 w-3.5" /> {APP_SERVERS.find((s) => s.id === srv)?.name} · live
           <span className="ml-auto flex items-center gap-1 text-[#3fb984]"><span className="h-1.5 w-1.5 rounded-full bg-[#3fb984]" /> connected</span>
         </div>
-        <div className="hyapp-scroll max-h-[340px] space-y-1 overflow-y-auto bg-black/40 p-4 font-mono text-[11.5px] leading-relaxed">
+        <div className="max-h-[340px] space-y-1 overflow-y-auto bg-black/40 p-4 font-mono text-[11.5px] leading-relaxed">
           {lines.map((l, i) => (
             <div key={i} className={l.includes('[WARN') ? 'text-[#d8a13a]' : l.includes('[ OK') ? 'text-[#3fb984]' : 'text-white/60'}>
               {l}
@@ -998,7 +924,7 @@ function ConsoleMod() {
             placeholder="Команда (напр. status, players, restart)…"
             className="flex-1 bg-transparent font-mono text-[12px] text-white outline-none placeholder:text-white/25"
           />
-          <button className="hyapp-grad rounded-md px-3 py-1 text-[11px] font-semibold text-white">Send</button>
+          <button className="rounded-md bg-white px-3 py-1 text-[11px] font-semibold text-black hover:bg-white/90">Send</button>
         </div>
       </Card>
     </>
@@ -1032,7 +958,7 @@ function LogsMod() {
           <button
             key={l}
             onClick={() => setLvl(l)}
-            className={`rounded-lg px-2.5 py-2 font-mono text-[10px] font-bold transition ${lvl === l ? 'hyapp-grad text-white' : 'border border-white/10 bg-white/[0.03] text-white/45'}`}
+            className={`rounded-lg px-2.5 py-2 font-mono text-[10px] font-bold transition ${lvl === l ? 'bg-white/[0.08] text-white' : 'border border-white/10 bg-white/[0.03] text-white/45'}`}
           >
             {l}
           </button>
@@ -1092,7 +1018,7 @@ function LauncherMod({ project }: { project: AppProject }) {
         <button
           onClick={startBuild}
           disabled={isBuilding}
-          className="hyapp-grad inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-semibold text-white shadow-lg transition hover:brightness-110 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-[12.5px] font-semibold text-black shadow transition hover:bg-white/90 disabled:opacity-50"
         >
           {isBuilding ? (
             <>
@@ -1388,9 +1314,9 @@ function BillingMod() {
             </div>
 
             <button
-              className={`mt-6 w-full rounded-xl py-2.5 text-[12px] font-semibold transition ${
+              className={`mt-6 w-full rounded-lg py-2.5 text-[12px] font-semibold transition ${
                 plan.popular
-                  ? 'hyapp-grad text-white shadow-lg hover:brightness-110'
+                  ? 'bg-[#ff1493] text-black shadow hover:brightness-110'
                   : 'border border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]'
               }`}
             >
@@ -1485,7 +1411,7 @@ function ApiMod() {
 
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-[13px] font-semibold">API-ключи</h3>
-        <button className="hyapp-grad inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-semibold text-white">
+        <button className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11.5px] font-semibold text-black hover:bg-white/90 transition">
           <Plus className="h-3.5 w-3.5" /> Создать ключ
         </button>
       </div>
@@ -1733,7 +1659,7 @@ function AiMod() {
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
             <input placeholder="Спросить ассистента…" className="flex-1 bg-transparent text-[12.5px] text-white outline-none placeholder:text-white/25" />
-            <button className="hyapp-grad grid h-7 w-7 place-items-center rounded-lg text-white">
+            <button className="grid h-7 w-7 place-items-center rounded-lg bg-white text-black hover:bg-white/90 transition">
               <Send className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1761,21 +1687,21 @@ function SettingsMod({ project }: { project: AppProject }) {
               </label>
             ))}
           </div>
-          <button className="hyapp-grad mt-4 rounded-lg px-4 py-2 text-[12px] font-semibold text-white">Сохранить</button>
+          <button className="mt-4 rounded-lg bg-white px-4 py-2 text-[12px] font-semibold text-black hover:bg-white/90 transition">Сохранить</button>
         </Card>
 
         <div className="space-y-4">
-          <Card grad className="p-5">
+          <Card className="p-5">
             <div className="flex items-center gap-2 text-[13px] font-semibold">
               <LifeBuoy className="h-4 w-4" style={{ color: PINK }} /> Лицензия
             </div>
             <div className="mt-3 flex items-end gap-2">
-              <span className="bg-gradient-to-r from-[#ff1493] to-[#a855f7] bg-clip-text text-[2rem] font-bold leading-none text-transparent">Lifetime</span>
+              <span className="text-[2rem] font-bold leading-none text-white">Lifetime</span>
               <span className="pb-1 text-[12px] text-white/40">· проект «{project.name}»</span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11.5px] text-white/55">
               {['Мультиплеер + ядро', 'Dashboard', 'SDK · API', 'Кастомный лаунчер', 'Все обновления', 'Приоритетная поддержка'].map((x) => (
-                <div key={x} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5" style={{ color: PURPLE }} /> {x}</div>
+                <div key={x} className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-pink-400" /> {x}</div>
               ))}
             </div>
           </Card>
