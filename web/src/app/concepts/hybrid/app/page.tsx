@@ -12,15 +12,19 @@ import {
   Circle,
   Copy,
   Cpu,
+  CreditCard,
   Database,
   Download,
+  FolderTree,
   Gauge,
   Globe,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
   Link2,
+  Megaphone,
   MemoryStick,
+  Paintbrush,
   Play,
   Plug,
   Plus,
@@ -30,6 +34,7 @@ import {
   Send,
   Server,
   Settings,
+  ShieldAlert,
   Sparkles,
   Terminal,
   Trash2,
@@ -41,7 +46,10 @@ import {
   ALERTS,
   ANALYTICS_SERIES,
   API_KEYS,
+  APP_CRASHES,
+  APP_INVOICES,
   APP_PROJECTS,
+  APP_RESOURCES,
   APP_SERVERS,
   DAY_LABELS,
   DOCS_TREE,
@@ -50,7 +58,9 @@ import {
   SDK_DOWNLOADS,
   SNIPPETS,
   WEBHOOKS,
+  type AppCrashIncident,
   type AppProject,
+  type AppResource,
 } from '../../_appdata';
 
 const PINK = '#ff1493';
@@ -60,9 +70,13 @@ const NAV: { id: Module; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'projects', label: 'Projects', icon: Boxes },
   { id: 'servers', label: 'Servers', icon: Server },
+  { id: 'resources', label: 'Resources', icon: FolderTree },
+  { id: 'watchdog', label: 'Watchdog & Crashes', icon: ShieldAlert },
   { id: 'analytics', label: 'Analytics', icon: Activity },
   { id: 'console', label: 'Console', icon: Terminal },
   { id: 'logs', label: 'Logs', icon: Database },
+  { id: 'launcher', label: 'Launcher Builder', icon: Paintbrush },
+  { id: 'billing', label: 'Billing & Invoices', icon: CreditCard },
   { id: 'api', label: 'API', icon: KeyRound },
   { id: 'sdk', label: 'SDK', icon: Download },
   { id: 'integrations', label: 'Integrations', icon: Plug },
@@ -75,9 +89,13 @@ type Module =
   | 'dashboard'
   | 'projects'
   | 'servers'
+  | 'resources'
+  | 'watchdog'
   | 'analytics'
   | 'console'
   | 'logs'
+  | 'launcher'
+  | 'billing'
   | 'api'
   | 'sdk'
   | 'integrations'
@@ -98,6 +116,10 @@ export default function HybridApp() {
   const [mod, setMod] = useState<Module>('dashboard');
   const [projectId, setProjectId] = useState(APP_PROJECTS[0].id);
   const project = useMemo(() => APP_PROJECTS.find((p) => p.id === projectId)!, [projectId]);
+
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [broadcastSent, setBroadcastSent] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-[#0c0c12] font-sans text-[#e9eaee] antialiased">
@@ -175,21 +197,34 @@ export default function HybridApp() {
             <ChevronRight className="h-3.5 w-3.5" />
             <span className="capitalize">{NAV.find((n) => n.id === mod)?.label}</span>
           </div>
-          <div className="ml-auto hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-white/40 md:flex">
-            <Search className="h-3.5 w-3.5" />
-            Поиск…
-            <span className="ml-6 rounded border border-white/10 px-1 font-mono text-[10px]">⌘K</span>
+
+          <div className="ml-auto flex items-center gap-2.5">
+            <button
+              onClick={() => setBroadcastOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-pink-500/40 bg-pink-500/10 px-2.5 py-1.5 text-[12px] font-medium text-pink-400 transition hover:bg-pink-500/20"
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+              <span>Объявление /o</span>
+            </button>
+
+            <div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-white/40 md:flex">
+              <Search className="h-3.5 w-3.5" />
+              Поиск…
+              <span className="ml-4 rounded border border-white/10 px-1 font-mono text-[10px]">⌘K</span>
+            </div>
+
+            <button className="relative rounded-lg border border-white/10 bg-white/[0.03] p-2 text-white/60 hover:text-white">
+              <Bell className="h-4 w-4" />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
+            </button>
+
+            <a
+              href="/concepts/hybrid"
+              className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[12px] font-medium text-white/70 hover:text-white sm:block"
+            >
+              ← Лендинг
+            </a>
           </div>
-          <button className="relative rounded-lg border border-white/10 bg-white/[0.03] p-2 text-white/60 hover:text-white">
-            <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
-          </button>
-          <a
-            href="/concepts/hybrid"
-            className="hidden rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[12px] font-medium text-white/70 hover:text-white sm:block"
-          >
-            ← Лендинг
-          </a>
         </header>
 
         {/* mobile module switch */}
@@ -212,9 +247,13 @@ export default function HybridApp() {
             {mod === 'dashboard' && <DashboardMod project={project} />}
             {mod === 'projects' && <ProjectsMod project={project} onSelect={setProjectId} />}
             {mod === 'servers' && <ServersMod />}
+            {mod === 'resources' && <ResourcesMod />}
+            {mod === 'watchdog' && <WatchdogMod />}
             {mod === 'analytics' && <AnalyticsMod />}
             {mod === 'console' && <ConsoleMod />}
             {mod === 'logs' && <LogsMod />}
+            {mod === 'launcher' && <LauncherMod project={project} />}
+            {mod === 'billing' && <BillingMod />}
             {mod === 'api' && <ApiMod />}
             {mod === 'sdk' && <SdkMod />}
             {mod === 'integrations' && <IntegrationsMod />}
@@ -225,6 +264,56 @@ export default function HybridApp() {
           <div className="h-10" />
         </main>
       </div>
+
+      {/* Broadcast Modal */}
+      {broadcastOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <div className="hyapp-card w-full max-w-md rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-4 w-4" style={{ color: PINK }} />
+                <h3 className="text-[14px] font-semibold text-white">Глобальное объявление (/o)</h3>
+              </div>
+              <button onClick={() => setBroadcastOpen(false)} className="text-white/40 hover:text-white">✕</button>
+            </div>
+            <p className="mt-1 text-[12px] text-white/50">
+              Сообщение будет отправлено всем онлайн-игрокам на серверах проекта через RemoteServerAgent.
+            </p>
+            <textarea
+              rows={3}
+              value={broadcastMsg}
+              onChange={(e) => setBroadcastMsg(e.target.value)}
+              placeholder="Введите текст объявления... (например: Технические работы через 15 минут)"
+              className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[12.5px] text-white outline-none focus:border-pink-500/50"
+            />
+            <div className="mt-4 flex items-center justify-between">
+              <span className="font-mono text-[11px] text-white/40">{broadcastMsg.length}/256 симв.</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBroadcastOpen(false)}
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-[12px] text-white/60 hover:text-white"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => {
+                    if (!broadcastMsg.trim()) return;
+                    setBroadcastSent(true);
+                    setTimeout(() => {
+                      setBroadcastSent(false);
+                      setBroadcastOpen(false);
+                      setBroadcastMsg('');
+                    }, 1200);
+                  }}
+                  className="hyapp-grad rounded-lg px-4 py-1.5 text-[12px] font-semibold text-white"
+                >
+                  {broadcastSent ? '✓ Отправлено!' : 'Отправить в /o'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,6 +569,39 @@ function ProjectsMod({ project, onSelect }: { project: AppProject; onSelect: (id
               ))}
             </div>
           </Card>
+
+          {/* FloV:ID & HWID Policy */}
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[13px] font-semibold text-white">FloV:ID &amp; HWID Политика</h3>
+              <span className="rounded bg-pink-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-pink-400">Strict</span>
+            </div>
+            <p className="mt-1 text-[11.5px] text-white/45">Регулирование обходчиков банов и мультиаккаунтов на серверах проекта.</p>
+            <div className="mt-3 grid gap-2">
+              {[
+                ['Strict', 'Жёсткий бан по железу и мгновенный отказ обходчикам'],
+                ['Lenient', 'Мягкий режим: логирование без кика (дефицит онлайна)'],
+                ['Disabled', 'Отключить проверку железа'],
+              ].map(([mode, desc]) => (
+                <label key={mode} className="flex items-center gap-2.5 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5 cursor-pointer transition hover:bg-white/[0.04]">
+                  <input type="radio" name="hwid_policy" defaultChecked={mode === 'Strict'} className="accent-pink-500" />
+                  <div>
+                    <div className="text-[12px] font-semibold text-white">{mode}</div>
+                    <div className="text-[10.5px] text-white/45">{desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between border-t border-white/[0.07] pt-2.5 text-[12px]">
+              <span className="text-white/70">Разрешить VPN / Proxy</span>
+              <input type="checkbox" defaultChecked className="accent-pink-500 h-4 w-4 rounded" />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[12px]">
+              <span className="text-white/70">Лимит аккаунтов на 1 HWID</span>
+              <span className="font-mono font-bold text-pink-400">3 аккаунта</span>
+            </div>
+          </Card>
+
           <Card className="border-[#e5484d]/25 p-5">
             <h3 className="text-[13px] font-semibold text-[#e5484d]">Danger zone</h3>
             <p className="mt-1 text-[11.5px] text-white/45">Удаление проекта отвяжет все серверы и API-ключи. Действие необратимо.</p>
@@ -547,6 +669,222 @@ function ServersMod() {
           </Card>
         ))}
       </div>
+    </>
+  );
+}
+
+/* ================================================================= *
+ *  Resources (Dynamic Resource Manager)
+ * ================================================================= */
+function ResourcesMod() {
+  const [resources, setResources] = useState<AppResource[]>(APP_RESOURCES);
+  const [filter, setFilter] = useState<'all' | 'script' | 'map' | 'vehicle' | 'ui'>('all');
+
+  const filtered = useMemo(() => {
+    if (filter === 'all') return resources;
+    return resources.filter((r) => r.type === filter);
+  }, [resources, filter]);
+
+  const toggleStatus = (id: string, newStatus: 'running' | 'stopped') => {
+    setResources((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
+    );
+  };
+
+  const totalMem = resources.filter((r) => r.status === 'running').reduce((acc, r) => acc + r.memoryMb, 0);
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <H sub="Динамический менеджер ресурсов (C# DynamicResourceManager) · горячий старт/стоп без перезагрузки сервера">
+          Resources
+        </H>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 font-mono text-[11px] text-white/60">
+            ОЗУ ресурсов: <b className="text-white">{totalMem} MB</b>
+          </span>
+          <button className="hyapp-grad inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold text-white">
+            <Plus className="h-4 w-4" /> Добавить ресурс
+          </button>
+        </div>
+      </div>
+
+      {/* filter tabs */}
+      <div className="mb-4 flex gap-1.5 overflow-x-auto">
+        {(['all', 'script', 'map', 'vehicle', 'ui'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setFilter(t)}
+            className={`rounded-lg px-3 py-1.5 text-[12px] font-medium capitalize transition ${
+              filter === t ? 'hyapp-grad text-white' : 'border border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80'
+            }`}
+          >
+            {t === 'all' ? 'Все ресурсы' : t}
+          </button>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden">
+        <table className="w-full text-left text-[12.5px]">
+          <thead className="border-b border-white/[0.08] bg-white/[0.02] text-[11px] font-medium uppercase tracking-wider text-white/40">
+            <tr>
+              <th className="px-4 py-3">Имя ресурса</th>
+              <th className="px-4 py-3">Тип</th>
+              <th className="px-4 py-3">Статус</th>
+              <th className="px-4 py-3">Память</th>
+              <th className="px-4 py-3">Зависимости</th>
+              <th className="px-4 py-3 text-right">Действия</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.05]">
+            {filtered.map((r) => (
+              <tr key={r.id} className="text-white/70 hover:bg-white/[0.02]">
+                <td className="px-4 py-3 font-mono font-semibold text-white/90">
+                  {r.name}
+                  <span className="ml-2 font-mono text-[10px] text-white/35">v{r.version}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] uppercase text-white/60">
+                    {r.type}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <StatusPill status={r.status === 'running' ? 'online' : r.status === 'stopped' ? 'offline' : 'paused'} />
+                </td>
+                <td className="px-4 py-3 font-mono text-[11.5px] text-white/50">
+                  {r.status === 'running' ? `${r.memoryMb} MB` : '0 MB'}
+                </td>
+                <td className="px-4 py-3">
+                  {r.dependencies.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {r.dependencies.map((dep) => (
+                        <span key={dep} className="rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 font-mono text-[9px] text-purple-300">
+                          {dep}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-white/25">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="inline-flex gap-1.5">
+                    {r.status === 'running' ? (
+                      <>
+                        <button
+                          onClick={() => toggleStatus(r.id, 'stopped')}
+                          className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-red-400 transition hover:border-red-500/40 hover:bg-red-500/10"
+                        >
+                          Стоп
+                        </button>
+                        <button
+                          onClick={() => {
+                            toggleStatus(r.id, 'stopped');
+                            setTimeout(() => toggleStatus(r.id, 'running'), 500);
+                          }}
+                          className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/70 transition hover:border-white/20 hover:text-white"
+                        >
+                          Рестарт
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => toggleStatus(r.id, 'running')}
+                        className="rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-[#3fb984] transition hover:border-[#3fb984]/40 hover:bg-[#3fb984]/10"
+                      >
+                        Старт
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </>
+  );
+}
+
+/* ================================================================= *
+ *  Watchdog & Crashes (Freeze Supervisor)
+ * ================================================================= */
+function WatchdogMod() {
+  const [selectedIncident, setSelectedIncident] = useState<AppCrashIncident | null>(null);
+
+  return (
+    <>
+      <div className="mb-5">
+        <H sub="Автономный надзор за здоровьем сервера (ServerCrashWatchdog) · детекция фризов >15с и rate-limited авторестарт">
+          Watchdog &amp; Crashes
+        </H>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card grad className="p-4">
+          <div className="flex items-center gap-2 text-[12px] font-semibold text-white/80">
+            <ShieldAlert className="h-4 w-4" style={{ color: PINK }} /> Статус супервизора
+          </div>
+          <div className="mt-2 text-xl font-bold text-[#3fb984]">Активен (15s порог)</div>
+          <div className="mt-1 text-[11px] text-white/45">Лимит: макс. 5 авторестартов / час</div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-[12px] font-semibold text-white/80">Сбоев за 30 дней</div>
+          <div className="mt-2 text-xl font-bold text-white">2 инцидента</div>
+          <div className="mt-1 text-[11px] text-[#3fb984]">100% автовосстановление</div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-[12px] font-semibold text-white/80">SLA Доступности</div>
+          <div className="mt-2 text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
+            99.98% SLA
+          </div>
+          <div className="mt-1 text-[11px] text-white/45">Даунтайм: 41 секунда за месяц</div>
+        </Card>
+      </div>
+
+      <Card className="mt-5 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3 text-[12.5px] text-white/60">
+          <span>Журнал расследования аварий (portal_server_crashes)</span>
+          <span className="font-mono text-[10px] text-white/30">{APP_CRASHES.length} записи</span>
+        </div>
+
+        <div className="divide-y divide-white/[0.05]">
+          {APP_CRASHES.map((inc) => (
+            <div key={inc.id} className="p-4 transition hover:bg-white/[0.01]">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-mono text-[12px] font-bold text-pink-400">{inc.id}</span>
+                <span className="font-mono text-[12px] text-white/80">{inc.server}</span>
+                <span className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-300">
+                  {inc.type}
+                </span>
+                <span className="ml-auto font-mono text-[11px] text-white/35">{inc.time}</span>
+              </div>
+
+              <div className="mt-2 text-[12.5px] text-white/75">{inc.reason}</div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[#3fb984]">
+                  <Check className="h-3 w-3" /> Авторестарт выполнен успешно
+                </span>
+                <button
+                  onClick={() => setSelectedIncident(selectedIncident?.id === inc.id ? null : inc)}
+                  className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/70 hover:text-white"
+                >
+                  {selectedIncident?.id === inc.id ? 'Скрыть стек' : 'Стек вызова C#'}
+                </button>
+              </div>
+
+              {selectedIncident?.id === inc.id && (
+                <pre className="mt-3 overflow-x-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] text-pink-300/80">
+                  {inc.stackPreview}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
     </>
   );
 }
@@ -717,6 +1055,412 @@ function LogsMod() {
           </tbody>
         </table>
       </Card>
+    </>
+  );
+}
+
+/* ================================================================= *
+ *  Launcher Builder
+ * ================================================================= */
+function LauncherMod({ project }: { project: AppProject }) {
+  const [launcherName, setLauncherName] = useState(project.name);
+  const [accent, setAccent] = useState('#ff3d8a');
+  const [serverTarget, setServerTarget] = useState('florida-prod-01 (185.220.101.44:7788)');
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildProgress, setBuildProgress] = useState<number | null>(null);
+
+  const startBuild = () => {
+    setIsBuilding(true);
+    setBuildProgress(10);
+    setTimeout(() => setBuildProgress(45), 600);
+    setTimeout(() => setBuildProgress(85), 1400);
+    setTimeout(() => {
+      setBuildProgress(100);
+      setTimeout(() => {
+        setIsBuilding(false);
+        setBuildProgress(null);
+      }, 1000);
+    }, 2200);
+  };
+
+  const PRESET_COLORS = ['#ff3d8a', '#a855f7', '#00e5ff', '#3fb984', '#f59e0b', '#ef4444'];
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <H sub="Конструктор брендированного лаунчера · генератор Setup.exe с CDN-манифестом">Launcher Builder</H>
+        <button
+          onClick={startBuild}
+          disabled={isBuilding}
+          className="hyapp-grad inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[12.5px] font-semibold text-white shadow-lg transition hover:brightness-110 disabled:opacity-50"
+        >
+          {isBuilding ? (
+            <>
+              <RotateCw className="h-4 w-4 animate-spin" />
+              <span>Сборка инсталлера... {buildProgress}%</span>
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              <span>Скомпилировать Setup.exe</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Left: Customization Settings */}
+        <div className="space-y-4">
+          <Card className="p-5">
+            <h3 className="text-[13.5px] font-semibold text-white">Брендинг лаунчера</h3>
+            <p className="mt-1 text-[12px] text-white/45">
+              Настройте внешний вид клиента, логотип и акцентный цвет для игроков вашего проекта.
+            </p>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="mb-1 block font-mono text-[10.5px] uppercase tracking-wider text-white/40">
+                  Название в заголовке лаунчера
+                </label>
+                <input
+                  type="text"
+                  value={launcherName}
+                  onChange={(e) => setLauncherName(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-2 text-[13px] text-white outline-none focus:border-pink-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block font-mono text-[10.5px] uppercase tracking-wider text-white/40">
+                  Акцентный цвет интерфейса
+                </label>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {PRESET_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setAccent(c)}
+                      className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
+                        accent === c ? 'border-white scale-110 shadow-lg' : 'border-transparent'
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                  <input
+                    type="text"
+                    value={accent}
+                    onChange={(e) => setAccent(e.target.value)}
+                    className="w-24 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-center font-mono text-[12px] text-white outline-none focus:border-pink-500/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block font-mono text-[10.5px] uppercase tracking-wider text-white/40">
+                  Целевой мастер-сервер для подключения
+                </label>
+                <select
+                  value={serverTarget}
+                  onChange={(e) => setServerTarget(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[12.5px] text-white outline-none focus:border-pink-500/50"
+                >
+                  <option value="florida-prod-01 (185.220.101.44:7788)" className="bg-[#0b0c10]">
+                    florida-prod-01 (185.220.101.44:7788) · Production
+                  </option>
+                  <option value="florida-dev (185.220.101.44:7790)" className="bg-[#0b0c10]">
+                    florida-dev (185.220.101.44:7790) · Development
+                  </option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3 text-center">
+                  <div className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-white/[0.05] text-white/60">
+                    <Paintbrush className="h-4 w-4" />
+                  </div>
+                  <div className="mt-2 text-[11.5px] font-medium text-white">Логотип (PNG)</div>
+                  <div className="text-[10px] text-white/35">Рекомендовано 512×512</div>
+                  <button className="mt-2 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10.5px] text-white/60 hover:text-white">
+                    Загрузить
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-3 text-center">
+                  <div className="mx-auto grid h-8 w-8 place-items-center rounded-lg bg-white/[0.05] text-white/60">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="mt-2 text-[11.5px] font-medium text-white">Баннер фона (WebP)</div>
+                  <div className="text-[10px] text-white/35">1920×1080 без сжатия</div>
+                  <button className="mt-2 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10.5px] text-white/60 hover:text-white">
+                    Загрузить
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="text-[13px] font-semibold text-white">CDN и целостность клиента</h3>
+            <div className="mt-3 space-y-2.5 text-[12px]">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">FastDL CDN Manifest</span>
+                <span className="font-mono text-emerald-400">manifest.v1.json (2 184 файла)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">Проверка SHA-256 хэшей</span>
+                <span className="font-mono text-white/80">Включена перед стартом</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">Авто-подмена Alt:V Runtimes</span>
+                <span className="font-mono text-pink-400">FloV:MP Native Bridge</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Right: Live Interactive Launcher Preview */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[12px] font-medium text-white/50">Превью окна лаунчера</span>
+            <span className="font-mono text-[10px] text-white/35">1280 × 720 (Масштаб 65%)</span>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-white/15 bg-[#0a0a0f] shadow-2xl">
+            {/* Window titlebar */}
+            <div className="flex items-center justify-between border-b border-white/[0.08] bg-black/40 px-4 py-2.5 text-[11px] text-white/60">
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />
+                <span className="font-semibold text-white">{launcherName} Launcher</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="h-2 w-2 rounded-full bg-white/20" />
+                <span className="h-2 w-2 rounded-full bg-white/20" />
+                <span className="h-2 w-2 rounded-full bg-white/20" />
+              </div>
+            </div>
+
+            {/* Launcher Body Mock */}
+            <div className="relative p-6">
+              {/* Background Glow */}
+              <div
+                className="pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full opacity-20 blur-3xl"
+                style={{ backgroundColor: accent }}
+              />
+
+              <div className="relative z-10 flex flex-col justify-between" style={{ minHeight: '340px' }}>
+                <div>
+                  <div
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold text-white"
+                    style={{ backgroundColor: `${accent}33`, border: `1px solid ${accent}66` }}
+                  >
+                    ● СЕРВЕР ОНЛАЙН · 1 180 / 1 500 ИГРОКОВ
+                  </div>
+                  <h2 className="mt-3 text-2xl font-black tracking-tight text-white">{launcherName}</h2>
+                  <p className="mt-1 max-w-sm text-[12px] text-white/60">
+                    Добро пожаловать в обновлённый мультиплеер на движке FloV:MP. Стабильные 60 FPS, моментальный FastDL
+                    и надёжная защита.
+                  </p>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-white/10 bg-black/50 p-4 backdrop-blur-md">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-white/80">Проверка файлов игры...</span>
+                    <span className="font-mono text-[11px] text-white/50">100% (Готов к игре)</span>
+                  </div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full w-full rounded-full transition-all" style={{ backgroundColor: accent }} />
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] text-white/40">Сервер</div>
+                      <div className="font-mono text-[12px] font-medium text-white">{serverTarget.split(' ')[0]}</div>
+                    </div>
+                    <button
+                      className="rounded-xl px-6 py-2.5 font-mono text-[13px] font-bold text-white shadow-xl transition hover:brightness-110"
+                      style={{ backgroundColor: accent }}
+                    >
+                      ИГРАТЬ
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================================================================= *
+ *  Billing & Invoices
+ * ================================================================= */
+function BillingMod() {
+  const [period, setPeriod] = useState<'month' | 'halfYear' | 'year'>('month');
+
+  const discountMultiplier = period === 'year' ? 0.7 : period === 'halfYear' ? 0.85 : 1.0;
+
+  const PLANS = [
+    {
+      name: 'Starter',
+      slots: '128 слотов',
+      price: Math.round(4900 * discountMultiplier),
+      desc: 'Идеально для закрытых тестов и небольших RP серверов',
+      features: ['До 128 онлайн игроков', 'Быстрый FastDL CDN 100 Мбит/с', 'Авто-рестарт при зависаниях', 'Базовая аналитика'],
+    },
+    {
+      name: 'Pro',
+      popular: true,
+      slots: '500 слотов',
+      price: Math.round(11900 * discountMultiplier),
+      desc: 'Для активно растущих проектов со средним онлайном',
+      features: ['До 500 онлайн игроков', 'Выделенный FastDL CDN 1 Гбит/с', 'Конструктор фирменного лаунчера', 'FloV:ID Hardware защита', 'Приоритетный саппорт'],
+    },
+    {
+      name: 'Enterprise',
+      slots: '1 500+ слотов',
+      price: Math.round(24900 * discountMultiplier),
+      desc: 'Флагманские проекты масштаба Держава / Florida V',
+      features: ['Неограниченно слотов', 'Multi-Node кластер и репликация', 'Персональный менеджер 24/7', 'Выделенный AI-ассистент диагностики', 'SLA 99.98% гарантия'],
+    },
+  ];
+
+  return (
+    <>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <H sub="Управление тарифными планами, подписками и выгрузка счетов">Billing &amp; Invoices</H>
+        
+        {/* Period Selector */}
+        <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] p-1">
+          {[
+            ['month', '1 месяц'],
+            ['halfYear', '6 месяцев (-15%)'],
+            ['year', '1 год (-30%)'],
+          ].map(([p, label]) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p as any)}
+              className={`rounded-lg px-3 py-1.5 text-[11.5px] font-medium transition ${
+                period === p ? 'hyapp-grad text-white shadow' : 'text-white/50 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Plan Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {PLANS.map((plan) => (
+          <Card
+            key={plan.name}
+            className={`flex flex-col justify-between p-5 ${
+              plan.popular ? 'border-pink-500/50 shadow-[0_0_24px_rgba(255,20,147,0.15)]' : ''
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-bold text-white">{plan.name}</span>
+                {plan.popular && (
+                  <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[9.5px] font-bold text-pink-400">
+                    ПОПУЛЯРНЫЙ
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[11.5px] text-white/40">{plan.desc}</div>
+
+              <div className="mt-4 flex items-baseline gap-1">
+                <span className="text-2xl font-black text-white">{plan.price.toLocaleString('ru-RU')} ₽</span>
+                <span className="text-[11px] text-white/40">/ месяц</span>
+              </div>
+              <div className="mt-1 font-mono text-[11px] text-pink-400">{plan.slots}</div>
+
+              <div className="mt-4 space-y-2 border-t border-white/[0.07] pt-4">
+                {plan.features.map((f) => (
+                  <div key={f} className="flex items-center gap-2 text-[11.5px] text-white/70">
+                    <Check className="h-3.5 w-3.5 flex-none text-pink-400" />
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className={`mt-6 w-full rounded-xl py-2.5 text-[12px] font-semibold transition ${
+                plan.popular
+                  ? 'hyapp-grad text-white shadow-lg hover:brightness-110'
+                  : 'border border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]'
+              }`}
+            >
+              {plan.name === 'Enterprise' ? 'Текущий план' : 'Сменить тариф'}
+            </button>
+          </Card>
+        ))}
+      </div>
+
+      {/* Invoices History */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-[13.5px] font-semibold text-white">История платежей и счетов</h3>
+            <p className="text-[11.5px] text-white/40">Все счета формируются автоматически в MariaDB portal_invoices</p>
+          </div>
+          <button className="inline-flex items-center gap-1 text-[12px] text-white/50 hover:text-white">
+            <Download className="h-3.5 w-3.5" /> Скачать все (ZIP)
+          </button>
+        </div>
+
+        <Card className="overflow-hidden">
+          <table className="w-full text-left text-[12px]">
+            <thead>
+              <tr className="border-b border-white/[0.07] font-mono text-[10px] uppercase tracking-wider text-white/35">
+                <th className="px-4 py-3">Номер счёта</th>
+                <th className="px-4 py-3">Проект</th>
+                <th className="px-4 py-3">Тариф / Слоты</th>
+                <th className="px-4 py-3">Сумма</th>
+                <th className="px-4 py-3">Дата</th>
+                <th className="px-4 py-3">Статус</th>
+                <th className="px-4 py-3 text-right">Чек</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.05]">
+              {APP_INVOICES.map((inv) => (
+                <tr key={inv.id} className="text-white/70 hover:bg-white/[0.02]">
+                  <td className="px-4 py-3 font-mono font-medium text-white">{inv.id}</td>
+                  <td className="px-4 py-3">{inv.project}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-semibold text-white">{inv.plan}</span>
+                    <span className="ml-1 text-[10.5px] text-white/40">({inv.slots} сл.)</span>
+                  </td>
+                  <td className="px-4 py-3 font-mono font-medium text-white">
+                    {inv.amount.toLocaleString('ru-RU')} ₽
+                  </td>
+                  <td className="px-4 py-3 text-white/45">{inv.date}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${
+                        inv.status === 'paid'
+                          ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                          : 'border border-amber-500/30 bg-amber-500/10 text-amber-400'
+                      }`}
+                    >
+                      <Circle className="h-1.5 w-1.5 fill-current" />
+                      {inv.status === 'paid' ? 'Оплачен' : 'Ожидает'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[11px] text-white/50 hover:text-white">
+                      <Download className="h-3 w-3" /> PDF
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      </div>
     </>
   );
 }

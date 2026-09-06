@@ -86,12 +86,17 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
   - `CharacterAppearance`: генетика HeadBlend, 20 микро-черт лица, наложения (бороды/макияж), причёски, одежда и пропсы.
   - `FactionUniformService`: универсальный потокобезопасный реестр униформы в ядре без хардкода ведомств.
   - Служебная форма государственных ведомств Москвы вынесена в `FloVMP.Gamemode/Presets/DerzhavaUniforms.cs`: МВД (ППСП/офицеры), ФСБ (спецназ), ГКБ им. Боткина (халаты) и ВС РФ (Ратник).
+- **Система моментальных снимков и точечных откатов (Time-Machine Rollback Engine, `FloVMP.Core.Database`):**
+  - Модель `PlayerStateSnapshot`: снимок балансов (банк, наличные, грязь), инвентаря, позиции, дименшна, здоровья, брони и лицензий.
+  - `SnapshotManager`: потокобезопасный кольцевой буфер снимков (по умолчанию 30 на игрока) с авто-отсечением старых копий.
+  - Точечный откат персонажа без общего рестарта и без вайпа базы. Перед любым откатом автоматически создаётся контрольный снимок `PreRollbackBackup` для возможности отмены отката.
+  - Команда `/snapshot` (Уровень 6+ администрации).
 - **Схема базы данных (`sql/schema.sql`):**
   - Добавлены таблицы MariaDB: `factions`, `faction_members`, `player_documents`, `properties`.
 - **Тестовое покрытие:**
-  - **182 automated tests passing** (154 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
+  - **197 automated tests passing** (169 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
   - Тесты `FloVMP.Core.Tests` проверяют чистое ядро с независимыми тестовыми фикстурами без зависимости от гейммода или карты.
-  - Покрыты: `AssetStreamingManagerTests` (100% green), `ServerCrashWatchdogTests` (100% green), `DynamicResourceManagerTests` (100% green), `FlovIdPolicyServiceTests` (100% green).
+  - Покрыты: `AssetStreamingManagerTests` (100% green), `ServerCrashWatchdogTests` (100% green), `DynamicResourceManagerTests` (100% green), `FlovIdPolicyServiceTests` (100% green), `DimensionManagerTests` (100% green), `MultiTierBanServiceTests` (100% green), `SnapshotManagerTests` (100% green).
 
 ## Лаунчер и нативный мост
 

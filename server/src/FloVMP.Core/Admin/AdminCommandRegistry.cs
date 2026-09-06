@@ -64,6 +64,7 @@ public static class AdminCommandRegistry
         Register("takemoney", 6, "/takemoney <ID/ник> <сумма>", "Изъять наличные средства у игрока");
         Register("giveitem", 6, "/giveitem <ID/ник> <item_id> <кол-во>", "Выдать предмет в инвентарь");
         Register("setdim", 6, "/setdim <ID/ник> <dimension>", "Установить виртуальный мир (дименшн)");
+        Register("snapshot", 6, "/snapshot <take|list|restore> <ID/ник> [snapshotId]", "Снимки состояний (Time-Machine) и точечный откат персонажа");
 
         // ── Уровень 7: Главный Администратор (ГА) ─────────────────
         Register("makeadmin", 7, "/makeadmin <ID/ник> <уровень 0-6>", "Назначить администратора (до 6 ранга)");
