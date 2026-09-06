@@ -35,6 +35,7 @@ public class GamemodeResource : Resource
     private AntiCheatSystem? _antiCheat;
     private FloVMP.Core.Factions.FactionService? _factions;
     private FloVMP.Core.Documents.DocumentService? _documents;
+    private FloVMP.Core.Housing.HousingService? _housing;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
@@ -63,6 +64,7 @@ public class GamemodeResource : Resource
         _economy = new FloVMP.Core.Economy.EconomyService();
         _factions = new FloVMP.Core.Factions.FactionService(loadDefaultPresets: true);
         _documents = new FloVMP.Core.Documents.DocumentService();
+        _housing = new FloVMP.Core.Housing.HousingService(loadDefaultPresets: true);
 
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
@@ -73,7 +75,8 @@ public class GamemodeResource : Resource
             findAccountByName: name => _auth.FindByName(name),
             economy: _economy,
             factions: _factions,
-            documents: _documents);
+            documents: _documents,
+            housing: _housing);
         _chat.Attach();
 
         _console = new ConsoleCommands(
@@ -155,6 +158,7 @@ public class GamemodeResource : Resource
         _antiCheat = null;
         _factions = null;
         _documents = null;
+        _housing = null;
 
         Alt.Log("[FloV:MP] core: gamemode stopped");
     }

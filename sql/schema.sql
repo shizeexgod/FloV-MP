@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- FloV:MP / Держава Онлайн — База данных (MariaDB / MySQL)
 -- =============================================================================
 -- Проект: «Держава Онлайн»
@@ -164,4 +164,77 @@ CREATE TABLE IF NOT EXISTS `bank_transactions` (
   INDEX `idx_bank_sender` (`sender_character_id`),
   INDEX `idx_bank_receiver` (`receiver_character_id`),
   INDEX `idx_bank_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 8. Таблица организаций и фракций (Factions)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `factions` (
+  `id` INT UNSIGNED PRIMARY KEY,
+  `tag` VARCHAR(16) NOT NULL,
+  `name` VARCHAR(128) NOT NULL,
+  `type` TINYINT UNSIGNED NOT NULL,
+  `treasury_balance` BIGINT NOT NULL DEFAULT 0,
+  `leader_account_id` INT UNSIGNED DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_faction_type` (`type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 9. Члены фракций (Faction Members)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `faction_members` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `account_id` INT UNSIGNED NOT NULL,
+  `faction_id` INT UNSIGNED NOT NULL,
+  `rank_level` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `custom_tag` VARCHAR(32) DEFAULT NULL,
+  `joined_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_active_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_fmember_faction` FOREIGN KEY (`faction_id`) REFERENCES `factions` (`id`) ON DELETE CASCADE,
+  UNIQUE KEY `uq_fmember_account` (`account_id`),
+  INDEX `idx_fmember_faction` (`faction_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 10. Документы граждан (Player Documents)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `player_documents` (
+  `id` VARCHAR(64) PRIMARY KEY,
+  `account_id` INT UNSIGNED NOT NULL,
+  `doc_type` TINYINT UNSIGNED NOT NULL,
+  `doc_number` VARCHAR(64) NOT NULL,
+  `full_name` VARCHAR(128) NOT NULL,
+  `issued_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` DATETIME DEFAULT NULL,
+  `issued_by` VARCHAR(128) NOT NULL,
+  `is_revoked` TINYINT(1) NOT NULL DEFAULT 0,
+  `revocation_reason` VARCHAR(255) DEFAULT NULL,
+  `metadata_json` JSON DEFAULT NULL,
+  INDEX `idx_doc_account` (`account_id`),
+  INDEX `idx_doc_type` (`doc_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 11. Недвижимость и жильё (Properties & Housing)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `properties` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `owner_account_id` INT UNSIGNED DEFAULT NULL,
+  `address` VARCHAR(128) NOT NULL,
+  `property_type` VARCHAR(32) NOT NULL DEFAULT 'APARTMENT' COMMENT 'APARTMENT, HOUSE, MANSION, GARAGE',
+  `price` BIGINT NOT NULL,
+  `enter_x` FLOAT NOT NULL,
+  `enter_y` FLOAT NOT NULL,
+  `enter_z` FLOAT NOT NULL,
+  `interior_x` FLOAT NOT NULL,
+  `interior_y` FLOAT NOT NULL,
+  `interior_z` FLOAT NOT NULL,
+  `dimension` INT NOT NULL DEFAULT 0,
+  `is_locked` TINYINT(1) NOT NULL DEFAULT 1,
+  `safe_cash` BIGINT NOT NULL DEFAULT 0,
+  `wardrobe_json` JSON DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_prop_owner` (`owner_account_id`),
+  INDEX `idx_prop_type` (`property_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

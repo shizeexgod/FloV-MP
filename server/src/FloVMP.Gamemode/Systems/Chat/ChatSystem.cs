@@ -25,6 +25,7 @@ public sealed class ChatSystem
     private readonly FloVMP.Core.Economy.EconomyService? _economy;
     private readonly FactionService? _factions;
     private readonly DocumentService? _documents;
+    private readonly FloVMP.Core.Housing.HousingService? _housing;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
@@ -35,7 +36,8 @@ public sealed class ChatSystem
         Func<string, Account?>? findAccountByName = null,
         FloVMP.Core.Economy.EconomyService? economy = null,
         FactionService? factions = null,
-        DocumentService? documents = null)
+        DocumentService? documents = null,
+        FloVMP.Core.Housing.HousingService? housing = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -43,6 +45,7 @@ public sealed class ChatSystem
         _economy = economy;
         _factions = factions;
         _documents = documents;
+        _housing = housing;
     }
 
     public void Attach()
@@ -578,6 +581,145 @@ public sealed class ChatSystem
                     else
                     {
                         SendSystem(player, arrErr);
+                    }
+                }
+                return;
+
+            case "buyhouse":
+            case "buyproperty":
+                if (_housing != null)
+                {
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    var nearbyProp = _housing.GetNearbyProperty(pPos, radius: 4.0f);
+                    if (nearbyProp == null)
+                    {
+                        SendSystem(player, "Вы должны находиться у входа в объект недвижимости.");
+                        return;
+                    }
+
+                    if (_housing.TryBuy(acc, nearbyProp.Id, out var buyErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Поздравляем с покупкой недвижимости! Адрес: {nearbyProp.Address}");
+                        SendSystem(player, $"С вашего банковского счёта списано: {nearbyProp.Price:N0} руб. Баланс: {acc.Bank:N0} руб.");
+                    }
+                    else
+                    {
+                        SendSystem(player, buyErr);
+                    }
+                }
+                return;
+
+            case "sellhouse":
+            case "sellproperty":
+                if (_housing != null)
+                {
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    var nearbyProp = _housing.GetNearbyProperty(pPos, radius: 4.0f);
+                    if (nearbyProp == null)
+                    {
+                        SendSystem(player, "Вы должны находиться у своего объекта недвижимости.");
+                        return;
+                    }
+
+                    if (_housing.TrySell(acc, nearbyProp.Id, out var refund, out var sellErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Вы продали недвижимость по адресу: {nearbyProp.Address}");
+                        SendSystem(player, $"Государственная выплата (75% + сейф): +{refund:N0} руб. Зачислено на банковский счёт.");
+                    }
+                    else
+                    {
+                        SendSystem(player, sellErr);
+                    }
+                }
+                return;
+
+            case "enter":
+                if (_housing != null)
+                {
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    var nearbyProp = _housing.GetAllProperties().FirstOrDefault(p => p.EntrancePosition.DistanceTo(pPos) <= 3.0f);
+                    if (nearbyProp == null)
+                    {
+                        SendSystem(player, "Рядом с вами нет входа в дом или квартиру.");
+                        return;
+                    }
+
+                    if (nearbyProp.IsLocked && !nearbyProp.HasAccess(acc.Id))
+                    {
+                        SendSystem(player, "Дверь заперта на замок.");
+                        return;
+                    }
+
+                    player.Dimension = nearbyProp.Dimension;
+                    player.Position = new Position(nearbyProp.InteriorPosition.X, nearbyProp.InteriorPosition.Y, nearbyProp.InteriorPosition.Z);
+                    SendSystem(player, $"Вы вошли в помещение: {nearbyProp.Address}");
+                }
+                return;
+
+            case "exit":
+                if (_housing != null)
+                {
+                    var insideProp = _housing.GetAllProperties().FirstOrDefault(p => p.Dimension == player.Dimension);
+                    if (insideProp == null && player.Dimension != 0)
+                    {
+                        player.Dimension = 0;
+                        SendSystem(player, "Вы вышли на улицу.");
+                        return;
+                    }
+
+                    if (insideProp != null)
+                    {
+                        player.Dimension = 0;
+                        player.Position = new Position(insideProp.EntrancePosition.X, insideProp.EntrancePosition.Y, insideProp.EntrancePosition.Z);
+                        SendSystem(player, $"Вы вышли на улицу: {insideProp.Address}");
+                    }
+                    else
+                    {
+                        SendSystem(player, "Вы не находитесь внутри помещения.");
+                    }
+                }
+                return;
+
+            case "hlock":
+                if (_housing != null)
+                {
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    var prop = _housing.GetAllProperties().FirstOrDefault(p =>
+                        p.EntrancePosition.DistanceTo(pPos) <= 3.0f || (p.Dimension == player.Dimension && p.InteriorPosition.DistanceTo(pPos) <= 3.0f));
+
+                    if (prop == null)
+                    {
+                        SendSystem(player, "Вы должны находиться у двери дома или квартиры.");
+                        return;
+                    }
+
+                    if (_housing.TryToggleLock(acc.Id, prop.Id, out bool isLocked, out var lockErr))
+                    {
+                        SendSystem(player, isLocked ? "Вы заперли входную дверь на замок." : "Вы открыли входную дверь.");
+                    }
+                    else
+                    {
+                        SendSystem(player, lockErr);
+                    }
+                }
+                return;
+
+            case "house":
+                if (_housing != null)
+                {
+                    var owned = _housing.GetPropertiesByOwner(acc.Id);
+                    if (owned.Count == 0)
+                    {
+                        SendSystem(player, "У вас нет в собственности недвижимости. Найдите свободный дом на карте и введите /buyhouse.");
+                        return;
+                    }
+
+                    SendSystem(player, $"=== Ваша недвижимость ({owned.Count} объекта) ===");
+                    foreach (var h in owned)
+                    {
+                        SendSystem(player, $"[{h.Id}] {h.Address} ({h.Type}) — Замок: {(h.IsLocked ? "Закрыт" : "Открыт")} | Сейф: {h.SafeCash:N0} руб. | Подселено: {h.Roommates.Count}");
                     }
                 }
                 return;
