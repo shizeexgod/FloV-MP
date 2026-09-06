@@ -1,6 +1,8 @@
 /* Proxima Nova — шрифты предоставлены владельцем (C:\Users\User\Downloads\
-   Proxima Nova, с Copyright.txt), см. assets/fonts/. Mulish — запасной. */
-@import url('https://fonts.googleapis.com/css2?family=Mulish:wght@400;500;600;700;800;900&display=swap');
+   Proxima Nova, с Copyright.txt), см. assets/fonts/. Запасной — системный
+   (-apple-system / Segoe UI): раньше тут был @import Mulish с Google Fonts,
+   но это блокирующий сетевой запрос на старте (виден как «фриз» при плохой
+   сети / офлайне) — убран, локального Proxima Nova + системного хватает. */
 
 @font-face{
   font-family: ProximaNova;
@@ -40,7 +42,7 @@
   --accent-color-rgb: 253, 208, 21;
   --accent-ink:#1a1206;
 
-  --ui-font: ProximaNova, Mulish, -apple-system, 'Segoe UI', sans-serif;
+  --ui-font: ProximaNova, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   /* ── Радиусы: 12 большие карточки, 8 кнопки/инпуты ── */
   --r-lg: 12px;
@@ -244,10 +246,14 @@ body{
   background:#1c1c1c; border:1px solid var(--line); border-radius: var(--r-lg);
   box-shadow: 0 20px 50px -12px rgba(0,0,0,.9);
   padding:8px; display:flex; flex-direction:column; gap:8px; z-index:80; isolation:isolate;
-  animation: resIn .16s cubic-bezier(.16,1,.3,1);
+  transform-origin: left top;
+  transition: opacity .16s ease, transform .16s cubic-bezier(.16,1,.3,1), visibility 0s linear 0s;
 }
-.res-flyout.hidden{ display:none; }
-@keyframes resIn{ from{ opacity:0; transform: translateX(-6px); } to{ opacity:1; transform:none; } }
+.res-flyout.hidden{
+  opacity:0; visibility:hidden; pointer-events:none;
+  transform: translateX(-6px) scale(.97);
+  transition: opacity .14s ease, transform .14s ease, visibility 0s linear .14s;
+}
 .res-group{ display:flex; flex-direction:column; gap:1px; }
 .res-group-title{
   font-family: var(--ui-font); font-size:9px; letter-spacing:.1em;
@@ -283,8 +289,17 @@ body{
 
 /* ---------- контент ---------- */
 .content{ flex:1; min-width:0; position:relative; overflow:hidden; }
-.page{ position:absolute; inset:0; padding:24px; display:none; }
-.page.active{ display:flex; flex-direction:column; animation: pageFadeIn .22s cubic-bezier(.16,1,.3,1) forwards; }
+/* Страницы наложены друг на друга (position:absolute) — переключение через
+   opacity/visibility, а не display:none, чтобы анимировались И вход, И уход. */
+.page{
+  position:absolute; inset:0; padding:24px; display:flex; flex-direction:column;
+  opacity:0; visibility:hidden; transform: translateY(8px); pointer-events:none;
+  transition: opacity .2s ease, transform .22s cubic-bezier(.16,1,.3,1), visibility 0s linear .2s;
+}
+.page.active{
+  opacity:1; visibility:visible; transform:none; pointer-events:auto;
+  transition: opacity .22s ease, transform .22s cubic-bezier(.16,1,.3,1), visibility 0s;
+}
 
 /* ===== Играть — список серверов слева, новости справа (как у Majestic) ===== */
 #page-play{ padding:24px 28px; }
@@ -313,12 +328,18 @@ body{
   background: var(--accent-color); opacity:0; transition: opacity .2s ease;
 }
 .server-row.is-recommended::before{ opacity:1; }
-.srv-status{ width:9px; height:9px; border-radius:50%; background: var(--bad); flex:0 0 auto; }
-.srv-status.online{ background: var(--good); animation: statusHalo 2.4s ease-out infinite; }
+.srv-status{ width:9px; height:9px; border-radius:50%; background: var(--bad); flex:0 0 auto; position:relative; }
+.srv-status.online{ background: var(--good); }
+/* Пульс — через ::after с transform/opacity (композитится на GPU), а не
+   анимацией box-shadow (repaint каждый кадр). */
+.srv-status.online::after{
+  content:""; position:absolute; inset:0; border-radius:50%;
+  background: var(--good); animation: statusHalo 2.4s ease-out infinite;
+}
 @keyframes statusHalo{
-  0%{ box-shadow:0 0 0 0 rgba(63,185,80,.5); }
-  70%{ box-shadow:0 0 0 7px rgba(63,185,80,0); }
-  100%{ box-shadow:0 0 0 0 rgba(63,185,80,0); }
+  0%{ transform: scale(1); opacity:.5; }
+  70%{ transform: scale(2.6); opacity:0; }
+  100%{ transform: scale(2.6); opacity:0; }
 }
 .srv-icon{
   width:30px; height:30px; border-radius: var(--r-sm); flex:0 0 auto;
@@ -447,11 +468,11 @@ body{
    кабинете/новости (16px), поэтому и те два подровнял до тех же 8px). */
 .settings-overlay{
   position:fixed; inset:0; z-index:70; background: rgba(5,5,5,.55);
-  backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
+  backdrop-filter: blur(6px); display:flex; align-items:center; justify-content:center;
   padding:24px;
 }
-.settings-overlay{ transition: opacity .2s ease, visibility 0s linear .2s; }
-.settings-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.settings-overlay{ transition: opacity .2s ease, visibility 0s; will-change: opacity; }
+.settings-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .settings-box{
   width:920px; max-width:96%; height:640px; max-height:90vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; flex-direction:column;
@@ -474,7 +495,7 @@ body{
 }
 .settings-panels{ flex:1; min-width:0; min-height:0; position:relative; }
 .settings-tab{ display:none; height:100%; }
-.settings-tab.active{ display:block; }
+.settings-tab.active{ display:block; animation: cabTabIn .24s cubic-bezier(.16,1,.3,1); }
 
 /* Сетка вместо фикс.колонки — карточки перестраиваются под ширину/растяг окна */
 .settings-list{
@@ -498,7 +519,10 @@ body{
 select{
   background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
   padding:8px 10px; color: var(--text); font-size:12.5px; font-family:inherit; cursor:pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
+select:hover{ border-color: var(--accent-dim); }
+select:focus{ outline:none; border-color: var(--accent-dim); box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), .12); }
 /* Переключатель-пилюля (вместо квадратного чекбокса) */
 /* Размеры и поведение сверены с реальным Majestic (CDP: input чекбокс
    36x20, radius 10px = ровно половина высоты, transition:background-color
@@ -512,10 +536,11 @@ select{
 .switch .track::before{
   content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
   background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.4);
-  transition: transform .2s ease;
+  transition: transform .24s cubic-bezier(.34,1.56,.64,1), width .15s ease;
 }
 .switch input:checked + .track{ background: var(--accent-color); }
 .switch input:checked + .track::before{ transform: translateX(16px); }
+.switch input:active:not(:disabled) + .track::before{ width:19px; }
 
 /* Ползунок (range) — дорожка + бегунок в акцентном цвете */
 input[type="range"]{
@@ -544,15 +569,23 @@ input[type="range"]::-webkit-slider-thumb:hover{ transform: scale(1.15); }
 .compact .card .field-row{ padding:7px 0; }
 .compact .rail-news-list, .compact .play-news-list{ gap:8px; }
 
-/* Отключённые анимации */
+/* Отключённые анимации (тумблер в настройках + системный prefers-reduced) */
 .no-anim *, .no-anim *::before, .no-anim *::after{
-  animation-duration:.001s !important; transition-duration:.001s !important;
+  animation-duration:.001s !important; animation-delay:0s !important;
+  transition-duration:.001s !important; transition-delay:0s !important;
+}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:.001s !important; animation-delay:0s !important;
+    transition-duration:.001s !important; transition-delay:0s !important;
+  }
 }
 .link-row{
   display:flex; align-items:center; gap:8px; color: var(--text-dim); font-size:12.5px;
   cursor:pointer; padding:8px 0;
+  transition: color .16s ease, gap .16s ease;
 }
-.link-row:hover{ color: var(--accent-soft); }
+.link-row:hover{ color: var(--accent-soft); gap:11px; }
 .link-row .icon{ width:14px; height:14px; }
 .about-version{ font-size:12px; color: var(--text-faint); font-family: var(--ui-font); }
 .field-label{ font-size:11px; color: var(--text-dim); margin-bottom:6px; display:block; }
@@ -560,21 +593,30 @@ input[type="text"], input[type="number"], input[type="password"]{
   width:100%; background: var(--surface-2); border:1px solid var(--line); border-radius: var(--r-sm);
   padding:10px 12px; color: var(--text); font-size:13px; font-family:inherit;
 }
-input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus{
+input[type="text"], input[type="number"], input[type="password"], input[type="email"]{
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus, input[type="email"]:focus{
   outline:none; border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), .12);
 }
 .row{ display:flex; gap:10px; }
 .row > *{ flex:1; }
 .btn-secondary{
   background: var(--surface-2); border:1px solid var(--line); color: var(--text-dim);
   border-radius: var(--r-sm); padding:10px 14px; font-size:12px; cursor:pointer; white-space:nowrap;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease, transform .1s ease;
 }
-.btn-secondary:hover{ color: var(--text); border-color: var(--accent-dim); }
+.btn-secondary:hover{ color: var(--text); border-color: var(--accent-dim); background: var(--surface-3); }
+.btn-secondary:active{ transform: scale(.97); }
 .toggle-group{ display:flex; gap:8px; margin: 10px 0 4px; }
 .toggle-btn{
   flex:1; padding:10px; border-radius: var(--r-sm); border:1px solid var(--line); background: var(--surface-2);
   color: var(--text-dim); font-size:12.5px; cursor:pointer;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease, transform .1s ease;
 }
+.toggle-btn:hover{ border-color: var(--accent-dim); color: var(--text); }
+.toggle-btn:active{ transform: scale(.98); }
 .toggle-btn.on{ background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight:600; }
 .checkbox-row{ display:flex; align-items:center; gap:10px; font-size:13px; }
 .checkbox-row input{ width:16px; height:16px; accent-color: var(--accent); }
@@ -583,19 +625,20 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 /* ---------- оверлей авторизации ---------- */
 .auth-overlay{
   position:absolute; inset:0; z-index:50;
-  background: rgba(11,11,11,.72); backdrop-filter: blur(10px);
+  background: rgba(11,11,11,.72); backdrop-filter: blur(6px);
   display:flex; align-items:center; justify-content:center;
-  transition: opacity .18s ease, visibility 0s linear .18s;
+  transition: opacity .2s ease, visibility 0s;
+  will-change: opacity;
 }
-.auth-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.auth-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .auth-box{
   width:400px; padding:36px 32px 28px; position:relative;
   border-radius: var(--r-lg); border:1px solid var(--white-100);
   background: linear-gradient(180deg, rgba(var(--accent-color-rgb), .06) 0%, transparent 60%), var(--bg-primary-color);
   box-shadow: 0 30px 70px -18px rgba(0,0,0,.8);
-  animation: authIn .2s cubic-bezier(.16,1,.3,1);
+  transition: opacity .24s cubic-bezier(.16,1,.3,1), transform .24s cubic-bezier(.16,1,.3,1);
 }
-@keyframes authIn{ from{ opacity:0; transform: translateY(12px) scale(.98); } to{ opacity:1; transform:none; } }
+.auth-overlay.hidden .auth-box{ opacity:0; transform: translateY(12px) scale(.98); }
 .auth-mark{
   width:56px; height:56px; margin:0 auto 18px; display:block; object-fit:contain;
   filter: drop-shadow(0 6px 16px rgba(var(--accent-color-rgb), .4));
@@ -658,11 +701,11 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 /* ---------- личный кабинет (модалка: вкладки + контент, Majestic-style) --- */
 .cabinet-overlay{
   position:fixed; inset:0; z-index:70; background: rgba(5,5,5,.8);
-  backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
+  backdrop-filter: blur(6px); display:flex; align-items:center; justify-content:center;
   padding:24px;
 }
-.cabinet-overlay{ transition: opacity .2s ease, visibility 0s linear .2s; }
-.cabinet-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.cabinet-overlay{ transition: opacity .2s ease, visibility 0s; will-change: opacity; }
+.cabinet-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .cabinet-box{
   width:760px; max-width:94%; height:560px; max-height:88vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; overflow:hidden;
@@ -790,10 +833,10 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 /* --- вложенные окна безопасности --- */
 .cab-sub-overlay{
   position:absolute; inset:0; z-index:6; display:flex; align-items:center; justify-content:center;
-  background: rgba(5,5,5,.7); backdrop-filter: blur(4px); padding:24px;
-  transition: opacity .18s ease, visibility 0s linear .18s;
+  background: rgba(5,5,5,.78); padding:24px;
+  transition: opacity .2s ease, visibility 0s;
 }
-.cab-sub-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.cab-sub-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .cab-sub-box{
   width:360px; max-width:100%; background: var(--bg-primary-color);
   border:1px solid var(--white-100); border-radius: var(--r-lg); padding:24px;
@@ -827,17 +870,18 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 /* ---------- модальное окно новости (Majestic-style) ---------- */
 .news-modal-overlay{
   position:absolute; inset:0; z-index:60; background: rgba(5,5,5,.8);
-  backdrop-filter: blur(8px); display:flex; align-items:center; justify-content:center;
+  backdrop-filter: blur(6px); display:flex; align-items:center; justify-content:center;
   padding:24px;
 }
-.news-modal-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
-.news-modal-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.news-modal-overlay{ transition: opacity .2s ease, visibility 0s; will-change: opacity; }
+.news-modal-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .news-modal-box{
   width:640px; max-width:92%; max-height:85vh; background: var(--surface);
   border:1px solid var(--line); border-radius: var(--r-lg); display:flex; flex-direction:column;
   overflow:hidden; box-shadow: 0 24px 60px -10px rgba(0,0,0,.9);
-  animation: modalScaleIn .24s cubic-bezier(.16,1,.3,1) forwards;
+  transition: opacity .24s cubic-bezier(.16,1,.3,1), transform .24s cubic-bezier(.16,1,.3,1);
 }
+.news-modal-overlay.hidden .news-modal-box{ opacity:0; transform: translateY(12px) scale(.97); }
 .news-modal-banner{
   height:110px; position:relative; padding:18px 24px; display:flex; align-items:flex-start;
   justify-content:space-between;
@@ -917,26 +961,12 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 .news-modal-text ul{ margin:0 0 16px 20px; padding:0; }
 .news-modal-text li{ margin-bottom:6px; }
 
-/* ---------- анимации переходов и окон ---------- */
-@keyframes pageFadeIn{
-  from{ opacity:0; transform:translateY(8px); }
-  to{ opacity:1; transform:translateY(0); }
-}
-@keyframes modalFadeIn{
-  from{ opacity:0; }
-  to{ opacity:1; }
-}
-@keyframes modalScaleIn{
-  from{ opacity:0; transform:scale(.95); }
-  to{ opacity:1; transform:scale(1); }
-}
-
 /* ─── Модалка запуска / загрузки файлов ─── */
 .launch-overlay{ position:fixed; inset:0; z-index:1000; display:grid; place-items:center; }
-.launch-overlay{ transition: opacity .18s ease, visibility 0s linear .18s; }
-.launch-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+.launch-overlay{ transition: opacity .2s ease, visibility 0s; will-change: opacity; }
+.launch-overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; transition: opacity .2s ease, visibility 0s linear .2s; }
 .launch-backdrop{
-  position:absolute; inset:0; background: rgba(11,11,11,.55); backdrop-filter: blur(8px);
+  position:absolute; inset:0; background: rgba(11,11,11,.6); backdrop-filter: blur(6px);
 }
 .launch-card{
   position:relative; width:360px; padding:28px; border-radius: var(--r-lg);
@@ -944,13 +974,13 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   background: linear-gradient(180deg, rgba(var(--accent-color-rgb), .1) 0%, transparent 55%), var(--bg-primary-color);
   display:flex; flex-direction:column; align-items:center; gap:16px;
   box-shadow: 0 30px 70px -14px rgba(0,0,0,.85);
-  animation: launchIn .2s cubic-bezier(.16,1,.3,1);
+  transition: opacity .24s cubic-bezier(.16,1,.3,1), transform .24s cubic-bezier(.16,1,.3,1);
 }
+.launch-overlay.hidden .launch-card{ opacity:0; transform: translateY(12px) scale(.97); }
 .launch-card::before{
   content:""; position:absolute; top:0; left:0; right:0; height:2px;
   background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
 }
-@keyframes launchIn{ from{ opacity:0; transform: translateY(12px) scale(.97); } to{ opacity:1; transform:none; } }
 .launch-srv-icon{
   width:64px; height:64px; border-radius: var(--r-md); border:1px solid var(--white-100);
   background: var(--surface-color); display:flex; align-items:center; justify-content:center;

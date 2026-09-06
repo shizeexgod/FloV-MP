@@ -39,8 +39,15 @@ const OUT = process.argv[2] || '.';
   win.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
   win.on('pageerror', (e) => errors.push(String(e)));
 
-  // 0. Модалка входа в лаунчере — необязательная, закрываем «Войти позже»,
-  //    чтобы она не перехватывала клики в остальных шагах.
+  // 0. Стартуем гостем: сбрасываем аккаунт (в settings.json мог остаться от
+  //    прошлого прогона) — сценарий проверяет путь «гость → вход».
+  await win.evaluate(async () => {
+    settings.account = null;
+    applyAccountUI();
+    await window.floridaV.saveSettings(settings);
+  });
+  await win.waitForTimeout(200);
+  // Модалка входа больше не всплывает сама — но на всякий случай закрываем.
   const authOv = win.locator('#auth-overlay:not(.hidden)');
   if (await authOv.count()) {
     await win.click('#auth-skip');
@@ -145,9 +152,25 @@ const OUT = process.argv[2] || '.';
     if (goldSwatch) await goldSwatch.click();
   }
 
-  // 6b. Закрыть настройки — под ними должна остаться страница как была (без блюра)
+  // 6b. Закрыть настройки — под ними должна остаться страница как была (без блюра).
+  //     Проверяем именно ПЛАВНОЕ закрытие: сразу после клика окно ещё видно
+  //     (идёт анимация), после паузы — полностью скрыто (opacity:0, не reflow).
   await win.click('#settings-close');
-  await win.waitForTimeout(300);
+  const midClose = await win.evaluate(() => {
+    const o = document.getElementById('settings-overlay');
+    return { hasHidden: o.classList.contains('hidden'), opacity: getComputedStyle(o).opacity };
+  });
+  if (!midClose.hasHidden) throw new Error('settings-close не повесил .hidden');
+  if (midClose.opacity === '0') console.log('WARN: настройки закрылись мгновенно (opacity 0 сразу) — нет анимации');
+  await win.waitForTimeout(400);
+  const doneClose = await win.evaluate(() => {
+    const o = document.getElementById('settings-overlay');
+    const cs = getComputedStyle(o);
+    return { opacity: cs.opacity, visibility: cs.visibility, pe: cs.pointerEvents };
+  });
+  if (doneClose.opacity !== '0' || doneClose.visibility !== 'hidden') {
+    throw new Error('настройки не скрылись после анимации: ' + JSON.stringify(doneClose));
+  }
   await shot('06b-settings-closed');
 
   // 7. Консоль на ошибки (слушатель повешен в начале)
