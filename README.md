@@ -1,68 +1,75 @@
-# FloV:MP
+# FloV:MP & Держава Онлайн
 
-Собственный мультиплеер-движок и фирменный лаунчер для **Florida V** —
-поверх локально работающих (мёртвых как сервис) бинарников **alt:V**,
-полностью автономно, без обращения к чужой инфраструктуре.
+Автономный мультиплеерный движок нового поколения (**FloV:MP**) + игровой RP-проект (**Держава Онлайн**) с фирменным лаунчером и веб-порталом управления лицензиями.
 
-> RAGE:MP и alt:V закрыты Take-Two в 2026. Заказчик не хочет оставаться
-> только на FiveM — нужен независимый мультиплеер под своим брендом.
-> Юридический риск владельцем осознан и принят.
+> RAGE:MP и alt:V закрыты Take-Two в 2026. FloV:MP — независимая суверенная платформа для GTA V, работающая автономно без обращения к чужой инфраструктуре.
 
-Полный контекст, решения и правила — в [`CLAUDE.md`](CLAUDE.md).
-Текущий статус и очередь задач — в [`agent_state.md`](agent_state.md).
+Полный контекст и архитектурные решения — в [`CLAUDE.md`](CLAUDE.md) и [`AGENTS.md`](AGENTS.md).  
+Текущий статус и дорожная карта — в [`agent_state.md`](agent_state.md).
 
-## Стек
+## Стек технологий
 
-| Слой | Технология |
-|---|---|
-| Сервер (гейм-логика) | C# / .NET 8, `coreclr-module` alt:V |
-| Клиент (игровой UI/HUD) | JS/TS + HTML (NUI), `js-module` alt:V |
-| Лаунчер | C# / WPF / .NET 8 |
+| Слой | Технология | Описание |
+|---|---|---|
+| **Сетевой рантайм** | C++ (unhooked alt:V core) | UDP порт 7788, FastDL CDN Nginx, 3D Voice WebRTC |
+| **Сервер (гейм-логика)** | C# / .NET 8 (`coreclr-module`) | MariaDB 10.6 пул, экономика, транспорт, 8-уровневая админка |
+| **Лаунчер** | Electron (Chromium UI) + C# Native | Аппаратное ускорение, кастомные акценты, безопасный запуск |
+| **Клиентский UI/HUD** | HTML5 / React / TypeScript (CEF) | NUI-интерфейсы с 60+ FPS |
+| **Веб-портал (SaaS)** | Next.js 14 / Tailwind / TypeScript | Личный кабинет, привязка IP, генерация ключей `FLV-XXXX` |
 
-## Структура
+## Структура репозитория
 
 ```
-server/     — C#-геймод (FloVMP.Gamemode) под alt:V coreclr-module
-client/     — клиентский JS-ресурс (flovmp-client)
-launcher/   — WPF-лаунчер: Core (логика) + UI + Tests (xUnit)
-config/     — шаблон server.toml
-scripts/    — сборка рантайма, манифесты, импорт клиента (PowerShell)
-docs/       — документация по разделам (engine/ gameplay/ launcher/ admin/ instructions/ archive/), карта — docs/README.md
-runtime/    — собранный рантайм (в git НЕ хранится, см. .gitignore)
+FloV-MP/
+├── server/       — C#-гейммод (FloVMP.Core, FloVMP.Gamemode) + unit-тесты
+├── client/       — Клиентский игровой UI-ресурс (flovmp-client)
+├── launcher/     — Лаунчер проекта:
+│   ├── electron/ — Основной UI лаунчера (Chromium, HTML5, CSS)
+│   └── src/      — Нативный C# помощник (Connect, Launcher.Native, Core)
+├── web/          — SaaS веб-портал (Next.js 14, ЛК, биллинг, верификация лицензий)
+├── sql/          — Схемы MariaDB (игровая schema.sql, портальная portal_schema.sql)
+├── config/       — server.toml и профили подключения
+├── scripts/      — Утилиты запуска и обслуживания (run-launcher, run-server, connect)
+├── runtime/      — Локальный рантайм alt:V (бинарники в git не идут)
+├── logs/         — Логи запусков и отладки
+├── archive/      — Архив устаревших прототипов (старый WPF-лаунчер)
+└── docs/         — Архитектурная и техническая документация
 ```
 
-Бинарники движка alt:V (~2 ГБ) — внешняя зависимость (`C:\ViMP backup\
-backup-altv`), в репозитории не хранятся.
+## Быстрый запуск
 
-## Быстрый старт (сервер)
+### 1. Запуск лаунчера
+```cmd
+scripts\run-launcher.cmd
+```
+
+### 2. Запуск локального сервера
+```cmd
+scripts\run-server.cmd
+```
+
+### 3. Быстрое прямое подключение к серверу
+```cmd
+scripts\connect.cmd
+```
+*(По умолчанию подключается к выделенному серверу `188.127.229.224:7788`)*
+
+### 4. Запуск SaaS веб-портала
+```cmd
+cd web
+npm start
+```
+*(Доступен по адресу `http://localhost:3000`)*
+
+## Тестирование и верификация
 
 ```powershell
-powershell -File scripts/assemble-runtime.ps1   # собрать рантайм из бэкапа alt:V
-powershell -File scripts/run-server.ps1          # запустить на :7788
+# Тесты серверного ядра (81 тест)
+dotnet test server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj
+
+# Тесты нативного лаунчера (28 тестов)
+dotnet test launcher/tests/FloVMP.Launcher.Tests/FloVMP.Launcher.Tests.csproj
+
+# Сборка веб-портала (15 роутов)
+cd web; npm run build
 ```
-
-Ждём `[C#] [FloV:MP] core: server fully started`.
-
-## Быстрый старт (лаунчер)
-
-```powershell
-dotnet build launcher/FloVMP.Launcher.slnx -c Debug
-dotnet test  launcher/FloVMP.Launcher.slnx -c Debug
-launcher/src/FloVMP.Launcher/bin/Debug/net8.0-windows/FloVMP.Launcher.exe
-```
-
-## Живой тест (2 игрока)
-
-См. [`docs/instructions/live-test-guide.md`](docs/instructions/live-test-guide.md) — нужен GTA V.
-
-## Документация
-
-Карта всех документов по разделам — **[`docs/README.md`](docs/README.md)**
-(`engine/` · `gameplay/` · `launcher/` · `admin/` · `instructions/` · `archive/`).
-
-## Разработка
-
-- Отвечаем и документируем на русском; `.ps1` и `Alt.Log` — ASCII (кодировка
-  консоли/парсера).
-- `git commit` после каждого раунда правок; `push` — по правилам сессии.
-- В репозитории работают только владелец и Claude.

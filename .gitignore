@@ -4,9 +4,11 @@ obj/
 *.user
 *.suo
 
-# Node / JS tooling (client NUI, if a build step gets added later)
+# Node / JS tooling (client NUI & Web portal)
 node_modules/
 dist/
+.next/
+out/
 
 # Secrets — never commit
 secrets.local.md
@@ -23,13 +25,16 @@ Thumbs.db
 # scripts/assemble-runtime.ps1 из C:\ViMP backup\backup-altv. В git не идёт.
 /runtime/
 
-# Логи запусков сервера, если кто-то запустит вне /runtime/
+# Логи запусков сервера и лаунчера
+logs/
 *.log
 
-# Временные утилиты и локальные хранилища
+# Временные утилиты, кэши и дампы
 /tools/
 /IsolatedStorage/
+/.server-crashes-cache/
+/cache/
 
-# Скриншоты визуальной проверки лаунчера (test-visual.js) — генерируются локально
+# Скриншоты визуальной проверки лаунчера
+launcher/electron/tests/screenshots/
 launcher/electron/pw_*.png
-

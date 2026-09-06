@@ -65,7 +65,7 @@ Florida V на FiveM (см. `C:\Arizona V fork project`), но заказчик 
 |---|---|---|
 | Сервер (гейм-логика) | **C# / .NET**, через `coreclr-module` alt:V | Уже есть в движке, официально поддерживается |
 | Клиент (игровой UI/HUD/камера/меню) | **JS/TS + HTML (NUI)** | Переиспользуем уже наработанный навык/паттерны из Florida V (az_auth/az_inventory), меньше риска при портировании дизайна |
-| Лаунчер | **C# / WPF / .NET 8** | Реестр Windows, работа с процессом игры, exe-подмена (Вариант 2 совместимости) — всё это естественнее на чистом .NET, чем через Tauri/Rust-бэкенд |
+| Лаунчер | **Electron (Chromium UI) + C# .NET 8 Native Bridge** | Визуальный уровень Majestic/GTA5RP (блюр, тени, аппаратное ускорение), реестр и exe-подмена — нативный C# FloVMP.Launcher.Native |
 
 ## MVP на месяц (цель + критерий успеха, зафиксировано с владельцем)
 
@@ -104,11 +104,16 @@ Florida V на FiveM (см. `C:\Arizona V fork project`), но заказчик 
 
 ```
 FloV-MP/
-├── server/     — C#-гейммод под alt:V coreclr-module
+├── server/     — C#-гейммод под alt:V coreclr-module (FloVMP.Core, Gamemode, Tests)
 ├── client/     — JS/TS + HTML NUI (клиентский игровой UI)
-├── launcher/   — C#/WPF/.NET 8 лаунчер
+├── launcher/   — Electron (Chromium UI) + C# Native Bridge (FloVMP.Connect, Native)
+├── web/        — SaaS Веб-портал (Next.js 14, ЛК, биллинг, валидация лицензий)
+├── sql/        — Схемы MariaDB (игровая schema.sql, портальная portal_schema.sql)
+├── config/     — server.toml и профили подключения
+├── scripts/    — Утилиты запуска и сборки (run-launcher.cmd, run-server.cmd, connect.cmd)
+├── logs/       — Логи разработки и запусков
+├── archive/    — Архив устаревших прототипов (старый WPF-лаунчер)
 ├── docs/       — архитектурные решения, разведка движка, и т.д.
-├── sql/        — схема БД (если понадобится, отдельная от Florida V)
 └── agent_state.md
 ```
 

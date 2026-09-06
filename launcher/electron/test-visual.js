@@ -5,7 +5,7 @@
 const { _electron: electron } = require('playwright');
 const path = require('node:path');
 
-const OUT = process.argv[2] || '.';
+const OUT = process.argv[2] || path.join(__dirname, 'tests', 'screenshots');
 
 (async () => {
   const app = await electron.launch({
