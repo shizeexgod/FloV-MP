@@ -38,6 +38,49 @@ export interface TelemetryRecord {
   recorded_at: string;
 }
 
+export interface ProjectRecord {
+  id: number;
+  user_id: number;
+  name: string;
+  slug: string;
+  license_key: string;
+  plan: string;
+  max_players: number;
+  api_key: string;
+  is_active: number;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface ServerRecord {
+  id: number;
+  project_id: number;
+  environment: 'production' | 'development' | 'test';
+  name: string;
+  ip: string;
+  port: number;
+  agent_token: string;
+  status: 'online' | 'offline' | 'restarting';
+  players_count: number;
+  max_players: number;
+  tick_rate: number;
+  memory_mb: number;
+  cpu_percent: number;
+  last_heartbeat?: string;
+  created_at: string;
+}
+
+export interface AgentCommandRecord {
+  id: number;
+  server_id: number;
+  command: 'restart' | 'stop' | 'broadcast' | 'kick_all' | 'execute';
+  payload?: string;
+  status: 'pending' | 'executed' | 'failed';
+  result?: string;
+  dispatched_at: string;
+  executed_at?: string;
+}
+
 export interface MockStore {
   users: Array<{
     id: number;
@@ -65,6 +108,9 @@ export interface MockStore {
   invoices: InvoiceRecord[];
   launcher_builds: LauncherBuildRecord[];
   telemetry: TelemetryRecord[];
+  projects?: ProjectRecord[];
+  servers?: ServerRecord[];
+  agent_commands?: AgentCommandRecord[];
 }
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -81,6 +127,79 @@ function getStore(): MockStore {
       if (!parsed.invoices) parsed.invoices = [];
       if (!parsed.launcher_builds) parsed.launcher_builds = [];
       if (!parsed.telemetry) parsed.telemetry = [];
+      if (!parsed.projects) parsed.projects = [];
+      if (!parsed.servers) parsed.servers = [];
+      if (!parsed.agent_commands) parsed.agent_commands = [];
+      if (parsed.projects.length === 0) {
+        parsed.projects = [
+          {
+            id: 1,
+            user_id: 1,
+            name: 'Держава Онлайн',
+            slug: 'derzhava-rp',
+            license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
+            plan: 'enterprise',
+            max_players: 1500,
+            api_key: 'flv_live_derzhava_7a8f19c2',
+            is_active: 1,
+            expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+            created_at: new Date().toISOString(),
+          },
+        ];
+        parsed.servers = [
+          {
+            id: 1,
+            project_id: 1,
+            environment: 'production',
+            name: 'Main Production Node #1',
+            ip: '188.127.229.224',
+            port: 7788,
+            agent_token: 'agnt_live_prod_99f48a',
+            status: 'online',
+            players_count: 142,
+            max_players: 1500,
+            tick_rate: 60.0,
+            memory_mb: 384,
+            cpu_percent: 18.5,
+            last_heartbeat: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            project_id: 1,
+            environment: 'development',
+            name: 'Core Dev Local',
+            ip: '127.0.0.1',
+            port: 7788,
+            agent_token: 'agnt_dev_local_11bc23',
+            status: 'online',
+            players_count: 2,
+            max_players: 64,
+            tick_rate: 60.0,
+            memory_mb: 198,
+            cpu_percent: 4.2,
+            last_heartbeat: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 3,
+            project_id: 1,
+            environment: 'test',
+            name: 'QA Staging Sandbox',
+            ip: '127.0.0.1',
+            port: 7789,
+            agent_token: 'agnt_test_sandbox_55ee78',
+            status: 'offline',
+            players_count: 0,
+            max_players: 32,
+            tick_rate: 0.0,
+            memory_mb: 0,
+            cpu_percent: 0.0,
+            created_at: new Date().toISOString(),
+          },
+        ];
+        saveStore(parsed);
+      }
       return parsed;
     }
   } catch (err) {
@@ -153,6 +272,74 @@ function getStore(): MockStore {
         recorded_at: new Date().toISOString(),
       },
     ],
+    projects: [
+      {
+        id: 1,
+        user_id: 1,
+        name: 'Держава Онлайн',
+        slug: 'derzhava-rp',
+        license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
+        plan: 'enterprise',
+        max_players: 1500,
+        api_key: 'flv_live_derzhava_7a8f19c2',
+        is_active: 1,
+        expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+      },
+    ],
+    servers: [
+      {
+        id: 1,
+        project_id: 1,
+        environment: 'production',
+        name: 'Main Production Node #1',
+        ip: '188.127.229.224',
+        port: 7788,
+        agent_token: 'agnt_live_prod_99f48a',
+        status: 'online',
+        players_count: 142,
+        max_players: 1500,
+        tick_rate: 60.0,
+        memory_mb: 384,
+        cpu_percent: 18.5,
+        last_heartbeat: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 2,
+        project_id: 1,
+        environment: 'development',
+        name: 'Core Dev Local',
+        ip: '127.0.0.1',
+        port: 7788,
+        agent_token: 'agnt_dev_local_11bc23',
+        status: 'online',
+        players_count: 2,
+        max_players: 64,
+        tick_rate: 60.0,
+        memory_mb: 198,
+        cpu_percent: 4.2,
+        last_heartbeat: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 3,
+        project_id: 1,
+        environment: 'test',
+        name: 'QA Staging Sandbox',
+        ip: '127.0.0.1',
+        port: 7789,
+        agent_token: 'agnt_test_sandbox_55ee78',
+        status: 'offline',
+        players_count: 0,
+        max_players: 32,
+        tick_rate: 0.0,
+        memory_mb: 0,
+        cpu_percent: 0.0,
+        created_at: new Date().toISOString(),
+      },
+    ],
+    agent_commands: [],
   };
 
   saveStore(initialStore);
@@ -454,5 +641,309 @@ function mockQueryFallback(sql: string, params: any[]): any {
     return store.telemetry.filter((t) => t.license_key === key).slice(-30);
   }
 
+  // 16. Projects queries
+  if (s.includes('from portal_projects')) {
+    if (/user_id\s*=/i.test(s)) {
+      const uid = Number(params[0]);
+      return (store.projects || []).filter((p) => p.user_id === uid);
+    }
+    if (/slug\s*=/i.test(s)) {
+      const slug = String(params[0]);
+      return (store.projects || []).filter((p) => p.slug === slug);
+    }
+    if (/\bid\s*=/i.test(s)) {
+      const id = Number(params[0]);
+      return (store.projects || []).filter((p) => p.id === id);
+    }
+    if (/api_key\s*=/i.test(s)) {
+      const key = String(params[0]);
+      return (store.projects || []).filter((p) => p.api_key === key);
+    }
+    return store.projects || [];
+  }
+
+  if (s.includes('insert into portal_projects')) {
+    const [user_id, name, slug, license_key, plan, max_players, api_key, expires_at] = params;
+    if (!store.projects) store.projects = [];
+    const newId = store.projects.length + 1;
+    const newProj: ProjectRecord = {
+      id: newId,
+      user_id: Number(user_id),
+      name: String(name),
+      slug: String(slug),
+      license_key: String(license_key),
+      plan: String(plan || 'enterprise'),
+      max_players: Number(max_players || 1500),
+      api_key: String(api_key),
+      is_active: 1,
+      expires_at: String(expires_at),
+      created_at: new Date().toISOString(),
+    };
+    store.projects.push(newProj);
+    saveStore(store);
+    return { insertId: newId, affectedRows: 1 };
+  }
+
+  // 17. Servers queries
+  if (s.includes('from portal_servers')) {
+    if (/project_id\s*=/i.test(s)) {
+      const pid = Number(params[0]);
+      return (store.servers || []).filter((srv) => srv.project_id === pid);
+    }
+    if (/agent_token\s*=/i.test(s)) {
+      const token = String(params[0]);
+      return (store.servers || []).filter((srv) => srv.agent_token === token);
+    }
+    if (/\bid\s*=/i.test(s)) {
+      const id = Number(params[0]);
+      return (store.servers || []).filter((srv) => srv.id === id);
+    }
+    return store.servers || [];
+  }
+
+  if (s.includes('insert into portal_servers')) {
+    const [project_id, environment, name, ip, port, agent_token, max_players] = params;
+    if (!store.servers) store.servers = [];
+    const newId = store.servers.length + 1;
+    const newSrv: ServerRecord = {
+      id: newId,
+      project_id: Number(project_id),
+      environment: environment || 'production',
+      name: String(name),
+      ip: String(ip || '127.0.0.1'),
+      port: Number(port || 7788),
+      agent_token: String(agent_token),
+      status: 'offline',
+      players_count: 0,
+      max_players: Number(max_players || 1500),
+      tick_rate: 60.0,
+      memory_mb: 0,
+      cpu_percent: 0.0,
+      created_at: new Date().toISOString(),
+    };
+    store.servers.push(newSrv);
+    saveStore(store);
+    return { insertId: newId, affectedRows: 1 };
+  }
+
+  if (s.includes('update portal_servers set')) {
+    if (s.includes('players_count =') && s.includes('agent_token =')) {
+      const [players, max_players, tick_rate, memory_mb, cpu_percent, status, last_heartbeat, token] = params;
+      const srv = (store.servers || []).find((x) => x.agent_token === String(token));
+      if (srv) {
+        srv.players_count = Number(players);
+        srv.max_players = Number(max_players);
+        srv.tick_rate = Number(tick_rate);
+        srv.memory_mb = Number(memory_mb);
+        srv.cpu_percent = Number(cpu_percent);
+        srv.status = status as 'online' | 'offline';
+        srv.last_heartbeat = String(last_heartbeat);
+        saveStore(store);
+        return { affectedRows: 1 };
+      }
+    }
+    if (s.includes('status =') && /\bid\s*=/i.test(s)) {
+      const [status, id] = params;
+      const srv = (store.servers || []).find((x) => x.id === Number(id));
+      if (srv) {
+        srv.status = status as 'online' | 'offline' | 'restarting';
+        saveStore(store);
+        return { affectedRows: 1 };
+      }
+    }
+  }
+
+  // 18. Agent commands queries
+  if (s.includes('from portal_agent_commands')) {
+    if (/server_id\s*=/i.test(s) && /status\s*=/i.test(s)) {
+      const [sid, status] = params;
+      return (store.agent_commands || []).filter((c) => c.server_id === Number(sid) && c.status === String(status));
+    }
+    return store.agent_commands || [];
+  }
+
+  if (s.includes('insert into portal_agent_commands')) {
+    const [server_id, command, payload, status] = params;
+    if (!store.agent_commands) store.agent_commands = [];
+    const newId = store.agent_commands.length + 1;
+    const newCmd: AgentCommandRecord = {
+      id: newId,
+      server_id: Number(server_id),
+      command: command,
+      payload: payload ? String(payload) : undefined,
+      status: (status as 'pending') || 'pending',
+      dispatched_at: new Date().toISOString(),
+    };
+    store.agent_commands.push(newCmd);
+    saveStore(store);
+    return { insertId: newId, affectedRows: 1 };
+  }
+
+  if (s.includes('update portal_agent_commands set status =')) {
+    const [status, result, executed_at, id] = params;
+    const cmd = (store.agent_commands || []).find((c) => c.id === Number(id));
+    if (cmd) {
+      cmd.status = status as 'executed' | 'failed';
+      cmd.result = result ? String(result) : undefined;
+      cmd.executed_at = String(executed_at);
+      saveStore(store);
+      return { affectedRows: 1 };
+    }
+  }
+
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// Typed Public Helpers for Project & Server Management
+// ---------------------------------------------------------------------------
+
+export async function getProjectsByUser(userId: number): Promise<ProjectRecord[]> {
+  const rows = await query('SELECT * FROM portal_projects WHERE user_id = ? ORDER BY id DESC', [userId]);
+  return rows as ProjectRecord[];
+}
+
+export async function getProjectBySlug(slug: string): Promise<ProjectRecord | null> {
+  const rows = await query('SELECT * FROM portal_projects WHERE slug = ? LIMIT 1', [slug]);
+  const arr = rows as ProjectRecord[];
+  return arr.length > 0 ? arr[0] : null;
+}
+
+export async function getProjectById(id: number): Promise<ProjectRecord | null> {
+  const rows = await query('SELECT * FROM portal_projects WHERE id = ? LIMIT 1', [id]);
+  const arr = rows as ProjectRecord[];
+  return arr.length > 0 ? arr[0] : null;
+}
+
+export async function createProject(
+  userId: number,
+  name: string,
+  slug: string,
+  plan: string = 'enterprise',
+  maxPlayers: number = 1500
+): Promise<ProjectRecord> {
+  const licenseKey = `FLV-PROJ-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const apiKey = `flv_live_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
+  const expiresAt = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString();
+
+  const res: any = await query(
+    'INSERT INTO portal_projects (user_id, name, slug, license_key, plan, max_players, api_key, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [userId, name, slug, licenseKey, plan, maxPlayers, apiKey, expiresAt]
+  );
+
+  return {
+    id: res.insertId || Date.now(),
+    user_id: userId,
+    name,
+    slug,
+    license_key: licenseKey,
+    plan,
+    max_players: maxPlayers,
+    api_key: apiKey,
+    is_active: 1,
+    expires_at: expiresAt,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function getServersByProject(projectId: number): Promise<ServerRecord[]> {
+  const rows = await query('SELECT * FROM portal_servers WHERE project_id = ? ORDER BY id ASC', [projectId]);
+  return rows as ServerRecord[];
+}
+
+export async function getServerById(id: number): Promise<ServerRecord | null> {
+  const rows = await query('SELECT * FROM portal_servers WHERE id = ? LIMIT 1', [id]);
+  const arr = rows as ServerRecord[];
+  return arr.length > 0 ? arr[0] : null;
+}
+
+export async function getServerByToken(agentToken: string): Promise<ServerRecord | null> {
+  const rows = await query('SELECT * FROM portal_servers WHERE agent_token = ? LIMIT 1', [agentToken]);
+  const arr = rows as ServerRecord[];
+  return arr.length > 0 ? arr[0] : null;
+}
+
+export async function createServer(
+  projectId: number,
+  environment: 'production' | 'development' | 'test',
+  name: string,
+  ip: string = '127.0.0.1',
+  port: number = 7788,
+  maxPlayers: number = 1500
+): Promise<ServerRecord> {
+  const token = `agnt_${environment}_${Math.random().toString(36).substring(2, 8)}`;
+  const res: any = await query(
+    'INSERT INTO portal_servers (project_id, environment, name, ip, port, agent_token, max_players) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [projectId, environment, name, ip, port, token, maxPlayers]
+  );
+
+  return {
+    id: res.insertId || Date.now(),
+    project_id: projectId,
+    environment,
+    name,
+    ip,
+    port,
+    agent_token: token,
+    status: 'offline',
+    players_count: 0,
+    max_players: maxPlayers,
+    tick_rate: 60.0,
+    memory_mb: 0,
+    cpu_percent: 0.0,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function updateServerTelemetry(
+  agentToken: string,
+  data: {
+    players: number;
+    maxPlayers: number;
+    tickRate: number;
+    memoryMb: number;
+    cpuPercent: number;
+  }
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const res: any = await query(
+    'UPDATE portal_servers SET players_count = ?, max_players = ?, tick_rate = ?, memory_mb = ?, cpu_percent = ?, status = ?, last_heartbeat = ? WHERE agent_token = ?',
+    [data.players, data.maxPlayers, data.tickRate, data.memoryMb, data.cpuPercent, 'online', now, agentToken]
+  );
+  return res.affectedRows > 0;
+}
+
+export async function queueAgentCommand(
+  serverId: number,
+  command: 'restart' | 'stop' | 'broadcast' | 'kick_all' | 'execute',
+  payload?: string
+): Promise<number> {
+  const res: any = await query(
+    'INSERT INTO portal_agent_commands (server_id, command, payload, status) VALUES (?, ?, ?, ?)',
+    [serverId, command, payload || null, 'pending']
+  );
+  return res.insertId;
+}
+
+export async function pollPendingCommands(agentToken: string): Promise<AgentCommandRecord[]> {
+  const srv = await getServerByToken(agentToken);
+  if (!srv) return [];
+  const rows = await query(
+    'SELECT * FROM portal_agent_commands WHERE server_id = ? AND status = ? ORDER BY id ASC',
+    [srv.id, 'pending']
+  );
+  return rows as AgentCommandRecord[];
+}
+
+export async function completeAgentCommand(
+  commandId: number,
+  status: 'executed' | 'failed',
+  result?: string
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const res: any = await query(
+    'UPDATE portal_agent_commands SET status = ?, result = ?, executed_at = ? WHERE id = ?',
+    [status, result || null, now, commandId]
+  );
+  return res.affectedRows > 0;
 }

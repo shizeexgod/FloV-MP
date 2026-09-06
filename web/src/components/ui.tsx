@@ -9,9 +9,7 @@ import { Check, Copy, X } from 'lucide-react';
 export function AuroraBlobs({ className = '' }: { className?: string }) {
   return (
     <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`} aria-hidden>
-      <div className="aura-blob left-[-8%] top-[-12%] h-[420px] w-[420px] bg-brand/25" />
-      <div className="aura-blob right-[-6%] top-[6%] h-[380px] w-[380px] bg-violetx/20" />
-      <div className="aura-blob left-1/3 bottom-[-20%] h-[460px] w-[460px] bg-cyber/12" />
+      <div className="aura-blob left-1/2 top-[-18%] h-[380px] w-[520px] -translate-x-1/2 bg-brand/10" />
     </div>
   );
 }
@@ -47,13 +45,11 @@ export function SectionHeading({
   title,
   sub,
   align = 'center',
-  accent = 'brand',
 }: {
   eyebrow: string;
   title: React.ReactNode;
   sub?: React.ReactNode;
   align?: 'center' | 'left';
-  accent?: 'brand' | 'cyber';
 }) {
   return (
     <div
@@ -61,8 +57,8 @@ export function SectionHeading({
         sub ? 'mb-14' : 'mb-12'
       }`}
     >
-      <span className={`eyebrow ${accent === 'brand' ? 'text-brand' : 'text-cyber'}`}>{eyebrow}</span>
-      <h2 className="mt-3 text-3xl font-black text-white sm:text-[2.6rem] sm:leading-[1.08]">{title}</h2>
+      <span className="eyebrow">{eyebrow}</span>
+      <h2 className="mt-3 text-[1.9rem] font-bold text-white sm:text-4xl sm:leading-[1.12]">{title}</h2>
       {sub ? <p className="mt-4 text-[15px] leading-relaxed text-slate-400">{sub}</p> : null}
     </div>
   );
@@ -106,7 +102,7 @@ export function CopyButton({
       title="Скопировать"
     >
       {copied ? (
-        <Check className="h-3.5 w-3.5 text-emeraldx" />
+        <Check className="h-3.5 w-3.5 text-ok" />
       ) : (
         <Copy className="h-3.5 w-3.5" />
       )}
@@ -130,9 +126,9 @@ export function Toast({
   onClose: () => void;
 }) {
   const tones: Record<ToastTone, string> = {
-    success: 'border-emeraldx/40 text-emeraldx',
-    error: 'border-red-500/40 text-red-400',
-    info: 'border-cyber/40 text-cyber',
+    success: 'border-ok/35 text-ok',
+    error: 'border-err/35 text-err',
+    info: 'border-brand/35 text-brand',
   };
   return (
     <div className="fixed right-4 top-24 z-[70] max-w-sm animate-slide-down">
@@ -239,13 +235,13 @@ export function Badge({
   className?: string;
 }) {
   const tones: Record<string, string> = {
-    brand: 'bg-brand/15 text-brand border-brand/30',
-    cyber: 'bg-cyber/15 text-cyber border-cyber/30',
-    emerald: 'bg-emeraldx/15 text-emeraldx border-emeraldx/30',
-    violet: 'bg-violetx/15 text-violetx border-violetx/30',
-    amber: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    red: 'bg-red-500/15 text-red-400 border-red-500/30',
-    slate: 'bg-white/5 text-slate-300 border-white/10',
+    brand: 'bg-brand/12 text-brand border-brand/25',
+    cyber: 'bg-white/5 text-slate-300 border-white/10',
+    emerald: 'bg-ok/12 text-ok border-ok/25',
+    violet: 'bg-white/5 text-slate-300 border-white/10',
+    amber: 'bg-warn/12 text-warn border-warn/25',
+    red: 'bg-err/12 text-err border-err/25',
+    slate: 'bg-white/5 text-slate-400 border-white/10',
   };
   return (
     <span
@@ -256,7 +252,7 @@ export function Badge({
   );
 }
 
-export function LiveDot({ tone = 'text-emeraldx' }: { tone?: string }) {
+export function LiveDot({ tone = 'text-ok' }: { tone?: string }) {
   return <span className={`status-dot ${tone}`} />;
 }
 

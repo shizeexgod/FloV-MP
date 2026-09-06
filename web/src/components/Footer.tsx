@@ -48,7 +48,7 @@ export default function Footer() {
             <div className="flex items-center gap-3">
               <span className="block h-10 w-10 overflow-hidden rounded-xl border border-white/15 bg-ink-800">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/branding/logo-codex.png" alt="FloV:MP" className="h-full w-full object-cover" />
+                <img src="/branding/logo.jpg" alt="FloV:MP" className="h-full w-full object-cover" />
               </span>
               <span className="text-lg font-black text-white">
                 FloV<span className="text-brand">:MP</span>
@@ -60,7 +60,7 @@ export default function Footer() {
               рисков блокировки.
             </p>
             <div className="mt-5 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-slate-400">
-              <span className="status-dot text-emeraldx" />
+              <span className="status-dot text-ok" />
               Node&nbsp;188.127.229.224:7788
             </div>
           </div>
@@ -93,7 +93,7 @@ export default function Footer() {
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             {SPECS.map((s) => (
               <span key={s.label} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
-                <s.icon className="h-3.5 w-3.5 text-brand/70" />
+                <s.icon className="h-3.5 w-3.5 text-slate-600" />
                 {s.label}
               </span>
             ))}
@@ -102,7 +102,7 @@ export default function Footer() {
             href="https://t.me/flovmp_dev"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition-colors hover:text-cyber"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 transition-colors hover:text-brand"
           >
             <Send className="h-3.5 w-3.5" />
             Telegram-поддержка
