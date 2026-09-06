@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('floridaV', {
+const api = {
   // Управление окном
   minimize: () => ipcRenderer.invoke('window:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
@@ -20,8 +20,16 @@ contextBridge.exposeInMainWorld('floridaV', {
   cancelPlay: () => ipcRenderer.invoke('native:cancelPlay'),
   onDownloadProgress: (cb) => ipcRenderer.on('download:progress', (_e, data) => cb(data)),
 
+  // Реальные данные о текущем устройстве (для «Личного кабинета» → Устройства,
+  // История входов). Возвращает { deviceId, hostname, userName, os, osArch,
+  // localIp, bootTimeUtc, nowUtc } — только то, что система отдаёт локально.
+  deviceInfo: () => ipcRenderer.invoke('native:deviceInfo'),
+
   // Автозапуск с Windows — настоящая системная настройка через Electron,
   // не просто галочка в settings.json.
   setAutostart: (enabled) => ipcRenderer.invoke('native:setAutostart', enabled),
   getAutostart: () => ipcRenderer.invoke('native:getAutostart'),
-});
+};
+
+contextBridge.exposeInMainWorld('floridaV', api);
+contextBridge.exposeInMainWorld('flovmp', api);

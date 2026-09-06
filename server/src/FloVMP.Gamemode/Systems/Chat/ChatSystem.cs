@@ -20,6 +20,7 @@ public sealed class ChatSystem
     private readonly Func<IPlayer, Account?> _accountOf;
     private readonly Action<Account>? _saveAccount;
     private readonly Func<string, Account?>? _findAccountByName;
+    private readonly FloVMP.Core.Economy.EconomyService? _economy;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
@@ -27,11 +28,13 @@ public sealed class ChatSystem
     public ChatSystem(
         Func<IPlayer, Account?> accountOf,
         Action<Account>? saveAccount = null,
-        Func<string, Account?>? findAccountByName = null)
+        Func<string, Account?>? findAccountByName = null,
+        FloVMP.Core.Economy.EconomyService? economy = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
         _findAccountByName = findAccountByName;
+        _economy = economy;
     }
 
     public void Attach()
@@ -166,6 +169,105 @@ public sealed class ChatSystem
             case "pos":
                 var pos = player.Position;
                 SendSystem(player, $"Координаты: X: {pos.X:0.0}, Y: {pos.Y:0.0}, Z: {pos.Z:0.0}");
+                return;
+
+            case "pay":
+                if (args.Length < 2 || !long.TryParse(args[1], out var payAmt) || payAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /pay <ID/ник> <сумма>");
+                    return;
+                }
+                var payTarget = FindPlayer(args[0]);
+                if (payTarget == null || !payTarget.Exists) { SendSystem(player, "Игрок не найден."); return; }
+                if (payTarget == player) { SendSystem(player, "Нельзя передать деньги самому себе."); return; }
+                var payTargetAcc = _accountOf(payTarget);
+                if (payTargetAcc == null) { SendSystem(player, "Аккаунт получателя не найден."); return; }
+                if (player.Position.Distance(payTarget.Position) > 5.0f)
+                {
+                    SendSystem(player, "Игрок находится слишком далеко от вас (максимум 5 метров).");
+                    return;
+                }
+                if (_economy != null)
+                {
+                    if (_economy.TryPayCash(acc, payTargetAcc, payAmt, out var payErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        _saveAccount?.Invoke(payTargetAcc);
+                        SendSystem(player, $"Вы передали {payAmt:N0} руб. игроку {payTargetAcc.Username}.");
+                        SendSystem(payTarget, $"Игрок {acc.Username} передал вам {payAmt:N0} руб.");
+                        foreach (var p in Alt.GetAllPlayers())
+                        {
+                            if (p.Exists && p.Position.Distance(player.Position) <= 15.0f)
+                                p.Emit("flovmp:chat:msg", "me", acc.Username, $"достал кошелёк и передал купюры {payTargetAcc.Username}");
+                        }
+                    }
+                    else
+                    {
+                        SendSystem(player, payErr);
+                    }
+                }
+                return;
+
+            case "bank":
+            case "balance":
+                SendSystem(player, $"=== Финансовый статус: {acc.Username} ===");
+                SendSystem(player, $"Наличные: {acc.Cash:N0} руб.");
+                SendSystem(player, $"Банковский счёт: {acc.Bank:N0} руб. (№ {acc.BankAccountNumber})");
+                return;
+
+            case "do":
+                if (args.Length == 0) { SendSystem(player, "Использование: /do <описание>"); return; }
+                var doAction = string.Join(' ', args);
+                foreach (var p in Alt.GetAllPlayers())
+                    if (p.Exists && _accountOf(p) is not null && p.Position.Distance(player.Position) <= 25.0f)
+                        p.Emit("flovmp:chat:msg", "do", "", $"{doAction} (( {acc.Username} ))");
+                return;
+
+            case "try":
+                if (args.Length == 0) { SendSystem(player, "Использование: /try <действие>"); return; }
+                var tryAction = string.Join(' ', args);
+                var isSuccess = Random.Shared.Next(0, 2) == 1;
+                var outcomeTag = isSuccess ? "[Удачно]" : "[Неудачно]";
+                foreach (var p in Alt.GetAllPlayers())
+                    if (p.Exists && _accountOf(p) is not null && p.Position.Distance(player.Position) <= 25.0f)
+                        p.Emit("flovmp:chat:msg", "try", acc.Username, $"{tryAction} | {outcomeTag}");
+                return;
+
+            case "todo":
+                if (args.Length == 0) { SendSystem(player, "Использование: /todo <фраза*действие>"); return; }
+                var rawTodo = string.Join(' ', args);
+                var parts = rawTodo.Split('*', 2);
+                var speech = parts[0].Trim();
+                var actionPart = parts.Length > 1 ? parts[1].Trim() : "";
+                foreach (var p in Alt.GetAllPlayers())
+                    if (p.Exists && _accountOf(p) is not null && p.Position.Distance(player.Position) <= 25.0f)
+                        p.Emit("flovmp:chat:msg", "todo", acc.Username, $"\"{speech}\", — сказал {acc.Username}, {actionPart}");
+                return;
+
+            case "engine":
+                if (player.Vehicle != null)
+                {
+                    player.Vehicle.EngineOn = !player.Vehicle.EngineOn;
+                    SendSystem(player, player.Vehicle.EngineOn ? "Двигатель заведён." : "Двигатель заглушен.");
+                }
+                else
+                {
+                    SendSystem(player, "Вы должны находиться в транспортном средстве.");
+                }
+                return;
+
+            case "lock":
+                if (player.Vehicle != null)
+                {
+                    player.Vehicle.LockState = player.Vehicle.LockState == AltV.Net.Enums.VehicleLockState.Locked 
+                        ? AltV.Net.Enums.VehicleLockState.Unlocked 
+                        : AltV.Net.Enums.VehicleLockState.Locked;
+                    SendSystem(player, player.Vehicle.LockState == AltV.Net.Enums.VehicleLockState.Locked ? "Двери заблокированы." : "Двери разблокированы.");
+                }
+                else
+                {
+                    SendSystem(player, "Вы должны находиться в транспортном средстве.");
+                }
                 return;
         }
 
@@ -457,6 +559,47 @@ public sealed class ChatSystem
                 var m = args.Length > 1 && int.TryParse(args[1], out var parsedM) ? parsedM : 0;
                 Alt.EmitAllClients("flovmp:env:time", h, m);
                 SendSystem(player, $"Время сервера установлено на {h:D2}:{m:D2}.");
+                break;
+
+            // ── Уровень 6: Куратор / Зам. ГА ──────────
+            case "givemoney":
+                if (args.Length < 2 || !long.TryParse(args[1], out var gAmt) || gAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /givemoney <ID/ник> <сумма>");
+                    return;
+                }
+                var gTarget = FindPlayer(args[0]);
+                if (gTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var gAcc = _accountOf(gTarget);
+                if (gAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                if (_economy != null)
+                {
+                    _economy.TryGiveCash(gAcc, gAmt, $"Выдано админом {acc.Username}", out _);
+                    _saveAccount?.Invoke(gAcc);
+                    SendSystem(player, $"Выдано {gAmt:N0} руб. игроку {gTarget.Name}.");
+                    SendSystem(gTarget, $"Администратор {acc.Username} выдал вам {gAmt:N0} руб.");
+                    GameLog.Admin("givemoney", LogActor.Admin(acc.Id, acc.Username), gTarget.Name, ("amount", gAmt));
+                }
+                break;
+
+            case "takemoney":
+                if (args.Length < 2 || !long.TryParse(args[1], out var tAmt) || tAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /takemoney <ID/ник> <сумма>");
+                    return;
+                }
+                var takeTarget = FindPlayer(args[0]);
+                if (takeTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var takeAcc = _accountOf(takeTarget);
+                if (takeAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                if (_economy != null)
+                {
+                    _economy.TryTakeCash(takeAcc, tAmt, $"Изъято админом {acc.Username}", out _);
+                    _saveAccount?.Invoke(takeAcc);
+                    SendSystem(player, $"Изъято {tAmt:N0} руб. у игрока {takeTarget.Name}.");
+                    SendSystem(takeTarget, $"Администратор {acc.Username} изъял у вас {tAmt:N0} руб.");
+                    GameLog.Admin("takemoney", LogActor.Admin(acc.Id, acc.Username), takeTarget.Name, ("amount", tAmt));
+                }
                 break;
 
             // ── Уровень 7: Главный Администратор ───────

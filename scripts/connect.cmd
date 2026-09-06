@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 > nul
 title FloV:MP Direct Connect
 echo ===================================================
@@ -12,7 +12,11 @@ if not exist "launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Conn
     dotnet build launcher\src\FloVMP.Connect\FloVMP.Connect.csproj -c Release --nologo > nul
 )
 
+set TARGET=%1
+if "%TARGET%"=="" set TARGET=188.127.229.224:7788
+
+echo [INFO] Target server: %TARGET%
 echo [INFO] Launching game...
-launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe -connect 127.0.0.1:7788 --client "%~dp0..\runtime\client"
+launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe -connect %TARGET% --client "%~dp0..\runtime\client"
 
 pause

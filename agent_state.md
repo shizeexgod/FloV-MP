@@ -1,32 +1,60 @@
-# Agent State — FloV:MP / Florida V
+# Agent State — FloV:MP / Держава Онлайн
 
-Updated: 2026-08-30 (вечер)
+Updated: 2026-09-06 (ночной спринт /goal — технический план доведён до идеала)
 
-## Архитектура продукта (зафиксировано 2026-09-05)
+## Архитектура продукта (зафиксировано)
 
 Чёткое архитектурное разграничение сущностей:
-- **FloV:MP** — независимый мультиплеерный движок (сетевой стек на отвязанных бинарниках alt:V, протокол синхронизации, коннектор, рантайм). Невидим игроку, работает строго «под капотом». Это **движок**, а НЕ сам RP-проект.
-- **Держава Онлайн** (Держава RP) — **сам RP-проект** (карта реальной Москвы, российская тематика, 8-уровневая админ-система, фракции, экономика, сайт с веб-админкой, Discord-бот администрации и сообщество игроков).
+- **FloV:MP** — независимый мультиплеерный движок (сетевой стек на отвязанных бинарниках alt:V v16.4.39 release, протокол синхронизации, коннектор, рантайм). Невидим игроку, работает строго «под капотом». Это **движок**, а НЕ сам RP-проект.
+- **Держава Онлайн** (Держава RP) — **сам RP-проект** (карта реальной Москвы RMRP 2025, российская тематика, 8-уровневая админ-система, фракции, экономика, сайт с веб-админкой, база MariaDB, Discord-сообщество игроков).
 - **Лаунчер «Держава RP / Держава Онлайн»** — единая входная точка для игрока, запускающая проект через движок FloV:MP.
 
-## Установка карты Москвы (RMRP 2025) и развёртывание на REDL VDS (2026-09-05)
+## Актуальный статус серверов и сервисов на VDS REDL (`188.127.229.224`)
 
-- **VDS хостинг REDL (`188.127.229.224`, machine `avds-rg1s7j`, Ubuntu 22.04 LTS):**
-  - Игровой сервер `flovmp.service` запущен автономно на порту UDP 7788.
-  - FastDL CDN (Nginx) запущен на порту HTTP 80 (CORS + Range enabled).
-  - Манифест карты `manifest-map.json` загружен на `/var/www/cdn/`.
-  - Архив карты `moscow_map.zip` загружается через SFTP FileZilla.
-- **Брендинг мультиплеера (FloV:MP) и RP-проекта (Держава Онлайн):**
-  - Логотип взят из `C:\РЕСУРСЫ\FlovMP logo\Изображение Codex 29 авг. 2026 г., 23_01_28.png`.
-  - Сгенерированы multi-res `assets/branding/app.ico` и PNG-логотипы (от 16 до 512px).
-  - `flovmp.exe` создан в `runtime/client/` вместо altv.exe, телеметрия заглушена.
-  - Окно GTA V и мультиплеера автоматически переименовывается в **«Держава Онлайн (FloV:MP)»**.
-  - `FloVMP.Connect.exe` пересобран в Release и обновлён в `runtime/client/`.
-- **Карта Москвы:** `C:\Users\User\Downloads\RMRP MAP 2025` (89 DLC-паков, одежда исключена для оптимизации).
-  - Скрипт `scripts/install-local-moscow-map.ps1` мгновенно подключил карту в локальную GTA V через жесткие ссылки (NTFS hardlinks).
-  - `SpawnPoints.cs` дополнен координатами Москвы (Красная площадь, Сити, Больница, Полиция). 46/46 тестов пройдены.
-  - Клиентский скрипт `flovmp-client` включает `loadCollisionAndUnfreeze` (защита от провала под текстуры при стриминге).
-- **Параллельная работа:** файлы `launcher/electron/` UI не трогаются, Клод работает над дизайном.
+1. **Серверный движок FloV:MP (`flovmp.service`):**
+   - Активен и работает на порту **UDP 7788**.
+   - CoreCLR / .NET 8 Runtime интегрирован на VDS (`/usr/share/dotnet`).
+   - C#-гейммод (`FloVMP.Core.dll`, `FloVMP.Gamemode.dll`, `MySqlConnector.dll`) загружен в рантайм.
+2. **База данных MariaDB (`mariadb.service`):**
+   - Установлена и запущена на VDS (MariaDB 10.6.23).
+   - Создана база данных `derzhava_rp`, выделен пользователь `flovmp`.
+   - Развёрнуты все 7 таблиц: `accounts`, `characters`, `character_inventory`, `vehicles`, `punishments`, `admin_audit_logs`, `bank_transactions`.
+3. **Nginx FastDL & CDN (HTTP :80 & HTTP :7788):**
+   - Эндпоинт `/info` отдаёт актуальный JSON статус в UTF-8 (`{"online":true,"players":0,"maxPlayers":128,"name":"Держава Онлайн","gamemode":"Держава RP"}`).
+   - `/cdn/` раздаёт статические файлы и манифесты (`manifest-map.json`, архив карты Москвы `moscow_map.zip`).
+
+## Реализованные системы гейммода и ядра (FloVMP.Core & FloVMP.Gamemode)
+
+- **8-уровневая админ-система (Levels 1–8):**
+  - Модели: `AdminRank`, `AdminTitles` (префиксы, цвета, наименования), `AdminCommandDef`, `AdminCommandRegistry`.
+  - Все команды диспетчеризируются в `ChatSystem.cs` с проверкой прав, логированием наказаний и аудитом.
+- **Экономика и банкинг (`FloVMP.Core.Economy`):**
+  - Балансы наличных (`Cash`) и банковского счёта (`Bank`, `BankAccountNumber`).
+  - `EconomyService`: атомарные, потокобезопасные методы (`TryGiveCash`, `TryTakeCash`, `TryDeposit`, `TryWithdraw`, `TryPayCash`, `TryTransferBank`).
+  - Игровые команды: `/pay`, `/balance`, `/bank`.
+  - Административные команды: `/givemoney`, `/takemoney`.
+- **Система транспорта (`FloVMP.Core.Vehicles`):**
+  - `VehicleData`: топливо (`Fuel`), состояние двигателя, замки дверей, мастер-ключи для администраторов 4+ ранга.
+  - `VehicleService`: реестр активного автопарка с поиском по госномеру и владельцу.
+  - Игровые команды: `/lock`, `/engine`, `/veh`, `/dv`, `/repair`.
+- **Слой персистентности (`FloVMP.Core.Database`):**
+  - `AccountStoreFactory`: динамическое подключение к MariaDB на хостинге с прозрачным fallback на `JsonAccountStore` при отсутствии БД.
+  - `MySqlAccountStore`: параметризованные SQL-запросы через `MySqlConnector` с пулом соединений.
+  - `MySqlAuditStore`: фиксация всех наказаний, действий администрации и финансовых переводов.
+- **Тестовое покрытие:**
+  - 109 automated tests passing (81 Core tests + 28 Launcher tests, 0 failures, 0 warnings).
+  - Playwright visual tests: 10/10 screenshots passing without console errors.
+
+## Лаунчер и нативный мост
+
+- `FloVMP.Launcher.Native`:
+  - `ServerStatusService.cs` с поддержкой портов 80 и 7788 и fallback.
+  - Гарантированная сериализация camelCase (`PropertyNamingPolicy = JsonNamingPolicy.CamelCase`), благодаря чему статус сервера отображается зелёным индикатором.
+- `native-bridge.js`:
+  - Наследует `EventEmitter`, парсит `msg.event` и транслирует в Electron IPC (`download:progress`, `window:state`).
+  - `preload.js` экспортирует как `window.floridaV`, так и `window.flovmp`.
+- **Соблюдение изоляции:**
+  - Код `launcher/electron/src/renderer/` НЕ модифицировался, предотвращая любые конфликты с фронтенд-разработкой Claude Code.
 
 ## ГДЕ МЫ СЕЙЧАС (живой прогон, 29.08 вечер — ПРОРЫВ: КЛИЕНТ ПОДКЛЮЧИЛСЯ)
 

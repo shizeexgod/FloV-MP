@@ -47,6 +47,9 @@ public sealed class JsonAccountStore : IAccountStore
                 Username = username,
                 PasswordHash = passwordHash,
                 CreatedUtc = DateTime.UtcNow.ToString("O"),
+                Cash = Account.StartingCash,
+                Bank = Account.StartingBank,
+                BankAccountNumber = $"40817810{_nextId:D8}",
             };
             _byName[username] = acc;
             Save();
@@ -106,5 +109,13 @@ public sealed class JsonAccountStore : IAccountStore
         PasswordHash = a.PasswordHash,
         CreatedUtc = a.CreatedUtc,
         LastLoginUtc = a.LastLoginUtc,
+        Cash = a.Cash,
+        Bank = a.Bank,
+        BankAccountNumber = a.BankAccountNumber,
+        AdminLevel = a.AdminLevel,
+        IsBanned = a.IsBanned,
+        BanReason = a.BanReason,
+        BanUntilUtc = a.BanUntilUtc,
+        MuteUntilUtc = a.MuteUntilUtc,
     };
 }

@@ -27,6 +27,7 @@ public class GamemodeResource : Resource
     private InventorySystem? _inv;
     private ChatSystem? _chat;
     private ConsoleCommands? _console;
+    private FloVMP.Core.Economy.EconomyService? _economy;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
@@ -34,7 +35,6 @@ public class GamemodeResource : Resource
     public override void OnStart()
     {
         Alt.Log($"[FloV:MP] core: gamemode start (v{BuildInfo.Version})");
-
 
         _playerLifecycle = new PlayerLifecycle();
         _playerLifecycle.Attach();
@@ -45,8 +45,14 @@ public class GamemodeResource : Resource
         GameLog.Configure(new FileLogSink(Path.Combine(dataDir, "logs")));
         GameLog.System("gamemode_start", ("version", BuildInfo.Version));
 
-        _auth = new AuthSystem(Path.Combine(dataDir, "accounts.json"), OnPlayerAuthed);
+        var dbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
+                     new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
+        var accountStore = FloVMP.Core.Database.AccountStoreFactory.Create(dbConn, Path.Combine(dataDir, "accounts.json"));
+
+        _auth = new AuthSystem(accountStore, OnPlayerAuthed);
         _auth.Attach();
+
+        _economy = new FloVMP.Core.Economy.EconomyService();
 
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
@@ -54,7 +60,8 @@ public class GamemodeResource : Resource
         _chat = new ChatSystem(
             accountOf: p => _auth.AccountOf(p),
             saveAccount: acc => _auth.SaveAccount(acc),
-            findAccountByName: name => _auth.FindByName(name));
+            findAccountByName: name => _auth.FindByName(name),
+            economy: _economy);
         _chat.Attach();
 
         _console = new ConsoleCommands(
@@ -93,6 +100,7 @@ public class GamemodeResource : Resource
         _playerLifecycle?.Detach();
         _playerLifecycle = null;
         _hud = null;
+        _economy = null;
 
         Alt.Log("[FloV:MP] core: gamemode stopped");
     }

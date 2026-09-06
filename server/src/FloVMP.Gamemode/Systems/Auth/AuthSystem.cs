@@ -28,11 +28,16 @@ public sealed class AuthSystem
     private readonly ConcurrentDictionary<int, uint> _activeAccounts = new();
     private readonly Action<IPlayer, Account> _onAuthed;
 
-    public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
+    public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed)
     {
-        _store = new JsonAccountStore(accountsPath);
+        _store = store;
         _auth = new AuthService(_store);
         _onAuthed = onAuthed;
+    }
+
+    public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
+        : this(new JsonAccountStore(accountsPath), onAuthed)
+    {
     }
 
     /// <summary>Аккаунт вошедшего игрока, либо null.</summary>

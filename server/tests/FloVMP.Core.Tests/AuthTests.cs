@@ -129,4 +129,28 @@ public sealed class AuthServiceTests : IDisposable
         var reopened = new AuthService(new JsonAccountStore(path), () => _now);
         Assert.True(reopened.Login("Persist", "secret6", "ip:5").Ok);
     }
+
+    [Fact]
+    public void Store_preserves_admin_level_and_punishment_flags()
+    {
+        var path = Path.Combine(_dir, "admin_store.json");
+        var store1 = new JsonAccountStore(path);
+        var acc = store1.Create("AdminHero", "secret6");
+        acc.AdminLevel = 8;
+        acc.Cash = 100_000;
+        acc.IsBanned = true;
+        acc.BanReason = "Testing";
+        acc.MuteUntilUtc = "2026-12-31T23:59:59.0000000Z";
+        store1.Update(acc);
+
+        var store2 = new JsonAccountStore(path);
+        var loaded = store2.FindByUsername("AdminHero");
+        Assert.NotNull(loaded);
+        Assert.Equal(8, loaded.AdminLevel);
+        Assert.Equal(100_000, loaded.Cash);
+        Assert.True(loaded.IsBanned);
+        Assert.Equal("Testing", loaded.BanReason);
+        Assert.Equal("2026-12-31T23:59:59.0000000Z", loaded.MuteUntilUtc);
+    }
 }
+

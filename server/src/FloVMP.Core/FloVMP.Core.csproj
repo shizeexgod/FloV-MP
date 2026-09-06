@@ -10,5 +10,8 @@
     <AssemblyName>FloVMP.Core</AssemblyName>
     <RootNamespace>FloVMP.Core</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+  </ItemGroup>
 
 </Project>

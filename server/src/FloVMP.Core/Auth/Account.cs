@@ -14,6 +14,14 @@ public sealed class Account
 
     public const long StartingCash = 5000;
 
+    /// <summary>Банковский счёт. Стартовый баланс — <see cref="StartingBank"/>.</summary>
+    public long Bank { get; set; } = StartingBank;
+
+    public const long StartingBank = 15000;
+
+    /// <summary>Номер банковского счёта (например, 4276...).</summary>
+    public string BankAccountNumber { get; set; } = "";
+
     /// <summary>Уровень администратора от 0 (игрок) до 8 (Руководитель проекта).</summary>
     public int AdminLevel { get; set; } = 0;
 

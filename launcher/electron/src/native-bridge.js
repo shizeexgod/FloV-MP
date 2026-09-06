@@ -4,6 +4,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const readline = require('node:readline');
+const { EventEmitter } = require('node:events');
 
 /**
  * Держит один долгоживущий процесс FloVMP.Launcher.Native.exe и говорит с ним
@@ -12,8 +13,9 @@ const readline = require('node:readline');
  * (реестр, поиск GTA V, запуск через FloVMP.Connect) остаётся в .NET —
  * этот модуль только маршрутизирует запросы/ответы.
  */
-class NativeBridge {
+class NativeBridge extends EventEmitter {
   constructor() {
+    super();
     this.proc = null;
     this.nextId = 1;
     this.pending = new Map();
@@ -45,11 +47,21 @@ class NativeBridge {
       if (!line.trim()) return;
       let msg;
       try { msg = JSON.parse(line); } catch { return; }
-      const waiter = this.pending.get(msg.id);
-      if (!waiter) return;
-      this.pending.delete(msg.id);
-      if (msg.ok) waiter.resolve(msg.result);
-      else waiter.reject(new Error(msg.error || 'native error'));
+
+      // Unprompted broadcast events from native process (e.g. download progress, game exit)
+      if (msg.event) {
+        this.emit(msg.event, msg);
+        this.emit('event', msg.event, msg);
+        return;
+      }
+
+      if (msg.id != null) {
+        const waiter = this.pending.get(msg.id);
+        if (!waiter) return;
+        this.pending.delete(msg.id);
+        if (msg.ok) waiter.resolve(msg.result);
+        else waiter.reject(new Error(msg.error || 'native error'));
+      }
     });
 
     this.proc.on('exit', (code) => {
