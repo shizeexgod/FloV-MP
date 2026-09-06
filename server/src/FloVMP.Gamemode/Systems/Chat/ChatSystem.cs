@@ -295,7 +295,7 @@ public sealed class ChatSystem
                     if (targetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
 
                     var pass = _documents.GetDocument(targetAcc.Id, DocumentType.Passport)
-                               ?? _documents.IssuePassport(targetAcc.Id, targetAcc.Username, DateTime.UtcNow.AddYears(-25), "Мужской", "г. Москва, ул. Тверская, д. 1");
+                               ?? FloVMP.Gamemode.Presets.DerzhavaDocuments.IssueRussianPassport(_documents, targetAcc.Id, targetAcc.Username, DateTime.UtcNow.AddYears(-25), "Мужской", "г. Москва, ул. Тверская, д. 1");
 
                     SendSystem(player, $"=== Паспорт гражданина РФ (№ {pass.DocumentNumber}) ===");
                     SendSystem(player, $"ФИО: {pass.FullName} | Пол: {pass.GetMeta("Gender")} | Рождение: {pass.GetMeta("BirthDate")}");
@@ -322,7 +322,7 @@ public sealed class ChatSystem
                     if (targetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
 
                     var drvLic = _documents.GetDocument(targetAcc.Id, DocumentType.DriverLicense)
-                                 ?? _documents.IssueDriverLicense(targetAcc.Id, targetAcc.Username, new[] { "B" });
+                                 ?? FloVMP.Gamemode.Presets.DerzhavaDocuments.IssueRussianDriverLicense(_documents, targetAcc.Id, targetAcc.Username, new[] { "B" });
                     var wepLic = _documents.GetDocument(targetAcc.Id, DocumentType.WeaponLicense);
                     var medCard = _documents.GetDocument(targetAcc.Id, DocumentType.MedicalCard);
 

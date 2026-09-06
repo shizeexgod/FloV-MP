@@ -7,13 +7,36 @@ namespace FloVMP.Core.Tests;
 
 public class FactionTests
 {
-    [Fact]
-    public void Presets_LoadCorrectly()
+    private static FactionService CreateTestFactionService()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = new FactionService();
+
+        var police = new Faction(2, "МВД", "Полиция", FactionType.Police, initialTreasury: 5_000_000);
+        police.AddRank(1, "Рядовой", 20_000, FactionPermissions.RadioFaction);
+        police.AddRank(2, "Сержант", 28_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest);
+        police.AddRank(3, "Старшина", 36_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest | FactionPermissions.TreasuryDeposit);
+        police.AddRank(4, "Лейтенант", 46_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest | FactionPermissions.TreasuryDeposit);
+        police.AddRank(5, "Капитан", 58_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest | FactionPermissions.TreasuryDeposit | FactionPermissions.Promote);
+        police.AddRank(6, "Майор", 75_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest | FactionPermissions.TreasuryDeposit | FactionPermissions.Promote | FactionPermissions.Demote | FactionPermissions.Invite);
+        police.AddRank(7, "Полковник", 98_000, FactionPermissions.RadioFaction | FactionPermissions.Cuffs | FactionPermissions.Arrest | FactionPermissions.TreasuryDeposit | FactionPermissions.Promote | FactionPermissions.Demote | FactionPermissions.Invite | FactionPermissions.Kick);
+        police.AddRank(8, "Генерал", 130_000, FactionPermissions.All);
+        service.RegisterFaction(police);
+
+        var mafia = new Faction(7, "СИНДИКАТ", "Преступный синдикат", FactionType.Mafia, initialTreasury: 1_000_000);
+        mafia.AddRank(1, "Шестёрка", 10_000, FactionPermissions.RadioFaction);
+        mafia.AddRank(2, "Авторитет", 50_000, FactionPermissions.All);
+        service.RegisterFaction(mafia);
+
+        return service;
+    }
+
+    [Fact]
+    public void RegisterFaction_AndRetrieval_Works()
+    {
+        var service = CreateTestFactionService();
         var factions = service.GetAllFactions();
 
-        Assert.Equal(7, factions.Count);
+        Assert.Equal(2, factions.Count);
 
         var police = service.GetFaction(2);
         Assert.NotNull(police);
@@ -32,7 +55,7 @@ public class FactionTests
     [Fact]
     public void Leader_HasAllPermissions()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int policeFactionId = 2;
 
@@ -53,7 +76,7 @@ public class FactionTests
     [Fact]
     public void InviteAndKick_WorkWithProperPermissions()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int newRecruitId = 101;
         const int civilianId = 102;
@@ -89,7 +112,7 @@ public class FactionTests
     [Fact]
     public void PromoteAndDemote_RankHierarchyEnforced()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int captainId = 101;
         const int recruitId = 102;
@@ -132,7 +155,7 @@ public class FactionTests
     [Fact]
     public void Treasury_DepositAndWithdraw()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int recruitId = 101;
         const int factionId = 2;
@@ -163,7 +186,7 @@ public class FactionTests
     [Fact]
     public void CuffsAndArrest_Flow()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int suspectId = 200;
 
@@ -208,7 +231,7 @@ public class FactionTests
     [Fact]
     public void Salaries_CalculatedProperlyOnPayDay()
     {
-        var service = new FactionService(loadDefaultPresets: true);
+        var service = CreateTestFactionService();
         const int leaderId = 100;
         const int captainId = 101;
         const int recruitId = 102;

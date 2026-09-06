@@ -40,40 +40,59 @@ public class CharacterTests
     }
 
     [Fact]
-    public void PoliceUniform_AppliesRankSpecificClothing()
+    public void UniformRegistry_AppliesRankSpecificClothing()
     {
+        var service = new FactionUniformService();
+        service.RegisterUniform(2, (app, rank) =>
+        {
+            if (rank >= 6)
+            {
+                app.SetCloth(11, 26, 0); // Senior jacket
+            }
+            else
+            {
+                app.SetCloth(11, 55, 0); // Patrol shirt
+                app.SetCloth(9, 10, 0);  // Vest
+                app.SetProp(0, 46, 0);   // Cap
+            }
+        });
+
         var app = CharacterAppearance.CreateDefaultMale();
 
         // Patrol officer (Rank 2)
-        FactionUniformService.ApplyUniform(app, factionId: 2, rankLevel: 2);
-        Assert.Equal(55, app.Clothes[11].Drawable); // Полицейская рубашка ППСП
-        Assert.Equal(10, app.Clothes[9].Drawable);  // Бронежилет МВД
-        Assert.True(app.Props.ContainsKey(0));      // Фуражка
+        Assert.True(service.ApplyUniform(app, factionId: 2, rankLevel: 2));
+        Assert.Equal(55, app.Clothes[11].Drawable);
+        Assert.Equal(10, app.Clothes[9].Drawable);
+        Assert.True(app.Props.ContainsKey(0));
 
         // Senior officer (Rank 7)
-        FactionUniformService.ApplyUniform(app, factionId: 2, rankLevel: 7);
-        Assert.Equal(26, app.Clothes[11].Drawable); // Парадный китель
+        Assert.True(service.ApplyUniform(app, factionId: 2, rankLevel: 7));
+        Assert.Equal(26, app.Clothes[11].Drawable);
     }
 
     [Fact]
-    public void FsbUniform_AppliesTacticalGear()
+    public void UniformRegistry_UnregisteredFaction_ReturnsFalse()
     {
+        var service = new FactionUniformService();
         var app = CharacterAppearance.CreateDefaultMale();
-
-        FactionUniformService.ApplyUniform(app, factionId: 3, rankLevel: 3);
-        Assert.Equal(53, app.Clothes[11].Drawable); // Спецназ ФСБ
-        Assert.Equal(52, app.Clothes[1].Drawable);  // Балаклава
-        Assert.Equal(39, app.Props[0].Drawable);    // Шлем
+        Assert.False(service.ApplyUniform(app, factionId: 999, rankLevel: 1));
+        Assert.False(service.HasUniform(999));
     }
 
     [Fact]
-    public void HospitalUniform_RemovesHeadwear()
+    public void UniformRegistry_UnregisterAndClear_Work()
     {
-        var app = CharacterAppearance.CreateDefaultMale();
-        app.SetProp(0, 10, 0); // Hat
+        var service = new FactionUniformService();
+        service.RegisterUniform(1, (app, rank) => app.SetCloth(11, 10, 0));
+        Assert.True(service.HasUniform(1));
 
-        FactionUniformService.ApplyUniform(app, factionId: 4, rankLevel: 3);
-        Assert.Equal(249, app.Clothes[11].Drawable); // Медицинский халат
-        Assert.False(app.Props.ContainsKey(0));       // Головной убор снят
+        Assert.True(service.UnregisterUniform(1));
+        Assert.False(service.HasUniform(1));
+
+        service.RegisterUniform(1, (app, rank) => app.SetCloth(11, 10, 0));
+        service.RegisterUniform(2, (app, rank) => app.SetCloth(11, 20, 0));
+        service.Clear();
+        Assert.False(service.HasUniform(1));
+        Assert.False(service.HasUniform(2));
     }
 }

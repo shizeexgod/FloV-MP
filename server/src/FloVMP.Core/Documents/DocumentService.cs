@@ -17,25 +17,25 @@ public sealed class DocumentService
     public PlayerDocument IssuePassport(
         int accountId,
         string fullName,
-        DateTime birthDate,
-        string gender,
-        string residence,
-        string issuedBy = "Отдел УФМС ГУ МВД по г. Москве")
+        string? docNumber = null,
+        string? issuedBy = null,
+        DateTime? birthDate = null,
+        string? gender = null,
+        string? residence = null)
     {
         lock (_lock)
         {
-            var series = $"45 {_rand.Next(10, 25):D2}";
-            var number = $"{_rand.Next(100000, 999999)}";
-            var docNumber = $"{series} {number}";
+            var number = docNumber ?? $"{_rand.Next(1000, 9999)} {_rand.Next(100000, 999999)}";
+            var issuer = issuedBy ?? "Department of Civil Registration";
 
-            var doc = new PlayerDocument(accountId, DocumentType.Passport, docNumber, fullName, issuedBy)
+            var doc = new PlayerDocument(accountId, DocumentType.Passport, number, fullName, issuer)
             {
                 ExpiresAtUtc = null // Паспорт бессрочный
             };
 
-            doc.SetMeta("BirthDate", birthDate.ToString("yyyy-MM-dd"));
-            doc.SetMeta("Gender", gender);
-            doc.SetMeta("Residence", residence);
+            if (birthDate.HasValue) doc.SetMeta("BirthDate", birthDate.Value.ToString("yyyy-MM-dd"));
+            if (!string.IsNullOrEmpty(gender)) doc.SetMeta("Gender", gender);
+            if (!string.IsNullOrEmpty(residence)) doc.SetMeta("Residence", residence);
 
             GetOrCreateDocs(accountId)[DocumentType.Passport] = doc;
             return doc;
@@ -47,20 +47,20 @@ public sealed class DocumentService
         string fullName,
         IEnumerable<string> categories,
         int validityDays = 30,
-        string issuedBy = "1-й ОСБ ДПС ГИБДД по г. Москве")
+        string? docNumber = null,
+        string? issuedBy = null)
     {
         lock (_lock)
         {
-            var series = $"77 {_rand.Next(10, 25):D2}";
-            var number = $"{_rand.Next(100000, 999999)}";
-            var docNumber = $"{series} {number}";
+            var number = docNumber ?? $"DL-{_rand.Next(100000, 999999)}";
+            var issuer = issuedBy ?? "Department of Motor Vehicles";
 
             var doc = new PlayerDocument(
                 accountId,
                 DocumentType.DriverLicense,
-                docNumber,
+                number,
                 fullName,
-                issuedBy,
+                issuer,
                 DateTime.UtcNow.AddDays(validityDays));
 
             var catList = categories.Select(c => c.Trim().ToUpperInvariant()).Distinct().ToList();
@@ -146,20 +146,20 @@ public sealed class DocumentService
         int accountId,
         string fullName,
         int validityDays = 30,
-        string issuedBy = "ЦЛРР Главного управления Росгвардии")
+        string? docNumber = null,
+        string? issuedBy = null)
     {
         lock (_lock)
         {
-            var series = $"РОХа {_rand.Next(10, 99):D2}";
-            var number = $"{_rand.Next(100000, 999999)}";
-            var docNumber = $"{series} {number}";
+            var number = docNumber ?? $"WPN-{_rand.Next(100000, 999999)}";
+            var issuer = issuedBy ?? "Licensing Authority";
 
             var doc = new PlayerDocument(
                 accountId,
                 DocumentType.WeaponLicense,
-                docNumber,
+                number,
                 fullName,
-                issuedBy,
+                issuer,
                 DateTime.UtcNow.AddDays(validityDays));
 
             GetOrCreateDocs(accountId)[DocumentType.WeaponLicense] = doc;
@@ -173,22 +173,25 @@ public sealed class DocumentService
         bool isPsychHealthy,
         bool isSubstanceFree,
         int validityDays = 14,
-        string issuedBy = "ГКБ им. С.П. Боткина")
+        string? docNumber = null,
+        string? issuedBy = null)
     {
         lock (_lock)
         {
-            var docNumber = $"МК-{_rand.Next(10000, 99999)}";
+            var number = docNumber ?? $"MED-{_rand.Next(10000, 99999)}";
+            var issuer = issuedBy ?? "Medical Health Center";
+
             var doc = new PlayerDocument(
                 accountId,
                 DocumentType.MedicalCard,
-                docNumber,
+                number,
                 fullName,
-                issuedBy,
+                issuer,
                 DateTime.UtcNow.AddDays(validityDays));
 
-            doc.SetMeta("PsychiatristStatus", isPsychHealthy ? "Годен" : "Не годен");
-            doc.SetMeta("NarcologistStatus", isSubstanceFree ? "Чист" : "Обнаружены ПАВ");
-            doc.SetMeta("OverallStatus", (isPsychHealthy && isSubstanceFree) ? "Годен к службе и ношению оружия" : "Не годен к службе");
+            doc.SetMeta("PsychiatristStatus", isPsychHealthy ? "Fit" : "Unfit");
+            doc.SetMeta("NarcologistStatus", isSubstanceFree ? "Clean" : "SubstanceDetected");
+            doc.SetMeta("OverallStatus", (isPsychHealthy && isSubstanceFree) ? "Approved" : "Rejected");
 
             GetOrCreateDocs(accountId)[DocumentType.MedicalCard] = doc;
             return doc;

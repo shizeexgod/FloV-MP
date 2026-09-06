@@ -36,6 +36,7 @@ public class GamemodeResource : Resource
     private FloVMP.Core.Factions.FactionService? _factions;
     private FloVMP.Core.Documents.DocumentService? _documents;
     private FloVMP.Core.Housing.HousingService? _housing;
+    private FloVMP.Core.Characters.FactionUniformService? _uniforms;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
@@ -62,9 +63,14 @@ public class GamemodeResource : Resource
         _auth.Attach();
 
         _economy = new FloVMP.Core.Economy.EconomyService();
-        _factions = new FloVMP.Core.Factions.FactionService(loadDefaultPresets: true);
+        _factions = new FloVMP.Core.Factions.FactionService();
+        Presets.DerzhavaFactions.RegisterAll(_factions);
         _documents = new FloVMP.Core.Documents.DocumentService();
-        _housing = new FloVMP.Core.Housing.HousingService(loadDefaultPresets: true);
+        _housing = new FloVMP.Core.Housing.HousingService();
+        Presets.DerzhavaHousing.RegisterAll(_housing);
+        _uniforms = new FloVMP.Core.Characters.FactionUniformService();
+        Presets.DerzhavaUniforms.RegisterAll(_uniforms);
+        Presets.DerzhavaUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
 
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();

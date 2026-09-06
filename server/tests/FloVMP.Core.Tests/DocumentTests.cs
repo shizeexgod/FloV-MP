@@ -16,9 +16,9 @@ public class DocumentTests
         var pass = service.IssuePassport(
             accountId,
             "Иванов Иван Иванович",
-            new DateTime(1995, 5, 12),
-            "Мужской",
-            "г. Москва, ул. Тверская, д. 7, кв. 14");
+            birthDate: new DateTime(1995, 5, 12),
+            gender: "Мужской",
+            residence: "г. Москва, ул. Тверская, д. 7, кв. 14");
 
         Assert.NotNull(pass);
         Assert.Equal(DocumentType.Passport, pass.Type);
@@ -86,7 +86,7 @@ public class DocumentTests
 
         Assert.NotNull(med);
         Assert.True(med.IsValid);
-        Assert.Equal("Годен к службе и ношению оружия", med.GetMeta("OverallStatus"));
+        Assert.Equal("Approved", med.GetMeta("OverallStatus"));
 
         var wep = service.IssueWeaponLicense(
             accountId,
@@ -95,7 +95,16 @@ public class DocumentTests
 
         Assert.NotNull(wep);
         Assert.True(wep.IsValid);
-        Assert.StartsWith("РОХа", wep.DocumentNumber);
+        Assert.StartsWith("WPN-", wep.DocumentNumber);
+
+        var customWep = service.IssueWeaponLicense(
+            999,
+            "Петров Петр",
+            validityDays: 60,
+            docNumber: "РОХа 77 123456",
+            issuedBy: "Росгвардия");
+        Assert.StartsWith("РОХа", customWep.DocumentNumber);
+        Assert.Equal("Росгвардия", customWep.IssuedBy);
 
         var allDocs = service.GetAllDocuments(accountId);
         Assert.Equal(2, allDocs.Count);

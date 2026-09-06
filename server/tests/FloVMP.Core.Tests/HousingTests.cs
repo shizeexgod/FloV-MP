@@ -8,17 +8,60 @@ namespace FloVMP.Core.Tests;
 
 public class HousingTests
 {
-    [Fact]
-    public void Presets_LoadProperly()
+    private static HousingService CreateTestHousingService()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = new HousingService();
+
+        service.RegisterProperty(new Property(
+            1,
+            "100 Downtown Ave, Apt 42",
+            PropertyType.Apartment,
+            price: 25_000_000,
+            entrance: new Vector3D(-268.3f, -956.8f, 31.2f),
+            interior: new Vector3D(-786.8f, 315.7f, 217.6f),
+            dimension: 1001));
+
+        service.RegisterProperty(new Property(
+            2,
+            "15 Central Boulevard, Apt 8",
+            PropertyType.Apartment,
+            price: 8_500_000,
+            entrance: new Vector3D(112.5f, -820.4f, 31.1f),
+            interior: new Vector3D(340.9f, 437.1f, 149.3f),
+            dimension: 1002));
+
+        service.RegisterProperty(new Property(
+            3,
+            "7 Richman Drive",
+            PropertyType.Mansion,
+            price: 85_000_000,
+            entrance: new Vector3D(-1288.6f, 440.3f, 97.5f),
+            interior: new Vector3D(1397.3f, 1141.2f, 114.3f),
+            dimension: 1003));
+
+        service.RegisterProperty(new Property(
+            4,
+            "Industrial Way, Box 24",
+            PropertyType.Garage,
+            price: 1_200_000,
+            entrance: new Vector3D(740.1f, -1002.5f, 22.8f),
+            interior: new Vector3D(178.6f, -1005.8f, -98.9f),
+            dimension: 1004));
+
+        return service;
+    }
+
+    [Fact]
+    public void RegisterProperty_AndRetrieval_Works()
+    {
+        var service = CreateTestHousingService();
         var props = service.GetAllProperties();
 
         Assert.Equal(4, props.Count);
 
         var city = service.GetProperty(1);
         Assert.NotNull(city);
-        Assert.Contains("Башня Федерация", city.Address);
+        Assert.Equal("100 Downtown Ave, Apt 42", city.Address);
         Assert.Equal(25_000_000, city.Price);
         Assert.Equal(1001, city.Dimension);
         Assert.False(city.HasOwner);
@@ -28,7 +71,7 @@ public class HousingTests
     [Fact]
     public void BuyProperty_SucceedsWithSufficientFunds()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var acc = new Account { Id = 10, Username = "Oligarch", Bank = 50_000_000 };
 
         Assert.True(service.TryBuy(acc, 1, out var error));
@@ -49,7 +92,7 @@ public class HousingTests
     [Fact]
     public void BuyProperty_FailsWithInsufficientFunds()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var poorAcc = new Account { Id = 20, Username = "PoorPlayer", Bank = 10_000 };
 
         Assert.False(service.TryBuy(poorAcc, 1, out var error));
@@ -62,7 +105,7 @@ public class HousingTests
     [Fact]
     public void SellProperty_GivesRefundAndClearsState()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var acc = new Account { Id = 10, Username = "Owner", Bank = 30_000_000, Cash = 500_000 };
 
         service.TryBuy(acc, 1, out _);
@@ -91,12 +134,12 @@ public class HousingTests
     [Fact]
     public void LockAndRoommates_AuthorizationFlow()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var owner = new Account { Id = 10, Bank = 20_000_000 };
         const int roommateId = 55;
         const int intruderId = 66;
 
-        service.TryBuy(owner, 2, out _); // Buy ЖК Тверской (8.5M)
+        service.TryBuy(owner, 2, out _);
         var prop = service.GetProperty(2)!;
 
         // Intruder cannot lock
@@ -119,7 +162,7 @@ public class HousingTests
     [Fact]
     public void Safe_DepositAndWithdraw()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var owner = new Account { Id = 10, Bank = 10_000_000, Cash = 100_000 };
         service.TryBuy(owner, 4, out _); // Гараж за 1.2M
 
@@ -141,7 +184,7 @@ public class HousingTests
     [Fact]
     public void NearbyProperty_LocatesProperly()
     {
-        var service = new HousingService(loadDefaultPresets: true);
+        var service = CreateTestHousingService();
         var prop = service.GetProperty(1)!;
 
         // Position exactly at entrance
