@@ -50,6 +50,20 @@ public sealed class Account
         return false;
     }
 
+    /// <summary>Количество активных предупреждений (варнов). При 3/3 — автоматический бан.</summary>
+    public int Warns { get; set; } = 0;
+
+    /// <summary>Время окончания заключения в деморгане / КПЗ (ISO 8601 string, пустая если не заключён).</summary>
+    public string JailUntilUtc { get; set; } = "";
+
+    public bool IsJailed(DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(JailUntilUtc)) return false;
+        if (DateTime.TryParse(JailUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var until))
+            return nowUtc < until;
+        return false;
+    }
+
     /// <summary>Правила имени пользователя (общие для клиента и сервера).</summary>
     public static bool IsValidUsername(string? name) =>
         !string.IsNullOrWhiteSpace(name)

@@ -48,9 +48,6 @@ public static class ChunkedDiffUpdater
         int chunkIndex = 0;
         long currentOffset = 0;
         int bytesRead;
-
-        using var sha = SHA256.Create();
-
         while ((bytesRead = await fs.ReadAsync(buffer.AsMemory(0, chunkSize), ct)) > 0)
         {
             var hashBytes = SHA256.HashData(buffer.AsSpan(0, bytesRead));
@@ -152,5 +149,24 @@ public static class ChunkedDiffUpdater
         await using var fs = new FileStream(targetFilePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None, bufferSize: 1024 * 1024, useAsync: true);
         fs.Seek(chunk.Offset, SeekOrigin.Begin);
         await fs.WriteAsync(chunkData, ct);
+    }
+
+    /// <summary>
+    /// Обеспечивает корректный итоговый размер файла (усечение или преаллокация).
+    /// Гарантирует отсутствие остаточных байтов при уменьшении размера файла между версиями.
+    /// </summary>
+    public static void EnsureFileSize(string targetFilePath, long totalSize)
+    {
+        var dir = Path.GetDirectoryName(targetFilePath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        using var fs = new FileStream(targetFilePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+        if (fs.Length != totalSize)
+        {
+            fs.SetLength(totalSize);
+        }
     }
 }

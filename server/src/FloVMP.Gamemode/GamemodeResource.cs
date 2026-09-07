@@ -86,7 +86,14 @@ public class GamemodeResource : Resource
             economy: _economy,
             factions: _factions,
             documents: _documents,
-            housing: _housing);
+            housing: _housing,
+            inventory: _inv,
+            restartServer: sec => Task.Run(async () =>
+            {
+                await Task.Delay(sec * 1000);
+                Safe.Run("core.restart.save", () => _inv?.SaveAll());
+                Alt.StopServer();
+            }));
         _chat.Attach();
 
         _console = new ConsoleCommands(

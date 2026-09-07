@@ -159,8 +159,8 @@ public sealed class AdaptiveTickManager<TId> where TId : notnull
         int tickModulo = GetTickModuloForTier(effectiveTier, _serverLoadFactor);
         if (tickModulo <= 1) return true;
 
-        // Хэширование для детерминированного размазывания синхронизации по тикам
-        int hashOffset = Math.Abs(targetId.GetHashCode()) % tickModulo;
+        // Хэширование для детерминированного размазывания синхронизации по тикам (защита от int.MinValue)
+        int hashOffset = (targetId.GetHashCode() & 0x7FFFFFFF) % tickModulo;
         return (currentTickIndex + hashOffset) % tickModulo == 0;
     }
 

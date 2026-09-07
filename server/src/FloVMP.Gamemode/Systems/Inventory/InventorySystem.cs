@@ -69,6 +69,25 @@ public sealed class InventorySystem
             Safe.Run("inv.SaveAll", () => _store.Save(accountId, inv));
     }
 
+    /// <summary>Выдать предмет игроку в инвентарь (административные команды / игровые награды).</summary>
+    public bool TryGiveItem(IPlayer player, string itemId, int quantity)
+    {
+        if (!player.Exists || quantity <= 0) return false;
+        if (!_live.TryGetValue(player.Id, out var e)) return false;
+        if (!ItemCatalog.Exists(itemId)) return false;
+
+        var res = e.inv.Add(itemId, quantity);
+        if (res.Ok)
+        {
+            _store.Save(e.accountId, e.inv);
+            Sync(player, e.inv);
+            FloVMP.Core.Logging.GameLog.Item("admin_give",
+                FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, quantity);
+            return true;
+        }
+        return false;
+    }
+
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("inv.OnDisconnect", () =>
     {
         if (_live.TryRemove(player.Id, out var e))
@@ -92,7 +111,12 @@ public sealed class InventorySystem
 
         var take = Math.Clamp(qty, 1, s.Quantity);
         var itemId = s.ItemId;
-        e.inv.Remove(itemId, take);
+        s.Quantity -= take;
+        if (s.Quantity <= 0)
+        {
+            e.inv.Slots[slot] = null;
+        }
+
         FloVMP.Core.Logging.GameLog.Item("drop",
             FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, take);
         // TODO: положить дроп на землю как объект мира (позже)
@@ -112,11 +136,13 @@ public sealed class InventorySystem
         {
             case "bandage":
                 player.Health = (ushort)Math.Min(200, player.Health + 25);
-                e.inv.Remove("bandage", 1);
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
                 break;
             case "water":
             case "bread":
-                e.inv.Remove(itemId, 1);
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
                 break;
             default:
                 player.Emit("flovmp:inv:notice", $"{itemId}: пока нельзя использовать");

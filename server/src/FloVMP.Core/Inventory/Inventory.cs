@@ -147,16 +147,17 @@ public sealed class Inventory
         return InvResult.Success;
     }
 
-    public List<ItemStack> Snapshot()
+    public List<ItemStack?> Snapshot()
     {
-        var list = new List<ItemStack>();
+        var list = new List<ItemStack?>(SlotCount);
         foreach (var s in Slots)
-            list.Add(s is null ? null! : new ItemStack { ItemId = s.ItemId, Quantity = s.Quantity });
+            list.Add(s is null ? null : new ItemStack { ItemId = s.ItemId, Quantity = s.Quantity });
         return list;
     }
 
-    public void LoadSnapshot(IReadOnlyList<ItemStack?> slots)
+    public void LoadSnapshot(IReadOnlyList<ItemStack?>? slots)
     {
+        if (slots is null) return;
         for (var i = 0; i < SlotCount; i++)
         {
             var s = i < slots.Count ? slots[i] : null;

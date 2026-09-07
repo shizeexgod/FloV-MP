@@ -89,6 +89,11 @@ public sealed class OcclusionCullingService
 
         // 2. Проверка дистанции
         float dist = viewerPos.DistanceTo(targetPos);
+        if (float.IsNaN(dist) || float.IsInfinity(dist))
+        {
+            return false;
+        }
+
         float limit = maxDistance ?? DefaultMaxDistance;
         if (dist > limit)
         {

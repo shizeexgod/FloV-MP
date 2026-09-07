@@ -202,11 +202,15 @@ public sealed class DeadReckoningInterpolator
             return null;
         }
 
-        // Защита от эксплойтов: нельзя отмотать время дальше maxRewindMs
+        // Защита от эксплойтов: нельзя отмотать время дальше maxRewindMs или дальше текущего времени + 150мс
         long minAllowedTimestamp = currentServerTimestampMs - maxRewindMs;
         if (targetTimestampMs < minAllowedTimestamp)
         {
             targetTimestampMs = minAllowedTimestamp;
+        }
+        else if (targetTimestampMs > currentServerTimestampMs + 150)
+        {
+            targetTimestampMs = currentServerTimestampMs + 150;
         }
 
         var snapshots = history.GetOrderedSnapshots();
@@ -261,6 +265,11 @@ public sealed class DeadReckoningInterpolator
         long currentServerTimestampMs,
         long maxRewindMs = 500)
     {
+        if (clientShotTimestampMs > currentServerTimestampMs + 250)
+        {
+            return new LagCompensationHitResult(false, Vector3D.Zero, float.MaxValue, "Shot timestamp is in the future");
+        }
+
         // Отмотка позиции цели на момент выстрела
         var rewoundPos = GetRewoundPosition(targetId, clientShotTimestampMs, currentServerTimestampMs, maxRewindMs);
         if (rewoundPos == null)

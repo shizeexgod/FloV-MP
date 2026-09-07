@@ -98,6 +98,7 @@ public sealed class VehiclePhysicsGuardian
             }
 
             float dt = (float)(timestampUtc - state.LastUpdateUtc).TotalSeconds;
+            if (dt < 0) return VehicleViolationType.None; // Игнорируем устаревшие пакеты, пришедшие не по порядку
             if (dt <= 0.001f) dt = 0.016f; // Защита от деления на 0 при спаме пакетов
 
             float dist = state.LastPosition.DistanceTo(newPosition);

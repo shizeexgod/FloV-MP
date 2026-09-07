@@ -330,8 +330,8 @@ public sealed class VoiceGridRouter
     /// </summary>
     public static float CalculateVolume(float distance, float maxDistance, VoiceAttenuationModel model)
     {
-        if (distance <= 0) return 1.0f;
-        if (distance >= maxDistance) return 0.0f;
+        if (float.IsNaN(distance) || float.IsInfinity(distance) || distance <= 0) return 1.0f;
+        if (float.IsNaN(maxDistance) || float.IsInfinity(maxDistance) || maxDistance <= 0.0001f || distance >= maxDistance) return 0.0f;
 
         float normalized = distance / maxDistance; // 0.0 .. 1.0
 

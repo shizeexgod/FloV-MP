@@ -179,6 +179,12 @@
     state.defs = { phone: { name: "Телефон" }, water: { name: "Вода" } };
     render();
   }
+
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "i" || e.key === "I" || e.key === "ш" || e.key === "Ш" || e.key === "Escape" || e.keyCode === 73 || e.keyCode === 27) {
+      send("flovmp:inv:close");
+    }
+  });
 </script>
 </body>
 </html>

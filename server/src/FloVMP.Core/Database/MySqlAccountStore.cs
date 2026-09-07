@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using FloVMP.Core.Auth;
 using FloVMP.Core.Logging;
 using MySqlConnector;
@@ -95,21 +95,35 @@ public sealed class MySqlAccountStore : IAccountStore
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            UPDATE accounts
-            SET password_hash = @pw,
-                cash = @cash,
-                bank = @bank,
-                admin_level = @admin_level,
-                is_banned = @is_banned,
-                ban_reason = @ban_reason,
-                ban_until_utc = @ban_until,
-                mute_until_utc = @mute_until,
-                last_login_at = @last_login,
-                email = @email,
-                totp_secret = @totp_secret,
-                two_fa_enabled = @two_fa_enabled
-            WHERE id = @id OR username = @username;";
+        cmd.CommandText = account.Id > 0
+            ? @"UPDATE accounts
+                SET password_hash = @pw,
+                    cash = @cash,
+                    bank = @bank,
+                    admin_level = @admin_level,
+                    is_banned = @is_banned,
+                    ban_reason = @ban_reason,
+                    ban_until_utc = @ban_until,
+                    mute_until_utc = @mute_until,
+                    last_login_at = @last_login,
+                    email = @email,
+                    totp_secret = @totp_secret,
+                    two_fa_enabled = @two_fa_enabled
+                WHERE id = @id;"
+            : @"UPDATE accounts
+                SET password_hash = @pw,
+                    cash = @cash,
+                    bank = @bank,
+                    admin_level = @admin_level,
+                    is_banned = @is_banned,
+                    ban_reason = @ban_reason,
+                    ban_until_utc = @ban_until,
+                    mute_until_utc = @mute_until,
+                    last_login_at = @last_login,
+                    email = @email,
+                    totp_secret = @totp_secret,
+                    two_fa_enabled = @two_fa_enabled
+                WHERE username = @username;";
 
         cmd.Parameters.AddWithValue("@id", account.Id);
         cmd.Parameters.AddWithValue("@username", account.Username);

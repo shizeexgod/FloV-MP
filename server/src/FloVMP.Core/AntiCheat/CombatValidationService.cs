@@ -114,7 +114,7 @@ public sealed class CombatValidationService
                 if (lastShot.Weapon == weaponHash)
                 {
                     float interval = (float)(shotTimeUtc - lastShot.LastShotUtc).TotalSeconds;
-                    if (interval < profile.MinShotIntervalSeconds * 0.55f) // Буфер 45% на сетевой джиттер
+                    if (interval >= 0 && interval < profile.MinShotIntervalSeconds * 0.55f) // Буфер 45% на сетевой джиттер
                     {
                         OnCombatViolation?.Invoke(attackerId, CombatViolationType.RapidFire,
                             $"Rapid Fire: интервал между выстрелами {interval * 1000:F0}мс (лимит {profile.MinShotIntervalSeconds * 1000:F0}мс)");

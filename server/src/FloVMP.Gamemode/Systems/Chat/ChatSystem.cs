@@ -26,9 +26,12 @@ public sealed class ChatSystem
     private readonly FactionService? _factions;
     private readonly DocumentService? _documents;
     private readonly FloVMP.Core.Housing.HousingService? _housing;
+    private readonly InventorySystem? _inventory;
+    private readonly Action<int>? _restartServer;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
+    private readonly ConcurrentDictionary<uint, (Position originalPos, int originalDim)> _spectatingAdmins = new();
 
     public ChatSystem(
         Func<IPlayer, Account?> accountOf,
@@ -37,7 +40,9 @@ public sealed class ChatSystem
         FloVMP.Core.Economy.EconomyService? economy = null,
         FactionService? factions = null,
         DocumentService? documents = null,
-        FloVMP.Core.Housing.HousingService? housing = null)
+        FloVMP.Core.Housing.HousingService? housing = null,
+        InventorySystem? inventory = null,
+        Action<int>? restartServer = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -46,6 +51,8 @@ public sealed class ChatSystem
         _factions = factions;
         _documents = documents;
         _housing = housing;
+        _inventory = inventory;
+        _restartServer = restartServer;
     }
 
     public void Attach()
@@ -821,6 +828,34 @@ public sealed class ChatSystem
                 SendSystem(player, $"[Ответ для {ansTarget.Name}]: {answer}");
                 break;
 
+            case "sp":
+                if (args.Length == 0) { SendSystem(player, "Использование: /sp <ID/ник>"); return; }
+                var spTarget = FindPlayer(args[0]);
+                if (spTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                if (spTarget == player) { SendSystem(player, "Нельзя следить за самим собой."); return; }
+                _spectatingAdmins[player.Id] = (player.Position, player.Dimension);
+                player.Dimension = spTarget.Dimension;
+                player.Position = spTarget.Position + new Position(0, 0, 2.0f);
+                player.Visible = false;
+                SendSystem(player, $"Вы вошли в режим слежки за {spTarget.Name} (ID {spTarget.Id}). Для выхода введите /spoff.");
+                GameLog.Admin("spectate", LogActor.Admin(acc.Id, acc.Username), spTarget.Name);
+                break;
+
+            case "spoff":
+                if (_spectatingAdmins.TryRemove(player.Id, out var orig))
+                {
+                    player.Position = orig.originalPos;
+                    player.Dimension = orig.originalDim;
+                    player.Visible = true;
+                    SendSystem(player, "Вы вышли из режима слежки и вернулись на исходную позицию.");
+                }
+                else
+                {
+                    player.Visible = true;
+                    SendSystem(player, "Вы не находитесь в режиме слежки.");
+                }
+                break;
+
             // ── Уровень 2: Модератор ───────────────────
             case "goto":
                 if (args.Length == 0) { SendSystem(player, "Использование: /goto <ID/ник>"); return; }
@@ -879,6 +914,45 @@ public sealed class ChatSystem
                 }
                 Broadcast($"[Размут] {unmuteTarget.Name} был размучен администратором {acc.Username}.");
                 GameLog.Admin("unmute", LogActor.Admin(acc.Id, acc.Username), unmuteTarget.Name);
+                break;
+
+            case "jail":
+                if (args.Length < 2 || !int.TryParse(args[1], out var jailMins) || jailMins <= 0)
+                {
+                    SendSystem(player, "Использование: /jail <ID/ник> <минут> [причина]");
+                    return;
+                }
+                var jailTarget = FindPlayer(args[0]);
+                if (jailTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var jailAcc = _accountOf(jailTarget);
+                if (jailAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var jailReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Нарушение правил сервера";
+                var jailUntil = DateTime.UtcNow.AddMinutes(jailMins);
+                jailAcc.JailUntilUtc = jailUntil.ToString("O");
+                _saveAccount?.Invoke(jailAcc);
+
+                jailTarget.RemoveAllWeapons(true);
+                jailTarget.Dimension = 9999;
+                jailTarget.Position = new Position(1651.2f, 2570.3f, 45.5f);
+
+                Broadcast($"[Деморган] {jailTarget.Name} отправлен в деморган на {jailMins} мин. администратором {acc.Username}. Причина: {jailReason}");
+                GameLog.Punishment("jail", LogActor.Admin(acc.Id, acc.Username), jailTarget.Name, jailReason, jailMins * 60);
+                break;
+
+            case "unjail":
+                if (args.Length == 0) { SendSystem(player, "Использование: /unjail <ID/ник>"); return; }
+                var unjailTarget = FindPlayer(args[0]);
+                if (unjailTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var unjailAcc = _accountOf(unjailTarget);
+                if (unjailAcc != null)
+                {
+                    unjailAcc.JailUntilUtc = "";
+                    _saveAccount?.Invoke(unjailAcc);
+                }
+                unjailTarget.Dimension = 0;
+                unjailTarget.Position = SpawnPoints.MoscowRedSquare;
+                Broadcast($"[Деморган] {unjailTarget.Name} освобождён из деморгана администратором {acc.Username}.");
+                GameLog.Admin("unjail", LogActor.Admin(acc.Id, acc.Username), unjailTarget.Name);
                 break;
 
             // ── Уровень 3: Старший Модератор ──────────
@@ -952,6 +1026,48 @@ public sealed class ChatSystem
                 if (slapTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 slapTarget.Position += new Position(0, 0, 2.5f);
                 SendSystem(player, $"Вы подбросили {slapTarget.Name}.");
+                break;
+
+            case "warn":
+                if (args.Length == 0) { SendSystem(player, "Использование: /warn <ID/ник> [причина]"); return; }
+                var warnTarget = FindPlayer(args[0]);
+                if (warnTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var warnAcc = _accountOf(warnTarget);
+                if (warnAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                var warnReason = args.Length > 1 ? string.Join(' ', args.Skip(1)) : "Нарушение правил сервера";
+
+                warnAcc.Warns++;
+                if (warnAcc.Warns >= 3)
+                {
+                    warnAcc.Warns = 0;
+                    warnAcc.IsBanned = true;
+                    warnAcc.BanReason = $"[3/3 Варнов] {warnReason}";
+                    warnAcc.BanUntilUtc = DateTime.UtcNow.AddDays(15).ToString("O");
+                    _saveAccount?.Invoke(warnAcc);
+
+                    Broadcast($"[Варн] {warnTarget.Name} получил предупреждение [3/3] от {acc.Username} и был заблокирован на 15 дн.! Причина: {warnReason}");
+                    GameLog.Punishment("warn_ban", LogActor.Admin(acc.Id, acc.Username), warnTarget.Name, warnReason, 15 * 86400);
+                    warnTarget.Kick($"Вы получили 3/3 варнов и заблокированы на 15 дн. Причина: {warnReason}");
+                }
+                else
+                {
+                    _saveAccount?.Invoke(warnAcc);
+                    Broadcast($"[Варн] {warnTarget.Name} получил предупреждение [{warnAcc.Warns}/3] от администратора {acc.Username}. Причина: {warnReason}");
+                    GameLog.Punishment("warn", LogActor.Admin(acc.Id, acc.Username), warnTarget.Name, warnReason);
+                }
+                break;
+
+            case "unwarn":
+                if (args.Length == 0) { SendSystem(player, "Использование: /unwarn <ID/ник>"); return; }
+                var unwarnTarget = FindPlayer(args[0]);
+                if (unwarnTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var unwarnAcc = _accountOf(unwarnTarget);
+                if (unwarnAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                if (unwarnAcc.Warns > 0) unwarnAcc.Warns--;
+                _saveAccount?.Invoke(unwarnAcc);
+                SendSystem(player, $"Снято предупреждение с {unwarnTarget.Name}. Текущий счёт: {unwarnAcc.Warns}/3.");
+                SendSystem(unwarnTarget, $"Администратор {acc.Username} снял с вас предупреждение (осталось {unwarnAcc.Warns}/3).");
+                GameLog.Admin("unwarn", LogActor.Admin(acc.Id, acc.Username), unwarnTarget.Name, ("warns", unwarnAcc.Warns));
                 break;
 
             // ── Уровень 4: Администратор ──────────────
@@ -1050,6 +1166,18 @@ public sealed class ChatSystem
                 }
                 break;
 
+            case "fuel":
+                if (player.Vehicle != null)
+                {
+                    player.Vehicle.SetStreamSyncedMetaData("fuel", 100.0f);
+                    SendSystem(player, "Транспортное средство заправлено на 100%.");
+                }
+                else
+                {
+                    SendSystem(player, "Вы должны находиться в транспорте.");
+                }
+                break;
+
             // ── Уровень 5: Старший Администратор ──────
             case "hwidban":
             case "macban":
@@ -1116,6 +1244,24 @@ public sealed class ChatSystem
                 SendSystem(player, $"Время сервера установлено на {h:D2}:{m:D2}.");
                 break;
 
+            case "setskin":
+                if (args.Length < 2) { SendSystem(player, "Использование: /setskin <ID/ник> <модель_скина>"); return; }
+                var skinTarget = FindPlayer(args[0]);
+                if (skinTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var skinModel = args[1];
+                try
+                {
+                    skinTarget.Model = Alt.Hash(skinModel);
+                    SendSystem(player, $"Скин игрока {skinTarget.Name} изменён на '{skinModel}'.");
+                    SendSystem(skinTarget, $"Администратор {acc.Username} установил вам модель персонажа '{skinModel}'.");
+                    GameLog.Admin("setskin", LogActor.Admin(acc.Id, acc.Username), skinTarget.Name, ("model", skinModel));
+                }
+                catch (Exception ex)
+                {
+                    SendSystem(player, $"Ошибка смены скина: {ex.Message}");
+                }
+                break;
+
             // ── Уровень 6: Куратор / Зам. ГА ──────────
             case "hardban":
                 if (args.Length < 1)
@@ -1177,6 +1323,48 @@ public sealed class ChatSystem
                 }
                 break;
 
+            case "setdim":
+                if (args.Length < 2 || !int.TryParse(args[1], out var newDim))
+                {
+                    SendSystem(player, "Использование: /setdim <ID/ник> <dimension>");
+                    return;
+                }
+                var dimTarget = FindPlayer(args[0]);
+                if (dimTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                dimTarget.Dimension = newDim;
+                SendSystem(player, $"Виртуальный мир игрока {dimTarget.Name} изменён на {newDim}.");
+                SendSystem(dimTarget, $"Администратор {acc.Username} переместил вас в виртуальный мир #{newDim}.");
+                GameLog.Admin("setdim", LogActor.Admin(acc.Id, acc.Username), dimTarget.Name, ("dim", newDim));
+                break;
+
+            case "giveitem":
+                if (args.Length < 3 || !int.TryParse(args[2], out var itemQty) || itemQty <= 0)
+                {
+                    SendSystem(player, "Использование: /giveitem <ID/ник> <item_id> <кол-во>");
+                    return;
+                }
+                var itemTarget = FindPlayer(args[0]);
+                if (itemTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                var itemId = args[1].ToLowerInvariant();
+                if (_inventory != null)
+                {
+                    if (_inventory.TryGiveItem(itemTarget, itemId, itemQty))
+                    {
+                        SendSystem(player, $"Вы выдали {itemQty} шт. '{itemId}' игроку {itemTarget.Name}.");
+                        SendSystem(itemTarget, $"Администратор {acc.Username} выдал вам в инвентарь: {itemQty}x {itemId}.");
+                        GameLog.Admin("giveitem", LogActor.Admin(acc.Id, acc.Username), itemTarget.Name, ("item", itemId), ("qty", itemQty));
+                    }
+                    else
+                    {
+                        SendSystem(player, $"Не удалось выдать предмет. Проверьте ID ('{itemId}') или свободное место в инвентаре.");
+                    }
+                }
+                else
+                {
+                    SendSystem(player, "Система инвентаря временно недоступна.");
+                }
+                break;
+
             // ── Уровень 7: Главный Администратор ───────
             case "makeadmin":
                 if (args.Length < 2 || !int.TryParse(args[1], out var newLvl) || newLvl is < 0 or > 6)
@@ -1195,6 +1383,27 @@ public sealed class ChatSystem
                 GameLog.Admin("promote", LogActor.Admin(acc.Id, acc.Username), promoteTarget.Name, ("newLevel", newLvl));
                 break;
 
+            case "clearadmin":
+                if (args.Length == 0) { SendSystem(player, "Использование: /clearadmin <ник>"); return; }
+                var clearName = args[0];
+                var clearAcc = _findAccountByName?.Invoke(clearName);
+                if (clearAcc == null)
+                {
+                    var onlineTarget = FindPlayer(clearName);
+                    clearAcc = onlineTarget != null ? _accountOf(onlineTarget) : null;
+                }
+                if (clearAcc == null)
+                {
+                    SendSystem(player, $"Аккаунт '{clearName}' не найден.");
+                    return;
+                }
+                clearAcc.AdminLevel = 0;
+                _saveAccount?.Invoke(clearAcc);
+                BroadcastAdmin($"[А-ЧАТ] Главный Администратор {acc.Username} снял права администратора с {clearAcc.Username}.");
+                SendSystem(player, $"Администраторские права успешно сняты с {clearAcc.Username}.");
+                GameLog.Admin("clearadmin", LogActor.Admin(acc.Id, acc.Username), clearAcc.Username);
+                break;
+
             // ── Уровень 8: Руководитель проекта ───────
             case "setadminlevel":
                 if (args.Length < 2 || !int.TryParse(args[1], out var fullLvl) || fullLvl is < 0 or > 8)
@@ -1211,6 +1420,13 @@ public sealed class ChatSystem
                 SendSystem(fullTarget, $"[Руководство] Ваш статус изменён на: {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl).");
                 SendSystem(player, $"Успешно установлен ранг {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl) для {fullTarget.Name}.");
                 GameLog.Admin("setadmin", LogActor.Admin(acc.Id, acc.Username), fullTarget.Name, ("level", fullLvl));
+                break;
+
+            case "srvrestart":
+                int restartSec = args.Length > 0 && int.TryParse(args[0], out var parsedSec) ? Math.Max(3, parsedSec) : 10;
+                Broadcast($"[ВНИМАНИЕ] Перезапуск сервера через {restartSec} сек. по команде администратора {acc.Username}. Сохранение...");
+                GameLog.Admin("srvrestart", LogActor.Admin(acc.Id, acc.Username), "SERVER", ("seconds", restartSec));
+                _restartServer?.Invoke(restartSec);
                 break;
         }
     }

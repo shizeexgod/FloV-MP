@@ -14,6 +14,8 @@ let inGame = false;
 let chatView = null;
 let chatTyping = false;
 let settingsView = null;
+let hudView = null;
+let inventoryView = null;
 
 // --- NoClip (Полет на F4 с невидимостью) ---------------------------------
 let noClip = false;
@@ -242,9 +244,12 @@ function openSettings() {
     alt.toggleGameControls(false);
 
     settingsView.on('flovmp:settings:close', closeSettings);
-    settingsView.on('flovmp:settings:accent', () => {
-        // Пока чисто клиентская настройка (localStorage, общий для всех NUI-экранов
-        // этого resource) — без записи на сервер/аккаунт.
+    settingsView.on('flovmp:settings:accent', (colorId) => {
+        alt.log(`[FloV:MP] Акцентный цвет изменён на: ${colorId}`);
+        if (hudView) hudView.emit('flovmp:settings:accent', colorId);
+        if (chatView) chatView.emit('flovmp:settings:accent', colorId);
+        if (inventoryView) inventoryView.emit('flovmp:settings:accent', colorId);
+        if (consoleView) consoleView.emit('flovmp:settings:accent', colorId);
     });
 }
 
@@ -256,8 +261,48 @@ function closeSettings() {
     alt.toggleGameControls(true);
 }
 
+// --- Игровой HUD (Здоровье, Броня, Деньги, Онлайн) -----------------------
+function openHud() {
+    if (hudView) return;
+    hudView = new alt.WebView('http://resource/client/html/hud/index.html');
+}
+
+function closeHud() {
+    if (!hudView) return;
+    hudView.destroy();
+    hudView = null;
+}
+
+// --- Инвентарь (Клавиша I) -----------------------------------------------
+function openInventory() {
+    if (inventoryView || !inGame || authView || chatTyping || consoleView) return;
+    inventoryView = new alt.WebView('http://resource/client/html/inventory/index.html');
+    inventoryView.focus();
+    alt.showCursor(true);
+    alt.toggleGameControls(false);
+
+    inventoryView.on('flovmp:inv:close', closeInventory);
+    inventoryView.on('flovmp:inv:use', (slot) => alt.emitServer('flovmp:inv:use', slot));
+    inventoryView.on('flovmp:inv:drop', (slot, qty) => alt.emitServer('flovmp:inv:drop', slot, qty));
+    inventoryView.on('flovmp:inv:move', (from, to) => alt.emitServer('flovmp:inv:move', from, to));
+}
+
+function closeInventory() {
+    if (!inventoryView) return;
+    inventoryView.destroy();
+    inventoryView = null;
+    try { alt.showCursor(false); } catch (e) { }
+    alt.toggleGameControls(true);
+}
+
+function toggleInventory() {
+    if (inventoryView) closeInventory();
+    else openInventory();
+}
+
 // --- Внутриигровая консоль разработчика (F8 / F11) ------------------------
 let consoleView = null;
+let consoleStatsInterval = null;
 
 function openDevConsole() {
     if (consoleView) return;
@@ -273,15 +318,38 @@ function openDevConsole() {
     consoleView.on('flovmp:console:hotreload', () => {
         alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
         if (chatView) chatView.reload(true);
+        if (hudView) hudView.reload(true);
+        if (inventoryView) inventoryView.reload(true);
         if (settingsView) settingsView.reload(true);
         if (consoleView) consoleView.emit('flovmp:console:log', 'HOTRELOAD', 'All active WebViews reloaded from disk.');
     });
     consoleView.on('flovmp:console:quit', () => {
         native.restartGame();
     });
+
+    if (consoleStatsInterval) alt.clearInterval(consoleStatsInterval);
+    consoleStatsInterval = alt.setInterval(() => {
+        if (!consoleView) return;
+        let fps = 60;
+        try {
+            const ft = native.getFrameTime();
+            if (ft > 0) fps = Math.min(240, Math.round(1.0 / ft));
+        } catch (e) {
+            fps = 60;
+        }
+        let ping = 14;
+        try {
+            if (typeof alt.getPing === 'function') ping = alt.getPing();
+        } catch (e) { }
+        consoleView.emit('flovmp:console:stats', fps, ping, 60);
+    }, 500);
 }
 
 function closeDevConsole() {
+    if (consoleStatsInterval) {
+        alt.clearInterval(consoleStatsInterval);
+        consoleStatsInterval = null;
+    }
     if (!consoleView) return;
     consoleView.destroy();
     consoleView = null;
@@ -332,6 +400,7 @@ alt.onServer('flovmp:auth:show', openAuth);
 alt.onServer('flovmp:auth:hide', () => {
     closeAuth();
     openChat();
+    openHud();
     inGame = true;
 
     const player = alt.Player.local;
@@ -348,13 +417,41 @@ alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
-// Клавиши: F4 — NoClip, T — Чат, F8/F11 — Консоль разработчика, F9 — Настройки
+alt.onServer('flovmp:hud:init', (serverName) => {
+    openHud();
+    if (hudView) hudView.emit('flovmp:hud:init', serverName);
+});
+
+alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
+    if (!hudView && inGame) openHud();
+    if (hudView) hudView.emit('flovmp:hud:tick', hp, armor, cash, online, hour, minute);
+});
+
+alt.onServer('flovmp:inv:sync', (json) => {
+    if (inventoryView) inventoryView.emit('flovmp:inv:sync', json);
+});
+
+alt.onServer('flovmp:inv:notice', (text) => {
+    if (inventoryView) inventoryView.emit('flovmp:inv:notice', text);
+});
+
+// Клавиши: F4 — NoClip, T — Чат, I — Инвентарь, F8/F11 — Консоль разработчика, F9 — Настройки
 alt.on('keyup', (key) => {
     if (key === 119 || key === 122) { // F8 (119) or F11 (122)
         toggleDevConsole();
         return;
     }
-    if (chatTyping || consoleView) return;
+    if (consoleView) return;
+
+    if (key === 73) { // I (73) — Инвентарь
+        if (inGame && !chatTyping && !authView) {
+            toggleInventory();
+            return;
+        }
+    }
+
+    if (chatTyping || inventoryView) return;
+
     if (key === 115) { // F4
         toggleNoClip();
     } else if (key === 84) { // T
@@ -374,6 +471,8 @@ alt.on('disconnect', () => {
     if (noClip) toggleNoClip();
     closeAuth();
     closeChat();
+    closeHud();
+    closeInventory();
     closeSettings();
     closeDevConsole();
     inGame = false;
