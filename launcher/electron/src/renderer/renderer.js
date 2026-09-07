@@ -880,6 +880,13 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
 });
 
 // ─── Аудиоустройства для вкладки «Голос» (реальные, из системы) ───────────
+function cleanDeviceLabel(label, kind) {
+  if (!label) return kind === 'audioinput' ? 'Микрофон' : 'Динамики';
+  return label
+    .replace(/^(Default|Communications|По умолчанию|Связь)\s*[-–]\s*/i, '')
+    .replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, '')
+    .trim();
+}
 async function fillAudioDevices() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
   try {
@@ -888,12 +895,20 @@ async function fillAudioDevices() {
       const sel = document.getElementById(selId);
       if (!sel) return;
       const cur = settings[selId === 'set-voice-input' ? 'voiceInput' : 'voiceOutput'];
-      devs.filter((d) => d.kind === kind).forEach((d) => {
-        const o = document.createElement('option');
-        o.value = d.deviceId; o.textContent = d.label || (kind === 'audioinput' ? 'Микрофон' : 'Динамики');
-        sel.appendChild(o);
-      });
-      if (cur) sel.value = cur;
+      // «default»/«communications» — псевдо-id Windows, дублируют реальное
+      // устройство; оставляем только настоящие + первый пункт «По умолчанию».
+      const seen = new Set();
+      devs.filter((d) => d.kind === kind && d.deviceId
+        && d.deviceId !== 'default' && d.deviceId !== 'communications')
+        .forEach((d) => {
+          const name = cleanDeviceLabel(d.label, kind);
+          if (seen.has(name)) return;
+          seen.add(name);
+          const o = document.createElement('option');
+          o.value = d.deviceId; o.textContent = name;
+          sel.appendChild(o);
+        });
+      if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
     };
     fill('set-voice-input', 'audioinput');
     fill('set-voice-output', 'audiooutput');
@@ -1445,6 +1460,12 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   status.classList.remove('error');
   status.textContent = '';
   openLaunchModal('Басманный');
+
+  // Сбросить отложенное сохранение до старта — PlayService на нативной
+  // стороне читает settings.json (режим окна, доп. аргументы, приоритет,
+  // FPS, пресет графики). Без флеша свежая правда могла не долететь.
+  clearTimeout(saveTimer);
+  await window.floridaV.saveSettings(settings);
 
   const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);
 

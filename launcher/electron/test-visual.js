@@ -126,7 +126,12 @@ const OUT = process.argv[2] || path.join(__dirname, 'tests', 'screenshots');
   await win.waitForTimeout(200);
   await shot('04b-settings-game');
   await win.click('.settings-subnav [data-subtab="voice"]');
-  await win.waitForTimeout(200);
+  // fillAudioDevices() асинхронный (enumerateDevices) — ждём заполнения
+  await win.waitForFunction(
+    () => document.getElementById('set-voice-input')?.options.length > 1,
+    { timeout: 3000 },
+  ).catch(() => null);
+  await win.waitForTimeout(250);
   await shot('04c-settings-voice');
   await win.click('.settings-subnav [data-subtab="general"]');
   await win.waitForTimeout(150);

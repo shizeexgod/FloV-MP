@@ -41,6 +41,27 @@ public static class PlayService
 
         var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\"";
 
+        // Настройки запуска из settings.json (те же, что редактируются на
+        // вкладке «Игра»). Раньше сохранялись, но никуда не передавались —
+        // отсюда жалобы «не применяются».
+        try
+        {
+            var s = SettingsService.Load();
+            if (s != null)
+            {
+                var gameArgs = BuildGameArgs(s);
+                if (gameArgs.Length > 0)
+                    args += $" --game-args \"{gameArgs.Replace("\"", "")}\"";
+                if (!string.IsNullOrWhiteSpace(s.ProcPriority) && s.ProcPriority != "normal")
+                    args += $" --priority {s.ProcPriority}";
+                if (s.FpsLimit > 0)
+                    args += $" --fps-limit {s.FpsLimit}";
+                if (!string.IsNullOrWhiteSpace(s.GraphicsPreset) && s.GraphicsPreset != "untouched")
+                    args += $" --gfx-preset {s.GraphicsPreset}";
+            }
+        }
+        catch { }
+
         try
         {
             var psi = new ProcessStartInfo
@@ -57,6 +78,24 @@ public static class PlayService
         {
             return new LaunchResult(false, $"Ошибка запуска: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Аргументы командной строки GTA V из настроек: режим окна + свои
+    /// аргументы владельца («Доп. аргументы запуска», передаются как есть).
+    /// </summary>
+    private static string BuildGameArgs(Models.LauncherSettings s)
+    {
+        var parts = new List<string>();
+        switch (s.GtaWindowMode)
+        {
+            case "windowed": parts.Add("-windowed"); break;
+            case "borderless": parts.Add("-borderless"); break;
+            case "fullscreen": parts.Add("-fullscreen"); break;
+        }
+        if (!string.IsNullOrWhiteSpace(s.LaunchArgs))
+            parts.Add(s.LaunchArgs.Trim());
+        return string.Join(' ', parts);
     }
 
     private static string? FindConnectExe()
