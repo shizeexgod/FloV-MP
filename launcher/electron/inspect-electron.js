@@ -111,10 +111,45 @@ const path = require('node:path');
   });
   console.log('\n=== анимация закрытия селекта ===\n', JSON.stringify(anim, null, 2));
 
-  await win.screenshot({ path: path.join(__dirname, 'tests', 'screenshots', 'el_news.png') });
-  await win.click('.rail-item[data-page="news"]').catch(() => {});
+  // 6. Звуки интерфейса — файлы реально грузятся?
+  const snd = await win.evaluate(async () => {
+    const names = ['hover', 'click', 'select', 'modal', 'modalOut', 'toggle', 'error'];
+    const out = {};
+    for (const n of names) {
+      try {
+        const r = await fetch(`assets/sounds/${n}.ogg`);
+        out[n] = r.ok ? `${(await r.arrayBuffer()).byteLength}b` : `HTTP ${r.status}`;
+      } catch (e) { out[n] = 'FAIL'; }
+    }
+    return out;
+  });
+  console.log('\n=== звуки интерфейса (fetch) ===\n', JSON.stringify(snd, null, 2));
+
+  // 7. Свой цвет — HSV-пикер, не нативный <input type=color>
+  await win.click('.settings-subnav [data-subtab="interface"]');
   await win.waitForTimeout(200);
-  await win.screenshot({ path: path.join(__dirname, 'tests', 'screenshots', 'el_news2.png') });
+  const picker = await win.evaluate(() => {
+    const custom = document.querySelector('.accent-swatch--custom, [data-accent="custom"]');
+    if (!custom) return 'нет кнопки своего цвета';
+    custom.click();
+    const pop = document.querySelector('.hsv-pop, .color-pop, .accent-custom-pop, input[type="color"]');
+    return {
+      opened: !!pop,
+      isNativeInput: pop ? pop.tagName === 'INPUT' && pop.type === 'color' : null,
+      popClass: pop ? pop.className : null,
+    };
+  });
+  console.log('\n=== пикер своего цвета ===\n', JSON.stringify(picker, null, 2));
+
+  const shots = [
+    ['el_settings_iface', async () => { await win.click('.settings-subnav [data-subtab="interface"]'); await win.waitForTimeout(300); }],
+    ['el_settings_server', async () => { await win.click('.settings-subnav [data-subtab="general"]'); await win.waitForTimeout(300); }],
+    ['el_play', async () => { await win.keyboard.press('Escape'); await win.waitForTimeout(300); await win.click('.rail-item[data-page="play"]'); await win.waitForTimeout(300); }],
+  ];
+  for (const [name, act] of shots) {
+    try { await act(); await win.screenshot({ path: path.join(__dirname, 'tests', 'screenshots', name + '.png') }); }
+    catch (e) { console.log('shot', name, 'fail', e.message); }
+  }
 
   console.log('\n=== console errors ===', JSON.stringify(errors));
   await app.close();
