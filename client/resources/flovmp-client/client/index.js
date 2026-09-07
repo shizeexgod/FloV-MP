@@ -256,6 +256,44 @@ function closeSettings() {
     alt.toggleGameControls(true);
 }
 
+// --- Внутриигровая консоль разработчика (F8 / F11) ------------------------
+let consoleView = null;
+
+function openDevConsole() {
+    if (consoleView) return;
+    consoleView = new alt.WebView('http://resource/client/html/console/index.html');
+    consoleView.focus();
+    alt.showCursor(true);
+    alt.toggleGameControls(false);
+
+    consoleView.on('flovmp:console:close', closeDevConsole);
+    consoleView.on('flovmp:console:cmd', (cmd) => {
+        alt.emitServer('flovmp:chat:say', '/' + cmd);
+    });
+    consoleView.on('flovmp:console:hotreload', () => {
+        alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
+        if (chatView) chatView.reload(true);
+        if (settingsView) settingsView.reload(true);
+        if (consoleView) consoleView.emit('flovmp:console:log', 'HOTRELOAD', 'All active WebViews reloaded from disk.');
+    });
+    consoleView.on('flovmp:console:quit', () => {
+        native.restartGame();
+    });
+}
+
+function closeDevConsole() {
+    if (!consoleView) return;
+    consoleView.destroy();
+    consoleView = null;
+    try { alt.showCursor(false); } catch (e) { }
+    alt.toggleGameControls(true);
+}
+
+function toggleDevConsole() {
+    if (consoleView) closeDevConsole();
+    else openDevConsole();
+}
+
 function loadCollisionAndUnfreeze(targetPos) {
     const player = alt.Player.local;
     if (!player || !player.valid) return;
@@ -310,9 +348,13 @@ alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
-// Клавиши: F4 — NoClip, T — Чат, F9 — Настройки
+// Клавиши: F4 — NoClip, T — Чат, F8/F11 — Консоль разработчика, F9 — Настройки
 alt.on('keyup', (key) => {
-    if (chatTyping) return;
+    if (key === 119 || key === 122) { // F8 (119) or F11 (122)
+        toggleDevConsole();
+        return;
+    }
+    if (chatTyping || consoleView) return;
     if (key === 115) { // F4
         toggleNoClip();
     } else if (key === 84) { // T
@@ -333,6 +375,7 @@ alt.on('disconnect', () => {
     closeAuth();
     closeChat();
     closeSettings();
+    closeDevConsole();
     inGame = false;
     alt.log('[FloV:MP] Отключено от сервера');
 });

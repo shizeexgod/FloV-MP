@@ -9,40 +9,49 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "build:native": "node build-native.mjs",
+    "dist": "npm run build:native && electron-builder --win",
+    "dist:fast": "electron-builder --win"
   },
   "devDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
     "electron": "^32.0.0",
     "electron-builder": "^25.0.0",
+    "lucide-static": "^1.41.0",
     "playwright": "^1.62.1"
   },
   "build": {
     "appId": "ru.derzhavarp.launcher",
     "productName": "Derzhava RP Launcher",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
     "files": [
       "src/**/*",
-      "assets/**/*"
+      "!src/renderer/**/*.map",
+      "!**/*.md"
     ],
     "extraResources": [
       {
-        "from": "../src/FloVMP.Launcher.Native/bin/Release/net8.0-windows",
+        "from": "native-dist",
         "to": "native",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*", "!*.pdb"]
       }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Держава RP",
+      "uninstallDisplayName": "Держава RP Launcher",
+      "artifactName": "DerzhavaRP-Launcher-Setup-${version}.${ext}"
     }
-  },
-  "dependencies": {
-    "@phosphor-icons/core": "^2.1.1",
-    "lucide-static": "^1.41.0"
   }
 }

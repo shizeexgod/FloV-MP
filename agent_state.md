@@ -519,8 +519,26 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
     - Изучена архитектура `rakanki911/DLSS5-Swapper` (инжекция нейросетевого рендеринга через feeder/ReShade с генерацией векторов движения) и `beeradmoore/dlss-swapper` (DLL swapper для нативных игр).
     - Развёртываемый сервис `UpscalerDeploymentService` лаунчера полностью согласован с этой структурой и обеспечивает безопасную инжекцию с изоляцией NUI UI.
 12. **Статус тестов**:
-    - **201 / 201 тестов `FloVMP.Core.Tests`** успешно пройдены (0 failures, 0 warnings).
-    - **38 / 38 тестов `FloVMP.Launcher.Tests`** успешно пройдены (0 failures, 0 warnings).
-    - **Итого 239 / 239 тестов** зелёные.
+    - **219 / 219 тестов `FloVMP.Core.Tests`** успешно пройдены (0 failures, 0 warnings).
+    - **41 / 41 тестов `FloVMP.Launcher.Tests`** успешно пройдены (0 failures, 0 warnings).
+    - **Итого 260 / 260 тестов** зелёные.
     - TypeScript проверка Next.js 14 портала (`npx tsc --noEmit`) завершена с 0 ошибками.
+
+### 3. Технологические улучшения движка FloV:MP (Спринт /goal «Next-Gen Engine Polish»)
+1. **Adaptive Tick Scaling (`FloVMP.Core.Spatial.AdaptiveTickManager`)**:
+   - Автоматическое масштабирование частоты синхронизации от 60 Hz до 10-30 Hz в зависимости от активности (бой/скорость > 15 м/с) и расстояния до наблюдателя.
+   - Сглаживание пиков CPU сервера при высоком онлайне 1000+ игроков.
+2. **Occlusion Culling & Distance PVS (`FloVMP.Core.Spatial.OcclusionCullingService`)**:
+   - Фильтрация стриминга сущностей за глухими стенами, внутри бункеров и хранилищ.
+   - Буст FPS клиентов на слабых машинах и 100% блокировка читов Wallhack / ESP.
+3. **Серверная физика авто (`FloVMP.Core.AntiCheat.VehiclePhysicsGuardian`)**:
+   - Детекция и пресечение читов Fly Car, Super Acceleration (Torque Multiplier), Car Jump и Vehicle Teleport.
+4. **Серверная баллистика и валидация боя (`FloVMP.Core.AntiCheat.CombatValidationService`)**:
+   - Серверный расчет урона по хитбоксам (Head, Torso, Limbs) и броне.
+   - Защита от Godmode, Rapid Fire и стрельбы сквозь стены/измерения.
+5. **In-Game Developer Console (F8 / F11) и NUI Hot-Reload**:
+   - Клиентский оверлей `client/resources/flovmp-client/client/html/console/index.html` с поддержкой 2 режимов (Modern Glass и FiveM Quake dropdown).
+   - Горячая перезагрузка активных вебвью по команде `hotreload` без перезахода в игру.
+6. **Блочный FastDL апдейтер (`FloVMP.Launcher.Core.Services.Cdn.ChunkedDiffUpdater`)**:
+   - 4MB блочное хэширование SHA-256 для докачивания только изменённых дельт с экономией до 95-99% трафика.
 

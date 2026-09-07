@@ -11,12 +11,15 @@ import {
   Command,
   Cpu,
   Database,
+  FileCode2,
   Gauge,
   LayoutDashboard,
   MemoryStick,
   Radio,
   Search,
   Server,
+  ShieldBan,
+  Terminal,
   Timer,
 } from 'lucide-react';
 import {
@@ -35,13 +38,21 @@ import {
 import { AreaChart, Bars, ConceptSwitch, CountUp, Reveal } from '../_ui';
 
 const PINK = '#ff1493';
-const NAV = ['Home', 'Features', 'Documentation', 'Projects', 'Roadmap', 'Pricing'];
+const NAV: { label: string; href: string }[] = [
+  { label: 'Home', href: '#top' },
+  { label: 'Features', href: '#features' },
+  { label: 'Documentation', href: '/docs' },
+  { label: 'Projects', href: '#projects' },
+  { label: 'Roadmap', href: '#roadmap' },
+  { label: 'Pricing', href: '#pricing' },
+];
+const TG = 'https://t.me/flovmp_dev';
 
 export default function SaaSConcept() {
   const [active, setActive] = useState('Dashboard');
 
   return (
-    <div className="min-h-screen bg-[#08080a] font-sans text-[#e9eaee] antialiased [--pink:#ff1493]">
+    <div id="top" className="min-h-screen scroll-smooth bg-[#08080a] font-sans text-[#e9eaee] antialiased [--pink:#ff1493] [&_section]:scroll-mt-16">
       {/* ================= NAV ================= */}
       <header className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#08080a]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
@@ -52,13 +63,13 @@ export default function SaaSConcept() {
           </div>
           <nav className="hidden items-center gap-6 md:flex">
             {NAV.map((n) => (
-              <a key={n} href="#" className="text-[13px] text-white/55 transition hover:text-white">
-                {n}
+              <a key={n.label} href={n.href} className="text-[13px] text-white/55 transition hover:text-white">
+                {n.label}
               </a>
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <a href="#" className="text-[13px] text-white/55 transition hover:text-white">
+            <a href="/concepts/saas/app" className="text-[13px] text-white/55 transition hover:text-white">
               Login
             </a>
             <a
@@ -96,10 +107,10 @@ export default function SaaSConcept() {
                 Buy Lifetime License <ArrowRight className="h-4 w-4" />
               </a>
               <a
-                href="#"
+                href="/concepts/saas/app"
                 className="inline-flex items-center gap-2 rounded-lg border border-white/12 bg-white/[0.03] px-4 py-2.5 text-[13px] font-semibold text-white/80 transition hover:bg-white/[0.06]"
               >
-                Documentation
+                Открыть дашборд <ArrowUpRight className="h-4 w-4" />
               </a>
             </div>
             <div className="mt-9 flex items-center gap-6 text-[12px] text-white/40">
@@ -162,7 +173,7 @@ export default function SaaSConcept() {
       </section>
 
       {/* ================= PROJECTS ================= */}
-      <section className="border-b border-white/[0.07]">
+      <section id="projects" className="border-b border-white/[0.07]">
         <div className="mx-auto max-w-6xl px-5 py-16">
           <Reveal>
             <div className="flex items-end justify-between">
@@ -170,8 +181,8 @@ export default function SaaSConcept() {
                 <h2 className="text-2xl font-semibold tracking-tight">Проекты на FloV:MP</h2>
                 <p className="mt-2 text-[14px] text-white/50">Каждый проект объединяет несколько серверов.</p>
               </div>
-              <a href="#" className="hidden items-center gap-1 text-[13px] text-white/50 hover:text-white sm:flex">
-                Все проекты <ChevronRight className="h-4 w-4" />
+              <a href="/concepts/saas/app" className="hidden items-center gap-1 text-[13px] text-white/50 hover:text-white sm:flex">
+                Открыть дашборд <ChevronRight className="h-4 w-4" />
               </a>
             </div>
           </Reveal>
@@ -213,7 +224,7 @@ export default function SaaSConcept() {
       </section>
 
       {/* ================= FEATURES ================= */}
-      <section className="border-b border-white/[0.07]">
+      <section id="features" className="border-b border-white/[0.07]">
         <div className="mx-auto max-w-6xl px-5 py-16">
           <Reveal>
             <h2 className="text-2xl font-semibold tracking-tight">Что входит в платформу</h2>
@@ -237,8 +248,98 @@ export default function SaaSConcept() {
         </div>
       </section>
 
+      {/* ================= OWNERSHIP / QUICK START ================= */}
+      <section id="ownership" className="border-b border-white/[0.07]">
+        <div className="mx-auto max-w-6xl px-5 py-16">
+          <Reveal>
+            <h2 className="text-2xl font-semibold tracking-tight">Полный контроль над сервером</h2>
+            <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-white/50">
+              FloV:MP даёт владельцу 100% контроль: никаких скрытых блокировок и навязанного лора. Любая
+              карта — реальная Москва, Дикий Запад XIX века или кастомные острова.
+            </p>
+          </Reveal>
+
+          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+            {[
+              {
+                icon: FileCode2,
+                t: '«Чистый холст» — Blank C# SDK',
+                d: 'Пустой проект на C# .NET 8 для кастомных механик со своей уникальной архитектурой.',
+              },
+              {
+                icon: Boxes,
+                t: '«RP Стартер» — готовая база',
+                d: 'Экономика, админ-система, инвентарь и дименшены интерьеров из коробки.',
+              },
+            ].map((c, i) => (
+              <Reveal key={c.t} delay={i * 70}>
+                <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.015] p-5">
+                  <div className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.03]">
+                    <c.icon className="h-4 w-4 text-white/70" />
+                  </div>
+                  <div className="mt-4 text-[14px] font-medium">{c.t}</div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/45">{c.d}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr]">
+            <Reveal>
+              <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.015] p-5">
+                <div className="flex items-center gap-2 text-[13px] font-medium">
+                  <Terminal className="h-4 w-4" style={{ color: PINK }} />
+                  Команды администратора из коробки
+                </div>
+                <div className="mt-4 space-y-1.5 font-mono text-[12px]">
+                  {[
+                    ['/o <текст>', 'глобальное оповещение всех игроков'],
+                    ['/pos', 'координаты X, Y, Z для маппинга'],
+                    ['/setdim <ник> <мир>', '0 — улица, 999 — админ-тюрьма, 10000+ — дома'],
+                    ['/veh <модель>', 'спавн любого транспорта GTA V'],
+                    ['/stats', 'сводка об игроке, пинге и железе'],
+                  ].map(([cmd, desc]) => (
+                    <div key={cmd} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-white/80">{cmd}</span>
+                      <span className="text-white/35">— {desc}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.06] pt-3 font-mono text-[11px] text-white/35">
+                  <span>UDP 7788 · alt:V протокол</span>
+                  <span>Консоль: F8 в клиенте / веб-консоль</span>
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={80}>
+              <div className="h-full rounded-xl border border-white/[0.08] bg-white/[0.015] p-5">
+                <div className="flex items-center gap-2 text-[13px] font-medium">
+                  <ShieldBan className="h-4 w-4" style={{ color: PINK }} />
+                  Многоуровневая система банов
+                </div>
+                <div className="mt-4 space-y-1.5 font-mono text-[12px]">
+                  {[
+                    ['/ban', 'бан аккаунта'],
+                    ['/banip', 'бан по IP'],
+                    ['/bansc', 'бан лицензии Rockstar Social Club'],
+                    ['/hwidban', 'бан по железу ПК (FloV:ID)'],
+                    ['/hardban', 'тотальный: Account + IP + SC + HWID + MAC'],
+                    ['/unban', 'универсальная разблокировка'],
+                  ].map(([cmd, desc]) => (
+                    <div key={cmd} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-white/80">{cmd}</span>
+                      <span className="text-white/35">— {desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
       {/* ================= ROADMAP ================= */}
-      <section className="border-b border-white/[0.07]">
+      <section id="roadmap" className="border-b border-white/[0.07]">
         <div className="mx-auto max-w-6xl px-5 py-16">
           <Reveal>
             <h2 className="text-2xl font-semibold tracking-tight">Roadmap</h2>
@@ -293,7 +394,9 @@ export default function SaaSConcept() {
                   </div>
                 ))}
                 <a
-                  href="#"
+                  href={TG}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="mt-4 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-black"
                   style={{ background: PINK }}
                 >

@@ -10,6 +10,9 @@ dist/
 .next/
 out/
 *.tsbuildinfo
+launcher/electron/build/
+launcher/electron/.native-stage/
+launcher/electron/native-dist/
 
 # Secrets — never commit
 secrets.local.md
