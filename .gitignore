@@ -10,7 +10,9 @@ dist/
 .next/
 out/
 *.tsbuildinfo
-launcher/electron/build/
+launcher/electron/build/*
+!launcher/electron/build/icon.png
+!launcher/electron/build/icon-256.png
 launcher/electron/.native-stage/
 launcher/electron/native-dist/
 
