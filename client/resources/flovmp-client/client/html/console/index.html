@@ -196,7 +196,7 @@
       { time: '12:00:05', tag: 'DEV', text: 'In-Game Dev Console ready. Press F8 or F11 to toggle.', color: 'text-amber-400' }
     ];
 
-    let currentMode = 'modern'; // 'modern' or 'classic'
+    let currentMode = localStorage.getItem('flovmp_console_mode') || 'classic'; // Default to FiveM Classic Quake
     let history = [];
     let historyIndex = -1;
 
@@ -213,16 +213,34 @@
         </div>`;
       });
 
-      mLogs.innerHTML = html;
-      cLogs.innerHTML = html;
-      mLogs.scrollTop = mLogs.scrollHeight;
-      cLogs.scrollTop = cLogs.scrollHeight;
+      if (mLogs) {
+        mLogs.innerHTML = html;
+        mLogs.scrollTop = mLogs.scrollHeight;
+      }
+      if (cLogs) {
+        cLogs.innerHTML = html;
+        cLogs.scrollTop = cLogs.scrollHeight;
+      }
     }
 
     function addLog(tag, text, time = null) {
       const now = time || new Date().toTimeString().split(' ')[0];
       logsData.push({ time: now, tag, text });
       renderLogs();
+    }
+
+    function initMode() {
+      const modern = document.getElementById('console-modern');
+      const classic = document.getElementById('console-classic');
+      if (currentMode === 'classic') {
+        modern.classList.add('hidden');
+        classic.classList.remove('hidden');
+        setTimeout(() => document.getElementById('c-input')?.focus(), 50);
+      } else {
+        classic.classList.add('hidden');
+        modern.classList.remove('hidden');
+        setTimeout(() => document.getElementById('m-input')?.focus(), 50);
+      }
     }
 
     function toggleStyleMode() {
@@ -240,6 +258,9 @@
         modern.classList.remove('hidden');
         document.getElementById('m-input').focus();
       }
+      try {
+        localStorage.setItem('flovmp_console_mode', currentMode);
+      } catch (e) {}
     }
 
     function setTab(tab) {
@@ -338,8 +359,8 @@
       });
     }
 
+    initMode();
     renderLogs();
-    document.getElementById('m-input').focus();
   </script>
 </body>
 </html>
