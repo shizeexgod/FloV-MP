@@ -38,10 +38,13 @@ public class GamemodeResource : Resource
     private FloVMP.Core.Housing.HousingService? _housing;
     private FloVMP.Core.Characters.FactionUniformService? _uniforms;
     private RemoteServerAgent? _agent;
+    private FloVMP.Core.Spatial.AdaptiveTickManager<uint>? _tickManager;
+    private FloVMP.Core.Spatial.OcclusionCullingService? _occlusion;
     
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private long _lastAutoSaveMs;
     private long _lastArrestTickMs;
+    private long _lastTickScaleMs;
 
     public override void OnStart()
     {
@@ -115,11 +118,25 @@ public class GamemodeResource : Resource
             }
         }
 
+        _tickManager = new FloVMP.Core.Spatial.AdaptiveTickManager<uint>();
+        _occlusion = new FloVMP.Core.Spatial.OcclusionCullingService();
+
         _telemetry = new TelemetryReporter(licConfig)
         {
             GetPlayerCount = () => Alt.GetAllPlayers().Count,
             GetMaxPlayers = () => licResult.MaxPlayers,
-            GetTickRate = () => 60,
+            GetTickRate = () =>
+            {
+                var players = Alt.GetAllPlayers();
+                if (players.Count == 0) return 60;
+                int sum = 0;
+                foreach (var p in players)
+                {
+                    if (p.Exists)
+                        sum += _tickManager?.GetEffectiveTickRate(p.Id) ?? 60;
+                }
+                return Math.Max(10, sum / players.Count);
+            },
             GetFps = () => 60,
             GetMemoryMb = () => System.GC.GetTotalMemory(false) / (1024 * 1024)
         };
@@ -177,7 +194,10 @@ public class GamemodeResource : Resource
         _playerLifecycle = null;
         _hud = null;
         _economy = null;
+        _antiCheat?.Detach();
         _antiCheat = null;
+        _tickManager = null;
+        _occlusion = null;
         _factions = null;
         _documents = null;
         _housing = null;
@@ -191,6 +211,27 @@ public class GamemodeResource : Resource
         _antiCheat?.Tick();
 
         var now = _clock.ElapsedMilliseconds;
+
+        // Адаптивное масштабирование тикрейта каждые 100 мс
+        if (now - _lastTickScaleMs >= 100)
+        {
+            _lastTickScaleMs = now;
+            if (_tickManager != null)
+            {
+                var allPlayers = Alt.GetAllPlayers();
+                _tickManager.ServerLoadFactor = Math.Clamp(allPlayers.Count / 1000f, 0f, 1f);
+                foreach (var p in allPlayers)
+                {
+                    if (!p.Exists) continue;
+                    var pos = new FloVMP.Core.AntiCheat.Vector3D(p.Position.X, p.Position.Y, p.Position.Z);
+                    var vel = p.IsInVehicle && p.Vehicle != null && p.Vehicle.Exists
+                        ? new FloVMP.Core.AntiCheat.Vector3D(p.Vehicle.Velocity.X, p.Vehicle.Velocity.Y, p.Vehicle.Velocity.Z)
+                        : FloVMP.Core.AntiCheat.Vector3D.Zero;
+                    bool inCombat = p.IsShooting || p.EntityAimingAt != null;
+                    _tickManager.UpdateEntityState(p.Id, pos, vel, inCombat, p.Dimension);
+                }
+            }
+        }
 
         // Ежесекундный тик арестов и освобождение заключённых
         if (now - _lastArrestTickMs >= 1000)
@@ -230,6 +271,7 @@ public class GamemodeResource : Resource
 
     private void OnPlayerDisconnect(IPlayer player, string reason) => Safe.Run("core.OnPlayerDisconnect", () =>
     {
+        _tickManager?.UnregisterEntity(player.Id);
         _antiCheat?.OnDisconnect(player);
         _hud?.OnDisconnect(player);
     });

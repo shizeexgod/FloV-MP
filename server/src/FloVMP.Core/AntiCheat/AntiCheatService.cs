@@ -60,6 +60,11 @@ public class AntiCheatService
         }
     }
 
+    public bool IsAdminExempt(int accountId)
+    {
+        return _players.TryGetValue(accountId, out var state) && state.IsAdminExempt;
+    }
+
     public bool CheckMovement(int accountId, Vector3D currentPos, bool inVehicle, DateTime? timestamp = null)
     {
         if (!_players.TryGetValue(accountId, out var state))
