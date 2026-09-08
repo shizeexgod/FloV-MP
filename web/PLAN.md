@@ -61,12 +61,14 @@ TxAdminConsole (SSE), Logs, LauncherBuilder, Billing, ApiWebhooks, SDK, AiAssist
 2. ✅ **Наполнение страниц** — home/features/pricing/projects/roadmap/contact/docs/legal
    + not-found; все ссылки ведут на реальные маршруты; интерактив (тариф-периоды,
    FAQ, форма, docs verify/SSE) протестирован
-3. ✅ **Личный кабинет + админ-панель** — все 9 вкладок + 5 модалок, подключены
+3. ✅ **Личный кабинет + админ-панель** — **12 вкладок** + 5 модалок, подключены
    к реальным API, чистый стиль, **полная i18n RU/EN** (dict.ts: dash.* / adm.*).
-   **Декомпозиция выполнена**: `dashboard/page.tsx` 2657 → 828 строк — контейнер
-   держит состояние/хендлеры/загрузку, отдаёт через `DashboardProvider` (context).
-   `components/dashboard/`: `_ctx.tsx` + 9 вкладок + 5 модалок = 15 файлов.
-   Поведение не менялось (JSX перенесён дословно), проверено в браузере RU и EN.
+   **Декомпозиция выполнена**: `dashboard/page.tsx` — контейнер держит
+   состояние/хендлеры/загрузку, отдаёт через `DashboardProvider` (context).
+   `components/dashboard/`: `_ctx.tsx` + 12 вкладок + 5 модалок = 18 файлов.
+   Вкладки из ТЗ Gemini добавлены: Watchdog & Crashes, Logs (поиск + фильтр),
+   Settings (аккаунт, реферал, сессии, **рабочая привязка 2FA к API**).
+   Проверено в браузере RU и EN; цикл 2FA через UI прошёл end-to-end.
 4. ✅ **Бэкенд — фаза 4**:
    - `lib/http.ts` — `readJson()` / `badRequest()`: тело запроса без JSON → **400**,
      не 500 (применено к незащищённым admin-роутам и всем новым)
