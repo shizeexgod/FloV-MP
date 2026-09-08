@@ -1,98 +1,60 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  BookOpen,
+  Check,
   ChevronRight,
+  Cloud,
+  Copy,
   Cpu,
   Play,
+  Rocket,
   Server,
-  Shield,
+  ShieldCheck,
   Terminal,
 } from 'lucide-react';
-import { AuroraBlobs, Badge, CopyButton, Spinner } from '@/components/ui';
+import { useT } from '@/lib/i18n';
+import { Container, PageHero, Reveal } from '@/components/site';
 
-const NAV = [
-  { id: 'verify', label: 'Верификация лицензии', icon: Shield },
-  { id: 'sdk', label: 'SDK интеграции', icon: Terminal },
-  { id: 'heartbeat', label: 'Телеметрия сервера', icon: Cpu },
-  { id: 'fastdl', label: 'FastDL CDN (Nginx)', icon: Server },
-];
-
-const SDK_TABS: { id: string; label: string; lang: string; code: string }[] = [
+const SNIPPETS: { id: string; label: string; lang: string; code: string }[] = [
   {
     id: 'csharp',
-    label: 'C# SDK',
-    lang: 'C# · AltV.Net',
-    code: `using System.Net.Http.Json;
-using AltV.Net;
+    label: 'C# · AltV.Net',
+    lang: 'C#',
+    code: `using FloVMP.Sdk;
 
-public sealed class LicenseValidator
-{
-    private static readonly HttpClient Http = new();
-    private const string Endpoint = "https://flovmp.ru/api/v1/license/verify";
+var flov = new FloVClient(Environment.GetEnvironmentVariable("FLOVMP_KEY")!);
+var lic  = await flov.License.VerifyAsync(serverIp: "188.127.229.224");
 
-    public static async Task<bool> VerifyAsync(string key, string serverIp)
-    {
-        var payload = new
-        {
-            licenseKey = key,
-            serverIp,
-            version = "v16.4.39-flov",
-            slots = 1500
-        };
-
-        var res = await Http.PostAsJsonAsync(Endpoint, payload);
-        if (!res.IsSuccessStatusCode)
-        {
-            Alt.Log($"[FloV:MP] [Security] verify failed: {res.StatusCode}");
-            return false;
-        }
-
-        var data = await res.Content.ReadFromJsonAsync<LicenseResponse>();
-        Alt.Log($"[FloV:MP] {data!.Plan} — {data.MaxPlayers} слотов");
-        return data.Valid;
-    }
-}`,
+if (!lic.Valid) { Alt.Log($"[FloV:MP] {lic.Reason}"); Environment.Exit(1); }
+Alt.Log($"[FloV:MP] {lic.Project} — {lic.MaxPlayers} slots, exp {lic.ExpiresAt}");`,
   },
   {
     id: 'node',
-    label: 'Node.js',
-    lang: 'JavaScript · fetch',
+    label: 'Node.js · fetch',
+    lang: 'JavaScript',
     code: `const ENDPOINT = 'https://flovmp.ru/api/v1/license/verify';
 
 export async function verifyLicense(licenseKey, serverIp) {
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      licenseKey,
-      serverIp,
-      version: 'v16.4.39-flov',
-      slots: 1500,
-    }),
+    body: JSON.stringify({ licenseKey, serverIp, version: 'v16.4.39-flov', slots: 1500 }),
   });
-
   const data = await res.json();
-  if (!res.ok || !data.valid) {
-    console.error('[FloV:MP] license invalid:', data.reason);
-    process.exit(1);
-  }
-
-  // HMAC-SHA256 подпись ответа — 64 hex-символа
-  console.log('[FloV:MP] plan:', data.plan, '· sig:', data.signature.slice(0, 12) + '…');
+  if (!res.ok || !data.valid) throw new Error('license invalid: ' + data.reason);
+  // HMAC-SHA256 signature — 64 hex chars
   return data;
 }`,
   },
   {
     id: 'nginx',
-    label: 'Nginx FastDL',
-    lang: 'NGINX config',
+    label: 'Nginx · FastDL',
+    lang: 'NGINX',
     code: `server {
     listen 80;
     server_name 188.127.229.224;
 
-    # Параллельная отдача клиентских ресурсов (транспорт, скины, интерьеры)
     location /cdn/ {
         alias /var/www/cdn/;
         autoindex off;
@@ -102,27 +64,45 @@ export async function verifyLicense(licenseKey, serverIp) {
         tcp_nodelay on;
         sendfile on;
     }
-
-    # Публичный JSON-статус сервера для портала
-    location /info {
-        default_type application/json;
-        charset utf-8;
-        alias /var/www/cdn/info.json;
-    }
 }`,
   },
 ];
 
+function CopyChip({ value }: { value: string }) {
+  const [c, setC] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard?.writeText(value).catch(() => {});
+        setC(true);
+        setTimeout(() => setC(false), 1400);
+      }}
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/55 hover:text-white"
+    >
+      {c ? <Check className="h-3 w-3 text-ok" /> : <Copy className="h-3 w-3" />}
+      {c ? 'OK' : 'Copy'}
+    </button>
+  );
+}
+
 export default function DocsPage() {
+  const t = useT();
   const [sdkTab, setSdkTab] = useState('csharp');
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testStatus, setTestStatus] = useState<number | null>(null);
-  const [testing, setTesting] = useState(false);
+  const [verifyOut, setVerifyOut] = useState<string | null>(null);
+  const [verifyStatus, setVerifyStatus] = useState<number | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  const [agentLog, setAgentLog] = useState<string[]>([]);
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    return () => esRef.current?.close();
+  }, []);
 
   const runVerify = async () => {
-    setTesting(true);
-    setTestResult(null);
-    setTestStatus(null);
+    setVerifying(true);
+    setVerifyOut(null);
+    setVerifyStatus(null);
     try {
       const res = await fetch('/api/v1/license/verify', {
         method: 'POST',
@@ -135,42 +115,61 @@ export default function DocsPage() {
         }),
       });
       const data = await res.json();
-      setTestStatus(res.status);
-      setTestResult(JSON.stringify(data, null, 2));
+      setVerifyStatus(res.status);
+      setVerifyOut(JSON.stringify(data, null, 2));
     } catch (err: any) {
-      setTestResult(`Error: ${err.message}`);
+      setVerifyOut('Error: ' + err.message);
     } finally {
-      setTesting(false);
+      setVerifying(false);
     }
   };
 
-  const activeSdk = SDK_TABS.find((t) => t.id === sdkTab)!;
+  const toggleAgent = () => {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+      setAgentLog((l) => [...l, '— stream closed —']);
+      return;
+    }
+    setAgentLog(['— connecting to /api/v1/agent/stream —']);
+    try {
+      const es = new EventSource('/api/v1/agent/stream');
+      esRef.current = es;
+      es.onmessage = (e) => setAgentLog((l) => [...l.slice(-40), e.data]);
+      es.onerror = () => {
+        setAgentLog((l) => [...l, '— stream error, closing —']);
+        es.close();
+        esRef.current = null;
+      };
+    } catch (err: any) {
+      setAgentLog((l) => [...l, 'Error: ' + err.message]);
+    }
+  };
+
+  const snip = SNIPPETS.find((s) => s.id === sdkTab)!;
+
+  const NAV = [
+    { id: 'quickstart', label: t.docs.navQuickstart, icon: Rocket },
+    { id: 'verify', label: t.docs.navVerify, icon: ShieldCheck },
+    { id: 'agent', label: t.docs.navAgent, icon: Cloud },
+    { id: 'telemetry', label: t.docs.navTelemetry, icon: Cpu },
+    { id: 'sdk', label: t.docs.navSdk, icon: Terminal },
+    { id: 'fastdl', label: t.docs.navFastdl, icon: Server },
+  ];
 
   return (
-    <div className="relative px-4 py-14 sm:px-6 lg:px-8">
-      <AuroraBlobs />
-      <div className="relative mx-auto max-w-7xl">
-        {/* Header */}
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-brand/35 bg-brand/10 px-3.5 py-1.5 shadow-neon-pink">
-            <BookOpen className="h-3.5 w-3.5 text-brand" />
-            <span className="eyebrow text-brand">Developer Documentation &amp; SDK</span>
-          </span>
-          <h1 className="mt-5 text-3xl font-black text-white sm:text-5xl">Документация и API интеграции</h1>
-          <p className="mt-3 text-sm text-slate-400">
-            Всё для валидации лицензий, отправки телеметрии и настройки Nginx FastDL.
-          </p>
-        </div>
+    <div>
+      <PageHero eyebrow={t.nav.docs} title={t.docs.title} sub={t.docs.sub} />
 
-        <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-[220px_1fr]">
-          {/* Sidebar */}
+      <Container className="py-12 sm:py-14">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[220px_1fr]">
           <aside className="lg:sticky lg:top-24 lg:h-max">
-            <nav className="glass card-edge rounded-2xl p-2">
+            <nav className="card p-2">
               {NAV.map((n) => (
                 <a
                   key={n.id}
                   href={`#${n.id}`}
-                  className="group flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                  className="group flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white"
                 >
                   <n.icon className="h-4 w-4 text-brand/70 group-hover:text-brand" />
                   {n.label}
@@ -180,26 +179,38 @@ export default function DocsPage() {
             </nav>
           </aside>
 
-          {/* Content */}
           <div className="min-w-0 space-y-16">
-            {/* Verify */}
-            <section id="verify" className="scroll-mt-24">
-              <div className="flex items-center gap-2">
-                <Badge tone="brand">POST</Badge>
-                <code className="font-mono text-sm text-white">/api/v1/license/verify</code>
+            {/* QUICKSTART */}
+            <section id="quickstart" className="scroll-mt-24">
+              <Reveal>
+                <h2 className="text-xl font-semibold tracking-tight">{t.docs.quickstartTitle}</h2>
+                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.quickstartLead}</p>
+              </Reveal>
+              <div className="mt-6 space-y-3">
+                {t.docs.steps.map(([h, d], i) => (
+                  <Reveal key={h} delay={i * 40}>
+                    <div className="card p-4">
+                      <div className="text-[13px] font-semibold text-white">{h}</div>
+                      <p className="mt-1 text-[12.5px] leading-relaxed text-white/50">{d}</p>
+                    </div>
+                  </Reveal>
+                ))}
               </div>
-              <p className="mt-4 max-w-2xl text-[14px] leading-relaxed text-slate-400">
-                Эндпоинт верификации, к которому сервер обращается при старте и каждые 15 минут.
-                Проверяет статус ключа, привязку IPv4 и подписывает ответ криптографическим
-                HMAC-SHA256 токеном.
-              </p>
+            </section>
 
-              <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-                <div className="glass card-edge rounded-2xl p-5">
-                  <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">
-                    Тело запроса
-                  </div>
-                  <pre className="terminal-scroll overflow-auto rounded-xl bg-ink-950/70 p-4 font-mono text-[12px] leading-relaxed text-slate-300">
+            {/* VERIFY */}
+            <section id="verify" className="scroll-mt-24">
+              <Reveal>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-brand">POST</span>
+                  <code className="font-mono text-[13px] text-white">/api/v1/license/verify</code>
+                </div>
+                <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.verifyDesc}</p>
+              </Reveal>
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="card p-4">
+                  <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-white/35">{t.docs.reqTitle}</div>
+                  <pre className="terminal-scroll overflow-auto rounded-lg bg-black/40 p-3.5 font-mono text-[12px] leading-relaxed text-white/70">
 {`{
   "licenseKey": "FLV-ENTERPRISE-2026-DERZHAVA",
   "serverIp": "188.127.229.224",
@@ -207,124 +218,115 @@ export default function DocsPage() {
   "slots": 1500
 }`}
                   </pre>
-                  <button
-                    onClick={runVerify}
-                    disabled={testing}
-                    className="btn btn-primary mt-4 h-10 w-full px-4 text-xs disabled:opacity-50"
-                  >
-                    {testing ? <Spinner className="h-4 w-4" /> : <Play className="h-3.5 w-3.5" />}
-                    {testing ? 'Отправка запроса…' : 'Выполнить тестовую верификацию'}
+                  <button onClick={runVerify} disabled={verifying} className="btn btn-primary mt-3 h-9 w-full text-xs">
+                    <Play className="h-3.5 w-3.5" />
+                    {verifying ? t.docs.running : t.docs.runVerify}
                   </button>
                 </div>
-
-                <div className="glass-panel card-edge overflow-hidden rounded-2xl">
-                  <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2.5">
-                    <span className="font-mono text-[11px] uppercase tracking-wider text-slate-500">
-                      Ответ API
-                    </span>
-                    {testStatus !== null && (
-                      <Badge tone={testStatus >= 200 && testStatus < 300 ? 'emerald' : 'red'}>
-                        HTTP {testStatus}
-                      </Badge>
+                <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+                  <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2.5">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-white/35">{t.docs.resTitle}</span>
+                    {verifyStatus !== null && (
+                      <span className={`rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold ${verifyStatus < 300 ? 'border-ok/30 text-ok' : 'border-err/30 text-err'}`}>
+                        HTTP {verifyStatus}
+                      </span>
                     )}
                   </div>
-                  <pre className="terminal-scroll max-h-[340px] min-h-[180px] overflow-auto p-4 font-mono text-[12px] leading-relaxed text-emeraldx/90">
-                    {testResult ?? '// Нажмите «Выполнить тестовую верификацию»\n// Здесь появится JSON с подписью HMAC-SHA256'}
+                  <pre className="terminal-scroll max-h-[320px] min-h-[170px] overflow-auto p-4 font-mono text-[12px] leading-relaxed text-ok/90">
+                    {verifyOut ?? t.docs.verifyHint}
                   </pre>
                 </div>
               </div>
             </section>
 
-            {/* SDK */}
-            <section id="sdk" className="scroll-mt-24">
-              <h2 className="text-2xl font-black text-white">SDK интеграции</h2>
-              <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-slate-400">
-                Готовые сниппеты для серверного гейммода AltV.Net, Node.js и конфигурации FastDL.
-              </p>
-
-              <div className="mt-6 glass-panel card-edge overflow-hidden rounded-2xl shadow-glass">
-                <div className="flex items-center gap-1 border-b border-white/[0.08] px-3 py-2.5">
-                  {SDK_TABS.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setSdkTab(t.id)}
-                      className={`rounded-lg px-3 py-1.5 font-mono text-[11px] transition-colors ${
-                        sdkTab === t.id ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-slate-300'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                  <div className="ml-auto flex items-center gap-2 pr-1">
-                    <span className="hidden font-mono text-[10px] text-brand sm:block">{activeSdk.lang}</span>
-                    <CopyButton value={activeSdk.code} size="sm" />
-                  </div>
+            {/* AGENT */}
+            <section id="agent" className="scroll-mt-24">
+              <Reveal>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white/70">SSE</span>
+                  <code className="font-mono text-[13px] text-white">/api/v1/agent/stream</code>
                 </div>
-                <pre className="terminal-scroll max-h-[460px] overflow-auto p-5 font-mono text-[12px] leading-relaxed text-slate-300">
-                  <code>{activeSdk.code}</code>
+                <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.agentDesc}</p>
+              </Reveal>
+              <div className="mt-5 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+                <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-2.5">
+                  <Terminal className="h-3.5 w-3.5 text-white/40" />
+                  <span className="font-mono text-[11px] text-white/40">agent stream</span>
+                  <button onClick={toggleAgent} className="btn btn-ghost ml-auto h-7 px-3 text-[11px]">
+                    {esRef.current ? 'Stop' : 'Connect'}
+                  </button>
+                </div>
+                <pre className="terminal-scroll max-h-[240px] min-h-[120px] overflow-auto bg-black/40 p-4 font-mono text-[11.5px] leading-relaxed text-white/60">
+                  {agentLog.length ? agentLog.join('\n') : t.docs.agentHint}
                 </pre>
               </div>
             </section>
 
-            {/* Heartbeat */}
-            <section id="heartbeat" className="scroll-mt-24">
-              <div className="flex items-center gap-2">
-                <Badge tone="violet">POST</Badge>
-                <code className="font-mono text-sm text-white">/api/v1/telemetry/heartbeat</code>
-              </div>
-              <p className="mt-4 max-w-2xl text-[14px] leading-relaxed text-slate-400">
-                Игровой сервер отправляет телеметрию каждую минуту: средний FPS, сетевой тикрейт,
-                нагрузку на память и онлайн. Данные строят графики в личном кабинете владельца.
-              </p>
-              <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-                <pre className="glass card-edge terminal-scroll overflow-auto rounded-2xl p-5 font-mono text-[12px] leading-relaxed text-slate-300">
+            {/* TELEMETRY */}
+            <section id="telemetry" className="scroll-mt-24">
+              <Reveal>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-brand/30 bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-brand">POST</span>
+                  <code className="font-mono text-[13px] text-white">/api/v1/telemetry/heartbeat</code>
+                </div>
+                <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.telemetryDesc}</p>
+              </Reveal>
+              <pre className="terminal-scroll mt-5 overflow-auto rounded-xl border border-white/[0.08] bg-black/40 p-4 font-mono text-[12px] leading-relaxed text-white/70">
 {`{
   "licenseKey": "FLV-ENTERPRISE-2026-DERZHAVA",
-  "players": 42,
-  "maxPlayers": 1500,
-  "tickRate": 60,
-  "memoryMb": 384,
-  "fps": 60
+  "players": 42, "maxPlayers": 1500,
+  "tickRate": 60, "memoryMb": 384, "fps": 60
 }`}
-                </pre>
-                <ul className="glass card-edge space-y-3 rounded-2xl p-6 text-[13px] text-slate-300">
-                  {[
-                    'Мгновенный мониторинг утечек памяти в гейммоде (GC / Heap).',
-                    'Аналитика пиков онлайна и стабильности сетевых тиков.',
-                    'История последних 30 пакетов прямо в дашборде проекта.',
-                  ].map((x) => (
-                    <li key={x} className="flex items-start gap-2.5">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emeraldx" />
-                      {x}
-                    </li>
+              </pre>
+            </section>
+
+            {/* SDK */}
+            <section id="sdk" className="scroll-mt-24">
+              <Reveal>
+                <h2 className="text-xl font-semibold tracking-tight">{t.docs.navSdk}</h2>
+                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.sdkDesc}</p>
+              </Reveal>
+              <div className="mt-5 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+                <div className="flex items-center gap-1 border-b border-white/[0.07] p-2">
+                  {SNIPPETS.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSdkTab(s.id)}
+                      className={`rounded-md px-3 py-1.5 font-mono text-[11px] transition-colors ${
+                        sdkTab === s.id ? 'bg-white/10 text-white' : 'text-white/45 hover:text-white/75'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
                   ))}
-                </ul>
+                  <span className="ml-auto pr-1">
+                    <CopyChip value={snip.code} />
+                  </span>
+                </div>
+                <pre className="terminal-scroll max-h-[420px] overflow-auto bg-black/40 p-4 font-mono text-[12px] leading-relaxed text-white/75">
+                  <code>{snip.code}</code>
+                </pre>
               </div>
             </section>
 
-            {/* FastDL */}
+            {/* FASTDL */}
             <section id="fastdl" className="scroll-mt-24">
-              <h2 className="text-2xl font-black text-white">FastDL CDN (Nginx)</h2>
-              <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-slate-400">
-                Раздача клиентских файлов на скорости гигабитного порта через HTTP/2. Переключите
-                вкладку «Nginx FastDL» в блоке SDK выше, чтобы скопировать готовый конфиг.
-              </p>
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {[
-                  ['Cache-Control', 'immutable, 30 дней'],
-                  ['Протокол', 'HTTP/2 + sendfile'],
-                  ['Нагрузка на UDP', '0% — канал разгружен'],
-                ].map(([k, v]) => (
-                  <div key={k} className="glass card-edge rounded-2xl p-5">
-                    <div className="font-mono text-[11px] uppercase tracking-wider text-slate-500">{k}</div>
-                    <div className="mt-1.5 text-sm font-bold text-white">{v}</div>
+              <Reveal>
+                <h2 className="text-xl font-semibold tracking-tight">{t.docs.navFastdl}</h2>
+                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-white/50">{t.docs.fastdlDesc}</p>
+              </Reveal>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {t.docs.fastdlFacts.map(([k, v]) => (
+                  <div key={k} className="card p-4">
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-white/35">{k}</div>
+                    <div className="mt-1 text-[13px] font-semibold text-white">{v}</div>
                   </div>
                 ))}
               </div>
             </section>
           </div>
         </div>
-      </div>
+      </Container>
     </div>
   );
 }
