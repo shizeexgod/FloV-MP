@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Activity, CheckCircle2, RefreshCw, Zap } from 'lucide-react';
+import { Activity, CheckCircle2, Cpu, Gauge, HardDrive, RefreshCw, Users, Zap } from 'lucide-react';
 import { Spinner } from '@/components/ui';
 import { useDashboard, MetricCard, timeShort } from './_ctx';
 

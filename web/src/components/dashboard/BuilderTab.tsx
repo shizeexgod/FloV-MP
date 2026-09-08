@@ -171,7 +171,7 @@ export function BuilderTab() {
             ) : null}
 
             <div className="mt-6 space-y-2 border-t border-white/[0.08] pt-5 font-mono text-[11px] text-slate-400">
-              {D.builder.feat.map((x) => (
+              {D.builder.feat.map((x: string) => (
                 <div key={x} className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-brand" />
                   {x}

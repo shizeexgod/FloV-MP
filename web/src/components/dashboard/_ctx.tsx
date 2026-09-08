@@ -130,8 +130,79 @@ export const timeShort = (s: string) => new Date(s).toLocaleTimeString('ru-RU');
 /* ----------------------------- context ----------------------------- */
 // The dashboard container (page.tsx) owns all state + handlers and provides them
 // here. Tab / modal components are purely presentational and read from this.
-// Typed loosely on purpose — it is an internal wiring object, not a public API.
-export type DashCtx = Record<string, any>;
+export interface DashCtx {
+  D: any;
+  BUILD_STAGES: string[];
+  primaryLic: License | undefined;
+  isIpBound: boolean | undefined;
+  promoCode: string;
+  latest: TelemetryPoint | null;
+  onboarding: { done: boolean; title: string; note: string; warn?: boolean }[];
+  user: UserProfile | null;
+  licenses: License[];
+  tab: TabKey;
+  projects: Project[];
+  selectedProject: Project | null;
+  servers: ServerInstance[];
+  dispatchingAction: string | null;
+  consoleLogs: { id: number; time: string; tag: string; text: string; tone: 'info' | 'warn' | 'error' | 'cmd' }[];
+  consoleInput: string;
+  troubleshootText: string;
+  diagnosing: boolean;
+  diagnosticResult: any;
+  showKeyId: number | null;
+  copied: string | null;
+  ipLicense: License | null;
+  ipValue: string;
+  ipName: string;
+  ipErr: string;
+  savingIp: boolean;
+  settingsModalOpen: boolean;
+  settingHwid: 'strict' | 'lenient' | 'disabled';
+  settingVpn: boolean;
+  settingMaxAccs: number;
+  settingDiscord: string;
+  settingTgToken: string;
+  settingTgChat: string;
+  settingAlertsEnabled: boolean;
+  savingSettings: boolean;
+  testingWebhook: boolean;
+  resources: ResourceItem[];
+  loadingResources: boolean;
+  loadingServers: boolean;
+  resourceActionLoading: string | null;
+  sseActive: boolean;
+  newProjOpen: boolean;
+  newProjName: string;
+  newProjSlug: string;
+  newProjPlan: string;
+  creatingProj: boolean;
+  newLicOpen: boolean;
+  newPlan: string;
+  newName: string;
+  newIp: string;
+  creatingLic: boolean;
+  invoices: Invoice[];
+  loadingInvoices: boolean;
+  payingId: number | null;
+  invoiceOpen: boolean;
+  invPlan: string;
+  invPeriod: 'monthly' | 'halfYear' | 'year';
+  invMethod: 'card' | 'sbp' | 'crypto';
+  creatingInvoice: boolean;
+  telemetry: TelemetryPoint[];
+  loadingTelemetry: boolean;
+  sendingHb: boolean;
+  bProject: string;
+  bColor: string;
+  bIp: string;
+  bPort: string;
+  building: boolean;
+  buildStage: number;
+  buildResult: LauncherBuildResult | null;
+  // setters + handlers — loosely typed
+  [key: string]: any;
+}
 
 const DashboardContext = createContext<DashCtx | null>(null);
 
