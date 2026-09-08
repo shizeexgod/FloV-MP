@@ -337,7 +337,7 @@ let settings = {
   account: null,
   nickname: 'Игрок',
   gtaPath: '',
-  serverHost: '127.0.0.1',
+  serverHost: '188.127.229.224',
   serverPort: 7788,
   autoUpdate: true,
   updateChannel: 'stable',
