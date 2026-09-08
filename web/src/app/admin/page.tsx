@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Badge, Spinner, useToast } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 interface MetricOverview {
   totalUsers: number;
@@ -27,6 +28,7 @@ const date = (s: string) => new Date(s).toLocaleDateString('ru-RU');
 export default function AdminPage() {
   const router = useRouter();
   const { show, node } = useToast();
+  const D = useT().adm;
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<MetricOverview | null>(null);
@@ -44,7 +46,7 @@ export default function AdminPage() {
       const res = await fetch('/api/v1/admin/stats');
       if (!res.ok) {
         if (res.status === 403) {
-          show('Доступ запрещён: требуется аккаунт администратора', 'error');
+          show(D.accessDenied, 'error');
           router.push('/dashboard');
           return;
         }
@@ -57,7 +59,7 @@ export default function AdminPage() {
       setUsers(data.users || []);
       setInvoices(data.invoices || []);
     } catch {
-      show('Не удалось загрузить данные платформы', 'error');
+      show(D.loadFailed, 'error');
     } finally {
       setLoading(false);
     }
@@ -76,7 +78,7 @@ export default function AdminPage() {
         show(data.message);
         load();
       } else {
-        show(data.error || 'Ошибка', 'error');
+        show(data.error || D.err, 'error');
       }
     } finally {
       setBusyId(null);
@@ -96,7 +98,7 @@ export default function AdminPage() {
         show(data.message);
         load();
       } else {
-        show(data.error || 'Ошибка', 'error');
+        show(data.error || D.err, 'error');
       }
     } finally {
       setBusyId(null);
@@ -107,16 +109,16 @@ export default function AdminPage() {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 text-brand">
         <Spinner className="h-8 w-8" />
-        <p className="text-sm text-slate-400">Загрузка панели администратора…</p>
+        <p className="text-sm text-slate-400">{D.loading}</p>
       </div>
     );
   }
 
   const cards = [
-    { label: 'Общий доход', value: `${fmt(metrics?.totalRevenueRub || 0)} ₽`, icon: TrendingUp, tone: 'text-brand', ring: 'border-brand/40 bg-brand/10' },
-    { label: 'Всего серверов', value: fmt(metrics?.totalLicenses || 0), icon: KeyRound, tone: 'text-cyber', ring: 'border-cyber/40 bg-cyber/10' },
-    { label: 'Активные лицензии', value: fmt(metrics?.activeServers || 0), icon: Server, tone: 'text-emeraldx', ring: 'border-emeraldx/40 bg-emeraldx/10' },
-    { label: 'Всего клиентов', value: fmt(metrics?.totalUsers || 0), icon: Users, tone: 'text-violetx', ring: 'border-violetx/40 bg-violetx/10' },
+    { label: D.mRevenue, value: `${fmt(metrics?.totalRevenueRub || 0)} ₽`, icon: TrendingUp, tone: 'text-brand', ring: 'border-brand/40 bg-brand/10' },
+    { label: D.mServers, value: fmt(metrics?.totalLicenses || 0), icon: KeyRound, tone: 'text-cyber', ring: 'border-cyber/40 bg-cyber/10' },
+    { label: D.mLicenses, value: fmt(metrics?.activeServers || 0), icon: Server, tone: 'text-emeraldx', ring: 'border-emeraldx/40 bg-emeraldx/10' },
+    { label: D.mClients, value: fmt(metrics?.totalUsers || 0), icon: Users, tone: 'text-violetx', ring: 'border-violetx/40 bg-violetx/10' },
   ];
 
   return (
@@ -131,15 +133,15 @@ export default function AdminPage() {
             Master Admin Panel
           </span>
           <h1 className="mt-3 text-xl font-semibold tracking-tight text-white sm:text-2xl">
-            Управление платформой и реестром серверов
+            {D.headerTitle}
           </h1>
           <p className="mt-1 text-[12px] text-white/45">
-            Контроль лицензий, клиентов, платежей и статусов узлов
+            {D.headerSub}
           </p>
         </div>
         <button onClick={load} className="btn btn-ghost h-10 px-4 text-xs font-semibold">
           <RefreshCw className="h-4 w-4 text-brand" />
-          Обновить
+          {D.refresh}
         </button>
       </div>
 
@@ -162,7 +164,7 @@ export default function AdminPage() {
       <div className="relative glass-panel card-edge mb-10 rounded-3xl p-6 shadow-glass sm:p-8">
         <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
           <KeyRound className="h-5 w-5 text-brand" />
-          Все выданные лицензии
+          {D.allLicenses}
           <span className="font-mono text-xs font-normal text-slate-500">({licenses.length})</span>
         </h2>
         <div className="overflow-x-auto">
@@ -170,13 +172,13 @@ export default function AdminPage() {
             <thead>
               <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
                 <th className="pb-3 pr-3 font-semibold">ID</th>
-                <th className="pb-3 pr-3 font-semibold">Сервер / проект</th>
-                <th className="pb-3 pr-3 font-semibold">Ключ</th>
-                <th className="pb-3 pr-3 font-semibold">Тариф</th>
+                <th className="pb-3 pr-3 font-semibold">{D.thServerProject}</th>
+                <th className="pb-3 pr-3 font-semibold">{D.thKey}</th>
+                <th className="pb-3 pr-3 font-semibold">{D.thPlan}</th>
                 <th className="pb-3 pr-3 font-semibold">IP</th>
-                <th className="pb-3 pr-3 font-semibold">Статус</th>
-                <th className="pb-3 pr-3 font-semibold">Истекает</th>
-                <th className="pb-3 pr-3 text-right font-semibold">Действия</th>
+                <th className="pb-3 pr-3 font-semibold">{D.thStatus}</th>
+                <th className="pb-3 pr-3 font-semibold">{D.thExpires}</th>
+                <th className="pb-3 pr-3 text-right font-semibold">{D.thActions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
@@ -194,7 +196,7 @@ export default function AdminPage() {
                     </td>
                     <td className="py-3 pr-3 font-mono">{lic.bound_ip}</td>
                     <td className="py-3 pr-3">
-                      <Badge tone={active ? 'emerald' : 'red'}>{active ? 'Активна' : 'Приостановлена'}</Badge>
+                      <Badge tone={active ? 'emerald' : 'red'}>{active ? D.active : D.suspended}</Badge>
                     </td>
                     <td className="py-3 pr-3 font-mono text-slate-400">{date(lic.expires_at)}</td>
                     <td className="py-3 pr-3">
@@ -208,7 +210,7 @@ export default function AdminPage() {
                               : 'bg-emeraldx/15 text-emeraldx hover:bg-emeraldx/25'
                           }`}
                         >
-                          {lic.is_active ? 'Заморозить' : 'Разморозить'}
+                          {lic.is_active ? D.freeze : D.unfreeze}
                         </button>
                         {[30, 90, 365].map((d) => (
                           <button
@@ -235,7 +237,7 @@ export default function AdminPage() {
         <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
           <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
             <Users className="h-5 w-5 text-violetx" />
-            Клиенты
+            {D.clients}
             <span className="font-mono text-xs font-normal text-slate-500">({users.length})</span>
           </h2>
           <div className="overflow-x-auto">
@@ -243,10 +245,10 @@ export default function AdminPage() {
               <thead>
                 <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
                   <th className="pb-3 pr-3 font-semibold">ID</th>
-                  <th className="pb-3 pr-3 font-semibold">Логин</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thLogin}</th>
                   <th className="pb-3 pr-3 font-semibold">Email</th>
-                  <th className="pb-3 pr-3 font-semibold">Роль</th>
-                  <th className="pb-3 pr-3 font-semibold">Создан</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thRole}</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thCreated}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
@@ -269,7 +271,7 @@ export default function AdminPage() {
         <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
           <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-white">
             <CreditCard className="h-5 w-5 text-cyber" />
-            Реестр транзакций
+            {D.txRegistry}
             <span className="font-mono text-xs font-normal text-slate-500">({invoices.length})</span>
           </h2>
           <div className="overflow-x-auto">
@@ -277,11 +279,11 @@ export default function AdminPage() {
               <thead>
                 <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
                   <th className="pb-3 pr-3 font-semibold">ID</th>
-                  <th className="pb-3 pr-3 font-semibold">Клиент</th>
-                  <th className="pb-3 pr-3 font-semibold">Сумма</th>
-                  <th className="pb-3 pr-3 font-semibold">Тариф</th>
-                  <th className="pb-3 pr-3 font-semibold">Статус</th>
-                  <th className="pb-3 pr-3 font-semibold">Дата</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thClient}</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thAmount}</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thPlan}</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thStatus}</th>
+                  <th className="pb-3 pr-3 font-semibold">{D.thDate}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05]">
@@ -293,7 +295,7 @@ export default function AdminPage() {
                     <td className="py-3 pr-3 font-mono uppercase">{inv.plan}</td>
                     <td className="py-3 pr-3">
                       <Badge tone={inv.status === 'paid' ? 'emerald' : 'amber'}>
-                        {inv.status === 'paid' ? 'Оплачен' : 'Ожидает'}
+                        {inv.status === 'paid' ? D.paid : D.pending}
                       </Badge>
                     </td>
                     <td className="py-3 pr-3 font-mono text-slate-400">{date(inv.created_at)}</td>
@@ -303,14 +305,14 @@ export default function AdminPage() {
             </table>
           </div>
           {invoices.length === 0 && (
-            <p className="py-8 text-center text-xs text-slate-500">Транзакций пока нет.</p>
+            <p className="py-8 text-center text-xs text-slate-500">{D.noTx}</p>
           )}
         </div>
       </div>
 
       <div className="relative mt-8 flex items-center gap-2 font-mono text-[11px] text-slate-600">
         <Wallet className="h-3.5 w-3.5" />
-        Все операции журналируются · owner@flovmp.ru
+        {D.logNote} · owner@flovmp.ru
       </div>
     </div>
   );

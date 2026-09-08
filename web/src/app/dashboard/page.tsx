@@ -44,6 +44,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
+import { useT } from '@/lib/i18n';
 
 /* ----------------------------- types ----------------------------- */
 interface License {
@@ -150,16 +151,16 @@ interface LauncherBuildResult {
 
 type TabKey = 'projects' | 'console' | 'troubleshoot' | 'overview' | 'telemetry' | 'sdk' | 'builder' | 'billing' | 'affiliate';
 
-const TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: 'projects', label: 'Проекты и Серверы', icon: Server },
-  { key: 'console', label: 'txAdmin Консоль', icon: Terminal },
-  { key: 'troubleshoot', label: 'AI Диагностика', icon: Zap },
-  { key: 'overview', label: 'Ключи и статус', icon: KeyRound },
-  { key: 'telemetry', label: 'Телеметрия VDS', icon: Activity },
-  { key: 'sdk', label: 'Загрузки и SDK', icon: Download },
-  { key: 'builder', label: 'Сборщик лаунчера', icon: Layers },
-  { key: 'billing', label: 'Счета и биллинг', icon: CreditCard },
-  { key: 'affiliate', label: 'Партнёрка (20%)', icon: Percent },
+const TABS: { key: TabKey; icon: React.ElementType }[] = [
+  { key: 'projects', icon: Server },
+  { key: 'console', icon: Terminal },
+  { key: 'troubleshoot', icon: Zap },
+  { key: 'overview', icon: KeyRound },
+  { key: 'telemetry', icon: Activity },
+  { key: 'sdk', icon: Download },
+  { key: 'builder', icon: Layers },
+  { key: 'billing', icon: CreditCard },
+  { key: 'affiliate', icon: Percent },
 ];
 
 const COLOR_PRESETS = [
@@ -169,8 +170,6 @@ const COLOR_PRESETS = [
   { name: 'Emerald', hex: '#10b981' },
   { name: 'Purple', hex: '#8b5cf6' },
 ];
-
-const BUILD_STAGES = ['Генерация конфигурации…', 'Упаковка Electron + Native Bridge…', 'Подписание EXE…', 'Готово'];
 
 const planTone = (plan: string) =>
   plan === 'enterprise' ? 'cyber' : plan === 'business' ? 'brand' : 'slate';
@@ -182,6 +181,8 @@ const timeShort = (s: string) => new Date(s).toLocaleTimeString('ru-RU');
 export default function DashboardPage() {
   const router = useRouter();
   const { show, node } = useToast();
+  const D = useT().dash;
+  const BUILD_STAGES = D.buildStages;
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [licenses, setLicenses] = useState<License[]>([]);
@@ -272,7 +273,7 @@ export default function DashboardPage() {
   const [sendingHb, setSendingHb] = useState(false);
 
   /* builder */
-  const [bProject, setBProject] = useState('Держава Онлайн');
+  const [bProject, setBProject] = useState('Florida V');
   const [bColor, setBColor] = useState('#ff3d8a');
   const [bIp, setBIp] = useState('188.127.229.224');
   const [bPort, setBPort] = useState('7788');
@@ -326,7 +327,7 @@ export default function DashboardPage() {
         }
       }
     } catch {
-      show('Не удалось загрузить данные кабинета', 'error');
+      show(D.toast.errLoad, 'error');
     } finally {
       setLoading(false);
     }
@@ -345,7 +346,7 @@ export default function DashboardPage() {
         }
       }
     } catch {
-      show('Не удалось загрузить серверы проекта', 'error');
+      show(D.toast.errLoadServers, 'error');
     } finally {
       setLoadingServers(false);
     }
@@ -386,8 +387,8 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка сохранения');
-      show('Настройки проекта и Webhook сохранены');
+      if (!res.ok) throw new Error(data.error || D.toast.errSave);
+      show(D.toast.settingsSaved);
       setSettingsModalOpen(false);
       loadDashboard();
     } catch (err: any) {
@@ -407,8 +408,8 @@ export default function DashboardPage() {
         body: JSON.stringify({ type }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка отправки');
-      show(data.message || 'Тестовые алерты отправлены');
+      if (!res.ok) throw new Error(data.error || D.toast.errSend);
+      show(data.message || D.toast.alertsSent);
     } catch (err: any) {
       show(err.message, 'error');
     } finally {
@@ -444,8 +445,8 @@ export default function DashboardPage() {
         body: JSON.stringify({ action, resourceName }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка управления ресурсом');
-      show(`Команда ${action.toUpperCase()} отправлена агенту`);
+      if (!res.ok) throw new Error(data.error || D.toast.errResource);
+      show(`${action.toUpperCase()} · ${D.toast.cmdToAgent}`);
       loadResources(serverId);
     } catch (err: any) {
       show(err.message, 'error');
@@ -459,7 +460,7 @@ export default function DashboardPage() {
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setSseActive(false);
-      show('Живой SSE стрим консоли отключен');
+      show(D.toast.sseOff);
     } else {
       try {
         const es = new EventSource('/api/v1/agent/stream');
@@ -486,9 +487,9 @@ export default function DashboardPage() {
         };
         eventSourceRef.current = es;
         setSseActive(true);
-        show('Живой SSE стрим консоли активирован');
+        show(D.toast.sseOn);
       } catch {
-        show('Не удалось подключиться к SSE потоку', 'error');
+        show(D.toast.sseErr, 'error');
       }
     }
   };
@@ -507,8 +508,8 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка создания проекта');
-      show('Новый проект успешно создан');
+      if (!res.ok) throw new Error(data.error || D.toast.errCreateProj);
+      show(D.toast.projCreated);
       setNewProjOpen(false);
       setNewProjName('');
       setNewProjSlug('');
@@ -536,13 +537,13 @@ export default function DashboardPage() {
           payload:
             payload ||
             (command === 'broadcast'
-              ? { message: 'Внимание: техническая перезагрузка сервера через 60 секунд!' }
+              ? { message: D.console.chipRebootCmd.replace(/^broadcast /, '') }
               : undefined),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка отправки команды');
-      show(`Команда ${command.toUpperCase()} поставлена в очередь (ID: ${data.commandId})`);
+      if (!res.ok) throw new Error(data.error || D.toast.errCmd);
+      show(`${command.toUpperCase()} · ${D.toast.cmdQueued} #${data.commandId}`);
       const timeStr = new Date().toLocaleTimeString('ru-RU');
       setConsoleLogs((prev) => [
         ...prev,
@@ -550,7 +551,7 @@ export default function DashboardPage() {
           id: Date.now(),
           time: timeStr,
           tag: 'ControlPlane',
-          text: `Команда ${command.toUpperCase()} отправлена агенту сервера #${serverId}`,
+          text: `${command.toUpperCase()} · ${D.toast.cmdToAgent} #${serverId}`,
           tone: 'cmd',
         },
       ]);
@@ -590,7 +591,7 @@ export default function DashboardPage() {
   const runTroubleshoot = async (sampleLogs?: string) => {
     const textToAnalyze = sampleLogs || troubleshootText;
     if (!textToAnalyze.trim()) {
-      show('Вставьте фрагмент логов сервера для анализа', 'error');
+      show(D.toast.pasteLogs, 'error');
       return;
     }
     setDiagnosing(true);
@@ -602,9 +603,9 @@ export default function DashboardPage() {
         body: JSON.stringify({ logs: textToAnalyze }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка анализа логов');
+      if (!res.ok) throw new Error(data.error || D.toast.errAnalyze);
       setDiagnosticResult(data.diagnosis);
-      show('AI Диагностика завершена');
+      show(D.toast.aiDone);
     } catch (err: any) {
       show(err.message, 'error');
     } finally {
@@ -664,8 +665,8 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка привязки IP');
-      show(data.message || 'IP-адрес сохранён');
+      if (!res.ok) throw new Error(data.error || D.toast.errBindIp);
+      show(data.message || D.toast.ipSaved);
       setIpLicense(null);
       loadDashboard();
     } catch (err: any) {
@@ -690,8 +691,8 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка создания лицензии');
-      show(data.message || 'Лицензия активирована');
+      if (!res.ok) throw new Error(data.error || D.toast.errCreateLic);
+      show(data.message || D.toast.licActivated);
       setNewLicOpen(false);
       setNewName('');
       setNewIp('');
@@ -713,8 +714,8 @@ export default function DashboardPage() {
         body: JSON.stringify({ invoiceId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка оплаты');
-      show(data.message || 'Оплата подтверждена');
+      if (!res.ok) throw new Error(data.error || D.toast.errPay);
+      show(data.message || D.toast.payConfirmed);
       loadInvoices();
       loadDashboard();
     } catch (err: any) {
@@ -739,9 +740,9 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка выставления счёта');
+      if (!res.ok) throw new Error(data.error || D.toast.errInvoice);
       setInvoiceOpen(false);
-      show(`Счёт №${data.invoiceId} на ${Number(data.amount).toLocaleString('ru-RU')} ₽ выставлен`);
+      show(`${D.toast.invoiceIssued} #${data.invoiceId} · ${Number(data.amount).toLocaleString('ru-RU')} ₽`);
       loadInvoices();
     } catch (err: any) {
       show(err.message, 'error');
@@ -769,10 +770,10 @@ export default function DashboardPage() {
         }),
       });
       if (res.ok) {
-        show('Heartbeat-пакет записан');
+        show(D.toast.hbRecorded);
         loadTelemetry();
       } else {
-        show('Ошибка записи телеметрии', 'error');
+        show(D.toast.errTelemetry, 'error');
       }
     } finally {
       setSendingHb(false);
@@ -783,7 +784,7 @@ export default function DashboardPage() {
   const buildLauncher = async (e: React.FormEvent) => {
     e.preventDefault();
     if (licenses.length === 0) {
-      show('Для сборки нужна активная лицензия', 'error');
+      show(D.toast.needActiveLic, 'error');
       return;
     }
     setBuilding(true);
@@ -808,11 +809,11 @@ export default function DashboardPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка сборки лаунчера');
+      if (!res.ok) throw new Error(data.error || D.toast.errBuild);
       await new Promise((r) => setTimeout(r, 1500));
       setBuildStage(3);
       setBuildResult(data);
-      show('Кастомный лаунчер собран');
+      show(D.toast.launcherBuilt);
     } catch (err: any) {
       show(err.message, 'error');
       setBuildStage(0);
@@ -829,10 +830,10 @@ export default function DashboardPage() {
 
   const onboarding = useMemo(
     () => [
-      { done: true, title: 'Аккаунт создан', note: user?.email ?? '' },
-      { done: !!primaryLic, title: 'Лицензия активна', note: primaryLic ? `Тариф: ${primaryLic.plan}` : 'Не создана' },
-      { done: !!isIpBound, title: 'IP сервера привязан', note: isIpBound ? primaryLic!.bound_ip : 'Требуется привязать', warn: !isIpBound },
-      { done: true, title: 'Сетевой узел онлайн', note: 'UDP 7788 · FastDL' },
+      { done: true, title: D.overview.stepAccount, note: user?.email ?? '' },
+      { done: !!primaryLic, title: D.overview.stepLicense, note: primaryLic ? `${D.overview.stepPlan}: ${primaryLic.plan}` : D.overview.stepLicenseNo },
+      { done: !!isIpBound, title: D.overview.stepIp, note: isIpBound ? primaryLic!.bound_ip : D.overview.stepIpNo, warn: !isIpBound },
+      { done: true, title: D.overview.stepNode, note: 'UDP 7788 · FastDL' },
     ],
     [user, primaryLic, isIpBound]
   );
@@ -841,7 +842,7 @@ export default function DashboardPage() {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 text-brand">
         <Spinner className="h-8 w-8" />
-        <p className="text-sm text-slate-400">Загрузка панели управления FloV:MP…</p>
+        <p className="text-sm text-slate-400">{D.loading}</p>
       </div>
     );
   }
@@ -859,19 +860,19 @@ export default function DashboardPage() {
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-xl">Здравствуйте, {user?.username}</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-xl">{D.hello}, {user?.username}</h1>
               <Badge tone={user?.role === 'admin' ? 'red' : 'brand'}>
-                {user?.role === 'admin' ? 'Администратор' : 'Клиент SaaS'}
+                {user?.role === 'admin' ? D.roleAdmin : D.roleClient}
               </Badge>
             </div>
             <p className="mt-0.5 text-[12px] text-white/45">
-              Лицензии, телеметрия VDS, биллинг и брендированный лаунчер FloV:MP
+              {D.headerSub}
             </p>
           </div>
         </div>
         <button onClick={() => setNewLicOpen(true)} className="btn btn-primary h-10 px-4 text-xs">
           <Plus className="h-4 w-4" />
-          Новая лицензия
+          {D.newLicense}
         </button>
       </div>
 
@@ -888,7 +889,7 @@ export default function DashboardPage() {
             }`}
           >
             <t.icon className="h-4 w-4" style={{ color: tab === t.key ? 'var(--brand)' : undefined }} />
-            {t.label}
+            {D.tabs[t.key]}
           </button>
         ))}
       </div>
@@ -901,10 +902,10 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Server className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">Проекты экосистемы FloV:MP</h2>
+                <h2 className="text-lg font-black text-white">{D.proj.title}</h2>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                Иерархия: Аккаунт → Проект (Лицензия) → Игровые серверы (Prod / Dev / Test)
+                {D.proj.hierarchy}
               </p>
             </div>
             <button
@@ -912,7 +913,7 @@ export default function DashboardPage() {
               className="btn btn-primary h-10 px-4 text-xs"
             >
               <Plus className="h-4 w-4" />
-              Создать проект
+              {D.proj.create}
             </button>
           </div>
 
@@ -943,7 +944,7 @@ export default function DashboardPage() {
                       <Badge tone={planTone(p.plan)}>{p.plan}</Badge>
                     </div>
                     <div className="mt-0.5 font-mono text-[11px] text-slate-400">
-                      /{p.slug} · {p.max_players} слотов
+                      /{p.slug} · {p.max_players} {D.proj.slots}
                     </div>
                   </div>
                 </button>
@@ -956,10 +957,10 @@ export default function DashboardPage() {
             <div className="glass card-edge rounded-3xl p-6 sm:p-8">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <span className="eyebrow text-brand">Активный проект</span>
+                  <span className="eyebrow text-brand">{D.proj.activeProject}</span>
                   <h3 className="mt-1 text-2xl font-black text-white">{selectedProject.name}</h3>
                   <p className="mt-1 font-mono text-xs text-slate-400">
-                    ID: #{selectedProject.id} · Тариф: <span className="text-white uppercase">{selectedProject.plan}</span> · Лимит: <span className="text-brand">{selectedProject.max_players} слотов</span>
+                    ID: #{selectedProject.id} · {D.proj.plan}: <span className="text-white uppercase">{selectedProject.plan}</span> · {D.proj.limit}: <span className="text-brand">{selectedProject.max_players} {D.proj.slots}</span>
                   </p>
                 </div>
 
@@ -971,7 +972,7 @@ export default function DashboardPage() {
                   <button
                     onClick={() => copy(selectedProject.license_key)}
                     className="btn btn-ghost h-9 w-9 p-0"
-                    title="Скопировать License Key"
+                    title={D.proj.copyLicenseKey}
                   >
                     {copied === selectedProject.license_key ? (
                       <Check className="h-4 w-4 text-emeraldx" />
@@ -987,7 +988,7 @@ export default function DashboardPage() {
                   <button
                     onClick={() => copy(selectedProject.api_key)}
                     className="btn btn-ghost h-9 w-9 p-0"
-                    title="Скопировать Agent API Key"
+                    title={D.proj.copyAgentKey}
                   >
                     {copied === selectedProject.api_key ? (
                       <Check className="h-4 w-4 text-emeraldx" />
@@ -999,10 +1000,10 @@ export default function DashboardPage() {
                   <button
                     onClick={() => openProjectSettings(selectedProject)}
                     className="btn h-9 border border-brand/40 bg-brand/10 px-3 text-xs font-semibold text-brand transition hover:bg-brand/20"
-                    title="Настройки безопасности и Webhook"
+                    title={D.proj.settingsWebhook}
                   >
                     <Sliders className="h-4 w-4" />
-                    Настройки & Webhook
+                    {D.proj.settingsWebhook}
                   </button>
                 </div>
               </div>
@@ -1015,13 +1016,13 @@ export default function DashboardPage() {
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-white">
                   <Cpu className="h-5 w-5 text-cyber" />
-                  Серверные среды (Environments)
+                  {D.proj.envTitle}
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  txAdmin Cloud агент на каждом узле слушает команды и отсылает телеметрию
+                  {D.proj.envSub}
                 </p>
               </div>
-              <span className="font-mono text-xs text-slate-500">Серверов: {servers.length}</span>
+              <span className="font-mono text-xs text-slate-500">{D.proj.serversCount}: {servers.length}</span>
             </div>
 
             {loadingServers ? (
@@ -1031,7 +1032,7 @@ export default function DashboardPage() {
             ) : servers.length === 0 ? (
               <div className="glass card-edge rounded-3xl p-10 text-center text-xs text-slate-400">
                 <Server className="mx-auto h-8 w-8 text-slate-600 mb-2" />
-                В этом проекте ещё нет запущенных серверов.
+                {D.proj.noServers}
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -1063,7 +1064,7 @@ export default function DashboardPage() {
                           </span>
                           <span className="flex items-center gap-1 font-mono text-[10px] text-slate-400">
                             <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
-                            Agent Active
+                            {D.proj.agentActive}
                           </span>
                         </div>
 
@@ -1074,15 +1075,15 @@ export default function DashboardPage() {
 
                         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-ink-950/50 p-3 font-mono text-[11px]">
                           <div>
-                            <span className="text-slate-500">Слоты:</span>{' '}
+                            <span className="text-slate-500">{D.proj.slotsShort}:</span>{' '}
                             <strong className="text-white">{srv.max_players}</strong>
                           </div>
                           <div>
-                            <span className="text-slate-500">Протокол:</span>{' '}
+                            <span className="text-slate-500">{D.proj.protocol}:</span>{' '}
                             <strong className="text-cyber">UDP 7788</strong>
                           </div>
                           <div>
-                            <span className="text-slate-500">Агент:</span>{' '}
+                            <span className="text-slate-500">{D.proj.agent}:</span>{' '}
                             <strong className="text-emeraldx">v1.0.4</strong>
                           </div>
                           <div>
@@ -1101,7 +1102,7 @@ export default function DashboardPage() {
                             className="btn h-9 border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
                           >
                             {isRestarting ? <Spinner className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                            Перезапуск
+                            {D.proj.restart}
                           </button>
                           <button
                             onClick={() => handleDispatchCommand(srv.id, 'stop')}
@@ -1109,7 +1110,7 @@ export default function DashboardPage() {
                             className="btn h-9 border border-red-500/30 bg-red-500/10 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
                           >
                             {isStopping ? <Spinner className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                            Остановить
+                            {D.proj.stop}
                           </button>
                         </div>
                         <button
@@ -1118,7 +1119,7 @@ export default function DashboardPage() {
                           className="btn btn-ghost h-9 w-full text-xs font-semibold text-slate-300"
                         >
                           {isBroadcasting ? <Spinner className="h-3.5 w-3.5" /> : <Radio className="h-3.5 w-3.5 text-brand" />}
-                          Анонс игрокам
+                          {D.proj.announce}
                         </button>
                       </div>
                     </div>
@@ -1134,10 +1135,10 @@ export default function DashboardPage() {
                   <div>
                     <h4 className="flex items-center gap-2 text-base font-bold text-white">
                       <Box className="h-5 w-5 text-brand" />
-                      Управление ресурсами сервера (Resource Manager)
+                      {D.proj.resTitle}
                     </h4>
                     <p className="text-xs text-slate-400">
-                      Запуск, остановка и перезапуск скриптов, карт и транспорта на лету без перезагрузки узла
+                      {D.proj.resSub}
                     </p>
                   </div>
                   <button
@@ -1146,7 +1147,7 @@ export default function DashboardPage() {
                     className="btn btn-ghost h-9 px-3 text-xs"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${loadingResources ? 'animate-spin text-brand' : ''}`} />
-                    Обновить ресурсы
+                    {D.proj.resReload}
                   </button>
                 </div>
 
@@ -1154,11 +1155,11 @@ export default function DashboardPage() {
                   <table className="w-full min-w-[600px] text-left text-xs">
                     <thead>
                       <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
-                        <th className="pb-3 pr-3 font-semibold">Ресурс</th>
-                        <th className="pb-3 pr-3 font-semibold">Тип</th>
-                        <th className="pb-3 pr-3 font-semibold">Версия</th>
-                        <th className="pb-3 pr-3 font-semibold">Статус</th>
-                        <th className="pb-3 pr-3 text-right font-semibold">Управление</th>
+                        <th className="pb-3 pr-3 font-semibold">{D.proj.thResource}</th>
+                        <th className="pb-3 pr-3 font-semibold">{D.proj.thType}</th>
+                        <th className="pb-3 pr-3 font-semibold">{D.proj.thVersion}</th>
+                        <th className="pb-3 pr-3 font-semibold">{D.proj.thStatus}</th>
+                        <th className="pb-3 pr-3 text-right font-semibold">{D.proj.thControl}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.05] text-slate-300 font-mono">
@@ -1191,7 +1192,7 @@ export default function DashboardPage() {
                                 }`}
                               >
                                 <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emeraldx animate-pulse' : 'bg-slate-500'}`} />
-                                {isRunning ? 'Работает' : 'Остановлен'}
+                                {isRunning ? D.proj.running : D.proj.stopped}
                               </span>
                             </td>
                             <td className="py-3 pr-3 text-right">
@@ -1202,7 +1203,7 @@ export default function DashboardPage() {
                                       onClick={() => handleResourceControl(servers[0].id, res.name, 'restart')}
                                       disabled={isRestarting}
                                       className="btn h-8 border border-white/10 bg-white/5 px-2.5 text-[11px] text-slate-200 transition hover:bg-white/10"
-                                      title="Перезапустить ресурс"
+                                      title={D.proj.resRestart}
                                     >
                                       {isRestarting ? <Spinner className="h-3 w-3" /> : <RefreshCw className="h-3 w-3" />}
                                     </button>
@@ -1210,7 +1211,7 @@ export default function DashboardPage() {
                                       onClick={() => handleResourceControl(servers[0].id, res.name, 'stop')}
                                       disabled={isStopping}
                                       className="btn h-8 border border-red-500/30 bg-red-500/10 px-2.5 text-[11px] text-red-400 transition hover:bg-red-500/20"
-                                      title="Остановить ресурс"
+                                      title={D.proj.resStop}
                                     >
                                       {isStopping ? <Spinner className="h-3 w-3" /> : <Square className="h-3 w-3" />}
                                     </button>
@@ -1220,7 +1221,7 @@ export default function DashboardPage() {
                                     onClick={() => handleResourceControl(servers[0].id, res.name, 'start')}
                                     disabled={isStarting}
                                     className="btn h-8 border border-emeraldx/30 bg-emeraldx/10 px-2.5 text-[11px] text-emeraldx transition hover:bg-emeraldx/20"
-                                    title="Запустить ресурс"
+                                    title={D.proj.resStart}
                                   >
                                     {isStarting ? <Spinner className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                                   </button>
@@ -1247,16 +1248,16 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Terminal className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">txAdmin Cloud Web Console</h2>
+                <h2 className="text-lg font-black text-white">{D.console.title}</h2>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                Прямой двухсторонний канал управления сервером FloV:MP через RemoteServerAgent
+                {D.console.sub}
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emeraldx/30 bg-emeraldx/15 px-3 py-1 font-mono text-[11px] font-bold text-emeraldx">
                 <span className="h-2 w-2 rounded-full bg-emeraldx animate-pulse" />
-                Agent Connected (UDP 7788)
+                {D.console.agentConnected}
               </span>
               <button
                 onClick={toggleSseStream}
@@ -1265,10 +1266,10 @@ export default function DashboardPage() {
                     ? 'bg-emeraldx text-ink-950 font-bold'
                     : 'btn-ghost text-slate-300'
                 }`}
-                title="Реальное время без задержек по Server-Sent Events"
+                title={D.console.sseTitle}
               >
                 <Radio className={`h-3.5 w-3.5 ${sseActive ? 'animate-pulse' : ''}`} />
-                {sseActive ? 'SSE Активен' : 'Включить SSE'}
+                {sseActive ? D.console.sseOn : D.console.sseOff}
               </button>
               <button
                 onClick={() =>
@@ -1277,14 +1278,14 @@ export default function DashboardPage() {
                       id: Date.now(),
                       time: new Date().toLocaleTimeString('ru-RU'),
                       tag: 'System',
-                      text: 'Консоль очищена',
+                      text: D.toast.consoleCleared,
                       tone: 'info',
                     },
                   ])
                 }
                 className="btn btn-ghost h-9 px-3 text-xs"
               >
-                Очистить
+                {D.console.clear}
               </button>
             </div>
           </div>
@@ -1292,10 +1293,10 @@ export default function DashboardPage() {
           {/* Quick Command Chips */}
           <div className="flex flex-wrap gap-2">
             {[
-              { label: 'Перезагрузка с анонсом', cmd: 'broadcast Внимание: перезагрузка через 5 минут!' },
-              { label: 'Запросить статус игроков', cmd: 'status' },
-              { label: 'Принудительный GC', cmd: 'coreclr gc collect' },
-              { label: 'Проверить BattlEye', cmd: 'battleye status' },
+              { label: D.console.chipReboot, cmd: D.console.chipRebootCmd },
+              { label: D.console.chipStatus, cmd: 'status' },
+              { label: D.console.chipGc, cmd: 'coreclr gc collect' },
+              { label: D.console.chipBattleye, cmd: 'battleye status' },
             ].map((qc) => (
               <button
                 key={qc.label}
@@ -1359,12 +1360,12 @@ export default function DashboardPage() {
               <input
                 value={consoleInput}
                 onChange={(e) => setConsoleInput(e.target.value)}
-                placeholder="broadcast [текст], restart, stop или команда сервера..."
+                placeholder={D.console.placeholder}
                 className="flex-1 bg-transparent font-mono text-xs text-white placeholder-slate-600 focus:outline-none"
               />
               <button type="submit" className="btn btn-primary h-8 px-4 text-xs">
                 <Send className="h-3.5 w-3.5" />
-                Отправить
+                {D.console.send}
               </button>
             </form>
           </div>
@@ -1378,33 +1379,33 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">FloV:AI Диагностика и Автоисправление сбоев</h2>
+                <h2 className="text-lg font-black text-white">{D.ai.title}</h2>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                Анализ логов запуска сервера, сбоев CoreCLR (.NET), портов UDP 7788, BattlEye и resource.toml
+                {D.ai.sub}
               </p>
             </div>
           </div>
 
           {/* Quick presets */}
           <div>
-            <div className="mb-2 text-xs font-semibold text-slate-400">Пресеты типовых сбоев для быстрой проверки:</div>
+            <div className="mb-2 text-xs font-semibold text-slate-400">{D.ai.presetsLabel}</div>
             <div className="flex flex-wrap gap-2">
               {[
                 {
-                  name: 'Сбой CoreCLR (.NET)',
+                  name: D.ai.pCoreclr,
                   text: 'FATAL [CoreCLR] System.IO.FileNotFoundException: Could not load file or assembly FloVMP.Gamemode.dll',
                 },
                 {
-                  name: 'Блокировка UDP 7788',
+                  name: D.ai.pUdp,
                   text: 'ERROR [Network] Failed to bind UDP socket on 0.0.0.0:7788: Address already in use / Firewall block',
                 },
                 {
-                  name: 'Отсутствие .bin файлов',
+                  name: D.ai.pBin,
                   text: 'ERROR [Server] Failed to load altv data file: data/release/data/vehicles.bin missing or corrupted',
                 },
                 {
-                  name: 'Ошибка resource.toml',
+                  name: D.ai.pToml,
                   text: 'ERROR [Resource] Failed to parse resource.toml: Invalid TOML syntax at line 14',
                 },
               ].map((sample) => (
@@ -1424,12 +1425,12 @@ export default function DashboardPage() {
 
           {/* Input Area */}
           <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
-            <FieldLabel>Фрагмент лога ошибки altv-server или исключения C#</FieldLabel>
+            <FieldLabel>{D.ai.inputLabel}</FieldLabel>
             <textarea
               rows={5}
               value={troubleshootText}
               onChange={(e) => setTroubleshootText(e.target.value)}
-              placeholder="Вставьте сюда текст ошибки (например: FATAL [CoreCLR] System.Exception: ...)"
+              placeholder={D.ai.inputPlaceholder}
               className="field w-full p-4 font-mono text-xs text-slate-200"
             />
             <div className="mt-4 flex justify-end">
@@ -1439,7 +1440,7 @@ export default function DashboardPage() {
                 className="btn btn-primary h-10 px-6 text-xs disabled:opacity-50"
               >
                 {diagnosing ? <Spinner className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
-                {diagnosing ? 'Нейроанализ логов…' : 'Диагностировать ошибку'}
+                {diagnosing ? D.ai.analyzing : D.ai.diagnose}
               </button>
             </div>
           </div>
@@ -1460,7 +1461,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white">{diagnosticResult.title}</h3>
-                    <div className="font-mono text-xs text-slate-400">Категория: {diagnosticResult.category}</div>
+                    <div className="font-mono text-xs text-slate-400">{D.ai.category}: {diagnosticResult.category}</div>
                   </div>
                 </div>
                 <Badge tone={diagnosticResult.severity === 'CRITICAL' ? 'red' : 'amber'}>
@@ -1469,13 +1470,13 @@ export default function DashboardPage() {
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-ink-950/60 p-4">
-                <div className="text-xs font-semibold text-slate-400 mb-1">Причина инцидента:</div>
+                <div className="text-xs font-semibold text-slate-400 mb-1">{D.ai.cause}</div>
                 <p className="text-sm text-slate-200 leading-relaxed">{diagnosticResult.explanation}</p>
               </div>
 
               <div>
                 <div className="text-xs font-semibold text-brand mb-3 uppercase tracking-wider font-mono">
-                  Пошаговое решение проблемы:
+                  {D.ai.solution}
                 </div>
                 <div className="space-y-3">
                   {diagnosticResult.actionableFixes.map((step: string, idx: number) => (
@@ -1494,7 +1495,7 @@ export default function DashboardPage() {
 
               {diagnosticResult.docsReference && (
                 <div className="pt-2 font-mono text-xs text-slate-400">
-                  Документация:{' '}
+                  {D.ai.docs}:{' '}
                   <span className="text-cyber underline cursor-pointer">{diagnosticResult.docsReference}</span>
                 </div>
               )}
@@ -1511,7 +1512,7 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center gap-2">
               <Rocket className="h-4 w-4 text-brand" />
               <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-brand">
-                Быстрый старт проекта
+                {D.overview.quickStart}
               </h3>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1540,21 +1541,21 @@ export default function DashboardPage() {
               <div>
                 <h2 className="flex items-center gap-2 text-lg font-black text-white">
                   <KeyRound className="h-5 w-5 text-brand" />
-                  Ваши лицензии
+                  {D.overview.yourLicenses}
                 </h2>
                 <p className="mt-1 text-xs text-slate-400">
-                  Каждый ключ привязывается к IPv4 игрового сервера
+                  {D.overview.licSub}
                 </p>
               </div>
-              <span className="font-mono text-xs text-slate-500">Всего: {licenses.length}</span>
+              <span className="font-mono text-xs text-slate-500">{D.overview.total}: {licenses.length}</span>
             </div>
 
             {licenses.length === 0 ? (
               <div className="glass card-edge rounded-3xl p-12 text-center">
                 <KeyRound className="mx-auto h-10 w-10 text-slate-600" />
-                <p className="mt-3 font-medium text-slate-300">У вас пока нет активных лицензий</p>
+                <p className="mt-3 font-medium text-slate-300">{D.overview.noLicenses}</p>
                 <button onClick={() => setNewLicOpen(true)} className="btn btn-primary mt-4 h-10 px-4 text-xs">
-                  Создать первую лицензию
+                  {D.overview.createFirst}
                 </button>
               </div>
             ) : (
@@ -1569,7 +1570,7 @@ export default function DashboardPage() {
                         <div className="min-w-0 flex-1 space-y-3">
                           <div className="flex flex-wrap items-center gap-2.5">
                             <h3 className="text-[17px] font-bold text-white">{lic.server_name}</h3>
-                            <Badge tone={planTone(lic.plan)}>Тариф: {lic.plan}</Badge>
+                            <Badge tone={planTone(lic.plan)}>{D.overview.planLabel}: {lic.plan}</Badge>
                             <span
                               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
                                 active
@@ -1578,7 +1579,7 @@ export default function DashboardPage() {
                               }`}
                             >
                               <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emeraldx animate-pulse' : 'bg-red-400'}`} />
-                              {active ? 'Активна' : 'Приостановлена'}
+                              {active ? D.overview.active : D.overview.suspended}
                             </span>
                           </div>
 
@@ -1591,7 +1592,7 @@ export default function DashboardPage() {
                               <button
                                 onClick={() => setShowKeyId(revealed ? null : lic.id)}
                                 className="text-slate-500 transition hover:text-white"
-                                title={revealed ? 'Скрыть ключ' : 'Показать ключ'}
+                                title={revealed ? D.overview.hideKey : D.overview.showKey}
                               >
                                 {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
@@ -1599,7 +1600,7 @@ export default function DashboardPage() {
                             <button
                               onClick={() => copy(lic.license_key)}
                               className="btn btn-ghost h-[42px] w-[42px] shrink-0 p-0"
-                              title="Скопировать ключ"
+                              title={D.overview.copyKey}
                             >
                               {copied === lic.license_key ? (
                                 <Check className="h-4 w-4 text-emeraldx" />
@@ -1612,15 +1613,15 @@ export default function DashboardPage() {
                           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 font-mono text-[11px] text-slate-400">
                             <span className="flex items-center gap-1.5">
                               <Globe className="h-3.5 w-3.5 text-brand" />
-                              IP: <strong className="text-white">{lic.bound_ip === '0.0.0.0' ? 'любой (0.0.0.0)' : lic.bound_ip}</strong>
+                              IP: <strong className="text-white">{lic.bound_ip === '0.0.0.0' ? D.overview.ipAny : lic.bound_ip}</strong>
                             </span>
                             <span className="flex items-center gap-1.5">
                               <Server className="h-3.5 w-3.5 text-cyber" />
-                              Слоты: <strong className="text-white">{lic.max_players}</strong>
+                              {D.overview.slotsShort}: <strong className="text-white">{lic.max_players}</strong>
                             </span>
                             <span className="flex items-center gap-1.5">
                               <ShieldCheck className="h-3.5 w-3.5 text-violetx" />
-                              Истекает: <strong className="text-white">{dateShort(lic.expires_at)}</strong>
+                              {D.overview.expires}: <strong className="text-white">{dateShort(lic.expires_at)}</strong>
                             </span>
                           </div>
                         </div>
@@ -1628,7 +1629,7 @@ export default function DashboardPage() {
                         <div className="flex shrink-0 gap-2.5">
                           <button onClick={() => openIpModal(lic)} className="btn btn-ghost h-10 px-3.5 text-xs font-semibold">
                             <Settings2 className="h-4 w-4 text-brand" />
-                            Настроить IP
+                            {D.overview.configureIp}
                           </button>
                           <a
                             href="/cdn/FloVMP-Server-x64-Linux.tar.gz"
@@ -1636,7 +1637,7 @@ export default function DashboardPage() {
                             className="btn btn-ghost h-10 px-3.5 text-xs font-semibold"
                           >
                             <Download className="h-4 w-4 text-emeraldx" />
-                            Сервер
+                            {D.overview.server}
                           </a>
                         </div>
                       </div>
@@ -1651,14 +1652,14 @@ export default function DashboardPage() {
           <div className="glass card-edge rounded-3xl p-6 sm:p-8">
             <h3 className="flex items-center gap-2 text-base font-bold text-white">
               <Terminal className="h-5 w-5 text-brand" />
-              Прописка ключа в <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-xs text-brand">server.toml</code>
+              {D.overview.tomlTitle} <code className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-xs text-brand">server.toml</code>
             </h3>
             <ol className="mt-4 space-y-3 text-[13px] text-slate-300">
               <li>
-                <strong className="text-white">1.</strong> Скачайте архив движка кнопкой «Сервер» на карточке лицензии.
+                <strong className="text-white">1.</strong> {D.overview.tomlStep1}
               </li>
               <li>
-                <strong className="text-white">2.</strong> В файле <code className="font-mono text-xs text-brand">server.toml</code> укажите блок:
+                <strong className="text-white">2.</strong> {D.overview.tomlStep2} <code className="font-mono text-xs text-brand">server.toml</code> {D.overview.tomlStep2b}
                 <pre className="mt-2 overflow-x-auto rounded-xl bg-ink-950/70 p-3 font-mono text-[12px] text-slate-200">
 {`[licensing]
 key      = "${primaryLic?.license_key || 'FLV-XXXX-XXXX-XXXX'}"
@@ -1666,7 +1667,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 </pre>
               </li>
               <li>
-                <strong className="text-white">3.</strong> Запустите <code className="font-mono text-xs text-emeraldx">./start.sh</code> — узел пройдёт онлайн-верификацию и начнёт приём игроков.
+                <strong className="text-white">3.</strong> {D.overview.tomlStep3a} <code className="font-mono text-xs text-emeraldx">./start.sh</code> {D.overview.tomlStep3b}
               </li>
             </ol>
           </div>
@@ -1680,7 +1681,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black text-white">
                 <Activity className="h-5 w-5 text-brand" />
-                Мониторинг игрового узла
+                {D.tele.title}
               </h2>
               <p className="mt-1 font-mono text-[11px] text-slate-400">
                 key: <span className="text-brand">{primaryLic?.license_key || '—'}</span> · VDS:{' '}
@@ -1690,7 +1691,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <div className="flex gap-2.5">
               <button onClick={loadTelemetry} disabled={loadingTelemetry} className="btn btn-ghost h-10 px-3.5 text-xs font-semibold">
                 <RefreshCw className={`h-4 w-4 ${loadingTelemetry ? 'animate-spin text-brand' : ''}`} />
-                Обновить
+                {D.refresh}
               </button>
               <button
                 onClick={sendHeartbeat}
@@ -1698,16 +1699,16 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 className="btn h-10 border border-brand/40 bg-brand/15 px-3.5 text-xs font-bold text-brand transition hover:bg-brand/25 disabled:opacity-50"
               >
                 {sendingHb ? <Spinner className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
-                Тестовый heartbeat
+                {D.tele.testHeartbeat}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard icon={Cpu} tone="text-emeraldx" ring="border-emeraldx/40 bg-emeraldx/10" label="Tick Rate" value={`${latest?.tick_rate ?? 60}.0`} unit="Hz" foot="Синхронизация 16.6 ms" />
-            <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={`${latest?.fps ?? 60}.0`} unit="FPS" foot="Физика без просадок" />
-            <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={`${latest?.memory_mb ?? 248}`} unit="MB" foot="ОЗУ оптимизировано" />
-            <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label="Игроки онлайн" value={`${latest?.players ?? 1}`} unit={`/ ${primaryLic?.max_players ?? 1500}`} foot="Слоты активны" />
+            <MetricCard icon={Cpu} tone="text-emeraldx" ring="border-emeraldx/40 bg-emeraldx/10" label="Tick Rate" value={`${latest?.tick_rate ?? 60}.0`} unit="Hz" foot={D.tele.tickFoot} />
+            <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={`${latest?.fps ?? 60}.0`} unit="FPS" foot={D.tele.fpsFoot} />
+            <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={`${latest?.memory_mb ?? 248}`} unit="MB" foot={D.tele.ramFoot} />
+            <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label={D.tele.playersLabel} value={`${latest?.players ?? 1}`} unit={`/ ${primaryLic?.max_players ?? 1500}`} foot={D.tele.playersFoot} />
           </div>
 
           {/* 24-Hour Activity Chart & SLA */}
@@ -1716,10 +1717,10 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-white">
                   <Activity className="h-5 w-5 text-brand" />
-                  Суточная динамика онлайна игроков (24h Activity)
+                  {D.tele.curveTitle}
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  Почасовая активность серверов проекта с расчётом пикового онлайна и аптайма SLA
+                  {D.tele.curveSub}
                 </p>
               </div>
               <div className="flex items-center gap-3 font-mono text-xs">
@@ -1728,7 +1729,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                   SLA: 99.98%
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
-                  Пик: <strong className="text-brand">184 игрока</strong>
+                  {D.tele.peak}: <strong className="text-brand">{D.tele.peakVal}</strong>
                 </span>
               </div>
             </div>
@@ -1769,12 +1770,12 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
 
             {/* Time markers */}
             <div className="mt-3 flex justify-between font-mono text-[10px] text-slate-500">
-              <span>00:00 (Ночь)</span>
+              <span>00:00 ({D.tele.night})</span>
               <span>04:00</span>
-              <span>08:00 (Утро)</span>
-              <span>12:00 (День)</span>
+              <span>08:00 ({D.tele.morning})</span>
+              <span>12:00 ({D.tele.day})</span>
               <span>16:00</span>
-              <span>20:00 (Прайм-тайм)</span>
+              <span>20:00 ({D.tele.prime})</span>
               <span>23:59</span>
             </div>
           </div>
@@ -1782,24 +1783,24 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
             <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-white">
               <Activity className="h-4 w-4 text-cyber" />
-              История пакетов телеметрии (последние 30)
+              {D.tele.historyTitle}
             </h3>
             {telemetry.length === 0 ? (
               <p className="py-10 text-center text-xs text-slate-500">
-                Нет записанных пакетов. Нажмите «Тестовый heartbeat», чтобы отправить пакет со стенда.
+                {D.tele.noPackets}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left font-mono text-xs">
                   <thead>
                     <tr className="border-b border-white/[0.08] uppercase tracking-wider text-slate-500">
-                      <th className="pb-3 pr-3 font-semibold">Время</th>
-                      <th className="pb-3 pr-3 font-semibold">IP узла</th>
-                      <th className="pb-3 pr-3 font-semibold">Онлайн</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.tele.thTime}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.tele.thNodeIp}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.tele.thOnline}</th>
                       <th className="pb-3 pr-3 font-semibold">Tick</th>
                       <th className="pb-3 pr-3 font-semibold">FPS</th>
-                      <th className="pb-3 pr-3 font-semibold">ОЗУ</th>
-                      <th className="pb-3 pr-3 font-semibold">Статус</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.tele.thRam}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.proj.thStatus}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.05] text-slate-300">
@@ -1831,67 +1832,25 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <div>
               <div className="flex items-center gap-2">
                 <Download className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">Дистрибутивы и SDK FloV:MP</h2>
+                <h2 className="text-lg font-black text-white">{D.sdk.title}</h2>
               </div>
               <p className="mt-1 text-xs text-slate-400">
-                Автономный мультиплеерный рантайм, модули CoreCLR, библиотека C# SDK и утилиты FastDL
+                {D.sdk.sub}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[
-              {
-                title: 'FloV:MP Server Core (Linux)',
-                desc: 'Автономный рантайм для VDS Ubuntu 22.04 / Debian 12. Включает coreclr-module, BattlEye и UDP стример.',
-                badge: 'Linux x64 · 85 MB',
-                badgeTone: 'cyber',
-                link: '/cdn/FloVMP-Server-x64-Linux.tar.gz',
-                btnText: 'Скачать tar.gz',
-              },
-              {
-                title: 'FloV:MP Server Core (Windows)',
-                desc: 'Локальный сервер для разработки под Windows 10/11/Server 2022. Полная изоляция от внешних бэкендов.',
-                badge: 'Win64 · 92 MB',
-                badgeTone: 'brand',
-                link: '/cdn/FloVMP-Server-x64-Windows.zip',
-                btnText: 'Скачать zip',
-              },
-              {
-                title: 'FloVMP.Core C# .NET 8 SDK',
-                desc: 'Пакет C# API: EntityStreamer, RemoteServerAgent, FactionEngine, LicensingService для создания гейммодов.',
-                badge: 'NuGet / DLL · 14 MB',
-                badgeTone: 'emeraldx',
-                link: '/cdn/FloVMP-SDK-v1.0.4.zip',
-                btnText: 'Скачать SDK',
-              },
-              {
-                title: 'FloV:MP Asset Packer (CLI)',
-                desc: 'Консольная утилита шифрования клиентских ресурсов и автогенерации манифестов FastDL перед релизом.',
-                badge: 'CLI Tool · 8 MB',
-                badgeTone: 'violetx',
-                link: '/cdn/flovmp-packer.exe',
-                btnText: 'Скачать Packer',
-              },
-              {
-                title: 'Electron Launcher Template',
-                desc: 'Исходный код брендированного лаунчера на Chromium UI + C# Native Bridge с аппаратным ускорением.',
-                badge: 'Source · 24 MB',
-                badgeTone: 'cyber',
-                link: '/cdn/FloVMP-Launcher-Template.zip',
-                btnText: 'Скачать шаблон',
-              },
-              {
-                title: 'Примеры гейммодов (Templates)',
-                desc: 'Готовые шаблоны ролевых проектов: RP Основа, Дрифт-сервер, DM Арена с полной C# типизацией.',
-                badge: 'Samples · 5 MB',
-                badgeTone: 'brand',
-                link: '/cdn/FloVMP-Gamemode-Samples.zip',
-                btnText: 'Скачать примеры',
-              },
-            ].map((item) => (
+              { badge: 'Linux x64 · 85 MB', badgeTone: 'cyber', link: '/cdn/FloVMP-Server-x64-Linux.tar.gz' },
+              { badge: 'Win64 · 92 MB', badgeTone: 'brand', link: '/cdn/FloVMP-Server-x64-Windows.zip' },
+              { badge: 'NuGet / DLL · 14 MB', badgeTone: 'emeraldx', link: '/cdn/FloVMP-SDK-v1.0.4.zip' },
+              { badge: 'CLI Tool · 8 MB', badgeTone: 'violetx', link: '/cdn/flovmp-packer.exe' },
+              { badge: 'Source · 24 MB', badgeTone: 'cyber', link: '/cdn/FloVMP-Launcher-Template.zip' },
+              { badge: 'Samples · 5 MB', badgeTone: 'brand', link: '/cdn/FloVMP-Gamemode-Samples.zip' },
+            ].map((item, idx) => (
               <div
-                key={item.title}
+                key={item.link}
                 className="glass-panel card-edge flex flex-col justify-between rounded-3xl p-6 shadow-glass"
               >
                 <div>
@@ -1899,8 +1858,8 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                     <Badge tone={item.badgeTone as any}>{item.badge}</Badge>
                     <Download className="h-4 w-4 text-slate-500" />
                   </div>
-                  <h3 className="mt-4 text-base font-bold text-white">{item.title}</h3>
-                  <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.desc}</p>
+                  <h3 className="mt-4 text-base font-bold text-white">{D.sdk.items[idx][0]}</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-400">{D.sdk.items[idx][1]}</p>
                 </div>
                 <div className="mt-6 border-t border-white/[0.08] pt-4">
                   <a
@@ -1909,7 +1868,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                     className="btn btn-ghost h-10 w-full text-xs font-semibold text-brand hover:bg-brand/10"
                   >
                     <Download className="h-4 w-4" />
-                    {item.btnText}
+                    {D.sdk.items[idx][2]}
                   </a>
                 </div>
               </div>
@@ -1927,25 +1886,25 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 <Layers className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-bold text-white">Сборщик кастомного лаунчера</h2>
-                <p className="text-xs text-slate-400">Компиляция установщика под бренд и IP проекта</p>
+                <h2 className="text-lg font-bold text-white">{D.builder.title}</h2>
+                <p className="text-xs text-slate-400">{D.builder.sub}</p>
               </div>
             </div>
 
             <form onSubmit={buildLauncher} className="mt-6 space-y-5">
               <div>
-                <FieldLabel>Название проекта</FieldLabel>
+                <FieldLabel>{D.builder.projectName}</FieldLabel>
                 <input
                   required
                   value={bProject}
                   onChange={(e) => setBProject(e.target.value)}
-                  placeholder="Держава Онлайн"
+                  placeholder="Florida V"
                   className="field h-11 px-4"
                 />
               </div>
 
               <div>
-                <FieldLabel>Фирменный HEX-цвет</FieldLabel>
+                <FieldLabel>{D.builder.hexColor}</FieldLabel>
                 <div className="flex items-center gap-3">
                   <input
                     type="color"
@@ -1980,11 +1939,11 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <FieldLabel>IP сервера</FieldLabel>
+                  <FieldLabel>{D.builder.serverIp}</FieldLabel>
                   <input required value={bIp} onChange={(e) => setBIp(e.target.value)} className="field h-11 px-4 font-mono" />
                 </div>
                 <div>
-                  <FieldLabel>UDP порт</FieldLabel>
+                  <FieldLabel>{D.builder.udpPort}</FieldLabel>
                   <input required value={bPort} onChange={(e) => setBPort(e.target.value)} className="field h-11 px-4 font-mono" />
                 </div>
               </div>
@@ -1995,7 +1954,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 className="btn btn-primary h-11 w-full text-sm disabled:opacity-50"
               >
                 {building ? <Spinner className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-                {building ? 'Компиляция…' : 'Скомпилировать лаунчер проекта'}
+                {building ? D.builder.compiling : D.builder.compile}
               </button>
             </form>
           </div>
@@ -2003,7 +1962,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           <div className="glass-panel card-edge flex flex-col rounded-3xl p-7 shadow-glass sm:p-8">
             <h3 className="flex items-center gap-2 text-base font-bold text-white">
               <Rocket className="h-4 w-4 text-brand" />
-              Статус сборщика
+              {D.builder.statusTitle}
             </h3>
 
             {building || buildStage > 0 ? (
@@ -2039,40 +1998,35 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               <div className="mt-5 space-y-4 rounded-2xl border border-emeraldx/25 bg-emeraldx/[0.06] p-5 text-xs animate-fade-in">
                 <div className="flex items-center gap-2 font-bold text-emeraldx">
                   <Check className="h-5 w-5" />
-                  Лаунчер собран (Build #{buildResult.buildId})
+                  {D.builder.built} (Build #{buildResult.buildId})
                 </div>
                 <div className="space-y-1.5 font-mono text-slate-300">
-                  <div>Проект: <strong className="text-white">{buildResult.projectName}</strong></div>
+                  <div>{D.builder.bProject}: <strong className="text-white">{buildResult.projectName}</strong></div>
                   <div className="flex items-center gap-1.5">
-                    Цвет:
+                    {D.builder.bColor}:
                     <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: buildResult.primaryColor }} />
                     <span style={{ color: buildResult.primaryColor }}>{buildResult.primaryColor}</span>
                   </div>
-                  <div>Эндпоинт: <strong className="text-white">{buildResult.config.serverIp}:{buildResult.config.serverPort}</strong></div>
-                  <div>Лицензия: <strong className="text-white">{buildResult.config.licenseKey}</strong></div>
+                  <div>{D.builder.bEndpoint}: <strong className="text-white">{buildResult.config.serverIp}:{buildResult.config.serverPort}</strong></div>
+                  <div>{D.builder.bLicense}: <strong className="text-white">{buildResult.config.licenseKey}</strong></div>
                 </div>
                 <a href={buildResult.downloadUrl} download className="btn h-10 w-full bg-emeraldx text-xs font-bold text-ink-950 transition hover:brightness-110">
                   <Download className="h-4 w-4" />
-                  Скачать {buildResult.projectName}-Setup.exe
+                  {D.builder.download} {buildResult.projectName}-Setup.exe
                 </a>
               </div>
             ) : !building && buildStage === 0 ? (
               <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center text-xs text-slate-500">
                 <Layers className="mx-auto h-10 w-10 text-slate-600" />
-                <p className="mt-3 font-semibold text-slate-300">Ожидание запуска сборки</p>
+                <p className="mt-3 font-semibold text-slate-300">{D.builder.waiting}</p>
                 <p className="mt-1">
-                  Укажите параметры слева и нажмите «Скомпилировать». Билдер упакует Electron + C#
-                  Native Bridge и FastDL-манифест.
+                  {D.builder.waitingSub}
                 </p>
               </div>
             ) : null}
 
             <div className="mt-6 space-y-2 border-t border-white/[0.08] pt-5 font-mono text-[11px] text-slate-400">
-              {[
-                'Аппаратное ускорение Chromium UI (blur / shadows)',
-                'Прямой коннектор C# .NET 8 (FloVMP.Connect)',
-                'Вшитый FastDL-кэш с CDN VDS',
-              ].map((x) => (
+              {D.builder.feat.map((x) => (
                 <div key={x} className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-brand" />
                   {x}
@@ -2090,20 +2044,20 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             <div>
               <h2 className="flex items-center gap-2 text-lg font-black text-white">
                 <CreditCard className="h-5 w-5 text-brand" />
-                Счета и управление подпиской
+                {D.billing.title}
               </h2>
               <p className="mt-1 text-xs text-slate-400">
-                Счета формируются автоматически, продление лицензий — моментальное
+                {D.billing.sub}
               </p>
             </div>
             <div className="flex gap-2.5">
               <button onClick={loadInvoices} disabled={loadingInvoices} className="btn btn-ghost h-10 px-3.5 text-xs font-semibold">
                 <RefreshCw className={`h-4 w-4 ${loadingInvoices ? 'animate-spin text-brand' : ''}`} />
-                Обновить
+                {D.refresh}
               </button>
               <button onClick={() => setInvoiceOpen(true)} className="btn btn-primary h-10 px-4 text-xs">
                 <Plus className="h-4 w-4" />
-                Выставить счёт на продление
+                {D.billing.issue}
               </button>
             </div>
           </div>
@@ -2111,13 +2065,13 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">
             <h3 className="mb-4 flex items-center gap-2 text-base font-bold text-white">
               <CreditCard className="h-4 w-4 text-violetx" />
-              История выставленных счетов
+              {D.billing.historyTitle}
             </h3>
             {invoices.length === 0 ? (
               <div className="py-10 text-center text-xs text-slate-500">
-                <p>Счетов пока нет.</p>
+                <p>{D.billing.noInvoices}</p>
                 <button onClick={() => setInvoiceOpen(true)} className="btn btn-primary mt-3 h-9 px-4 text-xs">
-                  Выставить счёт
+                  {D.billing.issueShort}
                 </button>
               </div>
             ) : (
@@ -2125,13 +2079,13 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 <table className="w-full min-w-[720px] text-left text-xs">
                   <thead>
                     <tr className="border-b border-white/[0.08] font-mono uppercase tracking-wider text-slate-500">
-                      <th className="pb-3 pr-3 font-semibold">№</th>
-                      <th className="pb-3 pr-3 font-semibold">Тариф</th>
-                      <th className="pb-3 pr-3 font-semibold">Сумма</th>
-                      <th className="pb-3 pr-3 font-semibold">Метод</th>
-                      <th className="pb-3 pr-3 font-semibold">Создан</th>
-                      <th className="pb-3 pr-3 font-semibold">Статус</th>
-                      <th className="pb-3 pr-3 text-right font-semibold">Действие</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.billing.thNo}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.billing.thPlan}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.billing.thAmount}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.billing.thMethod}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.billing.thCreated}</th>
+                      <th className="pb-3 pr-3 font-semibold">{D.proj.thStatus}</th>
+                      <th className="pb-3 pr-3 text-right font-semibold">{D.billing.thAction}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.05] text-slate-300">
@@ -2147,18 +2101,18 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                           <td className="py-3 pr-3 font-mono capitalize text-slate-400">{inv.payment_method}</td>
                           <td className="py-3 pr-3 font-mono text-slate-400">{dateShort(inv.created_at)}</td>
                           <td className="py-3 pr-3">
-                            <Badge tone={paid ? 'emerald' : 'amber'}>{paid ? 'Оплачен' : 'Ожидает оплаты'}</Badge>
+                            <Badge tone={paid ? 'emerald' : 'amber'}>{paid ? D.billing.paid : D.billing.pending}</Badge>
                           </td>
                           <td className="py-3 pr-3 text-right">
                             {paid ? (
-                              <span className="text-[11px] text-slate-600">Закрыт</span>
+                              <span className="text-[11px] text-slate-600">{D.billing.closed}</span>
                             ) : (
                               <button
                                 onClick={() => payInvoice(inv.id)}
                                 disabled={payingId === inv.id}
                                 className="btn h-8 bg-emeraldx px-3 text-[11px] font-bold text-ink-950 transition hover:brightness-110 disabled:opacity-50"
                               >
-                                {payingId === inv.id ? <Spinner className="h-3.5 w-3.5" /> : 'Оплатить'}
+                                {payingId === inv.id ? <Spinner className="h-3.5 w-3.5" /> : D.billing.pay}
                               </button>
                             )}
                           </td>
@@ -2181,14 +2135,11 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               <div className="max-w-2xl space-y-2">
                 <span className="eyebrow text-brand flex items-center gap-2">
                   <Percent className="h-4 w-4" />
-                  Партнёрская программа
+                  {D.aff.program}
                 </span>
-                <h3 className="text-2xl font-black text-white">Зарабатывайте 20% от оплат серверов</h3>
+                <h3 className="text-2xl font-black text-white">{D.aff.earn}</h3>
                 <p className="text-xs leading-relaxed text-slate-400">
-                  Рекомендуйте FloV:MP владельцам GTA V RP-серверов. Вы получаете{' '}
-                  <strong className="text-white">20% пожизненно</strong> с каждого продления лицензии
-                  приглашённого проекта. Приглашённый проект получает скидку{' '}
-                  <strong className="text-emeraldx">10%</strong>.
+                  {D.aff.descA}{' '}<strong className="text-white">{D.aff.descB}</strong> {D.aff.descC}{' '}<strong className="text-emeraldx">{D.aff.descD}</strong>.
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -2200,7 +2151,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                   className="btn h-11 border border-brand/40 bg-brand/15 px-4 text-xs font-bold text-brand transition hover:bg-brand/25"
                 >
                   {copied === promoCode ? <Check className="h-4 w-4 text-emeraldx" /> : <Copy className="h-4 w-4" />}
-                  {copied === promoCode ? 'Скопировано' : 'Копировать'}
+                  {copied === promoCode ? D.aff.copied : D.aff.copy}
                 </button>
               </div>
             </div>
@@ -2208,19 +2159,19 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <div className="glass card-edge rounded-2xl p-6">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Приглашено проектов</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{D.aff.invited}</div>
               <div className="mt-2 font-mono text-3xl font-black text-white">0</div>
-              <div className="mt-2 font-mono text-[11px] text-slate-500">Активные рефералы</div>
+              <div className="mt-2 font-mono text-[11px] text-slate-500">{D.aff.activeRefs}</div>
             </div>
             <div className="glass card-edge rounded-2xl p-6">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Начислено вознаграждений</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{D.aff.earned}</div>
               <div className="mt-2 font-mono text-3xl font-black text-emeraldx">0 ₽</div>
-              <div className="mt-2 font-mono text-[11px] text-slate-500">Доступно к выводу</div>
+              <div className="mt-2 font-mono text-[11px] text-slate-500">{D.aff.available}</div>
             </div>
             <div className="glass card-edge rounded-2xl p-6">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Процент отчислений</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{D.aff.percent}</div>
               <div className="mt-2 font-mono text-3xl font-black text-brand">20%</div>
-              <div className="mt-2 font-mono text-[11px] text-slate-500">Пожизненно со всех платежей</div>
+              <div className="mt-2 font-mono text-[11px] text-slate-500">{D.aff.lifetime}</div>
             </div>
           </div>
         </div>
@@ -2230,8 +2181,8 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
       <Modal
         open={!!ipLicense}
         onClose={() => setIpLicense(null)}
-        title="Привязка IP-адреса сервера"
-        description="Публичный IPv4 адрес VDS, на котором развёрнут игровой сервер"
+        title={D.modal.bindIpTitle}
+        description={D.modal.bindIpDesc}
         maxWidth="max-w-md"
       >
         {ipErr && (
@@ -2241,11 +2192,11 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
         )}
         <form onSubmit={saveIp} className="space-y-4">
           <div>
-            <FieldLabel>Название сервера</FieldLabel>
+            <FieldLabel>{D.modal.serverName}</FieldLabel>
             <input required value={ipName} onChange={(e) => setIpName(e.target.value)} className="field h-11 px-4" />
           </div>
           <div>
-            <FieldLabel>IPv4 адрес</FieldLabel>
+            <FieldLabel>{D.modal.ipv4}</FieldLabel>
             <input
               required
               value={ipValue}
@@ -2256,11 +2207,11 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           </div>
           <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
             <button type="button" onClick={() => setIpLicense(null)} className="px-4 py-2 text-xs text-slate-400 transition hover:text-white">
-              Отмена
+              {D.cancel}
             </button>
             <button type="submit" disabled={savingIp} className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50">
               {savingIp ? <Spinner className="h-4 w-4" /> : null}
-              Сохранить привязку
+              {D.modal.saveBinding}
             </button>
           </div>
         </form>
@@ -2269,15 +2220,15 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
       <Modal
         open={newLicOpen}
         onClose={() => setNewLicOpen(false)}
-        title="Оформление новой лицензии"
-        description="Выберите тариф под масштабы вашего игрового проекта"
+        title={D.modal.newLicTitle}
+        description={D.modal.newLicDesc}
       >
         <form onSubmit={createLicense} className="space-y-5">
           <div className="grid grid-cols-3 gap-3">
             {[
-              { id: 'indie', name: 'Инди', slots: '128 слотов', price: 'Бесплатно', tone: 'slate' },
-              { id: 'business', name: 'RP Проект', slots: '512 слотов', price: '14 900 ₽', tone: 'brand' },
-              { id: 'enterprise', name: 'Enterprise', slots: '1500+ слотов', price: '49 000 ₽', tone: 'cyber' },
+              { id: 'indie', name: D.modal.indie, slots: `128 ${D.proj.slots}`, price: D.modal.free, tone: 'slate' },
+              { id: 'business', name: 'RP', slots: `512 ${D.proj.slots}`, price: '14 900 ₽', tone: 'brand' },
+              { id: 'enterprise', name: 'Enterprise', slots: `1500+ ${D.proj.slots}`, price: '49 000 ₽', tone: 'cyber' },
             ].map((p) => (
               <button
                 type="button"
@@ -2300,7 +2251,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             ))}
           </div>
           <div>
-            <FieldLabel>Название вашего сервера</FieldLabel>
+            <FieldLabel>{D.modal.yourServerName}</FieldLabel>
             <input
               required
               value={newName}
@@ -2310,16 +2261,16 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             />
           </div>
           <div>
-            <FieldLabel>IP сервера (можно указать позже)</FieldLabel>
+            <FieldLabel>{D.modal.ipLater}</FieldLabel>
             <input value={newIp} onChange={(e) => setNewIp(e.target.value)} placeholder="0.0.0.0" className="field h-11 px-4 font-mono" />
           </div>
           <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
             <button type="button" onClick={() => setNewLicOpen(false)} className="px-4 py-2 text-xs text-slate-400 transition hover:text-white">
-              Отмена
+              {D.cancel}
             </button>
             <button type="submit" disabled={creatingLic} className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50">
               {creatingLic ? <Spinner className="h-4 w-4" /> : null}
-              Активировать лицензию
+              {D.modal.activateLic}
             </button>
           </div>
         </form>
@@ -2328,14 +2279,14 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
       <Modal
         open={newProjOpen}
         onClose={() => setNewProjOpen(false)}
-        title="Создание нового проекта"
-        description="Проект объединяет единую лицензию и несколько сред: Production, Development, Test"
+        title={D.modal.newProjTitle}
+        description={D.modal.newProjDesc}
       >
         <form onSubmit={createProjectHandler} className="space-y-5">
           <div className="grid grid-cols-2 gap-3">
             {[
-              { id: 'business', name: 'RP Проект', slots: '512 слотов', tone: 'brand' },
-              { id: 'enterprise', name: 'Enterprise', slots: '1500+ слотов', tone: 'cyber' },
+              { id: 'business', name: 'RP', slots: `512 ${D.proj.slots}`, tone: 'brand' },
+              { id: 'enterprise', name: 'Enterprise', slots: `1500+ ${D.proj.slots}`, tone: 'cyber' },
             ].map((p) => (
               <button
                 type="button"
@@ -2355,7 +2306,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             ))}
           </div>
           <div>
-            <FieldLabel>Название проекта</FieldLabel>
+            <FieldLabel>{D.builder.projectName}</FieldLabel>
             <input
               required
               value={newProjName}
@@ -2370,7 +2321,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
             />
           </div>
           <div>
-            <FieldLabel>Slug идентификатор (URL проекта)</FieldLabel>
+            <FieldLabel>{D.modal.slugLabel}</FieldLabel>
             <input
               required
               value={newProjSlug}
@@ -2385,7 +2336,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               onClick={() => setNewProjOpen(false)}
               className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
             >
-              Отмена
+              {D.cancel}
             </button>
             <button
               type="submit"
@@ -2393,7 +2344,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50"
             >
               {creatingProj ? <Spinner className="h-4 w-4" /> : null}
-              Создать проект
+              {D.proj.create}
             </button>
           </div>
         </form>
@@ -2403,32 +2354,32 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
       <Modal
         open={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
-        title="Настройки проекта & Webhooks"
-        description="Политика безопасности FloV:ID, пропуск обходников HWID и алерты в Discord / Telegram"
+        title={D.modal.settingsTitle}
+        description={D.modal.settingsDesc}
         maxWidth="max-w-2xl"
       >
         <form onSubmit={saveProjectSettings} className="space-y-6">
           {/* HWID Policy Selection */}
           <div>
-            <FieldLabel>Политика безопасности FloV:ID & HWID</FieldLabel>
+            <FieldLabel>{D.modal.hwidPolicy}</FieldLabel>
             <div className="grid grid-cols-3 gap-2.5">
               {[
                 {
                   id: 'strict',
-                  title: 'Строгий (Strict)',
-                  desc: 'Блокировка забаненных HWID',
+                  title: D.modal.hwidStrict,
+                  desc: D.modal.hwidStrictDesc,
                   tone: 'red',
                 },
                 {
                   id: 'lenient',
-                  title: 'Мягкий (Lenient)',
-                  desc: 'Вход разрешён с аудитом',
+                  title: D.modal.hwidLenient,
+                  desc: D.modal.hwidLenientDesc,
                   tone: 'brand',
                 },
                 {
                   id: 'disabled',
-                  title: 'Выключен (Disabled)',
-                  desc: 'Пускать всех без ограничений',
+                  title: D.modal.hwidDisabled,
+                  desc: D.modal.hwidDisabledDesc,
                   tone: 'slate',
                 },
               ].map((m) => (
@@ -2455,7 +2406,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <FieldLabel>Максимум аккаунтов на 1 HWID</FieldLabel>
+              <FieldLabel>{D.modal.maxAccs}</FieldLabel>
               <input
                 type="number"
                 min={1}
@@ -2474,7 +2425,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                   className="h-4 w-4 rounded accent-brand"
                 />
                 <span className="text-xs text-slate-200 font-semibold">
-                  Разрешать игрокам вход через VPN / Proxy
+                  {D.modal.allowVpn}
                 </span>
               </label>
             </div>
@@ -2486,10 +2437,10 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-bold text-white">
                   <Bell className="h-4 w-4 text-brand" />
-                  Оповещения в Discord и Telegram
+                  {D.modal.alertsTitle}
                 </h4>
                 <p className="text-[11px] text-slate-400">
-                  Автоматическая отправка уведомлений о падении сервера, сбоях и превышении нагрузки
+                  {D.modal.alertsSub}
                 </p>
               </div>
               <label className="flex items-center gap-2 text-xs text-slate-300 font-semibold cursor-pointer">
@@ -2499,7 +2450,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                   onChange={(e) => setSettingAlertsEnabled(e.target.checked)}
                   className="h-4 w-4 rounded accent-brand"
                 />
-                Включены
+                {D.modal.enabled}
               </label>
             </div>
 
@@ -2518,7 +2469,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                   disabled={testingWebhook || !settingDiscord}
                   className="btn btn-ghost h-10 px-3 text-xs text-brand disabled:opacity-40"
                 >
-                  Тест
+                  {D.modal.test}
                 </button>
               </div>
             </div>
@@ -2548,7 +2499,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                     disabled={testingWebhook || !settingTgToken || !settingTgChat}
                     className="btn btn-ghost h-10 px-3 text-xs text-cyber disabled:opacity-40"
                   >
-                    Тест
+                    {D.modal.test}
                   </button>
                 </div>
               </div>
@@ -2561,7 +2512,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               onClick={() => setSettingsModalOpen(false)}
               className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
             >
-              Отмена
+              {D.cancel}
             </button>
             <button
               type="submit"
@@ -2569,7 +2520,7 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
               className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50"
             >
               {savingSettings ? <Spinner className="h-4 w-4" /> : null}
-              Сохранить параметры проекта
+              {D.modal.saveProjectParams}
             </button>
           </div>
         </form>
@@ -2578,16 +2529,16 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
       <Modal
         open={invoiceOpen}
         onClose={() => setInvoiceOpen(false)}
-        title="Выставление счёта на оплату"
-        description="Выберите тариф, период и способ оплаты"
+        title={D.modal.invoiceTitle}
+        description={D.modal.invoiceDesc}
       >
         <form onSubmit={createInvoice} className="space-y-5">
           <div>
-            <FieldLabel>Тарифный план</FieldLabel>
+            <FieldLabel>{D.modal.planLabel}</FieldLabel>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { id: 'business', name: 'RP Проект', note: '512 слотов · 14 900 ₽/мес', tone: 'brand' },
-                { id: 'enterprise', name: 'Enterprise', note: '1500+ слотов · 49 000 ₽', tone: 'cyber' },
+                { id: 'business', name: 'RP', note: `512 ${D.proj.slots} · 14 900 ₽`, tone: 'brand' },
+                { id: 'enterprise', name: 'Enterprise', note: `1500+ ${D.proj.slots} · 49 000 ₽`, tone: 'cyber' },
               ].map((p) => (
                 <button
                   type="button"
@@ -2609,13 +2560,13 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           </div>
 
           <div>
-            <FieldLabel>Период оплаты</FieldLabel>
+            <FieldLabel>{D.modal.periodLabel}</FieldLabel>
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  ['monthly', '1 месяц'],
-                  ['halfYear', '6 мес · −15%'],
-                  ['year', '1 год · −30%'],
+                  ['monthly', D.modal.pMonth],
+                  ['halfYear', D.modal.pHalf],
+                  ['year', D.modal.pYear],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -2633,12 +2584,12 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
           </div>
 
           <div>
-            <FieldLabel>Способ оплаты</FieldLabel>
+            <FieldLabel>{D.modal.methodLabel}</FieldLabel>
             <div className="grid grid-cols-3 gap-2">
               {(
                 [
-                  ['card', 'Карта'],
-                  ['sbp', 'СБП QR'],
+                  ['card', D.modal.mCard],
+                  ['sbp', D.modal.mSbp],
                   ['crypto', 'USDT'],
                 ] as const
               ).map(([id, label]) => (
@@ -2658,11 +2609,11 @@ bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
 
           <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
             <button type="button" onClick={() => setInvoiceOpen(false)} className="px-4 py-2 text-xs text-slate-400 transition hover:text-white">
-              Отмена
+              {D.cancel}
             </button>
             <button type="submit" disabled={creatingInvoice} className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50">
               {creatingInvoice ? <Spinner className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
-              Выставить счёт
+              {D.modal.issueInvoice}
             </button>
           </div>
         </form>
