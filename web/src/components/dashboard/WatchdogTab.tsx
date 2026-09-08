@@ -22,7 +22,7 @@ export function WatchdogTab() {
           [w.threshold, w.thresholdVal],
           [w.restarts, w.restartsVal],
           [w.uptime, w.uptimeVal],
-        ].map(([l, v]: [string, string]) => (
+        ].map(([l, v]) => (
           <div key={l} className="glass card-edge rounded-2xl p-5">
             <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{l}</div>
             <div className="mt-1.5 text-2xl font-black text-white">{v}</div>
