@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, AlertTriangle, CreditCard, Download, KeyRound, Layers, Percent, Plus, ScrollText, Server, Settings, Terminal, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, CreditCard, Download, KeyRound, Layers, Percent, Plug, Plus, ScrollText, Server, Settings, Terminal, Zap } from 'lucide-react';
 import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
@@ -20,8 +20,10 @@ import { SdkTab } from '@/components/dashboard/SdkTab';
 import { BuilderTab } from '@/components/dashboard/BuilderTab';
 import { BillingTab } from '@/components/dashboard/BillingTab';
 import { AffiliateTab } from '@/components/dashboard/AffiliateTab';
+import { AnalyticsTab } from '@/components/dashboard/AnalyticsTab';
 import { WatchdogTab } from '@/components/dashboard/WatchdogTab';
 import { LogsTab } from '@/components/dashboard/LogsTab';
+import { ApiTab } from '@/components/dashboard/ApiTab';
 import { SettingsTab } from '@/components/dashboard/SettingsTab';
 import { IpBindModal } from '@/components/dashboard/IpBindModal';
 import { NewLicenseModal } from '@/components/dashboard/NewLicenseModal';
@@ -36,8 +38,10 @@ const TABS: { key: TabKey; icon: React.ElementType }[] = [
   { key: 'troubleshoot', icon: Zap },
   { key: 'overview', icon: KeyRound },
   { key: 'telemetry', icon: Activity },
+  { key: 'analytics', icon: BarChart3 },
   { key: 'watchdog', icon: AlertTriangle },
   { key: 'logs', icon: ScrollText },
+  { key: 'api', icon: Plug },
   { key: 'sdk', icon: Download },
   { key: 'builder', icon: Layers },
   { key: 'billing', icon: CreditCard },
@@ -206,6 +210,24 @@ export default function DashboardPage() {
       show(D.toast.twoFaOff);
     } catch (e: any) {
       setTwoFa((s) => ({ ...s, busy: false, err: e.message }));
+    }
+  };
+
+  /* Agent API key rotation */
+  const [rotatingKey, setRotatingKey] = useState(false);
+  const rotateApiKey = async () => {
+    if (!selectedProject) return;
+    setRotatingKey(true);
+    try {
+      const r = await fetch(`/api/v1/projects/${selectedProject.id}/api-key`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || D.toast.err);
+      show(D.api.rotated);
+      await loadDashboard();
+    } catch (e: any) {
+      show(e.message, 'error');
+    } finally {
+      setRotatingKey(false);
     }
   };
 
@@ -798,6 +820,7 @@ export default function DashboardPage() {
     bProject, setBProject, bColor, setBColor, bIp, setBIp, bPort, setBPort,
     building, buildStage, buildResult,
     twoFa, setTwoFa, start2fa, confirm2fa, disable2fa,
+    rotatingKey, rotateApiKey,
     loadServers, handleSelectProject, openProjectSettings, saveProjectSettings, testWebhooks,
     loadResources, handleResourceControl, toggleSseStream, createProjectHandler,
     handleDispatchCommand, sendConsoleCommand, runTroubleshoot, loadInvoices, loadTelemetry,
@@ -867,11 +890,17 @@ export default function DashboardPage() {
       {/* ============ TELEMETRY ============ */}
       {tab === 'telemetry' && <TelemetryTab />}
 
+      {/* ============ ANALYTICS ============ */}
+      {tab === 'analytics' && <AnalyticsTab />}
+
       {/* ============ WATCHDOG & CRASHES ============ */}
       {tab === 'watchdog' && <WatchdogTab />}
 
       {/* ============ LOGS ============ */}
       {tab === 'logs' && <LogsTab />}
+
+      {/* ============ API & WEBHOOKS ============ */}
+      {tab === 'api' && <ApiTab />}
 
       {/* ============ DOWNLOADS & SDK ============ */}
       {tab === 'sdk' && <SdkTab />}

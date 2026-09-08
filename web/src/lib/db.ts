@@ -727,6 +727,23 @@ function mockQueryFallback(sql: string, params: any[]): any {
     return { insertId: newId, affectedRows: 1 };
   }
 
+  // 16b. Dynamic UPDATE portal_projects SET col = ?, ... WHERE id = ?
+  if (s.includes('update portal_projects set')) {
+    const cols = (sql.match(/set\s+(.+?)\s+where/i)?.[1] || '')
+      .split(',')
+      .map((c) => c.trim().split('=')[0].trim());
+    const id = Number(params[params.length - 1]);
+    const proj = (store.projects || []).find((p) => p.id === id);
+    if (!proj) return { affectedRows: 0 };
+    const pr = proj as unknown as Record<string, unknown>;
+    cols.forEach((col, i) => {
+      const v = params[i];
+      pr[col] = v === null || v === undefined ? null : typeof v === 'number' ? v : String(v);
+    });
+    saveStore(store);
+    return { affectedRows: 1 };
+  }
+
   // 17. Servers queries
   if (s.includes('from portal_servers')) {
     if (/project_id\s*=/i.test(s)) {
@@ -1050,6 +1067,13 @@ export async function updateProjectSettings(
   vals.push(projectId);
   const res: any = await query(`UPDATE portal_projects SET ${fields.join(', ')} WHERE id = ?`, vals);
   return res.affectedRows > 0;
+}
+
+/** Regenerate the project's Agent API key. Returns the new key. */
+export async function rotateProjectApiKey(projectId: number): Promise<string> {
+  const apiKey = `flv_live_${Math.random().toString(36).substring(2, 12)}_${Date.now().toString(36)}`;
+  await query('UPDATE portal_projects SET api_key = ? WHERE id = ?', [apiKey, projectId]);
+  return apiKey;
 }
 
 export async function getResourcesByServer(serverId: number): Promise<ResourceRecord[]> {

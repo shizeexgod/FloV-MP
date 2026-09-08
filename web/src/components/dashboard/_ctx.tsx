@@ -110,8 +110,8 @@ export interface LauncherBuildResult {
 
 export type TabKey =
   | 'projects' | 'console' | 'troubleshoot' | 'overview'
-  | 'telemetry' | 'sdk' | 'builder' | 'billing' | 'affiliate'
-  | 'watchdog' | 'logs' | 'settings';
+  | 'telemetry' | 'analytics' | 'sdk' | 'builder' | 'billing' | 'affiliate'
+  | 'watchdog' | 'logs' | 'api' | 'settings';
 
 export interface TwoFaState {
   enabled: boolean;
@@ -215,6 +215,8 @@ export interface DashCtx {
   start2fa: () => void;
   confirm2fa: () => void;
   disable2fa: () => void;
+  rotatingKey: boolean;
+  rotateApiKey: () => void;
   // setters + handlers — loosely typed
   [key: string]: any;
 }
