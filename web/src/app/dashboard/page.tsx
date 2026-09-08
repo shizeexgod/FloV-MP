@@ -43,14 +43,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import {
-  AuroraBlobs,
-  Badge,
-  FieldLabel,
-  Modal,
-  Spinner,
-  useToast,
-} from '@/components/ui';
+import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
 
 /* ----------------------------- types ----------------------------- */
 interface License {
@@ -854,48 +847,47 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <AuroraBlobs />
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       {node}
 
       {/* Header */}
-      <div className="relative glass-panel card-edge mb-8 flex flex-col gap-5 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
-        <div className="flex items-center gap-4">
-          <span className="block h-14 w-14 overflow-hidden rounded-2xl border border-white/15 bg-ink-800 shadow-neon-pink">
+      <div className="card card-edge mb-6 flex flex-col gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+        <div className="flex items-center gap-3.5">
+          <span className="block h-11 w-11 overflow-hidden rounded-xl border border-white/10 bg-ink-800">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo-codex.png" alt="" className="h-full w-full object-cover" />
+            <img src="/branding/logo.jpg" alt="" className="h-full w-full object-cover" />
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white sm:text-2xl">Здравствуйте, {user?.username}</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-xl">Здравствуйте, {user?.username}</h1>
               <Badge tone={user?.role === 'admin' ? 'red' : 'brand'}>
                 {user?.role === 'admin' ? 'Администратор' : 'Клиент SaaS'}
               </Badge>
             </div>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-0.5 text-[12px] text-white/45">
               Лицензии, телеметрия VDS, биллинг и брендированный лаунчер FloV:MP
             </p>
           </div>
         </div>
-        <button onClick={() => setNewLicOpen(true)} className="btn btn-primary h-11 px-5 text-xs">
+        <button onClick={() => setNewLicOpen(true)} className="btn btn-primary h-10 px-4 text-xs">
           <Plus className="h-4 w-4" />
           Новая лицензия
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="relative mb-8 flex gap-1.5 overflow-x-auto border-b border-white/[0.08] pb-2 no-scrollbar">
+      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-white/[0.08] pb-2 no-scrollbar">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-all ${
+            className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
               tab === t.key
-                ? 'bg-brand text-white shadow-neon-pink'
-                : 'bg-white/[0.03] text-slate-400 hover:bg-white/[0.06] hover:text-white'
+                ? 'bg-white/[0.06] text-white'
+                : 'text-white/40 hover:bg-white/[0.04] hover:text-white/80'
             }`}
           >
-            <t.icon className="h-4 w-4" />
+            <t.icon className="h-4 w-4" style={{ color: tab === t.key ? 'var(--brand)' : undefined }} />
             {t.label}
           </button>
         ))}

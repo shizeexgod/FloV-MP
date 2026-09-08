@@ -12,7 +12,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { AuroraBlobs, Badge, Spinner, useToast } from '@/components/ui';
+import { Badge, Spinner, useToast } from '@/components/ui';
 
 interface MetricOverview {
   totalUsers: number;
@@ -120,21 +120,20 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <AuroraBlobs />
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       {node}
 
       {/* Header */}
-      <div className="relative glass-panel card-edge mb-8 flex flex-col gap-5 rounded-3xl p-7 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <div className="card card-edge mb-6 flex flex-col gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
         <div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-red-400">
+          <span className="inline-flex items-center gap-2 rounded-full border border-err/30 bg-err/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-err">
             <ShieldAlert className="h-3.5 w-3.5" />
             Master Admin Panel
           </span>
-          <h1 className="mt-3 text-2xl font-black text-white sm:text-3xl">
+          <h1 className="mt-3 text-xl font-semibold tracking-tight text-white sm:text-2xl">
             Управление платформой и реестром серверов
           </h1>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[12px] text-white/45">
             Контроль лицензий, клиентов, платежей и статусов узлов
           </p>
         </div>
@@ -145,7 +144,7 @@ export default function AdminPage() {
       </div>
 
       {/* Metrics */}
-      <div className="relative mb-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
           <div key={c.label} className="glass card-edge rounded-2xl p-6">
             <div className="flex items-center justify-between">
