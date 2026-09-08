@@ -159,8 +159,12 @@ ipcMain.handle('native:cleanupUpscaler', (_e, gtaPath) => native.call('cleanupUp
 ipcMain.handle('native:auth', async (_e, mode, payload) => {
   const route = AUTH_ROUTES[mode];
   if (!route) return { ok: false, message: 'неизвестная операция' };
+  const host = (payload && payload.serverHost) || process.env.FLOVMP_SERVER_HOST || '188.127.229.224';
+  const apiBase = (host === '127.0.0.1' || host === 'localhost')
+    ? 'http://127.0.0.1:7799/api/auth'
+    : `http://${host}/api/auth`;
   try {
-    const res = await fetch(`${AUTH_API}/${route}`, {
+    const res = await fetch(`${apiBase}/${route}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload || {}),

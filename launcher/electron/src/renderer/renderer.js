@@ -1183,7 +1183,7 @@ document.getElementById('sec-btn-email').addEventListener('click', () => openCab
 async function secSubmit(mode, payload, errorEl, okMsg) {
   errorEl.textContent = '';
   try {
-    const data = await window.floridaV.auth(mode, { username: settings.account?.username, ...payload });
+    const data = await window.floridaV.auth(mode, { username: settings.account?.username, ...payload, serverHost: settings.serverHost });
     if (!data || !data.ok) { errorEl.textContent = (data && data.message) || 'Раздел безопасности подключается вместе с сервером — попробуйте позже'; return false; }
     errorEl.textContent = '';
     return true;
@@ -1600,7 +1600,7 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
   const prevText = submitBtn.textContent;
   submitBtn.textContent = 'Проверка…';
   try {
-    const payload = { username: login, password };
+    const payload = { username: login, password, serverHost: settings.serverHost };
     if (auth2faStage) payload.code = code2fa;
     const data = await window.floridaV.auth(isRegisterMode ? 'register' : 'login', payload);
 
