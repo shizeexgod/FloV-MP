@@ -229,7 +229,7 @@ public class AntiCheatSystem
                 driver.Vehicle.EngineOn = false;
                 driver.Vehicle.ScriptMaxSpeed = 0.1f;
             }
-            driver.Emit("flovmp:chat:system", $"[FloV:Shield] Зафиксировано нарушение физики транспорта ({type}): {reason}");
+            driver.Emit("flovmp:chat:msg", "system", "", $"[FloV:Shield] Зафиксировано нарушение физики транспорта ({type}): {reason}");
         }
     }
 
@@ -250,7 +250,7 @@ public class AntiCheatSystem
 
         if (attacker != null && attacker.Exists)
         {
-            attacker.Emit("flovmp:chat:system", $"[FloV:Shield] Выстрел отклонён античитом ({type}): {reason}");
+            attacker.Emit("flovmp:chat:msg", "system", "", $"[FloV:Shield] Выстрел отклонён античитом ({type}): {reason}");
         }
     }
 
@@ -275,13 +275,16 @@ public class AntiCheatSystem
         {
             case AntiCheatAction.TeleportBack:
                 var state = _service.GetOrCreateState(accountId, target.Name, Vector3D.Zero);
-                target.Position = new Position(state.LastValidPosition.X, state.LastValidPosition.Y, state.LastValidPosition.Z);
-                target.Emit("flovmp:chat:system", "[FloV:Shield] Обнаружена рассинхронизация перемещения. Вы возвращены на позицию.");
+                if (state.LastValidPosition != Vector3D.Zero)
+                {
+                    target.Position = new Position(state.LastValidPosition.X, state.LastValidPosition.Y, state.LastValidPosition.Z);
+                }
+                target.Emit("flovmp:chat:msg", "system", "", "[FloV:Shield] Обнаружена рассинхронизация перемещения. Вы возвращены на позицию.");
                 break;
 
             case AntiCheatAction.Disarm:
                 target.RemoveWeapon(target.CurrentWeapon);
-                target.Emit("flovmp:chat:system", "[FloV:Shield] Запрещённое оружие изъято сервером.");
+                target.Emit("flovmp:chat:msg", "system", "", "[FloV:Shield] Запрещённое оружие изъято сервером.");
                 break;
 
             case AntiCheatAction.Kick:
@@ -289,7 +292,7 @@ public class AntiCheatSystem
                 break;
 
             case AntiCheatAction.Warning:
-                target.Emit("flovmp:chat:system", $"[FloV:Shield Предупреждение] {reason}");
+                target.Emit("flovmp:chat:msg", "system", "", $"[FloV:Shield Предупреждение] {reason}");
                 break;
         }
     }

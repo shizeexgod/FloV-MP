@@ -140,4 +140,30 @@ public sealed class VoiceGridRouterTests
         Assert.Single(afterLeaveRecipients);
         Assert.Equal(102ul, afterLeaveRecipients[0].ListenerId);
     }
+
+    [Fact]
+    public void RemovePlayer_Cleans_All_Channels_And_Mutes()
+    {
+        var grid = new SpatialHashGrid<ulong>();
+        var router = new VoiceGridRouter(grid);
+
+        router.TuneRadio(101, 105.0f);
+        router.TuneRadio(102, 105.0f);
+        router.JoinPhoneCall("call_xyz", 101);
+        router.SetServerMute(101, true);
+        router.SetPlayerMute(101, 102, true);
+
+        Assert.True(router.IsServerMuted(101));
+        Assert.True(router.IsPlayerMutedBy(101, 102));
+
+        router.RemovePlayer(101);
+
+        Assert.False(router.IsServerMuted(101));
+        Assert.False(router.IsPlayerMutedBy(101, 102));
+
+        // When 102 talks on radio 105.0, 101 does not receive it
+        var recs = router.RouteRadioVoice(102, 105.0f);
+        Assert.DoesNotContain(recs, r => r.ListenerId == 101ul);
+    }
 }
+

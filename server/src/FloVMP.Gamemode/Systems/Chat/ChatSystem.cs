@@ -374,8 +374,20 @@ public sealed class ChatSystem
             case "engine":
                 if (player.Vehicle != null)
                 {
+                    float fuel = 100.0f;
+                    if (player.Vehicle.GetStreamSyncedMetaData("fuel", out float fVal))
+                        fuel = fVal;
+
+                    if (fuel <= 0.05f && !player.Vehicle.EngineOn)
+                    {
+                        SendSystem(player, "В баке нет топлива! Двигатель не заводится.");
+                        return;
+                    }
+
                     player.Vehicle.EngineOn = !player.Vehicle.EngineOn;
-                    SendSystem(player, player.Vehicle.EngineOn ? "Двигатель заведён." : "Двигатель заглушен.");
+                    var engStatus = player.Vehicle.EngineOn ? "Двигатель заведён." : "Двигатель заглушен.";
+                    SendSystem(player, engStatus);
+                    BroadcastNearbyMe(player, player.Vehicle.EngineOn ? "повернул ключ зажигания и завёл двигатель" : "повернул ключ зажигания и заглушил двигатель");
                 }
                 else
                 {
@@ -384,17 +396,41 @@ public sealed class ChatSystem
                 return;
 
             case "lock":
-                if (player.Vehicle != null)
+                IVehicle? lockVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (lockVeh == null)
                 {
-                    player.Vehicle.LockState = player.Vehicle.LockState == AltV.Net.Enums.VehicleLockState.Locked 
-                        ? AltV.Net.Enums.VehicleLockState.Unlocked 
-                        : AltV.Net.Enums.VehicleLockState.Locked;
-                    SendSystem(player, player.Vehicle.LockState == AltV.Net.Enums.VehicleLockState.Locked ? "Двери заблокированы." : "Двери разблокированы.");
+                    SendSystem(player, "Рядом с вами нет транспортного средства (максимум 5 метров).");
+                    return;
                 }
-                else
+
+                // Проверка прав на ключ: админ 4+, владелец, либо транспорт без назначенного владельца
+                bool canLock = acc.AdminLevel >= 4;
+                if (!canLock)
                 {
-                    SendSystem(player, "Вы должны находиться в транспортном средстве.");
+                    if (lockVeh.GetMetaData("ownerAccountId", out int ownerId))
+                    {
+                        canLock = (ownerId == acc.Id);
+                    }
+                    else
+                    {
+                        lockVeh.SetMetaData("ownerAccountId", acc.Id);
+                        canLock = true;
+                    }
                 }
+
+                if (!canLock)
+                {
+                    SendSystem(player, "У вас нет ключей от этого транспортного средства.");
+                    return;
+                }
+
+                lockVeh.LockState = lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Locked
+                    ? AltV.Net.Enums.VehicleLockState.Unlocked
+                    : AltV.Net.Enums.VehicleLockState.Locked;
+
+                bool isLockedNow = lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Locked;
+                SendSystem(player, isLockedNow ? "Двери заблокированы." : "Двери разблокированы.");
+                BroadcastNearbyMe(player, isLockedNow ? "нажал кнопку брелока сигнализации и заблокировал двери" : "нажал кнопку брелока сигнализации и разблокировал двери");
                 return;
 
             case "passport":
@@ -1295,10 +1331,13 @@ public sealed class ChatSystem
                     var veh = Alt.CreateVehicle(model, spawnPos, player.Rotation);
                     if (veh != null)
                     {
+                        veh.Dimension = player.Dimension;
                         byte c1 = args.Length > 1 && byte.TryParse(args[1], out var parsedC1) ? parsedC1 : (byte)0;
                         byte c2 = args.Length > 2 && byte.TryParse(args[2], out var parsedC2) ? parsedC2 : (byte)0;
                         veh.PrimaryColor = c1;
                         veh.SecondaryColor = c2;
+                        veh.SetMetaData("ownerAccountId", acc.Id);
+                        veh.SetStreamSyncedMetaData("fuel", 100.0f);
                         SendSystem(player, $"Транспорт '{model}' успешно создан (ID: {veh.Id}).");
                     }
                     else
@@ -1313,14 +1352,15 @@ public sealed class ChatSystem
                 break;
 
             case "dv":
-                if (player.Vehicle != null)
+                IVehicle? dvVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (dvVeh != null)
                 {
-                    player.Vehicle.Destroy();
+                    dvVeh.Destroy();
                     SendSystem(player, "Транспорт удалён.");
                 }
                 else
                 {
-                    SendSystem(player, "Вы должны находиться в транспорте, чтобы удалить его.");
+                    SendSystem(player, "Вы должны находиться в транспорте или рядом с ним (до 5 метров).");
                 }
                 break;
 
@@ -1349,27 +1389,31 @@ public sealed class ChatSystem
                 break;
 
             case "repair":
-                if (player.Vehicle != null)
+                IVehicle? repVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (repVeh != null)
                 {
-                    player.Vehicle.EngineHealth = 1000;
-                    player.Vehicle.BodyHealth = 1000;
+                    repVeh.EngineHealth = 1000;
+                    repVeh.BodyHealth = 1000;
                     SendSystem(player, "Транспорт отремонтирован.");
+                    BroadcastNearbyMe(player, "достал инструменты и восстановил состояние автомобиля");
                 }
                 else
                 {
-                    SendSystem(player, "Вы должны находиться в транспорте.");
+                    SendSystem(player, "Вы должны находиться в транспорте или рядом с ним (до 5 метров).");
                 }
                 break;
 
             case "fuel":
-                if (player.Vehicle != null)
+                IVehicle? fuelVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (fuelVeh != null)
                 {
-                    player.Vehicle.SetStreamSyncedMetaData("fuel", 100.0f);
+                    fuelVeh.SetStreamSyncedMetaData("fuel", 100.0f);
                     SendSystem(player, "Транспортное средство заправлено на 100%.");
+                    BroadcastNearbyMe(player, "заправил бак автомобиля до полного объёма");
                 }
                 else
                 {
-                    SendSystem(player, "Вы должны находиться в транспорте.");
+                    SendSystem(player, "Вы должны находиться в транспорте или рядом с ним (до 5 метров).");
                 }
                 break;
 
@@ -1651,4 +1695,37 @@ public sealed class ChatSystem
             (_, cur) => now - cur.first > Window ? (1, now) : (cur.count + 1, cur.first));
         return e.count > MaxPerWindow;
     }
+
+    private static IVehicle? FindNearestVehicle(Position pos, int dimension, float maxDistance = 5.0f)
+    {
+        IVehicle? best = null;
+        float bestDist = maxDistance;
+        foreach (var v in Alt.GetAllVehicles())
+        {
+            if (!v.Exists || v.Dimension != dimension) continue;
+            var dist = v.Position.Distance(pos);
+            if (dist <= bestDist)
+            {
+                bestDist = dist;
+                best = v;
+            }
+        }
+        return best;
+    }
+
+    private void BroadcastNearbyMe(IPlayer player, string action)
+    {
+        var pos = player.Position;
+        var dim = player.Dimension;
+        var acc = _accountOf(player);
+        var username = acc?.Username ?? player.Name;
+        foreach (var p in Alt.GetAllPlayers())
+        {
+            if (p.Exists && p.Dimension == dim && p.Position.Distance(pos) <= 20.0f)
+            {
+                p.Emit("flovmp:chat:msg", "me", username, action);
+            }
+        }
+    }
 }
+

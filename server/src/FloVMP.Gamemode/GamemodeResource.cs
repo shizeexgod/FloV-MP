@@ -45,6 +45,7 @@ public class GamemodeResource : Resource
     private long _lastAutoSaveMs;
     private long _lastArrestTickMs;
     private long _lastTickScaleMs;
+    private long _lastVehTickMs;
 
     public override void OnStart()
     {
@@ -61,7 +62,12 @@ public class GamemodeResource : Resource
         _auth = new AuthSystem(accountStore, OnPlayerAuthed);
         _auth.Attach();
 
-        _antiCheat = new AntiCheatSystem(p => _auth?.AccountOf(p));
+        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
+        _inv.Attach();
+
+        _antiCheat = new AntiCheatSystem(
+            accountOf: p => _auth?.AccountOf(p),
+            inventoryWeaponsOf: p => _inv?.GetAllowedWeapons(p));
 
         _playerLifecycle = new PlayerLifecycle(notifyTeleport: (p, pos) => _antiCheat?.NotifyAdminTeleport(p, pos));
         _playerLifecycle.Attach();
@@ -78,8 +84,6 @@ public class GamemodeResource : Resource
         Presets.DerzhavaUniforms.RegisterAll(_uniforms);
         Presets.DerzhavaUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
 
-        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
-        _inv.Attach();
 
         _chat = new ChatSystem(
             accountOf: p => _auth.AccountOf(p),
@@ -254,9 +258,42 @@ public class GamemodeResource : Resource
                     var p = Alt.GetAllPlayers().FirstOrDefault(pl => pl.Exists && _auth?.AccountOf(pl)?.Id == accId);
                     if (p != null && p.Exists)
                     {
+                        p.Dimension = 0;
                         p.Position = new AltV.Net.Data.Position(425.1f, -979.5f, 30.7f);
                         _antiCheat?.NotifyAdminTeleport(p, p.Position);
-                        p.Emit("flovmp:chat:system", "[ГУ МВД] Срок вашего ареста истёк. Вы освобождены из камеры предварительного заключения.");
+                        ChatSystem.SendSystem(p, "[ГУ МВД] Срок вашего ареста истёк. Вы освобождены из камеры предварительного заключения.");
+                    }
+                }
+            }
+        }
+
+        // Расход топлива транспорта и контроль двигателей каждые 2 сек
+        if (now - _lastVehTickMs >= 2000)
+        {
+            _lastVehTickMs = now;
+            foreach (var veh in Alt.GetAllVehicles())
+            {
+                if (!veh.Exists || !veh.EngineOn) continue;
+
+                float currentFuel = 100.0f;
+                if (veh.GetStreamSyncedMetaData("fuel", out float fVal))
+                {
+                    currentFuel = fVal;
+                }
+
+                // Расход: холостой ход 0.02%, при движении пропорционально скорости
+                float speed = (float)Math.Sqrt(veh.Velocity.X * veh.Velocity.X + veh.Velocity.Y * veh.Velocity.Y + veh.Velocity.Z * veh.Velocity.Z);
+                float consumption = 0.02f + (speed * 0.003f);
+                float newFuel = Math.Max(0.0f, currentFuel - consumption);
+
+                veh.SetStreamSyncedMetaData("fuel", newFuel);
+
+                if (newFuel <= 0.05f)
+                {
+                    veh.EngineOn = false;
+                    if (veh.Driver != null && veh.Driver.Exists)
+                    {
+                        ChatSystem.SendSystem(veh.Driver, "[Транспорт] В баке закончилось топливо! Двигатель заглох.");
                     }
                 }
             }

@@ -197,7 +197,6 @@ public sealed class VoiceGridRouter
             channel[playerId] = encryptionKey;
         }
     }
-
     /// <summary>
     /// Отключение игрока от рации.
     /// </summary>
@@ -210,6 +209,17 @@ public sealed class VoiceGridRouter
                 pair.Value.TryRemove(playerId, out _);
             }
         }
+    }
+
+    /// <summary>
+    /// Полная очистка состояния игрока (радио, телефонные звонки, списки мутов) при отключении от сервера.
+    /// </summary>
+    public void RemovePlayer(ulong playerId)
+    {
+        LeaveRadio(playerId);
+        LeavePhoneCall(playerId);
+        _playerMuteLists.TryRemove(playerId, out _);
+        _serverMutes.TryRemove(playerId, out _);
     }
 
     /// <summary>

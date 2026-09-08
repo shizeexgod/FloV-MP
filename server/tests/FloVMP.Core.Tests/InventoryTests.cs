@@ -127,4 +127,26 @@ public sealed class InventoryTests
             try { Directory.Delete(dir, true); } catch { }
         }
     }
+
+    [Fact]
+    public void ItemCatalog_Contains_Medical_And_Vehicle_Items()
+    {
+        Assert.True(ItemCatalog.Exists("medkit"));
+        Assert.True(ItemCatalog.Exists("repairkit"));
+        Assert.True(ItemCatalog.Exists("fuelcan"));
+
+        var medkit = ItemCatalog.Get("medkit");
+        Assert.NotNull(medkit);
+        Assert.Equal("Большая аптечка", medkit.Name);
+        Assert.True(medkit.Stackable);
+
+        var rep = ItemCatalog.Get("repairkit");
+        Assert.NotNull(rep);
+        Assert.Equal(3.0, rep.Weight);
+
+        var fuel = ItemCatalog.Get("fuelcan");
+        Assert.NotNull(fuel);
+        Assert.Equal(4.0, fuel.Weight);
+    }
 }
+

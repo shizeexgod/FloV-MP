@@ -138,11 +138,64 @@ public sealed class InventorySystem
                 player.Health = (ushort)Math.Min(200, player.Health + 25);
                 s.Quantity -= 1;
                 if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы перевязали раны (+25 HP)");
+                break;
+            case "medkit":
+                player.Health = (ushort)Math.Min(200, player.Health + 75);
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы использовали аптечку (+75 HP)");
+                break;
+            case "repairkit":
+                var repVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (repVeh == null)
+                {
+                    player.Emit("flovmp:inv:notice", "Рядом нет транспорта для ремонта (до 5м)");
+                    return;
+                }
+                repVeh.EngineHealth = 1000;
+                repVeh.BodyHealth = 1000;
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Транспорт успешно отремонтирован ремкомплектом");
+                break;
+            case "fuelcan":
+                var fuelVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
+                if (fuelVeh == null)
+                {
+                    player.Emit("flovmp:inv:notice", "Рядом нет транспорта для заправки (до 5м)");
+                    return;
+                }
+                float curF = 100.0f;
+                if (fuelVeh.GetStreamSyncedMetaData("fuel", out float fMeta)) curF = fMeta;
+                float addedF = Math.Min(100.0f, curF + 35.0f);
+                fuelVeh.SetStreamSyncedMetaData("fuel", addedF);
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", $"Заправлено +35% бензина. Уровень: {Math.Round(addedF)}%");
                 break;
             case "water":
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы выпили чистую воду и освежились");
+                break;
             case "bread":
                 s.Quantity -= 1;
                 if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы перекусили свежим хлебом");
+                break;
+            case "pistol":
+                const uint pistolHash = 0x1B06D571;
+                if (player.CurrentWeapon == pistolHash)
+                {
+                    player.RemoveWeapon(pistolHash);
+                    player.Emit("flovmp:inv:notice", "Пистолет убран в кобуру");
+                }
+                else
+                {
+                    player.GiveWeapon(pistolHash, 50, true);
+                    player.Emit("flovmp:inv:notice", "Пистолет взведён и готов к стрельбе");
+                }
                 break;
             default:
                 player.Emit("flovmp:inv:notice", $"{itemId}: пока нельзя использовать");
@@ -154,6 +207,45 @@ public sealed class InventorySystem
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
     });
+
+    /// <summary>
+    /// Получить множество разрешённого оружия, находящегося в инвентаре игрока.
+    /// </summary>
+    public ISet<uint> GetAllowedWeapons(IPlayer player)
+    {
+        var set = new HashSet<uint>();
+        if (!player.Exists) return set;
+        if (_live.TryGetValue(player.Id, out var e))
+        {
+            foreach (var s in e.inv.Slots)
+            {
+                if (s == null) continue;
+                if (s.ItemId == "pistol" || s.ItemId == "ammo9")
+                {
+                    set.Add(0x1B06D571); // Pistol
+                }
+            }
+        }
+        return set;
+    }
+
+    private static IVehicle? FindNearestVehicle(AltV.Net.Data.Position pos, int dimension, float maxDistance = 5.0f)
+    {
+        IVehicle? best = null;
+        float bestDist = maxDistance;
+        foreach (var v in Alt.GetAllVehicles())
+        {
+            if (!v.Exists || v.Dimension != dimension) continue;
+            var dist = v.Position.Distance(pos);
+            if (dist <= bestDist)
+            {
+                bestDist = dist;
+                best = v;
+            }
+        }
+        return best;
+    }
+
 
     private static void Sync(IPlayer player, Inventory inv)
     {

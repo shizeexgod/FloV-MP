@@ -18,13 +18,16 @@ public static class ItemCatalog
 {
     private static readonly Dictionary<string, ItemDef> Defs = new[]
     {
-        new ItemDef("water",   "Вода",          0.5,  10),
-        new ItemDef("bread",   "Хлеб",          0.3,  10),
-        new ItemDef("phone",   "Телефон",       0.2,  1),
-        new ItemDef("bandage", "Бинт",          0.1,  20),
-        new ItemDef("cash",    "Наличные",      0.0,  1_000_000),
-        new ItemDef("pistol",  "Пистолет",      1.1,  1),
-        new ItemDef("ammo9",   "Патроны 9мм",   0.01, 250),
+        new ItemDef("water",      "Вода",                0.5,  10),
+        new ItemDef("bread",      "Хлеб",                0.3,  10),
+        new ItemDef("phone",      "Телефон",             0.2,  1),
+        new ItemDef("bandage",    "Бинт",                0.1,  20),
+        new ItemDef("medkit",     "Большая аптечка",     0.8,  5),
+        new ItemDef("repairkit",  "Ремкомплект авто",    3.0,  3),
+        new ItemDef("fuelcan",    "Канистра с бензином", 4.0,  2),
+        new ItemDef("cash",       "Наличные",            0.0,  1_000_000),
+        new ItemDef("pistol",     "Пистолет",            1.1,  1),
+        new ItemDef("ammo9",      "Патроны 9мм",         0.01, 250),
     }.ToDictionary(d => d.Id);
 
     public static IReadOnlyCollection<ItemDef> All => Defs.Values;

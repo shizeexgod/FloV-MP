@@ -202,4 +202,24 @@ public class AntiCheatTests
         Assert.True(valid);
         Assert.Null(violation);
     }
+
+    [Fact]
+    public void Vector3D_Operators_And_Length_Work_Correctly()
+    {
+        var v1 = new Vector3D(3f, 4f, 0f);
+        var v2 = new Vector3D(3f, 4f, 0f);
+        var v3 = new Vector3D(0f, 0f, 10f);
+
+        Assert.True(v1 == v2);
+        Assert.False(v1 != v2);
+        Assert.True(v1.Equals(v2));
+        Assert.Equal(v1.GetHashCode(), v2.GetHashCode());
+
+        Assert.True(v1 != v3);
+        Assert.False(v1 == v3);
+
+        Assert.Equal(5.0f, v1.Length, precision: 4); // 3-4-5 triangle
+        Assert.Equal(10.0f, v3.Length, precision: 4);
+    }
 }
+
