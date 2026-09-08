@@ -1,0 +1,562 @@
+/**
+ * FloV:MP — двуязычный словарь интерфейса (RU по умолчанию / EN).
+ * Правило: в ветке `ru` — только русский, в ветке `en` — только английский.
+ */
+
+export type Lang = 'ru' | 'en';
+
+const ru = {
+  common: {
+    getLicense: 'Купить лицензию',
+    openDashboard: 'Открыть кабинет',
+    login: 'Войти',
+    register: 'Регистрация',
+    logout: 'Выйти',
+    docs: 'Документация',
+    contactSupport: 'Написать в поддержку',
+    learnMore: 'Подробнее',
+    comingSoon: 'Скоро',
+    online: 'Онлайн',
+    offline: 'Оффлайн',
+    perMonth: 'в месяц',
+    perYear: 'в год',
+    save: 'выгода',
+    from: 'от',
+    allRightsReserved: 'Все права защищены.',
+    backHome: 'На главную',
+  },
+
+  nav: {
+    features: 'Возможности',
+    pricing: 'Тарифы',
+    projects: 'Проекты',
+    roadmap: 'Дорожная карта',
+    docs: 'Документация',
+    contact: 'Контакты',
+  },
+
+  footer: {
+    tagline:
+      'Независимый мультиплеерный движок нового поколения для GTA V и SaaS-платформа управления игровыми проектами.',
+    colProduct: 'Продукт',
+    colResources: 'Ресурсы',
+    colCompany: 'Компания',
+    nodeStatus: 'Узел',
+    links: {
+      features: 'Возможности',
+      pricing: 'Тарифы и лицензии',
+      dashboard: 'Личный кабинет',
+      launcher: 'Сборщик лаунчера',
+      docs: 'Документация',
+      quickstart: 'Быстрый старт',
+      api: 'Developer API',
+      status: 'Статус платформы',
+      projects: 'Проекты на FloV:MP',
+      roadmap: 'Дорожная карта',
+      contact: 'Контакты',
+      terms: 'Условия использования',
+      privacy: 'Политика конфиденциальности',
+    },
+  },
+
+  home: {
+    badge: 'SaaS-платформа и мультиплеерный движок',
+    h1a: 'Своя инфраструктура',
+    h1accent: 'GTA V проекта',
+    h1b: 'без чужих серверов',
+    sub: 'Запускайте и управляйте RP-проектами через единую панель: сетевой рантайм, лицензирование, облачная консоль серверов, телеметрия, биллинг и SDK. Полная автономия от Take-Two, RAGE:MP и alt:V backend.',
+    ctaPrimary: 'Купить Lifetime-лицензию',
+    ctaSecondary: 'Смотреть документацию',
+    trustLine: 'Один узел = один VDS. FastDL CDN включён. Верификация ключей HMAC-SHA256.',
+
+    statsTitle: 'Платформа в цифрах',
+    stats: {
+      projects: 'Активных проектов',
+      servers: 'Игровых серверов',
+      players: 'Игроков онлайн',
+      uptime: 'Аптайм за 90 дней',
+    },
+
+    pillarsTitle: 'Три опоры платформы',
+    pillars: [
+      {
+        n: '01',
+        t: 'Автономный рантайм',
+        d: 'Сервер стартует на вашем VDS и работает независимо. C# .NET 8 для логики, V8 для клиентского UI. Никаких мастер-листов и внешних зависимостей.',
+      },
+      {
+        n: '02',
+        t: 'Облачное управление',
+        d: 'txAdmin-подобная веб-консоль: живой SSE-стрим логов, рестарт, kick, RCON, горячий менеджер ресурсов без падения сервера.',
+      },
+      {
+        n: '03',
+        t: 'Контроль и защита',
+        d: 'Политики FloV:ID и HWID (Strict / Lenient / Disabled), анти-VPN, криптоверификация лицензий и серверный контроль всех транзакций.',
+      },
+    ],
+
+    featuresTitle: 'Что входит в платформу',
+    featuresSub: 'Всё для запуска и роста RP-проекта — из коробки, без сборки сторонних плагинов.',
+    features: [
+      { t: '3D Voice-чат', d: 'Нативный WebRTC + Opus. Пространственный звук, рации фракций, мегафоны, звуковые зоны.' },
+      { t: 'Синхронизация мира', d: 'Педы, трафик, квестовые NPC и боевые противники — синхронно для всех игроков.' },
+      { t: 'Облачная консоль', d: 'SSE-логи в реальном времени, RCON, рестарт и kick прямо из браузера.' },
+      { t: 'Менеджер ресурсов', d: 'Старт / стоп / рестарт скриптов, карт и паков без перезапуска сервера, с контролем зависимостей.' },
+      { t: 'Телеметрия 60 Hz', d: 'Тикрейт, FPS сервера, память CoreCLR, суточный график онлайна и SLA 99.98%.' },
+      { t: 'Сборщик лаунчера', d: 'Брендированный Setup.exe: название, цвет, лого, FloV:Graphics (DLSS / FSR).' },
+      { t: 'Верификация ключей', d: 'Формат FLV-XXXX-XXXX-XXXX, подпись HMAC-SHA256, авто-привязка IP, grace period 7 дней.' },
+      { t: 'Developer API', d: 'Публичные эндпоинты статуса и игроков, вебхуки Discord / Telegram, приём донатов.' },
+    ],
+
+    quickstartTitle: 'Первый запуск сервера',
+    quickstartSub: 'От архива движка до приёма игроков — один вечер по гайду.',
+    quickstartPort: 'Сетевой порт',
+    quickstartConsole: 'Игровая консоль',
+    quickstartConsoleVal: 'клавиша F8 в клиенте + веб-консоль в кабинете',
+    quickstartCmds: 'Команды администратора из коробки',
+    cmds: [
+      ['/o <текст>', 'глобальное оповещение всех игроков'],
+      ['/pos', 'координаты игрока X, Y, Z для маппинга'],
+      ['/setdim <ник> <мир>', '0 — улица, 999 — админ-тюрьма, 10000+ — дома'],
+      ['/veh <модель>', 'спавн любого транспорта GTA V'],
+      ['/stats', 'сводка об игроке, пинге и железе'],
+    ],
+    quickstartBans: 'Многоуровневая система банов',
+    bans: [
+      ['/ban', 'бан аккаунта'],
+      ['/banip', 'бан по IP'],
+      ['/bansc', 'бан лицензии Rockstar Social Club'],
+      ['/hwidban', 'бан по железу ПК (FloV:ID)'],
+      ['/hardban', 'тотальный: Account + IP + SC + HWID + MAC'],
+      ['/unban', 'универсальная разблокировка'],
+    ],
+
+    ownershipTitle: 'Полный контроль над сервером',
+    ownershipSub:
+      'FloV:MP не навязывает лор и не ставит скрытых блокировок. Любая карта — реальная Москва, Дикий Запад XIX века или кастомные острова.',
+    ownership: [
+      { t: '«Чистый холст» — Blank C# SDK', d: 'Пустой проект на C# .NET 8 для уникальных механик со своей архитектурой.' },
+      { t: '«RP Стартер» — готовая база', d: 'Экономика, админ-система, инвентарь и дименшены интерьеров из коробки.' },
+    ],
+
+    projectsTitle: 'Проекты уже на FloV:MP',
+    projectsSub: 'Каждый проект объединяет несколько серверов: production, development, test.',
+    projectsCta: 'Все проекты',
+
+    ctaTitle: 'Подключите свой RP-сервер сегодня',
+    ctaSub: 'Расскажем, как перенести проект с RAGE:MP или FiveM, и поможем с первым запуском.',
+  },
+
+  features: {
+    title: 'Возможности платформы',
+    sub: 'Подробно о том, из чего состоит FloV:MP: сетевой движок, облачное управление, безопасность и инструменты разработчика.',
+    groups: [
+      {
+        t: 'Сетевой движок',
+        items: [
+          ['Автономный рантайм', 'altv-server v16.4.39 (unhooked). Весь сетевой стек — EntityStreamer, SyncSend/Receive, NetworkWorker — поднимается локально без обращения к бэкенду alt:V.'],
+          ['C# .NET 8 гейммод', 'CoreCLR-модуль, полноценный доступ к API движка, hot-reload ресурсов, типобезопасный SDK (NuGet).'],
+          ['Клиент NUI на JS/TS', 'HUD, меню, камеры и интерфейсы на HTML/CSS/JS. Переиспользование наработок с RAGE:MP и FiveM.'],
+          ['Синхронизация мира', 'Живой город с ботами, квестовые и боевые NPC, синхронный трафик, погода и время.'],
+        ],
+      },
+      {
+        t: 'Облачное управление',
+        items: [
+          ['txAdmin Cloud Console', 'Двусторонний агент на игровом сервере. Живой SSE-стрим консоли в браузер, RCON, рестарт, kick, broadcast.'],
+          ['Dynamic Resource Manager', 'Старт / стоп / рестарт отдельных скриптов, карт, паков машин и NUI без перезапуска сервера. Граф зависимостей.'],
+          ['Watchdog и краши', 'Супервизор зависаний > 15 с, дамп стека CoreCLR, авторестарт (лимит 5 / час), лог аварийных завершений.'],
+          ['Среды проекта', 'Production, Development, Test Sandbox — раздельные лицензии-привязки и телеметрия.'],
+        ],
+      },
+      {
+        t: 'Безопасность',
+        items: [
+          ['FloV:ID и HWID', 'Аппаратные идентификаторы ПК. Политики Strict / Lenient / Disabled, лимит аккаунтов на одно железо.'],
+          ['Анти-VPN', 'Определение и блокировка VPN / прокси на входе, белые списки.'],
+          ['Верификация лицензий', 'Формат FLV-XXXX-XXXX-XXXX, ответ подписан HMAC-SHA256, авто-привязка первого внешнего IP.'],
+          ['Grace period', 'Сервер кэширует лицензию локально и работает до 7 дней при недоступности портала.'],
+        ],
+      },
+      {
+        t: 'Инструменты разработчика',
+        items: [
+          ['Launcher Builder', 'Брендированный Setup.exe: название, HEX-цвет, лого, FloV:Graphics (DLSS / FSR, детект GPU).'],
+          ['Public Developer API', '/status, /players, /donate (проверка X-Signature HMAC) — для мониторингов и внешних сайтов.'],
+          ['Вебхуки', 'Discord Rich Embeds и Telegram Bot API: краши, пики нагрузки, восстановление, срабатывание HWID-политики.'],
+          ['SDK и FastDL', 'Ядра Linux/Win, C# SDK, Asset Packer CLI, сниппеты кода, гигабитная раздача контента по HTTP/2.'],
+        ],
+      },
+    ],
+  },
+
+  pricing: {
+    title: 'Тарифы и лицензии',
+    sub: 'Стартовая лицензия — бесплатно. Скидки при оплате за 6 или 12 месяцев. Партнёрская программа — 20% пожизненно.',
+    periodMonth: '1 месяц',
+    periodHalf: '6 месяцев',
+    periodYear: '1 год',
+    popular: 'Популярный выбор',
+    cta: 'Выбрать тариф',
+    ctaFree: 'Начать бесплатно',
+    plans: [
+      {
+        id: 'starter',
+        name: 'Starter',
+        tagline: 'Для разработки и теста нового сервера',
+        priceMonth: '0 ₽',
+        note: '30 дней',
+        features: ['До 128 игроков', 'Автономные бинарники движка', 'C# Gamemode SDK', 'Привязка 1 IP', 'Облачная консоль (read-only)'],
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        tagline: 'Для запуска полноценного RP-проекта',
+        priceMonth: '14 900 ₽',
+        note: 'за проект',
+        features: ['До 512 игроков', 'Готовая база «RP Стартер»', '3D Voice + синхронизация NPC', 'txAdmin Cloud + Resource Manager', 'FloV:ID / HWID политики', 'Вебхуки Discord / Telegram'],
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise',
+        tagline: 'Для крупных проектов и франшиз',
+        priceMonth: '49 000 ₽',
+        note: 'за проект',
+        features: ['1500+ игроков', 'Брендированный лаунчер', 'Миграция с RAGE:MP / FiveM «под ключ»', 'Выделенная поддержка · SLA 99.9%', 'Приоритет в дорожной карте'],
+      },
+    ],
+    faqTitle: 'Вопросы по биллингу',
+    faq: [
+      ['Как работает Lifetime-лицензия?', 'Одна лицензия закрепляется за проектом навсегда. Внутри проекта — сколько угодно серверов (production / dev / test), общий SDK и API-ключи.'],
+      ['Что с продлением?', 'Тарифы Pro и Enterprise — подписка на проект. Автопродление можно включить или выключить в кабинете. Скидка −15% за 6 месяцев, −30% за год.'],
+      ['Как оплатить?', 'Карта, СБП QR или USDT. Активация лицензии — моментальная после подтверждения оплаты.'],
+      ['Партнёрская программа?', '20% от платежей приглашённых проектов — пожизненно. Промокод и статистика — в разделе Settings кабинета.'],
+    ],
+  },
+
+  projects: {
+    title: 'Проекты на FloV:MP',
+    sub: 'Витрина RP-проектов, развёрнутых поверх платформы. Публичный статус обновляется в реальном времени.',
+    thServers: 'серверов',
+    thOnline: 'онлайн',
+    thPeak: 'пик',
+    visit: 'Перейти',
+  },
+
+  roadmap: {
+    title: 'Дорожная карта',
+    sub: 'Ближайшие вехи развития движка и SaaS-платформы. Приоритеты Enterprise-клиентов учитываются в первую очередь.',
+    statusDone: 'Готово',
+    statusActive: 'В работе',
+    statusPlanned: 'Запланировано',
+    items: [
+      { q: 'Q3 2026', t: 'Автономный рантайм', s: 'done', d: 'Отвязка бинарников alt:V, локальный старт сетевого стека, FastDL CDN, верификация ключей HMAC.' },
+      { q: 'Q3 2026', t: 'SaaS-портал MVP', s: 'done', d: 'Лицензии, среды, биллинг, телеметрия, сборщик лаунчера, публичный API.' },
+      { q: 'Q4 2026', t: 'txAdmin Cloud Console', s: 'active', d: 'Двусторонний агент, SSE-стрим логов, RCON, менеджер ресурсов, watchdog.' },
+      { q: 'Q4 2026', t: 'FloV:ID / HWID', s: 'active', d: 'Аппаратные идентификаторы, политики Strict / Lenient / Disabled, анти-VPN.' },
+      { q: 'Q1 2027', t: '2FA и RBAC', s: 'planned', d: 'TOTP, роли Owner / Project Lead / Developer, аудит действий команды.' },
+      { q: 'Q1 2027', t: 'Нагрузочный тест 3000+', s: 'planned', d: 'Стресс-тест сетевого стека и стриминга на тысячах игроков.' },
+      { q: 'Q2 2027', t: 'Автодеплой и хостинг', s: 'planned', d: 'Деплой из ветки в один клик, интеграция с REDL Hosting, снапшоты.' },
+    ],
+  },
+
+  contact: {
+    title: 'Контакты',
+    sub: 'Расскажите про проект — предложим тариф, поможем с переносом и первым запуском.',
+    tgTitle: 'Telegram',
+    tgDesc: 'Быстрые ответы по будням, обсуждение переноса и техвопросы.',
+    dsTitle: 'Discord',
+    dsDesc: 'Комьюнити разработчиков, анонсы обновлений и статус платформы.',
+    formTitle: 'Оставить заявку',
+    formName: 'Имя или ник',
+    formContact: 'Telegram / Email',
+    formProject: 'Про проект',
+    formSubmit: 'Отправить заявку',
+    formNote: 'Это демонстрационная форма — отправьте сообщение в Telegram для реального ответа.',
+  },
+
+  notFound: {
+    title: 'Страница не найдена',
+    sub: 'Такой страницы нет или она была перемещена.',
+  },
+};
+
+const en: typeof ru = {
+  common: {
+    getLicense: 'Get a license',
+    openDashboard: 'Open dashboard',
+    login: 'Log in',
+    register: 'Sign up',
+    logout: 'Log out',
+    docs: 'Documentation',
+    contactSupport: 'Contact support',
+    learnMore: 'Learn more',
+    comingSoon: 'Soon',
+    online: 'Online',
+    offline: 'Offline',
+    perMonth: 'per month',
+    perYear: 'per year',
+    save: 'save',
+    from: 'from',
+    allRightsReserved: 'All rights reserved.',
+    backHome: 'Back home',
+  },
+
+  nav: {
+    features: 'Features',
+    pricing: 'Pricing',
+    projects: 'Projects',
+    roadmap: 'Roadmap',
+    docs: 'Docs',
+    contact: 'Contact',
+  },
+
+  footer: {
+    tagline:
+      'Next-generation independent multiplayer engine for GTA V and a SaaS platform for managing game projects.',
+    colProduct: 'Product',
+    colResources: 'Resources',
+    colCompany: 'Company',
+    nodeStatus: 'Node',
+    links: {
+      features: 'Features',
+      pricing: 'Pricing & licenses',
+      dashboard: 'Dashboard',
+      launcher: 'Launcher builder',
+      docs: 'Documentation',
+      quickstart: 'Quick start',
+      api: 'Developer API',
+      status: 'Platform status',
+      projects: 'Projects on FloV:MP',
+      roadmap: 'Roadmap',
+      contact: 'Contact',
+      terms: 'Terms of Service',
+      privacy: 'Privacy Policy',
+    },
+  },
+
+  home: {
+    badge: 'SaaS platform & multiplayer engine',
+    h1a: 'Own your',
+    h1accent: 'GTA V project',
+    h1b: 'infrastructure',
+    sub: 'Launch and manage RP projects from one panel: network runtime, licensing, cloud server console, telemetry, billing and SDK. Fully independent from Take-Two, RAGE:MP and the alt:V backend.',
+    ctaPrimary: 'Buy a Lifetime license',
+    ctaSecondary: 'Read the docs',
+    trustLine: 'One node = one VDS. FastDL CDN included. HMAC-SHA256 key verification.',
+
+    statsTitle: 'Platform in numbers',
+    stats: {
+      projects: 'Active projects',
+      servers: 'Game servers',
+      players: 'Players online',
+      uptime: 'Uptime over 90 days',
+    },
+
+    pillarsTitle: 'Three platform pillars',
+    pillars: [
+      {
+        n: '01',
+        t: 'Autonomous runtime',
+        d: 'The server starts on your VDS and runs independently. C# .NET 8 for logic, V8 for the client UI. No master lists, no external dependencies.',
+      },
+      {
+        n: '02',
+        t: 'Cloud control',
+        d: 'A txAdmin-style web console: live SSE log stream, restart, kick, RCON and a hot resource manager that never drops the server.',
+      },
+      {
+        n: '03',
+        t: 'Control & protection',
+        d: 'FloV:ID and HWID policies (Strict / Lenient / Disabled), anti-VPN, cryptographic license verification and server-side control of every transaction.',
+      },
+    ],
+
+    featuresTitle: 'What the platform includes',
+    featuresSub: 'Everything to launch and grow an RP project — out of the box, no third-party plugins to assemble.',
+    features: [
+      { t: '3D voice chat', d: 'Native WebRTC + Opus. Spatial audio, faction radios, megaphones, sound zones.' },
+      { t: 'World sync', d: 'Peds, traffic, quest NPCs and combat enemies — in sync for every player.' },
+      { t: 'Cloud console', d: 'Real-time SSE logs, RCON, restart and kick straight from the browser.' },
+      { t: 'Resource manager', d: 'Start / stop / restart scripts, maps and packs without restarting the server, with dependency control.' },
+      { t: '60 Hz telemetry', d: 'Tick rate, server FPS, CoreCLR memory, a 24h online graph and a 99.98% SLA.' },
+      { t: 'Launcher builder', d: 'Branded Setup.exe: name, color, logo, FloV:Graphics (DLSS / FSR).' },
+      { t: 'Key verification', d: 'FLV-XXXX-XXXX-XXXX format, HMAC-SHA256 signature, auto IP binding, 7-day grace period.' },
+      { t: 'Developer API', d: 'Public status and player endpoints, Discord / Telegram webhooks, donation intake.' },
+    ],
+
+    quickstartTitle: 'First server launch',
+    quickstartSub: 'From the engine archive to accepting players — one evening with the guide.',
+    quickstartPort: 'Network port',
+    quickstartConsole: 'In-game console',
+    quickstartConsoleVal: 'F8 key in the client + web console in the dashboard',
+    quickstartCmds: 'Built-in admin commands',
+    cmds: [
+      ['/o <text>', 'global broadcast to every player'],
+      ['/pos', 'player coordinates X, Y, Z for mapping'],
+      ['/setdim <name> <world>', '0 — street, 999 — admin jail, 10000+ — houses'],
+      ['/veh <model>', 'spawn any GTA V vehicle'],
+      ['/stats', 'player, ping and hardware summary'],
+    ],
+    quickstartBans: 'Multi-level ban system',
+    bans: [
+      ['/ban', 'account ban'],
+      ['/banip', 'IP ban'],
+      ['/bansc', 'Rockstar Social Club license ban'],
+      ['/hwidban', 'hardware ban (FloV:ID)'],
+      ['/hardban', 'total: Account + IP + SC + HWID + MAC'],
+      ['/unban', 'universal unban'],
+    ],
+
+    ownershipTitle: 'Full control over your server',
+    ownershipSub:
+      'FloV:MP imposes no lore and hides no locks. Any map — real Moscow, the 19th-century Wild West or custom islands.',
+    ownership: [
+      { t: '"Blank canvas" — Blank C# SDK', d: 'An empty C# .NET 8 project for unique mechanics with your own architecture.' },
+      { t: '"RP Starter" — ready base', d: 'Economy, admin system, inventory and interior dimensions out of the box.' },
+    ],
+
+    projectsTitle: 'Projects already on FloV:MP',
+    projectsSub: 'Each project groups several servers: production, development, test.',
+    projectsCta: 'All projects',
+
+    ctaTitle: 'Connect your RP server today',
+    ctaSub: 'We will show how to migrate from RAGE:MP or FiveM and help with the first launch.',
+  },
+
+  features: {
+    title: 'Platform features',
+    sub: 'A detailed look at what FloV:MP is made of: the network engine, cloud control, security and developer tools.',
+    groups: [
+      {
+        t: 'Network engine',
+        items: [
+          ['Autonomous runtime', 'altv-server v16.4.39 (unhooked). The whole network stack — EntityStreamer, SyncSend/Receive, NetworkWorker — comes up locally with no alt:V backend calls.'],
+          ['C# .NET 8 gamemode', 'CoreCLR module, full engine API access, resource hot-reload, a type-safe SDK (NuGet).'],
+          ['NUI client in JS/TS', 'HUD, menus, cameras and UIs in HTML/CSS/JS. Reuse your RAGE:MP and FiveM work.'],
+          ['World sync', 'A living city with bots, quest and combat NPCs, synced traffic, weather and time.'],
+        ],
+      },
+      {
+        t: 'Cloud control',
+        items: [
+          ['txAdmin Cloud Console', 'A two-way agent on the game server. Live SSE console stream to the browser, RCON, restart, kick, broadcast.'],
+          ['Dynamic Resource Manager', 'Start / stop / restart individual scripts, maps, car packs and NUI without restarting the server. Dependency graph.'],
+          ['Watchdog & crashes', 'Hang supervisor > 15 s, CoreCLR stack dump, auto-restart (limit 5 / hour), crash log.'],
+          ['Project environments', 'Production, Development, Test Sandbox — separate license bindings and telemetry.'],
+        ],
+      },
+      {
+        t: 'Security',
+        items: [
+          ['FloV:ID & HWID', 'PC hardware identifiers. Strict / Lenient / Disabled policies, account limit per machine.'],
+          ['Anti-VPN', 'Detects and blocks VPN / proxy on connect, allow-lists.'],
+          ['License verification', 'FLV-XXXX-XXXX-XXXX format, HMAC-SHA256 signed response, auto-binding of the first external IP.'],
+          ['Grace period', 'The server caches the license locally and runs up to 7 days if the portal is unreachable.'],
+        ],
+      },
+      {
+        t: 'Developer tools',
+        items: [
+          ['Launcher Builder', 'Branded Setup.exe: name, HEX color, logo, FloV:Graphics (DLSS / FSR, GPU detection).'],
+          ['Public Developer API', '/status, /players, /donate (X-Signature HMAC check) — for monitors and external sites.'],
+          ['Webhooks', 'Discord Rich Embeds and the Telegram Bot API: crashes, load peaks, recovery, HWID policy hits.'],
+          ['SDK & FastDL', 'Linux/Win cores, C# SDK, Asset Packer CLI, code snippets, gigabit HTTP/2 content delivery.'],
+        ],
+      },
+    ],
+  },
+
+  pricing: {
+    title: 'Pricing & licenses',
+    sub: 'The starter license is free. Discounts for 6 or 12 months. Affiliate program — 20% for life.',
+    periodMonth: '1 month',
+    periodHalf: '6 months',
+    periodYear: '1 year',
+    popular: 'Popular choice',
+    cta: 'Choose plan',
+    ctaFree: 'Start for free',
+    plans: [
+      {
+        id: 'starter',
+        name: 'Starter',
+        tagline: 'For developing and testing a new server',
+        priceMonth: 'Free',
+        note: '30 days',
+        features: ['Up to 128 players', 'Autonomous engine binaries', 'C# Gamemode SDK', '1 IP binding', 'Cloud console (read-only)'],
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        tagline: 'For launching a full RP project',
+        priceMonth: '$179',
+        note: 'per project',
+        features: ['Up to 512 players', '"RP Starter" ready base', '3D voice + NPC sync', 'txAdmin Cloud + Resource Manager', 'FloV:ID / HWID policies', 'Discord / Telegram webhooks'],
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise',
+        tagline: 'For large projects and franchises',
+        priceMonth: '$590',
+        note: 'per project',
+        features: ['1500+ players', 'Branded launcher', 'Turnkey RAGE:MP / FiveM migration', 'Dedicated support · SLA 99.9%', 'Roadmap priority'],
+      },
+    ],
+    faqTitle: 'Billing questions',
+    faq: [
+      ['How does the Lifetime license work?', 'One license is tied to a project forever. Inside a project you can have any number of servers (production / dev / test), a shared SDK and API keys.'],
+      ['What about renewals?', 'Pro and Enterprise are per-project subscriptions. Auto-renewal can be toggled in the dashboard. −15% for 6 months, −30% for a year.'],
+      ['How do I pay?', 'Card, SBP QR or USDT. License activation is instant once payment is confirmed.'],
+      ['Affiliate program?', '20% of payments from referred projects — for life. Promo code and stats live in the dashboard Settings.'],
+    ],
+  },
+
+  projects: {
+    title: 'Projects on FloV:MP',
+    sub: 'A showcase of RP projects deployed on top of the platform. Public status updates in real time.',
+    thServers: 'servers',
+    thOnline: 'online',
+    thPeak: 'peak',
+    visit: 'Visit',
+  },
+
+  roadmap: {
+    title: 'Roadmap',
+    sub: 'Upcoming milestones for the engine and the SaaS platform. Enterprise customer priorities come first.',
+    statusDone: 'Done',
+    statusActive: 'In progress',
+    statusPlanned: 'Planned',
+    items: [
+      { q: 'Q3 2026', t: 'Autonomous runtime', s: 'done', d: 'Unhooking alt:V binaries, local network stack start, FastDL CDN, HMAC key verification.' },
+      { q: 'Q3 2026', t: 'SaaS portal MVP', s: 'done', d: 'Licenses, environments, billing, telemetry, launcher builder, public API.' },
+      { q: 'Q4 2026', t: 'txAdmin Cloud Console', s: 'active', d: 'Two-way agent, SSE log stream, RCON, resource manager, watchdog.' },
+      { q: 'Q4 2026', t: 'FloV:ID / HWID', s: 'active', d: 'Hardware identifiers, Strict / Lenient / Disabled policies, anti-VPN.' },
+      { q: 'Q1 2027', t: '2FA and RBAC', s: 'planned', d: 'TOTP, Owner / Project Lead / Developer roles, team action audit.' },
+      { q: 'Q1 2027', t: 'Load test 3000+', s: 'planned', d: 'Stress test of the network stack and streaming at thousands of players.' },
+      { q: 'Q2 2027', t: 'Auto-deploy & hosting', s: 'planned', d: 'One-click deploy from a branch, REDL Hosting integration, snapshots.' },
+    ],
+  },
+
+  contact: {
+    title: 'Contact',
+    sub: 'Tell us about your project — we will suggest a plan and help with migration and the first launch.',
+    tgTitle: 'Telegram',
+    tgDesc: 'Fast replies on weekdays, migration talk and tech questions.',
+    dsTitle: 'Discord',
+    dsDesc: 'Developer community, update announcements and platform status.',
+    formTitle: 'Send a request',
+    formName: 'Name or nickname',
+    formContact: 'Telegram / Email',
+    formProject: 'About the project',
+    formSubmit: 'Send request',
+    formNote: 'This is a demo form — message us on Telegram for a real reply.',
+  },
+
+  notFound: {
+    title: 'Page not found',
+    sub: 'This page does not exist or has been moved.',
+  },
+};
+
+export const DICT: Record<Lang, typeof ru> = { ru, en };
