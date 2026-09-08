@@ -56,8 +56,20 @@ TxAdminConsole (SSE), Logs, LauncherBuilder, Billing, ApiWebhooks, SDK, AiAssist
 
 ## Фазы
 
-1. **i18n + дизайн-система + многостраничная навигация** (публичный сайт) ← текущая
-2. Наполнение страниц контентом (features/pricing/projects/roadmap/docs/contact)
-3. Личный кабинет: декомпозиция + подключение к реальным API, SSE-консоль
-4. Бэкенд: 2FA, RBAC, grace period, agent poll-очередь, публичный API HMAC
-5. Подготовка к Vercel: `vercel.json`, env, миграция файлового стора на R2/VDS
+1. ✅ **i18n + дизайн-система + многостраничная навигация** — сделано (RU/EN,
+   переключатель, self-hosted шрифты, анимированные кнопки, reveal без залипаний)
+2. ✅ **Наполнение страниц** — home/features/pricing/projects/roadmap/contact/docs/legal
+   + not-found; все ссылки ведут на реальные маршруты; интерактив (тариф-периоды,
+   FAQ, форма, docs verify/SSE) протестирован
+3. 🟡 **Личный кабинет** — работает, все 9 вкладок рендерятся, подключены к
+   реальным API (license, projects/servers/resources, agent SSE+command, billing,
+   telemetry, ai/troubleshoot, launcher). Шапка/таб-бар приведены к чистому стилю.
+   НЕ сделано: декомпозиция на 14 файлов (риск регрессии на рабочем 2700-строчном
+   компоненте) и полная i18n кабинета — оставлен русским как операторская консоль
+   для аудитории СНГ. Публичный сайт полностью двуязычный.
+4. 🔲 **Бэкенд**: 2FA TOTP, RBAC, grace period, agent poll-очередь, публичный API HMAC
+5. 🟡 **Vercel**: `vercel.json` + `.env.example` готовы. Осталось: миграция
+   файлового стора (portal-db.json / сборки лаунчера) на R2/VDS, т.к. FS Vercel r/o
+
+## Безопасность (исправлено)
+- `/api/auth/me` больше не отдаёт `password_hash` (JSON-fallback игнорировал SELECT)
