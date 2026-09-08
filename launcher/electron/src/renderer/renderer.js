@@ -1476,7 +1476,7 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   clearTimeout(saveTimer);
   await window.floridaV.saveSettings(settings);
 
-  // Движок клиента alt:V — если не установлен/устарел, качаем с CDN один раз
+  // Движок клиента FloV:MP — если не установлен/устарел, качаем с CDN один раз
   // (прогресс в той же модалке). FloVMP.Connect потом берёт его из
   // %LOCALAPPDATA%\FloridaV\engine\.
   try {

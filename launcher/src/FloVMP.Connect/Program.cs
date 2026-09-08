@@ -37,8 +37,8 @@ if (opts is null) return 1;
 var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname) = opts.Value;
 
 var flovmpExe = Path.Combine(clientDir, "flovmp.exe");
-var altvExe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(clientDir, "altv.exe");
-if (!File.Exists(altvExe))
+var clientExe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(clientDir, "altv.exe");
+if (!File.Exists(clientExe))
 {
     Console.Error.WriteLine($"[err] Не найден исполняемый файл клиента в папке {clientDir} (ожидался flovmp.exe или altv.exe)");
     return 2;
@@ -158,7 +158,7 @@ cdn.Start();
 
 // 2) altv.toml
 AltvToml.Write(clientDir, gtaDir, debug, platformOverride, nickname);
-Console.WriteLine("[connect] altv.toml записан");
+Console.WriteLine("[connect] flovmp.toml записан");
 
 // 2.7) skin.bin — патчим customUiUrl для загрузки NUI
 var customUi = $"{cdn.BaseUrl}/ui/index.html";
@@ -170,13 +170,14 @@ foreach (var skinPath in new[] { Path.Combine(clientDir, "cache", "skin.bin"), P
 
 try
 {
-    // 3) Запуск клиента alt:V
+    // 3) Запуск игрового клиента FloV:MP
     var url = $"altv://connect/{connect}";
     var direct = noDirectLaunch ? "" : " -directlaunch";
     var argLine = $"-connecturl \"{url}\"{direct} -customui {customUi} -noupdate";
-    Console.WriteLine($"[connect] Запуск: altv.exe {argLine}");
+    var exeName = Path.GetFileName(clientExe);
+    Console.WriteLine($"[connect] Запуск: {exeName} {argLine}");
 
-    var psi = new ProcessStartInfo(altvExe, argLine)
+    var psi = new ProcessStartInfo(clientExe, argLine)
     {
         WorkingDirectory = clientDir,
         UseShellExecute = false,
@@ -190,10 +191,10 @@ try
     using var proc = Process.Start(psi);
     if (proc is null)
     {
-        Console.Error.WriteLine("[err] Не удалось запустить altv.exe");
+        Console.Error.WriteLine($"[err] Не удалось запустить {exeName}");
         return 3;
     }
-    Console.WriteLine($"[connect] altv.exe запущен (PID {proc.Id}). Ожидаю запуска и завершения игры...");
+    Console.WriteLine($"[connect] {exeName} запущен (PID {proc.Id}). Ожидаю запуска и завершения игры...");
 
     // 4) Ждём завершения
     var gtaSeen = false;
@@ -328,7 +329,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
     client ??= ResolveClientDir();
     if (client is null)
     {
-        Console.Error.WriteLine("[err] Не найдена папка клиента alt:V (runtime/client). Задайте путь через --client <dir>");
+        Console.Error.WriteLine("[err] Не найдена папка клиента FloV:MP (runtime/client). Задайте путь через --client <dir>");
         return null;
     }
 

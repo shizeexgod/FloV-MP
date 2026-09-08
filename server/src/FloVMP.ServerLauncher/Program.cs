@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -22,7 +22,7 @@ else
     for (var i = 0; i < 10; i++)
     {
         var candidate = Path.Combine(walkDir, "runtime", "server");
-        if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "altv-server.exe")))
+        if (Directory.Exists(candidate) && (File.Exists(Path.Combine(candidate, "flovmp-server.exe")) || File.Exists(Path.Combine(candidate, "altv-server.exe"))))
         {
             found = candidate;
             break;
@@ -34,7 +34,7 @@ else
     if (found is null)
     {
         Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine("[error] Не нашёл runtime\\server с altv-server.exe.");
+        Console.WriteLine("[error] Не нашёл runtime\\server с flovmp-server.exe или altv-server.exe.");
         Console.WriteLine("        Задай переменную окружения FLOVMP_SERVER_DIR.");
         Console.ResetColor();
         Console.WriteLine("Press any key to exit...");
@@ -138,15 +138,16 @@ _ = Task.Run(() =>
     }
 });
 
+var serverExeName = File.Exists(Path.Combine(serverDir, "flovmp-server.exe")) ? "flovmp-server.exe" : "altv-server.exe";
 var psi = new ProcessStartInfo
 {
-    FileName = Path.Combine(serverDir, "altv-server.exe"),
+    FileName = Path.Combine(serverDir, serverExeName),
     WorkingDirectory = serverDir,
     UseShellExecute = false,
 };
 
 Console.ForegroundColor = ConsoleColor.Green;
-Console.WriteLine("[server] Launching altv-server.exe...");
+Console.WriteLine($"[server] Launching {serverExeName}...");
 Console.ResetColor();
 
 Process? proc;
@@ -154,7 +155,7 @@ try { proc = Process.Start(psi); }
 catch (Exception ex)
 {
     Console.ForegroundColor = ConsoleColor.Red;
-    Console.WriteLine($"[error] Failed to start altv-server.exe: {ex.Message}");
+    Console.WriteLine($"[error] Failed to start {serverExeName}: {ex.Message}");
     Console.ResetColor();
     listener.Stop();
     Console.WriteLine("Press any key to exit...");
@@ -172,7 +173,7 @@ if (proc is null)
 }
 
 Console.ForegroundColor = ConsoleColor.Cyan;
-Console.WriteLine($"[server] altv-server.exe PID {proc.Id}. Ctrl+C to stop.");
+Console.WriteLine($"[server] {serverExeName} PID {proc.Id}. Ctrl+C to stop.");
 Console.ResetColor();
 
 Console.CancelKeyPress += (_, e) =>
@@ -183,7 +184,7 @@ Console.CancelKeyPress += (_, e) =>
 
 proc.WaitForExit();
 Console.ForegroundColor = ConsoleColor.Yellow;
-Console.WriteLine($"[server] altv-server.exe exited with code {proc.ExitCode}.");
+Console.WriteLine($"[server] {serverExeName} exited with code {proc.ExitCode}.");
 Console.ResetColor();
 listener.Stop();
 return 0;

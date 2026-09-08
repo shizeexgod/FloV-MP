@@ -72,7 +72,7 @@
                 </Grid>
                 <TextBlock Text="{Binding GtaStatusText}" Foreground="{StaticResource Text1}" FontSize="11" Margin="0,0,0,12"/>
 
-                <TextBlock Text="ЯДРО КЛИЕНТА alt:V (папка с altv.exe)" Style="{StaticResource Caption}"/>
+                <TextBlock Text="ЯДРО КЛИЕНТА FloV:MP (папка с flovmp.exe)" Style="{StaticResource Caption}"/>
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

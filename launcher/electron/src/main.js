@@ -197,8 +197,8 @@ native.on?.('download', (data) => {
   mainWindow?.webContents.send('download:progress', data);
 });
 
-// ─── Движок клиента alt:V (Фаза 2 CDN-раздача) ──────────────────────────
-// Лаунчер тонкий: сам движок (~430 МБ: libce2/CEF/altv-client) не вшит в
+// ─── Движок клиента FloV:MP (Фаза 2 CDN-раздача) ──────────────────────────
+// Лаунчер тонкий: сам движок (~430 МБ: libce2/CEF/flovmp-client) не вшит в
 // инсталлятор, а качается один раз с CDN сервера в
 // %LOCALAPPDATA%\FloridaV\engine\ и проверяется по sha256 из манифеста.
 // FloVMP.Connect подхватывает его оттуда (см. PlayService.FindClientDir).
@@ -213,6 +213,7 @@ ipcMain.handle('native:engineStatus', async (_e, cdnBase) => {
   const marker = readEngineMarker();
   const entry = marker?.entry || 'flovmp.exe';
   const entryOk = fs.existsSync(path.join(ENGINE_DIR, entry))
+    || fs.existsSync(path.join(ENGINE_DIR, 'flovmp.exe'))
     || fs.existsSync(path.join(ENGINE_DIR, 'altv.exe'));
   let latest = null;
   try {

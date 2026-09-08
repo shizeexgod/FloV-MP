@@ -112,7 +112,8 @@ public static class AltvClientCore
 
     public static Process Launch(string coreDir, string args)
     {
-        var exe = Path.Combine(coreDir, "altv.exe");
+        var flovmpExe = Path.Combine(coreDir, "flovmp.exe");
+        var exe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(coreDir, "altv.exe");
         var psi = new ProcessStartInfo(exe, args)
         {
             WorkingDirectory = coreDir,

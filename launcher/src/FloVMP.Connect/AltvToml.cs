@@ -66,6 +66,7 @@ public static class AltvToml
 
             """;
 
+        File.WriteAllText(Path.Combine(clientDir, "flovmp.toml"), toml);
         File.WriteAllText(Path.Combine(clientDir, "altv.toml"), toml);
     }
 

@@ -245,7 +245,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void BrowseCore()
     {
-        var dlg = new OpenFolderDialog { Title = "Папка ядра клиента alt:V (с altv.exe)" };
+        var dlg = new OpenFolderDialog { Title = "Папка ядра клиента FloV:MP (с flovmp.exe)" };
         if (!string.IsNullOrWhiteSpace(_s.AltvCoreDir) && Directory.Exists(_s.AltvCoreDir)) dlg.InitialDirectory = _s.AltvCoreDir;
         if (dlg.ShowDialog() == true) AltvCoreDir = dlg.FolderName;
     }
@@ -262,18 +262,20 @@ public sealed class MainViewModel : ObservableObject
             if (_s.SyncAltvToml)
             {
                 AltvClientCore.SyncAltvToml(_s.GtaPath, _s.Branch, _s.Nickname);
-                Log("altv.toml синхронизирован (.bak рядом).");
+                Log("flovmp.toml синхронизирован (.bak рядом).");
             }
 
             var url = AltvClientCore.BuildConnectUrl(_s.ServerHost, _s.ServerPort, _s.Nickname, null);
             var gameExe = GtaLocator.FindGameExecutable(_s.GtaPath);
             var gameExePath = gameExe is null ? null : Path.Combine(_s.GtaPath, gameExe);
             var args = AltvClientCore.BuildArgs(url, _s.Branch, _s.AllowMultipleInstances, gameExePath);
-            Log($"Запуск: altv.exe {args}");
+            var flovmpExe = Path.Combine(_s.AltvCoreDir, "flovmp.exe");
+            var exeName = File.Exists(flovmpExe) ? "flovmp.exe" : "altv.exe";
+            Log($"Запуск: {exeName} {args}");
             Log($"CWD: {_s.AltvCoreDir}");
 
             var proc = AltvClientCore.Launch(_s.AltvCoreDir, args);
-            Log($"Процесс запущен, PID {proc.Id}. Дальше работает клиент alt:V.");
+            Log($"Процесс запущен, PID {proc.Id}. Дальше работает клиент FloV:MP.");
         }
         catch (Exception ex)
         {

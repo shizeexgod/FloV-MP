@@ -39,32 +39,28 @@ export default function Footer() {
       title: t.footer.colCompany,
       links: [
         { label: L.projects, href: '/projects' },
-        { label: L.roadmap, href: '/roadmap' },
         { label: L.contact, href: '/contact' },
         { label: L.terms, href: '/legal/terms' },
+        { label: L.privacy, href: '/legal/privacy' },
       ],
     },
   ];
 
   return (
-    <footer className="border-t border-white/[0.08] bg-ink-950/60">
-      <div className="mx-auto max-w-6xl px-5 py-14 sm:px-6">
+    <footer className="mt-8 px-3 pb-4 sm:px-4">
+      <div className="mx-auto max-w-6xl rounded-2xl border border-white/[0.08] bg-[#131316]/60 px-6 py-12 sm:px-8">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="block h-9 w-9 overflow-hidden rounded-lg border border-white/10 bg-ink-800">
+              <span className="block h-9 w-9 overflow-hidden rounded-[10px] border border-white/10 bg-ink-800">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/branding/logo.jpg" alt="FloV:MP" className="h-full w-full object-cover" />
               </span>
-              <span className="text-[16px] font-semibold text-white">
+              <span className="text-[16px] font-extrabold text-white">
                 FloV<span className="text-brand">:MP</span>
               </span>
             </div>
             <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-white/50">{t.footer.tagline}</p>
-            <div className="mt-5 inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/50">
-              <span className="status-dot text-ok" />
-              {t.footer.nodeStatus}&nbsp;188.127.229.224:7788
-            </div>
           </div>
 
           {COLUMNS.map((col) => (
@@ -83,7 +79,8 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col items-center gap-4 border-t border-white/[0.06] pt-8 sm:flex-row sm:justify-between">
+        <hr className="rule-soft mt-12" />
+        <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <p className="text-xs text-white/40">© 2026 FloV:MP Engine. {t.common.allRightsReserved}</p>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             {SPECS.map((s) => (

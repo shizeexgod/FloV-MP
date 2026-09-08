@@ -21,7 +21,7 @@ const api = {
   cancelPlay: () => ipcRenderer.invoke('native:cancelPlay'),
   onDownloadProgress: (cb) => ipcRenderer.on('download:progress', (_e, data) => cb(data)),
 
-  // Движок клиента alt:V — статус локальной установки и загрузка с CDN
+  // Движок клиента FloV:MP — статус локальной установки и загрузка с CDN
   // (%LOCALAPPDATA%\FloridaV\engine\). Прогресс идёт тем же каналом
   // download:progress, что и загрузка файлов игры.
   engineStatus: (cdnBase) => ipcRenderer.invoke('native:engineStatus', cdnBase),

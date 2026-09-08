@@ -49,6 +49,10 @@ resources = [
     "flovmp-client",
 ]
 
+# --- Конфигурация модулей --------------------------------------------
+[csharp-module]
+disableDependencyDownload = true
+
 # Теги мастер-листа не нужны (announce = false), секция оставлена пустой
 # как валидный якорь формата.
 [tags]

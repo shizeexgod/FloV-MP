@@ -118,6 +118,8 @@ Write-Host "[server binaries]" -ForegroundColor Yellow
 $srvSrc = Join-Path $AltvBackup "server\$Branch\$plat"
 Copy-Required "$srvSrc\altv-server.exe"         "$server\altv-server.exe"
 Copy-Required "$srvSrc\altv-crash-handler.exe"  "$server\altv-crash-handler.exe"
+Copy-Item "$server\altv-server.exe" "$server\flovmp-server.exe" -Force
+Copy-Item "$server\altv-crash-handler.exe" "$server\flovmp-crash-handler.exe" -Force
 Copy-Required "$srvSrc\update.json"             "$server\update.json"
 
 if ($KeepSentry) {

@@ -63,9 +63,25 @@ export function Section({
   bordered?: boolean;
 }) {
   return (
-    <section id={id} className={`scroll-mt-20 ${bordered ? 'border-b border-white/[0.07]' : ''} ${className}`}>
-      <Container className="py-16 sm:py-20">{children}</Container>
+    <section id={id} className={`scroll-mt-24 ${className}`}>
+      <Container className="py-16 sm:py-24">{children}</Container>
+      {bordered ? (
+        <Container>
+          <hr className="rule" />
+        </Container>
+      ) : null}
     </section>
+  );
+}
+
+/** Renders a numeric eyebrow ("04", "01–03") large; a word eyebrow small. */
+function Eyebrow({ value }: { value?: string }) {
+  if (!value) return null;
+  const isNum = /^[\d]/.test(value.trim());
+  return isNum ? (
+    <span className="section-num">{value}</span>
+  ) : (
+    <span className="eyebrow">{value}</span>
   );
 }
 
@@ -79,15 +95,18 @@ export function PageHero({
   sub?: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-white/[0.07]">
-      <Container className="py-16 sm:py-20">
+    <div>
+      <Container className="py-16 sm:py-24">
         <Reveal>
-          {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
-          <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
-            {title}
+          <Eyebrow value={eyebrow} />
+          <h1 className="mt-3 max-w-3xl text-[2rem] font-extrabold leading-[1.08] tracking-tight sm:text-[2.9rem]">
+            <span className="h-grad">{title}</span>
           </h1>
-          {sub ? <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/55">{sub}</p> : null}
+          {sub ? <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-white/55">{sub}</p> : null}
         </Reveal>
+      </Container>
+      <Container>
+        <hr className="rule" />
       </Container>
     </div>
   );
@@ -103,10 +122,12 @@ export function SectionHeading({
   sub?: React.ReactNode;
 }) {
   return (
-    <Reveal className="mb-10 max-w-2xl">
-      {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
-      <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-[1.9rem]">{title}</h2>
-      {sub ? <p className="mt-3 text-[14px] leading-relaxed text-white/50">{sub}</p> : null}
+    <Reveal className="mb-12 max-w-2xl">
+      <Eyebrow value={eyebrow} />
+      <h2 className="mt-3 text-[1.65rem] font-extrabold leading-[1.12] tracking-tight sm:text-[2.15rem]">
+        <span className="h-grad">{title}</span>
+      </h2>
+      {sub ? <p className="mt-3.5 text-[14.5px] leading-relaxed text-white/50">{sub}</p> : null}
     </Reveal>
   );
 }
