@@ -180,6 +180,11 @@ public sealed class VoiceGridRouter
     /// </summary>
     public void TuneRadio(ulong playerId, float frequency, string? encryptionKey = null)
     {
+        if (float.IsNaN(frequency) || float.IsInfinity(frequency) || frequency <= 0.0f || frequency > 1000.0f)
+        {
+            return;
+        }
+
         // Нормализация частоты до 1 знака после запятой (например, 101.5)
         frequency = (float)Math.Round(frequency, 1);
 
@@ -213,6 +218,8 @@ public sealed class VoiceGridRouter
     public IReadOnlyList<VoiceRecipient> RouteRadioVoice(ulong speakerId, float frequency, string? speakerKey = null)
     {
         if (IsServerMuted(speakerId)) return Array.Empty<VoiceRecipient>();
+        if (float.IsNaN(frequency) || float.IsInfinity(frequency) || frequency <= 0.0f || frequency > 1000.0f)
+            return Array.Empty<VoiceRecipient>();
 
         frequency = (float)Math.Round(frequency, 1);
 

@@ -122,6 +122,14 @@ public sealed class DeadReckoningInterpolator
     /// </summary>
     public void RecordSnapshot(ulong entityId, long timestampMs, Vector3D position, Vector3D velocity, Vector3D rotation)
     {
+        if (float.IsNaN(position.X) || float.IsNaN(position.Y) || float.IsNaN(position.Z) ||
+            float.IsInfinity(position.X) || float.IsInfinity(position.Y) || float.IsInfinity(position.Z) ||
+            float.IsNaN(velocity.X) || float.IsNaN(velocity.Y) || float.IsNaN(velocity.Z) ||
+            float.IsInfinity(velocity.X) || float.IsInfinity(velocity.Y) || float.IsInfinity(velocity.Z))
+        {
+            return;
+        }
+
         var history = _entityHistories.GetOrAdd(entityId, _ => new EntityHistoryBuffer(capacity: 64));
         history.Add(new EntitySnapshot(timestampMs, position, velocity, rotation));
     }
