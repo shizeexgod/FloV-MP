@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { BadJsonError, badRequest, readJson } from '@/lib/http';
 
 export async function POST(req: NextRequest) {
   const session = getSessionUser();
-  if (!session || session.role !== 'admin') {
+  if (!session || !['owner','admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Доступ разрешен только администраторам' }, { status: 403 });
   }
 
-  const { licenseId, days } = await req.json();
+  let body: { licenseId?: number; days?: number };
+  try {
+    body = await readJson(req);
+  } catch (e) {
+    if (e instanceof BadJsonError) return badRequest();
+    throw e;
+  }
+  const { licenseId, days } = body;
   if (!licenseId || !days) {
     return NextResponse.json({ error: 'Укажите ID лицензии и количество дней' }, { status: 400 });
   }

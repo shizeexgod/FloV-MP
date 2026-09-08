@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     session.userId,
   ]);
 
-  if (lics.length === 0 && session.role !== 'admin') {
+  if (lics.length === 0 && !['owner','admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Доступ запрещен' }, { status: 403 });
   }
 

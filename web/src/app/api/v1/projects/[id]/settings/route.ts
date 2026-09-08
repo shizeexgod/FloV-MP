@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateProjectSettings, getProjectById } from '@/lib/db';
+import { AuthError, assertProjectAccess, requireUser } from '@/lib/rbac';
+import { BadJsonError, badRequest, readJson } from '@/lib/http';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const session = requireUser();
     const projectId = Number(params.id);
     if (isNaN(projectId)) {
       return NextResponse.json({ success: false, error: 'Invalid project ID' }, { status: 400 });
     }
 
     const project = await getProjectById(projectId);
-    if (!project) {
-      return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
-    }
+    assertProjectAccess(session, project);
 
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await readJson(req);
+    } catch (e) {
+      if (e instanceof BadJsonError) return badRequest();
+      throw e;
+    }
     const {
       hwidPolicy,
       allowVpn,
@@ -39,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       message: 'Настройки проекта успешно обновлены',
     });
   } catch (err: any) {
+    if (err instanceof AuthError) return NextResponse.json({ success: false, error: err.message }, { status: err.status });
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

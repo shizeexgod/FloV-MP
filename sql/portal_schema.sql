@@ -9,9 +9,12 @@ CREATE TABLE IF NOT EXISTS `portal_users` (
   `email` VARCHAR(128) NOT NULL UNIQUE,
   `username` VARCHAR(64) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
-  `role` VARCHAR(16) NOT NULL DEFAULT 'client' COMMENT 'client, admin',
+  `role` VARCHAR(16) NOT NULL DEFAULT 'client' COMMENT 'client, developer, project_lead, admin, owner',
   `telegram` VARCHAR(64) DEFAULT NULL,
   `discord` VARCHAR(64) DEFAULT NULL,
+  `totp_secret` VARCHAR(64) DEFAULT NULL COMMENT 'active TOTP secret (base32)',
+  `totp_pending` VARCHAR(64) DEFAULT NULL COMMENT 'secret awaiting first-code confirmation',
+  `totp_enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_puser_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

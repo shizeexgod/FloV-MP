@@ -139,7 +139,10 @@ export interface MockStore {
   agent_commands?: AgentCommandRecord[];
 }
 
-const DB_DIR = path.join(process.cwd(), 'data');
+// On Vercel the bundle dir is read-only — only /tmp is writable. The JSON store
+// is a local-dev / MySQL-down fallback only; a real deploy must point DB_* at a
+// managed MariaDB. /tmp is ephemeral per lambda, which is acceptable for that.
+const DB_DIR = process.env.VERCEL ? '/tmp/flovmp' : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'portal-db.json');
 
 function getStore(): MockStore {
@@ -461,6 +464,20 @@ function mockQueryFallback(sql: string, params: any[]): any {
     store.users.push(newUser);
     saveStore(store);
     return { insertId: newId, affectedRows: 1 };
+  }
+
+  // 4b. Update user 2FA columns (totp_secret / totp_pending / totp_enabled)
+  if (s.includes('update portal_users set')) {
+    const idParam = params[params.length - 1];
+    const user = store.users.find((u) => u.id === Number(idParam));
+    if (!user) return { affectedRows: 0 };
+    const u = user as Record<string, unknown>;
+    let pi = 0;
+    if (s.includes('totp_secret')) u.totp_secret = params[pi++] == null ? null : String(params[pi - 1]);
+    if (s.includes('totp_pending')) u.totp_pending = params[pi++] == null ? null : String(params[pi - 1]);
+    if (s.includes('totp_enabled')) u.totp_enabled = Number(params[pi++]) ? 1 : 0;
+    saveStore(store);
+    return { affectedRows: 1 };
   }
 
   // 5. Find license by id (and optional user_id)
@@ -824,8 +841,10 @@ function mockQueryFallback(sql: string, params: any[]): any {
 // Typed Public Helpers for Project & Server Management
 // ---------------------------------------------------------------------------
 
-export async function getProjectsByUser(userId: number): Promise<ProjectRecord[]> {
-  const rows = await query('SELECT * FROM portal_projects WHERE user_id = ? ORDER BY id DESC', [userId]);
+export async function getProjectsByUser(userId: number, all = false): Promise<ProjectRecord[]> {
+  const rows = all
+    ? await query('SELECT * FROM portal_projects ORDER BY id DESC')
+    : await query('SELECT * FROM portal_projects WHERE user_id = ? ORDER BY id DESC', [userId]);
   return rows as ProjectRecord[];
 }
 

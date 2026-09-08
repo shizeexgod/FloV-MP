@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { comparePassword, signToken } from '@/lib/auth';
+import { BadJsonError, badRequest, readJson } from '@/lib/http';
+import { verifyTotp } from '@/lib/totp';
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json();
+    let body: { email?: string; password?: string; totpToken?: string };
+    try {
+      body = await readJson(req);
+    } catch (e) {
+      if (e instanceof BadJsonError) return badRequest();
+      throw e;
+    }
+    const { email, password, totpToken } = body;
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Укажите email и пароль' }, { status: 400 });
     }
 
-    const users = await query('SELECT * FROM portal_users WHERE email = ? LIMIT 1', [email.toLowerCase().trim()]);
+    const users = await query('SELECT * FROM portal_users WHERE email = ? LIMIT 1', [
+      String(email).toLowerCase().trim(),
+    ]);
     if (users.length === 0) {
       return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
     }
@@ -19,6 +30,17 @@ export async function POST(req: NextRequest) {
     const passwordMatch = await comparePassword(password, user.password_hash);
     if (!passwordMatch) {
       return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
+    }
+
+    // Second factor — RFC 6238 TOTP
+    if (user.totp_enabled) {
+      if (!totpToken) {
+        // Password OK, but a 2FA code is still required. No session cookie yet.
+        return NextResponse.json({ twoFactorRequired: true });
+      }
+      if (!verifyTotp(String(user.totp_secret || ''), String(totpToken))) {
+        return NextResponse.json({ error: 'Неверный код двухфакторной аутентификации', twoFactorRequired: true }, { status: 401 });
+      }
     }
 
     const token = signToken({

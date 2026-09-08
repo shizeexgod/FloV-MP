@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 
 export async function GET() {
   const session = getSessionUser();
-  if (!session || session.role !== 'admin') {
+  if (!session || !['owner','admin'].includes(session.role)) {
     return NextResponse.json({ error: 'Доступ разрешен только администраторам платформы' }, { status: 403 });
   }
 

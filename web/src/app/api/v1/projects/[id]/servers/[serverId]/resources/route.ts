@@ -1,19 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getResourcesByServer, queueAgentCommand, setResourceStatus, getServerById } from '@/lib/db';
+import { getResourcesByServer, queueAgentCommand, setResourceStatus, getServerById, getProjectById } from '@/lib/db';
+import { AuthError, assertProjectAccess, requireUser } from '@/lib/rbac';
+import { BadJsonError, badRequest, readJson } from '@/lib/http';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string; serverId: string } }
 ) {
   try {
+    const session = requireUser();
     const serverId = Number(params.serverId);
     if (isNaN(serverId)) {
       return NextResponse.json({ success: false, error: 'Invalid server ID' }, { status: 400 });
     }
+    assertProjectAccess(session, await getProjectById(Number(params.id)));
 
     const resources = await getResourcesByServer(serverId);
     return NextResponse.json({ success: true, resources });
   } catch (err: any) {
+    if (err instanceof AuthError) return NextResponse.json({ success: false, error: err.message }, { status: err.status });
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
@@ -23,17 +28,25 @@ export async function POST(
   { params }: { params: { id: string; serverId: string } }
 ) {
   try {
+    const session = requireUser();
     const serverId = Number(params.serverId);
     if (isNaN(serverId)) {
       return NextResponse.json({ success: false, error: 'Invalid server ID' }, { status: 400 });
     }
 
+    assertProjectAccess(session, await getProjectById(Number(params.id)));
     const server = await getServerById(serverId);
     if (!server) {
       return NextResponse.json({ success: false, error: 'Server not found' }, { status: 404 });
     }
 
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await readJson(req);
+    } catch (e) {
+      if (e instanceof BadJsonError) return badRequest();
+      throw e;
+    }
     const { action, resourceName } = body;
 
     if (!action || !resourceName) {
@@ -64,6 +77,7 @@ export async function POST(
       commandId,
     });
   } catch (err: any) {
+    if (err instanceof AuthError) return NextResponse.json({ success: false, error: err.message }, { status: err.status });
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

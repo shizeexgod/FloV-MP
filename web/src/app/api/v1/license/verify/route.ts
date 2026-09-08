@@ -49,11 +49,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check expiration
+    // Check expiration — with a 7-day grace window so a late renewal does not
+    // hard-stop a live server. The game server also caches the signed response
+    // and may keep running up to `graceHours` if the portal is unreachable.
+    const GRACE_MS = 7 * 24 * 3600 * 1000;
     const expiry = new Date(lic.expires_at).getTime();
-    if (Date.now() > expiry) {
+    const inGrace = Date.now() > expiry && Date.now() <= expiry + GRACE_MS;
+    if (Date.now() > expiry + GRACE_MS) {
       return NextResponse.json(
-        { valid: false, reason: 'Срок действия лицензии истек. Продлите подписку в ЛК' },
+        { valid: false, reason: 'Срок действия лицензии истёк более 7 дней назад. Продлите подписку в ЛК' },
         { status: 403 }
       );
     }
@@ -82,6 +86,9 @@ export async function POST(req: NextRequest) {
 
     const responsePayload = {
       valid: true,
+      grace: inGrace,
+      graceHours: 168,
+      graceUntil: new Date(expiry + GRACE_MS).toISOString(),
       licenseKey: lic.license_key,
       serverName: lic.server_name,
       plan: lic.plan,

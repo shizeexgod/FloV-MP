@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getProjectById, getServersByProject } from '@/lib/db';
 import { dispatchDiscordAlert, dispatchTelegramAlert } from '@/lib/webhookDispatcher';
+import { AuthError, assertProjectAccess, requireUser } from '@/lib/rbac';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const session = requireUser();
     const projectId = Number(params.id);
     if (isNaN(projectId)) {
       return NextResponse.json({ success: false, error: 'Invalid project ID' }, { status: 400 });
     }
 
-    const project = await getProjectById(projectId);
-    if (!project) {
-      return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
-    }
+    const projectMaybe = await getProjectById(projectId);
+    assertProjectAccess(session, projectMaybe);
+    const project = projectMaybe!;
 
     const servers = await getServersByProject(projectId);
     const mainServer = servers[0] || {
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       results,
     });
   } catch (err: any) {
+    if (err instanceof AuthError) return NextResponse.json({ success: false, error: err.message }, { status: err.status });
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

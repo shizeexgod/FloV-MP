@@ -67,9 +67,25 @@ TxAdminConsole (SSE), Logs, LauncherBuilder, Billing, ApiWebhooks, SDK, AiAssist
    держит состояние/хендлеры/загрузку, отдаёт через `DashboardProvider` (context).
    `components/dashboard/`: `_ctx.tsx` + 9 вкладок + 5 модалок = 15 файлов.
    Поведение не менялось (JSX перенесён дословно), проверено в браузере RU и EN.
-4. 🔲 **Бэкенд**: 2FA TOTP, RBAC, grace period, agent poll-очередь, публичный API HMAC
-5. 🟡 **Vercel**: `vercel.json` + `.env.example` готовы. Осталось: миграция
-   файлового стора (portal-db.json / сборки лаунчера) на R2/VDS, т.к. FS Vercel r/o
+4. ✅ **Бэкенд — фаза 4**:
+   - `lib/http.ts` — `readJson()` / `badRequest()`: тело запроса без JSON → **400**,
+     не 500 (применено к незащищённым admin-роутам и всем новым)
+   - `lib/rbac.ts` — `requireUser` / `requirePlatformAdmin` / `assertProjectAccess`.
+     **Исправлен баг авторизации**: `/api/v1/projects*` работал от имени user 1
+     независимо от сессии → теперь 401 без сессии, 403 на чужой проект. Проверка
+     владельца добавлена в settings / servers / resources / webhooks. Admin-роуты
+     принимают роли `owner` + `admin`
+   - `lib/totp.ts` — TOTP RFC 6238 без зависимостей (HMAC-SHA1, 30s, окно ±1).
+     Эндпоинты `POST /api/v1/account/2fa` (setup), `/enable`, `/disable`, `GET`
+     (статус). Логин: при `totp_enabled` без `totpToken` → `{ twoFactorRequired }`,
+     с кодом → сессия. Проверено end-to-end в браузере
+   - Grace period: `/api/v1/license/verify` — окно 7 дней (`valid:true, grace:true`),
+     в подписанном ответе `graceHours:168` + `graceUntil`
+5. 🟡 **Vercel**: `vercel.json` + `.env.example` готовы; `db.ts` → `/tmp/flovmp`
+   при `process.env.VERCEL`; `sql/portal_schema.sql` — колонки `totp_*` + роли.
+   Осталось: сборки лаунчера / FastDL на R2/VDS (FS Vercel r/o), managed MariaDB
 
 ## Безопасность (исправлено)
 - `/api/auth/me` больше не отдаёт `password_hash` (JSON-fallback игнорировал SELECT)
+- `/api/v1/projects*` — устранена работа от имени user 1 без проверки сессии
+- 2FA TOTP, ownership-проверки на проектных роутах, `req.json()` → 400
