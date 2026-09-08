@@ -28,6 +28,8 @@ public sealed class ChatSystem
     private readonly FloVMP.Core.Housing.HousingService? _housing;
     private readonly InventorySystem? _inventory;
     private readonly Action<int>? _restartServer;
+    private readonly Action<IPlayer, Position>? _notifyTeleport;
+    private readonly Action<int, bool>? _setAdminExempt;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
@@ -42,7 +44,9 @@ public sealed class ChatSystem
         DocumentService? documents = null,
         FloVMP.Core.Housing.HousingService? housing = null,
         InventorySystem? inventory = null,
-        Action<int>? restartServer = null)
+        Action<int>? restartServer = null,
+        Action<IPlayer, Position>? notifyTeleport = null,
+        Action<int, bool>? setAdminExempt = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -53,6 +57,8 @@ public sealed class ChatSystem
         _housing = housing;
         _inventory = inventory;
         _restartServer = restartServer;
+        _notifyTeleport = notifyTeleport;
+        _setAdminExempt = setAdminExempt;
     }
 
     public void Attach()
@@ -245,6 +251,89 @@ public sealed class ChatSystem
                 SendSystem(player, $"=== Финансовый статус: {acc.Username} ===");
                 SendSystem(player, $"Наличные: {acc.Cash:N0} руб.");
                 SendSystem(player, $"Банковский счёт: {acc.Bank:N0} руб. (№ {acc.BankAccountNumber})");
+                return;
+
+            case "deposit":
+                if (args.Length == 0 || !long.TryParse(args[0], out var depAmt) || depAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /deposit <сумма>");
+                    return;
+                }
+                if (_economy != null)
+                {
+                    if (_economy.TryDeposit(acc, depAmt, out var depErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Вы внесли {depAmt:N0} руб. на банковский счёт. Баланс: {acc.Bank:N0} руб.");
+                    }
+                    else
+                    {
+                        SendSystem(player, depErr);
+                    }
+                }
+                return;
+
+            case "withdraw":
+                if (args.Length == 0 || !long.TryParse(args[0], out var withAmt) || withAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /withdraw <сумма>");
+                    return;
+                }
+                if (_economy != null)
+                {
+                    if (_economy.TryWithdraw(acc, withAmt, out var withErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Вы сняли {withAmt:N0} руб. с банковского счёта. Наличные: {acc.Cash:N0} руб.");
+                    }
+                    else
+                    {
+                        SendSystem(player, withErr);
+                    }
+                }
+                return;
+
+            case "transfer":
+                if (args.Length < 2 || !long.TryParse(args[1], out var trAmt) || trAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /transfer <ID/ник/номер_счёта> <сумма> [назначение]");
+                    return;
+                }
+                var trTarget = FindPlayer(args[0]);
+                Account? trTargetAcc = null;
+                if (trTarget != null && trTarget.Exists)
+                {
+                    trTargetAcc = _accountOf(trTarget);
+                }
+                else
+                {
+                    trTargetAcc = _findAccountByName?.Invoke(args[0]);
+                }
+
+                if (trTargetAcc == null)
+                {
+                    SendSystem(player, "Получатель перевода не найден.");
+                    return;
+                }
+
+                if (_economy != null)
+                {
+                    var desc = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Банковский перевод";
+                    if (_economy.TryTransferBank(acc, trTargetAcc, trAmt, desc, out var trErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        _saveAccount?.Invoke(trTargetAcc);
+                        SendSystem(player, $"Перевод {trAmt:N0} руб. в пользу {trTargetAcc.Username} успешно выполнен.");
+                        if (trTarget != null && trTarget.Exists)
+                        {
+                            SendSystem(trTarget, $"На ваш банковский счёт поступил перевод: +{trAmt:N0} руб. от {acc.Username}. Назначение: {desc}");
+                        }
+                    }
+                    else
+                    {
+                        SendSystem(player, trErr);
+                    }
+                }
                 return;
 
             case "do":
@@ -600,6 +689,7 @@ public sealed class ChatSystem
                         // Перемещение в ИВС ГУ МВД
                         arrTarget.Dimension = 0;
                         arrTarget.Position = new Position(459.4f, -997.8f, 24.9f);
+                        _notifyTeleport?.Invoke(arrTarget, arrTarget.Position);
                         arrTarget.RemoveAllWeapons(true);
 
                         SendSystem(player, $"Вы оформили {arrAcc.Username} в КПЗ на {arrestMinutes} мин. Причина: {arrReason}");
@@ -682,6 +772,7 @@ public sealed class ChatSystem
 
                     player.Dimension = nearbyProp.Dimension;
                     player.Position = new Position(nearbyProp.InteriorPosition.X, nearbyProp.InteriorPosition.Y, nearbyProp.InteriorPosition.Z);
+                    _notifyTeleport?.Invoke(player, player.Position);
                     SendSystem(player, $"Вы вошли в помещение: {nearbyProp.Address}");
                 }
                 return;
@@ -693,6 +784,8 @@ public sealed class ChatSystem
                     if (insideProp == null && player.Dimension != 0)
                     {
                         player.Dimension = 0;
+                        player.Position = SpawnPoints.MoscowRedSquare;
+                        _notifyTeleport?.Invoke(player, player.Position);
                         SendSystem(player, "Вы вышли на улицу.");
                         return;
                     }
@@ -701,6 +794,7 @@ public sealed class ChatSystem
                     {
                         player.Dimension = 0;
                         player.Position = new Position(insideProp.EntrancePosition.X, insideProp.EntrancePosition.Y, insideProp.EntrancePosition.Z);
+                        _notifyTeleport?.Invoke(player, player.Position);
                         SendSystem(player, $"Вы вышли на улицу: {insideProp.Address}");
                     }
                     else
@@ -748,6 +842,100 @@ public sealed class ChatSystem
                     foreach (var h in owned)
                     {
                         SendSystem(player, $"[{h.Id}] {h.Address} ({h.Type}) — Замок: {(h.IsLocked ? "Закрыт" : "Открыт")} | Сейф: {h.SafeCash:N0} руб. | Подселено: {h.Roommates.Count}");
+                    }
+                }
+                return;
+
+            case "hdeposit":
+                if (args.Length < 2 || !int.TryParse(args[0], out var depHId) || !long.TryParse(args[1], out var depSafeAmt) || depSafeAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /hdeposit <ID_недвижимости> <сумма>");
+                    return;
+                }
+                if (_housing != null)
+                {
+                    if (_housing.TryDepositSafe(acc, depHId, depSafeAmt, out var sDepErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        var prop = _housing.GetProperty(depHId);
+                        SendSystem(player, $"Вы положили {depSafeAmt:N0} руб. в сейф дома [{depHId}]. В сейфе: {prop?.SafeCash:N0} руб.");
+                    }
+                    else
+                    {
+                        SendSystem(player, sDepErr);
+                    }
+                }
+                return;
+
+            case "hwithdraw":
+                if (args.Length < 2 || !int.TryParse(args[0], out var withHId) || !long.TryParse(args[1], out var withSafeAmt) || withSafeAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /hwithdraw <ID_недвижимости> <сумма>");
+                    return;
+                }
+                if (_housing != null)
+                {
+                    if (_housing.TryWithdrawSafe(acc, withHId, withSafeAmt, out var sWithErr))
+                    {
+                        _saveAccount?.Invoke(acc);
+                        var prop = _housing.GetProperty(withHId);
+                        SendSystem(player, $"Вы взяли {withSafeAmt:N0} руб. из сейфа дома [{withHId}]. В сейфе осталось: {prop?.SafeCash:N0} руб.");
+                    }
+                    else
+                    {
+                        SendSystem(player, sWithErr);
+                    }
+                }
+                return;
+
+            case "haddmate":
+                if (args.Length < 2 || !int.TryParse(args[0], out var addHId))
+                {
+                    SendSystem(player, "Использование: /haddmate <ID_недвижимости> <ID/ник_жильца>");
+                    return;
+                }
+                if (_housing != null)
+                {
+                    var targetMate = FindPlayer(args[1]);
+                    if (targetMate == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var mateAcc = _accountOf(targetMate);
+                    if (mateAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+
+                    if (_housing.TryAddRoommate(acc.Id, addHId, mateAcc.Id, out var addMateErr))
+                    {
+                        SendSystem(player, $"Вы подселили {mateAcc.Username} в свой объект недвижимости [{addHId}].");
+                        SendSystem(targetMate, $"Гражданин {acc.Username} подселил вас в дом/квартиру [{addHId}]. Теперь у вас есть ключ!");
+                    }
+                    else
+                    {
+                        SendSystem(player, addMateErr);
+                    }
+                }
+                return;
+
+            case "hdelmate":
+                if (args.Length < 2 || !int.TryParse(args[0], out var delHId))
+                {
+                    SendSystem(player, "Использование: /hdelmate <ID_недвижимости> <ID/ник_жильца>");
+                    return;
+                }
+                if (_housing != null)
+                {
+                    var targetDel = FindPlayer(args[1]);
+                    Account? delAcc = targetDel != null ? _accountOf(targetDel) : _findAccountByName?.Invoke(args[1]);
+                    if (delAcc == null) { SendSystem(player, "Аккаунт жильца не найден."); return; }
+
+                    if (_housing.TryRemoveRoommate(acc.Id, delHId, delAcc.Id, out var delMateErr))
+                    {
+                        SendSystem(player, $"Вы выселили {delAcc.Username} из объекта недвижимости [{delHId}].");
+                        if (targetDel != null && targetDel.Exists)
+                        {
+                            SendSystem(targetDel, $"Гражданин {acc.Username} аннулировал ваше подселение в объект [{delHId}].");
+                        }
+                    }
+                    else
+                    {
+                        SendSystem(player, delMateErr);
                     }
                 }
                 return;
@@ -836,6 +1024,7 @@ public sealed class ChatSystem
                 _spectatingAdmins[player.Id] = (player.Position, player.Dimension);
                 player.Dimension = spTarget.Dimension;
                 player.Position = spTarget.Position + new Position(0, 0, 2.0f);
+                _notifyTeleport?.Invoke(player, player.Position);
                 player.Visible = false;
                 SendSystem(player, $"Вы вошли в режим слежки за {spTarget.Name} (ID {spTarget.Id}). Для выхода введите /spoff.");
                 GameLog.Admin("spectate", LogActor.Admin(acc.Id, acc.Username), spTarget.Name);
@@ -846,6 +1035,7 @@ public sealed class ChatSystem
                 {
                     player.Position = orig.originalPos;
                     player.Dimension = orig.originalDim;
+                    _notifyTeleport?.Invoke(player, player.Position);
                     player.Visible = true;
                     SendSystem(player, "Вы вышли из режима слежки и вернулись на исходную позицию.");
                 }
@@ -862,6 +1052,7 @@ public sealed class ChatSystem
                 var gotoTarget = FindPlayer(args[0]);
                 if (gotoTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 player.Position = gotoTarget.Position + new Position(0, 1.0f, 0.5f);
+                _notifyTeleport?.Invoke(player, player.Position);
                 SendSystem(player, $"Вы телепортировались к {gotoTarget.Name}.");
                 break;
 
@@ -870,6 +1061,7 @@ public sealed class ChatSystem
                 var gethereTarget = FindPlayer(args[0]);
                 if (gethereTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 gethereTarget.Position = player.Position + new Position(0, 1.0f, 0.5f);
+                _notifyTeleport?.Invoke(gethereTarget, gethereTarget.Position);
                 SendSystem(player, $"Вы телепортировали к себе {gethereTarget.Name}.");
                 SendSystem(gethereTarget, "Вы были телепортированы администратором.");
                 break;
@@ -932,8 +1124,9 @@ public sealed class ChatSystem
                 _saveAccount?.Invoke(jailAcc);
 
                 jailTarget.RemoveAllWeapons(true);
-                jailTarget.Dimension = 9999;
+                jailTarget.Dimension = FloVMP.Core.World.DimensionManager.AdminJailDimension;
                 jailTarget.Position = new Position(1651.2f, 2570.3f, 45.5f);
+                _notifyTeleport?.Invoke(jailTarget, jailTarget.Position);
 
                 Broadcast($"[Деморган] {jailTarget.Name} отправлен в деморган на {jailMins} мин. администратором {acc.Username}. Причина: {jailReason}");
                 GameLog.Punishment("jail", LogActor.Admin(acc.Id, acc.Username), jailTarget.Name, jailReason, jailMins * 60);
@@ -951,6 +1144,7 @@ public sealed class ChatSystem
                 }
                 unjailTarget.Dimension = 0;
                 unjailTarget.Position = SpawnPoints.MoscowRedSquare;
+                _notifyTeleport?.Invoke(unjailTarget, unjailTarget.Position);
                 Broadcast($"[Деморган] {unjailTarget.Name} освобождён из деморгана администратором {acc.Username}.");
                 GameLog.Admin("unjail", LogActor.Admin(acc.Id, acc.Username), unjailTarget.Name);
                 break;
@@ -1025,6 +1219,7 @@ public sealed class ChatSystem
                 var slapTarget = FindPlayer(args[0]);
                 if (slapTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 slapTarget.Position += new Position(0, 0, 2.5f);
+                _notifyTeleport?.Invoke(slapTarget, slapTarget.Position);
                 SendSystem(player, $"Вы подбросили {slapTarget.Name}.");
                 break;
 
@@ -1207,6 +1402,7 @@ public sealed class ChatSystem
                     return;
                 }
                 player.Position = new Position(x, y, z);
+                _notifyTeleport?.Invoke(player, player.Position);
                 SendSystem(player, $"Телепортирован в: X: {x:0.0}, Y: {y:0.0}, Z: {z:0.0}");
                 break;
 
@@ -1220,6 +1416,7 @@ public sealed class ChatSystem
                     _ => SpawnPoints.MoscowRedSquare
                 };
                 player.Position = targetPos;
+                _notifyTeleport?.Invoke(player, player.Position);
                 SendSystem(player, $"Телепортирован в локацию: {targetPreset.ToUpperInvariant()} (Москва)");
                 break;
 
@@ -1378,6 +1575,7 @@ public sealed class ChatSystem
                 if (promoteAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
                 promoteAcc.AdminLevel = newLvl;
                 _saveAccount?.Invoke(promoteAcc);
+                _setAdminExempt?.Invoke(promoteAcc.Id, newLvl > 0);
                 SendSystem(promoteTarget, $"[Администрация] Ваш статус изменён на: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl) администратором {acc.Username}.");
                 SendSystem(player, $"Вы назначили {promoteTarget.Name} на должность: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl).");
                 GameLog.Admin("promote", LogActor.Admin(acc.Id, acc.Username), promoteTarget.Name, ("newLevel", newLvl));
@@ -1399,6 +1597,7 @@ public sealed class ChatSystem
                 }
                 clearAcc.AdminLevel = 0;
                 _saveAccount?.Invoke(clearAcc);
+                _setAdminExempt?.Invoke(clearAcc.Id, false);
                 BroadcastAdmin($"[А-ЧАТ] Главный Администратор {acc.Username} снял права администратора с {clearAcc.Username}.");
                 SendSystem(player, $"Администраторские права успешно сняты с {clearAcc.Username}.");
                 GameLog.Admin("clearadmin", LogActor.Admin(acc.Id, acc.Username), clearAcc.Username);
@@ -1417,6 +1616,7 @@ public sealed class ChatSystem
                 if (fullAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
                 fullAcc.AdminLevel = fullLvl;
                 _saveAccount?.Invoke(fullAcc);
+                _setAdminExempt?.Invoke(fullAcc.Id, fullLvl > 0);
                 SendSystem(fullTarget, $"[Руководство] Ваш статус изменён на: {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl).");
                 SendSystem(player, $"Успешно установлен ранг {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl) для {fullTarget.Name}.");
                 GameLog.Admin("setadmin", LogActor.Admin(acc.Id, acc.Username), fullTarget.Name, ("level", fullLvl));

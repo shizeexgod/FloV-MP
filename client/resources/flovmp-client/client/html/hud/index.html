@@ -76,6 +76,114 @@
   .bar.hp > i { background: var(--hp); }
   .bar.armor > i { background: var(--armor); }
   .val { width: 26px; text-align: right; font-size: 11px; color: var(--text1); }
+
+  /* Спидометр (в правом нижнем углу) */
+  .speedo {
+    position: absolute; right: 20px; bottom: 22px;
+    width: 220px;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 14px 18px;
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity .3s ease, transform .3s ease;
+    pointer-events: none;
+  }
+  .speedo.active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .speedo-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .speed-val-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .speedo-num {
+    font-size: 40px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -1px;
+    color: var(--text0);
+  }
+  .speedo-unit {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text1);
+    letter-spacing: .5px;
+  }
+  .gear-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    background: rgba(255, 255, 255, .1);
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .fuel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .fuel-icon {
+    font-size: 13px;
+    color: var(--text1);
+  }
+  .bar.fuel {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, .1);
+  }
+  .bar.fuel > i {
+    background: var(--accent);
+  }
+  .fuel-pct {
+    font-size: 11px;
+    color: var(--text1);
+    width: 32px;
+    text-align: right;
+  }
+  .speedo-icons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, .06);
+  }
+  .ico {
+    font-size: 15px;
+    cursor: default;
+    transition: color .2s ease, opacity .2s ease;
+  }
+  .ico.off { color: rgba(255, 255, 255, .25); }
+  .ico.on-good { color: #3fb950; }
+  .ico.on-warn { color: #f59e0b; }
+  .ico.on-bad { color: #ef4444; }
+  .ico.on-accent { color: var(--accent); }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+  .blink {
+    animation: blink 1s infinite;
+  }
 </style>
 </head>
 <body>
@@ -98,9 +206,39 @@
     </div>
   </div>
 
+  <div class="speedo" id="speedo">
+    <div class="speedo-main">
+      <div class="speed-val-wrap">
+        <span class="speedo-num" id="speedo-val">0</span>
+        <span class="speedo-unit">КМ/Ч</span>
+      </div>
+      <span class="gear-badge" id="speedo-gear">N</span>
+    </div>
+    <div class="fuel-row">
+      <span class="fuel-icon">⛽</span>
+      <span class="bar fuel"><i id="fuel-fill" style="width: 100%;"></i></span>
+      <span class="fuel-pct"><span id="speedo-fuel">100</span>%</span>
+    </div>
+    <div class="speedo-icons">
+      <span class="ico off" id="speedo-seatbelt" title="Ремень (B)">⛊</span>
+      <span class="ico on-good" id="speedo-engine" title="Двигатель (2)">⚡</span>
+      <span class="ico on-bad" id="speedo-lock" title="Замок (L)">🔒</span>
+      <span class="ico off" id="speedo-lights" title="Фары">💡</span>
+    </div>
+  </div>
+
 <script>
   var $ = function (id) { return document.getElementById(id); };
   function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  var PRESETS = {
+    gold:{accent:'#fdd015',dim:'#b3790a',ink:'#1a1206'},
+    pink:{accent:'#ff3d8a',dim:'#b3316f',ink:'#1a0410'},
+    blue:{accent:'#4ac3ff',dim:'#2e8fdb',ink:'#031420'},
+    green:{accent:'#3fd98a',dim:'#22b86b',ink:'#031b10'},
+    purple:{accent:'#c084fc',dim:'#8b3fe8',ink:'#1a0f26'},
+    red:{accent:'#ff5d5d',dim:'#c23a3a',ink:'#210404'}
+  };
 
   if (typeof alt !== "undefined") {
     alt.on("flovmp:hud:init", function (serverName) {
@@ -115,6 +253,66 @@
       $("cash").textContent = Number(cash).toLocaleString("ru-RU");
       $("online").textContent = online;
       $("clock").textContent = pad(hour) + ":" + pad(minute);
+    });
+
+    alt.on("flovmp:hud:speedo", function (show, speed, fuel, gear, engine, locked, seatbelt, lights) {
+      var el = $("speedo");
+      if (!show) {
+        el.classList.remove("active");
+        return;
+      }
+      el.classList.add("active");
+      $("speedo-val").textContent = speed;
+      $("speedo-fuel").textContent = Math.round(fuel);
+      $("fuel-fill").style.width = Math.max(0, Math.min(100, fuel)) + "%";
+
+      var gText = gear === 0 ? "R" : (gear === -1 ? "N" : String(gear));
+      $("speedo-gear").textContent = gText;
+
+      var sb = $("speedo-seatbelt");
+      if (seatbelt) {
+        sb.className = "ico on-good";
+        sb.title = "Ремень пристёгнут";
+      } else {
+        sb.className = "ico on-warn blink";
+        sb.title = "Пристегните ремень [B]";
+      }
+
+      var eng = $("speedo-engine");
+      if (engine) {
+        eng.className = "ico on-good";
+        eng.title = "Двигатель заведён [2]";
+      } else {
+        eng.className = "ico on-bad";
+        eng.title = "Двигатель заглушен [2]";
+      }
+
+      var lk = $("speedo-lock");
+      if (locked) {
+        lk.className = "ico on-bad";
+        lk.textContent = "🔒";
+        lk.title = "Двери заперты [L]";
+      } else {
+        lk.className = "ico on-good";
+        lk.textContent = "🔓";
+        lk.title = "Двери открыты [L]";
+      }
+
+      var lt = $("speedo-lights");
+      if (lights) {
+        lt.className = "ico on-accent";
+      } else {
+        lt.className = "ico off";
+      }
+    });
+
+    alt.on("flovmp:settings:accent", function (colorId) {
+      var p = PRESETS[colorId] || PRESETS.gold;
+      var s = document.documentElement.style;
+      s.setProperty('--accent', p.accent);
+      s.setProperty('--accent-dim', p.dim);
+      s.setProperty('--accent-ink', p.ink);
+      try { localStorage.setItem('flovmp:accent', colorId); } catch(e) {}
     });
   }
 </script>

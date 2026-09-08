@@ -161,4 +161,45 @@ public class AntiCheatTests
         Assert.False(valid);
         Assert.Contains("отсутствующее в инвентаре", violation);
     }
+
+    [Fact]
+    public void Legitimate_Teleport_Does_Not_Trigger_Violation()
+    {
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(1, "Player", new Vector3D(0, 0, 0), t0);
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        // Notify legitimate teleport to 2000, 3000, 50 at t1 = t0 + 0.5s
+        var t1 = t0.AddSeconds(0.5);
+        var targetPos = new Vector3D(2000, 3000, 50);
+        ac.NotifyLegitimateTeleport(1, targetPos, t1);
+
+        // Check movement right at the new position
+        bool valid = ac.CheckMovement(1, targetPos, inVehicle: false, timestamp: t1.AddSeconds(0.1));
+
+        Assert.True(valid);
+        Assert.Null(violation);
+    }
+
+    [Fact]
+    public void Admin_Exemption_Bypasses_Movement_Checks()
+    {
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(10, "Admin", new Vector3D(0, 0, 0), t0);
+        ac.SetAdminExemption(10, true);
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        // Admin flies 5000 meters in 0.1 sec
+        var t1 = t0.AddSeconds(0.1);
+        bool valid = ac.CheckMovement(10, new Vector3D(5000, 5000, 100), inVehicle: false, timestamp: t1);
+
+        Assert.True(valid);
+        Assert.Null(violation);
+    }
 }

@@ -140,7 +140,7 @@ public class AntiCheatSystem
         if (!player.Exists) return;
         var pos = new Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
         var state = _service.GetOrCreateState(account.Id, account.Username, pos);
-        if (account.AdminLevel >= 4)
+        if (account.AdminLevel > 0)
         {
             _service.SetAdminExemption(account.Id, true);
         }

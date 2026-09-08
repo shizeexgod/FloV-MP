@@ -43,6 +43,12 @@ public sealed class SpatialHashGrid<T> where T : notnull
     /// </summary>
     public void InsertOrUpdate(T entity, Vector3D position, int dimension = 0)
     {
+        if (float.IsNaN(position.X) || float.IsNaN(position.Y) || float.IsNaN(position.Z) ||
+            float.IsInfinity(position.X) || float.IsInfinity(position.Y) || float.IsInfinity(position.Z))
+        {
+            return;
+        }
+
         int cellX = GetCellCoordinate(position.X);
         int cellY = GetCellCoordinate(position.Y);
         var newCellKey = (cellX, cellY, dimension);
@@ -266,6 +272,7 @@ public sealed class SpatialHashGrid<T> where T : notnull
 
     private int GetCellCoordinate(float worldCoord)
     {
+        if (float.IsNaN(worldCoord) || float.IsInfinity(worldCoord)) return 0;
         return (int)Math.Floor(worldCoord / _cellSize);
     }
 

@@ -42,22 +42,34 @@ public class AntiCheatService
 
     public void NotifyLegitimateTeleport(int accountId, Vector3D newPos, DateTime? timestamp = null)
     {
-        if (_players.TryGetValue(accountId, out var state))
+        var time = timestamp ?? DateTime.UtcNow;
+        var state = _players.GetOrAdd(accountId, id => new PlayerTrackingState
         {
-            var time = timestamp ?? DateTime.UtcNow;
-            state.LastValidPosition = newPos;
-            state.LastTrackedTime = time;
-            state.LastSpawnOrTeleportTime = time;
-            state.ResetViolations();
-        }
+            AccountId = id,
+            Username = string.Empty,
+            LastValidPosition = newPos,
+            LastTrackedTime = time,
+            LastSpawnOrTeleportTime = time
+        });
+
+        state.LastValidPosition = newPos;
+        state.LastTrackedTime = time;
+        state.LastSpawnOrTeleportTime = time;
+        state.ResetViolations();
     }
 
     public void SetAdminExemption(int accountId, bool isExempt)
     {
-        if (_players.TryGetValue(accountId, out var state))
+        var state = _players.GetOrAdd(accountId, id => new PlayerTrackingState
         {
-            state.IsAdminExempt = isExempt;
-        }
+            AccountId = id,
+            Username = string.Empty,
+            LastValidPosition = Vector3D.Zero,
+            LastTrackedTime = DateTime.UtcNow,
+            LastSpawnOrTeleportTime = DateTime.UtcNow
+        });
+
+        state.IsAdminExempt = isExempt;
     }
 
     public bool IsAdminExempt(int accountId)

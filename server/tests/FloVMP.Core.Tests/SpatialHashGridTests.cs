@@ -104,5 +104,23 @@ namespace FloVMP.Core.Tests
             // Повторное удаление возвращает false
             Assert.False(grid.Remove(99));
         }
+
+        [Fact]
+        public void NaN_And_Infinity_Coordinates_Are_Gracefully_Rejected()
+        {
+            var grid = new SpatialHashGrid<int>(cellSize: 64.0f);
+
+            grid.InsertOrUpdate(1, new Vector3D(float.NaN, 0f, 0f));
+            grid.InsertOrUpdate(2, new Vector3D(0f, float.PositiveInfinity, 0f));
+            grid.InsertOrUpdate(3, new Vector3D(0f, 0f, float.NegativeInfinity));
+
+            Assert.Equal(0, grid.Count);
+
+            var nearby = grid.FindInRadius(new Vector3D(float.NaN, 0f, 0f), radius: 10f);
+            Assert.Empty(nearby);
+
+            var nearbyInf = grid.FindInRadius(new Vector3D(0f, 0f, 0f), radius: float.PositiveInfinity);
+            Assert.Empty(nearbyInf);
+        }
     }
 }

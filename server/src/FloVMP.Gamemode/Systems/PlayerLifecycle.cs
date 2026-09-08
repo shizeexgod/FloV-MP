@@ -16,6 +16,12 @@ namespace FloVMP.Gamemode;
 public sealed class PlayerLifecycle
 {
     private int _spawnCounter = -1;
+    private readonly Action<IPlayer, AltV.Net.Data.Position>? _notifyTeleport;
+
+    public PlayerLifecycle(Action<IPlayer, AltV.Net.Data.Position>? notifyTeleport = null)
+    {
+        _notifyTeleport = notifyTeleport;
+    }
 
     public void Attach()
     {
@@ -38,6 +44,8 @@ public sealed class PlayerLifecycle
         player.Model = (uint)PedModel.FreemodeMale01;
         player.Dimension = 0;
         player.Spawn(position, 0);
+
+        _notifyTeleport?.Invoke(player, position);
 
         player.Emit("flovmp:client:welcome", player.Name, index);
 

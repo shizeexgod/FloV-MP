@@ -435,7 +435,65 @@ alt.onServer('flovmp:inv:notice', (text) => {
     if (inventoryView) inventoryView.emit('flovmp:inv:notice', text);
 });
 
-// Клавиши: F4 — NoClip, T — Чат, I — Инвентарь, F8/F11 — Консоль разработчика, F9 — Настройки
+// --- Состояние транспорта и спидометр ----------------------------------
+let seatbeltOn = false;
+let inVehiclePrev = false;
+
+alt.setInterval(() => {
+    if (!inGame || !hudView) return;
+    const player = alt.Player.local;
+    if (!player || !player.valid) return;
+
+    const veh = player.vehicle;
+    if (veh && veh.valid) {
+        inVehiclePrev = true;
+        let speed = 0;
+        try {
+            speed = Math.round(native.getEntitySpeed(veh.scriptID) * 3.6);
+        } catch (e) {
+            speed = 0;
+        }
+
+        let fuel = 100.0;
+        try {
+            if (veh.hasStreamSyncedMetaData('fuel')) {
+                fuel = veh.getStreamSyncedMetaData('fuel');
+            }
+        } catch (e) { }
+
+        let gear = 1;
+        try {
+            gear = veh.gear;
+        } catch (e) { }
+
+        let engine = false;
+        try {
+            engine = native.getIsVehicleEngineRunning(veh.scriptID);
+        } catch (e) { }
+
+        let locked = false;
+        try {
+            locked = veh.lockState === 2;
+        } catch (e) { }
+
+        let lights = false;
+        try {
+            const [hasLights, lightsOn, highbeamsOn] = native.getVehicleLightsState(veh.scriptID);
+            lights = lightsOn || highbeamsOn;
+        } catch (e) { }
+
+        hudView.emit('flovmp:hud:speedo', true, speed, fuel, gear, engine, locked, seatbeltOn, lights);
+    } else if (inVehiclePrev) {
+        inVehiclePrev = false;
+        seatbeltOn = false;
+        try {
+            native.setPedConfigFlag(player.scriptID, 32, true);
+        } catch (e) { }
+        hudView.emit('flovmp:hud:speedo', false, 0, 0, 0, false, false, false, false);
+    }
+}, 50);
+
+// Клавиши: F4 — NoClip, T — Чат, I — Инвентарь, F8/F11 — Консоль разработчика, F9 — Настройки, B — Ремень, 2 — Двигатель, L — Двери
 alt.on('keyup', (key) => {
     if (key === 119 || key === 122) { // F8 (119) or F11 (122)
         toggleDevConsole();
@@ -447,6 +505,43 @@ alt.on('keyup', (key) => {
         if (inGame && !chatTyping && !authView) {
             toggleInventory();
             return;
+        }
+    }
+
+    if (key === 66) { // B (66) — Ремень безопасности
+        if (inGame && !chatTyping && !authView) {
+            const player = alt.Player.local;
+            if (player && player.valid && player.vehicle) {
+                seatbeltOn = !seatbeltOn;
+                try {
+                    native.setPedConfigFlag(player.scriptID, 32, !seatbeltOn);
+                } catch (e) { }
+                if (chatView) {
+                    const status = seatbeltOn ? 'пристёгнут' : 'отстёгнут';
+                    chatView.emit('flovmp:chat:msg', 'system', 'Транспорт', `Ремень безопасности ${status}.`);
+                }
+                return;
+            }
+        }
+    }
+
+    if (key === 50) { // 2 (50) — Двигатель авто
+        if (inGame && !chatTyping && !authView) {
+            const player = alt.Player.local;
+            if (player && player.valid && player.vehicle) {
+                alt.emitServer('flovmp:chat:say', '/engine');
+                return;
+            }
+        }
+    }
+
+    if (key === 76) { // L (76) — Замок дверей авто
+        if (inGame && !chatTyping && !authView) {
+            const player = alt.Player.local;
+            if (player && player.valid) {
+                alt.emitServer('flovmp:chat:say', '/lock');
+                return;
+            }
         }
     }
 

@@ -50,11 +50,6 @@ public class GamemodeResource : Resource
     {
         Alt.Log($"[FloV:MP] core: gamemode start (v{BuildInfo.Version})");
 
-        _playerLifecycle = new PlayerLifecycle();
-        _playerLifecycle.Attach();
-
-        _hud = new HudSystem(ServerName);
-
         var dataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
         GameLog.Configure(new FileLogSink(Path.Combine(dataDir, "logs")));
         GameLog.System("gamemode_start", ("version", BuildInfo.Version));
@@ -65,6 +60,13 @@ public class GamemodeResource : Resource
 
         _auth = new AuthSystem(accountStore, OnPlayerAuthed);
         _auth.Attach();
+
+        _antiCheat = new AntiCheatSystem(p => _auth?.AccountOf(p));
+
+        _playerLifecycle = new PlayerLifecycle(notifyTeleport: (p, pos) => _antiCheat?.NotifyAdminTeleport(p, pos));
+        _playerLifecycle.Attach();
+
+        _hud = new HudSystem(ServerName);
 
         _economy = new FloVMP.Core.Economy.EconomyService();
         _factions = new FloVMP.Core.Factions.FactionService();
@@ -88,6 +90,8 @@ public class GamemodeResource : Resource
             documents: _documents,
             housing: _housing,
             inventory: _inv,
+            notifyTeleport: (p, pos) => _antiCheat?.NotifyAdminTeleport(p, pos),
+            setAdminExempt: (accId, exempt) => _antiCheat?.Service.SetAdminExemption(accId, exempt),
             restartServer: sec => Task.Run(async () =>
             {
                 await Task.Delay(sec * 1000);
@@ -159,8 +163,6 @@ public class GamemodeResource : Resource
             return await Task.FromResult("OK");
         };
         _agent.Start();
-
-        _antiCheat = new AntiCheatSystem(p => _auth?.AccountOf(p));
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnServerStarted += OnServerStarted;
@@ -253,6 +255,7 @@ public class GamemodeResource : Resource
                     if (p != null && p.Exists)
                     {
                         p.Position = new AltV.Net.Data.Position(425.1f, -979.5f, 30.7f);
+                        _antiCheat?.NotifyAdminTeleport(p, p.Position);
                         p.Emit("flovmp:chat:system", "[ГУ МВД] Срок вашего ареста истёк. Вы освобождены из камеры предварительного заключения.");
                     }
                 }
