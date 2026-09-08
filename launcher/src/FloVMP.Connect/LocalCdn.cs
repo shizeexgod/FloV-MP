@@ -238,7 +238,19 @@ public sealed class LocalCdn : IDisposable
             if (byName is null) return (404, "text/plain", "Not Found"u8.ToArray());
             file = byName;
         }
-        return (200, "application/octet-stream", File.ReadAllBytes(file));
+
+        try
+        {
+            using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var ms = new MemoryStream();
+            fs.CopyTo(ms);
+            return (200, "application/octet-stream", ms.ToArray());
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[cdn] error reading {file}: {ex.Message}");
+            return (500, "text/plain", Encoding.UTF8.GetBytes($"Error: {ex.Message}"));
+        }
     }
 
     private string BuildClientManifest()
@@ -292,7 +304,7 @@ public sealed class LocalCdn : IDisposable
 
     private static string Sha1(string file)
     {
-        using var fs = File.OpenRead(file);
+        using var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         return Convert.ToHexString(SHA1.HashData(fs)).ToLowerInvariant();
     }
 

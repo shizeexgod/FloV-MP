@@ -351,24 +351,33 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
 
 static string? ResolveClientDir()
 {
-    var candidates = new[]
+    var dir = AppContext.BaseDirectory;
+    for (var i = 0; i < 8; i++)
     {
-        Path.Combine(Environment.CurrentDirectory, "runtime", "client"),
-        Path.Combine(AppContext.BaseDirectory, "client"),
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "runtime", "client"),
-        @"C:\FloV-MP\runtime\client",
-    };
-
-    foreach (var c in candidates)
-    {
-        try
+        var candidate = Path.Combine(dir, "runtime", "client");
+        if (Directory.Exists(candidate) &&
+            (File.Exists(Path.Combine(candidate, "altv.exe")) || File.Exists(Path.Combine(candidate, "flovmp.exe"))))
         {
-            var full = Path.GetFullPath(c);
-            if (Directory.Exists(full) && File.Exists(Path.Combine(full, "altv.exe")))
-                return full;
+            return Path.GetFullPath(candidate);
         }
-        catch { }
+
+        var parent = Directory.GetParent(dir);
+        if (parent == null) break;
+        dir = parent.FullName;
     }
+
+    var hardcoded = @"C:\FloV-MP\runtime\client";
+    if (Directory.Exists(hardcoded) &&
+        (File.Exists(Path.Combine(hardcoded, "altv.exe")) || File.Exists(Path.Combine(hardcoded, "flovmp.exe"))))
+    {
+        return hardcoded;
+    }
+
+    var appData = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "FloridaV", "runtime", "client");
+    if (Directory.Exists(appData)) return appData;
+
     return null;
 }
 

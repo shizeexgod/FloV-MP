@@ -1451,8 +1451,17 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   const btn = document.getElementById('btn-play');
   const status = document.getElementById('play-status');
   if (!settings.gtaPath) {
-    status.textContent = 'Папка GTA V не найдена. Укажи путь в настройках.';
+    status.textContent = 'Поиск папки GTA V…';
+    status.classList.remove('error');
+    await detectGta();
+  }
+  if (!settings.gtaPath) {
+    status.textContent = 'Папка GTA V не найдена. Укажите путь в настройках.';
     status.classList.add('error');
+    selectSettingsTab('game');
+    settingsOverlay.classList.remove('hidden');
+    const input = document.getElementById('set-gtapath');
+    if (input) input.focus();
     return;
   }
   btn.disabled = true;
@@ -1463,9 +1472,11 @@ document.getElementById('btn-play').addEventListener('click', async () => {
 
   // Сбросить отложенное сохранение до старта — PlayService на нативной
   // стороне читает settings.json (режим окна, доп. аргументы, приоритет,
-  // FPS, пресет графики). Без флеша свежая правда могла не долететь.
+  // FPS, пресет графики).
   clearTimeout(saveTimer);
   await window.floridaV.saveSettings(settings);
+
+  updateLaunchProgress({ phase: 'Инициализация коннектора…', percent: 20 });
 
   const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);
 
@@ -1477,8 +1488,10 @@ document.getElementById('btn-play').addEventListener('click', async () => {
     if (settings.minimizeOnPlay) setTimeout(() => window.floridaV.minimize(), 1500);
   } else {
     closeLaunchModal();
-    status.textContent = (result && result.error) || 'Неизвестная ошибка запуска.';
+    const errMsg = (result && result.error) || 'Неизвестная ошибка запуска.';
+    status.textContent = errMsg;
     status.classList.add('error');
+    alert(`Ошибка запуска игры:\n${errMsg}`);
   }
 });
 

@@ -39,7 +39,10 @@ public static class PlayService
         var safeHost = (serverHost ?? "127.0.0.1").Trim();
         var safePort = serverPort <= 0 ? 7788 : serverPort;
 
-        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\"";
+        var clientDir = FindClientDir();
+        var clientArg = !string.IsNullOrWhiteSpace(clientDir) ? $" --client \"{clientDir}\"" : "";
+
+        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\"{clientArg}";
 
         // Настройки запуска из settings.json (те же, что редактируются на
         // вкладке «Игра»). Раньше сохранялись, но никуда не передавались —
@@ -71,13 +74,53 @@ public static class PlayService
                 UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(connectExe),
             };
-            Process.Start(psi);
+            var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                return new LaunchResult(false, "Не удалось запустить процесс FloVMP.Connect.exe");
+            }
             return new LaunchResult(true);
         }
         catch (Exception ex)
         {
             return new LaunchResult(false, $"Ошибка запуска: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Находит папку рантайма клиента alt:V (runtime/client).
+    /// </summary>
+    private static string? FindClientDir()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var dir = baseDir;
+        for (var i = 0; i < 8; i++)
+        {
+            var candidate = Path.Combine(dir, "runtime", "client");
+            if (Directory.Exists(candidate) &&
+                (File.Exists(Path.Combine(candidate, "altv.exe")) || File.Exists(Path.Combine(candidate, "flovmp.exe"))))
+            {
+                return Path.GetFullPath(candidate);
+            }
+
+            var parent = Directory.GetParent(dir);
+            if (parent == null) break;
+            dir = parent.FullName;
+        }
+
+        var hardcoded = @"C:\FloV-MP\runtime\client";
+        if (Directory.Exists(hardcoded) &&
+            (File.Exists(Path.Combine(hardcoded, "altv.exe")) || File.Exists(Path.Combine(hardcoded, "flovmp.exe"))))
+        {
+            return hardcoded;
+        }
+
+        var appData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FloridaV", "runtime", "client");
+        if (Directory.Exists(appData)) return appData;
+
+        return null;
     }
 
     /// <summary>
@@ -115,6 +158,9 @@ public static class PlayService
             var devRelease = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
                 "bin", "Release", "net8.0-windows", "FloVMP.Connect.exe");
             if (File.Exists(devRelease)) return devRelease;
+
+            var devDist = Path.Combine(dir, "launcher", "electron", "native-dist", "FloVMP.Connect.exe");
+            if (File.Exists(devDist)) return devDist;
 
             var devDebug = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
                 "bin", "Debug", "net8.0-windows", "FloVMP.Connect.exe");

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, CreditCard, Download, KeyRound, Layers, Percent, Plus, Server, Terminal, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, CreditCard, Download, KeyRound, Layers, Percent, Plus, ScrollText, Server, Settings, Terminal, Zap } from 'lucide-react';
 import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
@@ -20,11 +20,15 @@ import { SdkTab } from '@/components/dashboard/SdkTab';
 import { BuilderTab } from '@/components/dashboard/BuilderTab';
 import { BillingTab } from '@/components/dashboard/BillingTab';
 import { AffiliateTab } from '@/components/dashboard/AffiliateTab';
+import { WatchdogTab } from '@/components/dashboard/WatchdogTab';
+import { LogsTab } from '@/components/dashboard/LogsTab';
+import { SettingsTab } from '@/components/dashboard/SettingsTab';
 import { IpBindModal } from '@/components/dashboard/IpBindModal';
 import { NewLicenseModal } from '@/components/dashboard/NewLicenseModal';
 import { NewProjectModal } from '@/components/dashboard/NewProjectModal';
 import { ProjectSettingsModal } from '@/components/dashboard/ProjectSettingsModal';
 import { InvoiceModal } from '@/components/dashboard/InvoiceModal';
+import type { TwoFaState } from '@/components/dashboard/_ctx';
 
 const TABS: { key: TabKey; icon: React.ElementType }[] = [
   { key: 'projects', icon: Server },
@@ -32,10 +36,13 @@ const TABS: { key: TabKey; icon: React.ElementType }[] = [
   { key: 'troubleshoot', icon: Zap },
   { key: 'overview', icon: KeyRound },
   { key: 'telemetry', icon: Activity },
+  { key: 'watchdog', icon: AlertTriangle },
+  { key: 'logs', icon: ScrollText },
   { key: 'sdk', icon: Download },
   { key: 'builder', icon: Layers },
   { key: 'billing', icon: CreditCard },
   { key: 'affiliate', icon: Percent },
+  { key: 'settings', icon: Settings },
 ];
 
 /* =============================================================== */
@@ -143,8 +150,68 @@ export default function DashboardPage() {
   const [buildResult, setBuildResult] = useState<LauncherBuildResult | null>(null);
   const stageTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  /* 2FA (TOTP) — /api/v1/account/2fa */
+  const [twoFa, setTwoFa] = useState<TwoFaState>({ enabled: false, loading: true, setup: null, code: '', busy: false, err: '' });
+
+  const load2fa = async () => {
+    try {
+      const r = await fetch('/api/v1/account/2fa');
+      const d = await r.json();
+      setTwoFa((s) => ({ ...s, enabled: !!d.enabled, loading: false }));
+    } catch {
+      setTwoFa((s) => ({ ...s, loading: false }));
+    }
+  };
+
+  const start2fa = async () => {
+    setTwoFa((s) => ({ ...s, busy: true, err: '' }));
+    try {
+      const r = await fetch('/api/v1/account/2fa', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || D.toast.err);
+      setTwoFa((s) => ({ ...s, setup: { secret: d.secret, otpauthUri: d.otpauthUri }, code: '', busy: false }));
+    } catch (e: any) {
+      setTwoFa((s) => ({ ...s, busy: false, err: e.message }));
+    }
+  };
+
+  const confirm2fa = async () => {
+    setTwoFa((s) => ({ ...s, busy: true, err: '' }));
+    try {
+      const r = await fetch('/api/v1/account/2fa/enable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: twoFa.code.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || D.toast.twoFaErr);
+      setTwoFa({ enabled: true, loading: false, setup: null, code: '', busy: false, err: '' });
+      show(D.toast.twoFaOn);
+    } catch (e: any) {
+      setTwoFa((s) => ({ ...s, busy: false, err: e.message }));
+    }
+  };
+
+  const disable2fa = async () => {
+    setTwoFa((s) => ({ ...s, busy: true, err: '' }));
+    try {
+      const r = await fetch('/api/v1/account/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: twoFa.code.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || D.toast.twoFaErr);
+      setTwoFa({ enabled: false, loading: false, setup: null, code: '', busy: false, err: '' });
+      show(D.toast.twoFaOff);
+    } catch (e: any) {
+      setTwoFa((s) => ({ ...s, busy: false, err: e.message }));
+    }
+  };
+
   /* ------------------------------------------------------------- */
   useEffect(() => {
+    void load2fa();
     void loadDashboard();
     return () => {
       stageTimers.current.forEach(clearTimeout);
@@ -730,6 +797,7 @@ export default function DashboardPage() {
     telemetry, loadingTelemetry, sendingHb,
     bProject, setBProject, bColor, setBColor, bIp, setBIp, bPort, setBPort,
     building, buildStage, buildResult,
+    twoFa, setTwoFa, start2fa, confirm2fa, disable2fa,
     loadServers, handleSelectProject, openProjectSettings, saveProjectSettings, testWebhooks,
     loadResources, handleResourceControl, toggleSseStream, createProjectHandler,
     handleDispatchCommand, sendConsoleCommand, runTroubleshoot, loadInvoices, loadTelemetry,
@@ -799,6 +867,12 @@ export default function DashboardPage() {
       {/* ============ TELEMETRY ============ */}
       {tab === 'telemetry' && <TelemetryTab />}
 
+      {/* ============ WATCHDOG & CRASHES ============ */}
+      {tab === 'watchdog' && <WatchdogTab />}
+
+      {/* ============ LOGS ============ */}
+      {tab === 'logs' && <LogsTab />}
+
       {/* ============ DOWNLOADS & SDK ============ */}
       {tab === 'sdk' && <SdkTab />}
 
@@ -810,6 +884,9 @@ export default function DashboardPage() {
 
       {/* ============ AFFILIATE ============ */}
       {tab === 'affiliate' && <AffiliateTab />}
+
+      {/* ============ SETTINGS ============ */}
+      {tab === 'settings' && <SettingsTab />}
 
       {/* ============ MODALS ============ */}
       <IpBindModal />

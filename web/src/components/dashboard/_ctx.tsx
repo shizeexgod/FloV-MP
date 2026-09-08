@@ -110,7 +110,17 @@ export interface LauncherBuildResult {
 
 export type TabKey =
   | 'projects' | 'console' | 'troubleshoot' | 'overview'
-  | 'telemetry' | 'sdk' | 'builder' | 'billing' | 'affiliate';
+  | 'telemetry' | 'sdk' | 'builder' | 'billing' | 'affiliate'
+  | 'watchdog' | 'logs' | 'settings';
+
+export interface TwoFaState {
+  enabled: boolean;
+  loading: boolean;
+  setup: { secret: string; otpauthUri: string } | null;
+  code: string;
+  busy: boolean;
+  err: string;
+}
 
 /* ----------------------------- shared consts / helpers ----------------------------- */
 export const COLOR_PRESETS = [
@@ -200,6 +210,11 @@ export interface DashCtx {
   building: boolean;
   buildStage: number;
   buildResult: LauncherBuildResult | null;
+  twoFa: TwoFaState;
+  setTwoFa: React.Dispatch<React.SetStateAction<TwoFaState>>;
+  start2fa: () => void;
+  confirm2fa: () => void;
+  disable2fa: () => void;
   // setters + handlers — loosely typed
   [key: string]: any;
 }

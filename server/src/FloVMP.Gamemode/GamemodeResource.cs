@@ -38,6 +38,7 @@ public class GamemodeResource : Resource
     private FloVMP.Core.Housing.HousingService? _housing;
     private FloVMP.Core.Characters.FactionUniformService? _uniforms;
     private RemoteServerAgent? _agent;
+    private FloVMP.Gamemode.Systems.Api.HttpApiSystem? _httpApi;
     private FloVMP.Core.Spatial.AdaptiveTickManager<uint>? _tickManager;
     private FloVMP.Core.Spatial.OcclusionCullingService? _occlusion;
     
@@ -61,6 +62,19 @@ public class GamemodeResource : Resource
 
         _auth = new AuthSystem(accountStore, OnPlayerAuthed);
         _auth.Attach();
+
+        // Встроенный HTTP-API (:7799) — авторизация для лаунчера + живой /info.
+        // На Linux отдельного FloVMP.ServerLauncher нет, поэтому API здесь.
+        int apiPort = int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_API_PORT"), out var pp) ? pp : 7799;
+        _httpApi = new FloVMP.Gamemode.Systems.Api.HttpApiSystem(
+            store: accountStore,
+            playerCount: () => Alt.GetAllPlayers().Count,
+            maxPlayers: 1500,
+            serverName: "Держава Онлайн",
+            gamemode: ServerName,
+            log: msg => Alt.Log(msg),
+            port: apiPort);
+        _httpApi.Start();
 
         _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
         _inv.Attach();
@@ -176,6 +190,9 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
+        _httpApi?.Stop();
+        _httpApi = null;
+
         _agent?.Stop();
         _agent?.Dispose();
         _agent = null;
