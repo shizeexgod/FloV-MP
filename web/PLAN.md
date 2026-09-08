@@ -61,13 +61,12 @@ TxAdminConsole (SSE), Logs, LauncherBuilder, Billing, ApiWebhooks, SDK, AiAssist
 2. ✅ **Наполнение страниц** — home/features/pricing/projects/roadmap/contact/docs/legal
    + not-found; все ссылки ведут на реальные маршруты; интерактив (тариф-периоды,
    FAQ, форма, docs verify/SSE) протестирован
-3. ✅ **Личный кабинет + админ-панель** — работают, все 9 вкладок + 5 модалок,
-   подключены к реальным API (license, projects/servers/resources, agent
-   SSE+command, billing, telemetry, ai/troubleshoot, launcher). Шапка/таб-бар в
-   чистом стиле. **Полная i18n RU/EN** — все строки в dict.ts (ветки dash.* и
-   adm.*), проверено в браузере в обоих языках. Декомпозиция на отдельные файлы
-   НЕ делалась осознанно (риск регрессии на рабочем 2700-строчном компоненте,
-   поведение и так модульное по вкладкам).
+3. ✅ **Личный кабинет + админ-панель** — все 9 вкладок + 5 модалок, подключены
+   к реальным API, чистый стиль, **полная i18n RU/EN** (dict.ts: dash.* / adm.*).
+   **Декомпозиция выполнена**: `dashboard/page.tsx` 2657 → 828 строк — контейнер
+   держит состояние/хендлеры/загрузку, отдаёт через `DashboardProvider` (context).
+   `components/dashboard/`: `_ctx.tsx` + 9 вкладок + 5 модалок = 15 файлов.
+   Поведение не менялось (JSX перенесён дословно), проверено в браузере RU и EN.
 4. 🔲 **Бэкенд**: 2FA TOTP, RBAC, grace period, agent poll-очередь, публичный API HMAC
 5. 🟡 **Vercel**: `vercel.json` + `.env.example` готовы. Осталось: миграция
    файлового стора (portal-db.json / сборки лаунчера) на R2/VDS, т.к. FS Vercel r/o
