@@ -1476,6 +1476,28 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   clearTimeout(saveTimer);
   await window.floridaV.saveSettings(settings);
 
+  // Движок клиента alt:V — если не установлен/устарел, качаем с CDN один раз
+  // (прогресс в той же модалке). FloVMP.Connect потом берёт его из
+  // %LOCALAPPDATA%\FloridaV\engine\.
+  try {
+    const eng = await window.floridaV.engineStatus?.();
+    if (eng && (!eng.installed || !eng.upToDate)) {
+      updateLaunchProgress({
+        phase: eng.installed ? 'Обновление движка…' : 'Первый запуск: загрузка движка',
+        percent: 0,
+      });
+      const dl = await window.floridaV.downloadEngine?.();
+      if (!dl || !dl.ok) {
+        closeLaunchModal();
+        btn.disabled = false; btn.textContent = 'ИГРАТЬ';
+        const m = (dl && dl.error) || 'не удалось загрузить движок';
+        status.textContent = `Движок не установлен: ${m}`;
+        status.classList.add('error');
+        return;
+      }
+    }
+  } catch { /* engineStatus недоступен (старый мост) — пробуем запуск как есть */ }
+
   updateLaunchProgress({ phase: 'Инициализация коннектора…', percent: 20 });
 
   const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);

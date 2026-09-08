@@ -65,6 +65,11 @@ if (!window.floridaV) {
 
     serverStatus: async () => ({ online: false, players: 0 }),
 
+    // Движок в браузерном превью считаем установленным (игру всё равно не
+    // запустить), кнопка загрузки не мешает кликать по остальному UI.
+    engineStatus: async () => ({ installed: true, upToDate: true, version: 'dev', latestVersion: 'dev', sizeBytes: 0 }),
+    downloadEngine: async () => ({ ok: true, upToDate: true, version: 'dev' }),
+
     // Демо-прогресс для модалки запуска (в браузере игру не запустить).
     _progressCb: null,
     _demoTimer: null,

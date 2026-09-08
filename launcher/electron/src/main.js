@@ -197,6 +197,109 @@ native.on?.('download', (data) => {
   mainWindow?.webContents.send('download:progress', data);
 });
 
+// ─── Движок клиента alt:V (Фаза 2 CDN-раздача) ──────────────────────────
+// Лаунчер тонкий: сам движок (~430 МБ: libce2/CEF/altv-client) не вшит в
+// инсталлятор, а качается один раз с CDN сервера в
+// %LOCALAPPDATA%\FloridaV\engine\ и проверяется по sha256 из манифеста.
+// FloVMP.Connect подхватывает его оттуда (см. PlayService.FindClientDir).
+const ENGINE_DIR = path.join(SHARED_DIR, 'engine');
+const ENGINE_MARKER = path.join(ENGINE_DIR, '.flovmp-engine.json');
+const DEFAULT_CDN = process.env.FLOVMP_CDN || 'http://188.127.229.224/cdn';
+
+function readEngineMarker() {
+  try { return JSON.parse(fs.readFileSync(ENGINE_MARKER, 'utf8')); } catch { return null; }
+}
+ipcMain.handle('native:engineStatus', async (_e, cdnBase) => {
+  const marker = readEngineMarker();
+  const entry = marker?.entry || 'flovmp.exe';
+  const entryOk = fs.existsSync(path.join(ENGINE_DIR, entry))
+    || fs.existsSync(path.join(ENGINE_DIR, 'altv.exe'));
+  let latest = null;
+  try {
+    const base = (cdnBase || DEFAULT_CDN).replace(/\/+$/, '');
+    const res = await fetch(`${base}/engine/engine-manifest.json`, { signal: AbortSignal.timeout(6000) });
+    if (res.ok) latest = await res.json();
+  } catch {}
+  return {
+    installed: !!marker && entryOk,
+    version: marker?.version || null,
+    latestVersion: latest?.version || null,
+    upToDate: !!marker && entryOk && (!latest || marker.version === latest.version),
+    sizeBytes: latest?.archive?.size || latest?.totalBytes || 0,
+  };
+});
+
+ipcMain.handle('native:downloadEngine', async (_e, cdnBase) => {
+  const base = (cdnBase || DEFAULT_CDN).replace(/\/+$/, '');
+  const send = (d) => mainWindow?.webContents.send('download:progress', d);
+  try {
+    send({ phase: 'Проверка версии движка…', percent: 0, downloaded: 0, total: 0, speed: 0 });
+    const man = await fetch(`${base}/engine/engine-manifest.json`, { signal: AbortSignal.timeout(10000) })
+      .then((r) => { if (!r.ok) throw new Error(`манифест ${r.status}`); return r.json(); });
+
+    const marker = readEngineMarker();
+    if (marker && marker.version === man.version
+        && fs.existsSync(path.join(ENGINE_DIR, man.entry || 'flovmp.exe'))) {
+      send({ phase: 'Движок актуален', percent: 100, done: true });
+      return { ok: true, upToDate: true, version: man.version };
+    }
+
+    const arc = man.archive || {};
+    const total = arc.size || man.totalBytes || 0;
+    const tmp = path.join(SHARED_DIR, 'engine-download.tgz');
+    fs.mkdirSync(SHARED_DIR, { recursive: true });
+
+    send({ phase: 'Загрузка движка', percent: 0, downloaded: 0, total, speed: 0 });
+    const res = await fetch(`${base}/engine/${arc.name || 'engine.tgz'}`);
+    if (!res.ok || !res.body) throw new Error(`архив ${res.status}`);
+
+    const out = fs.createWriteStream(tmp);
+    const hash = require('node:crypto').createHash('sha256');
+    let got = 0; const started = Date.now(); let lastTick = started;
+    for await (const chunk of res.body) {
+      out.write(chunk); hash.update(chunk); got += chunk.length;
+      const now = Date.now();
+      if (now - lastTick > 250) {
+        lastTick = now;
+        send({
+          phase: 'Загрузка движка',
+          percent: total ? (got / total) * 90 : 0,
+          downloaded: got, total,
+          speed: got / Math.max(0.001, (now - started) / 1000),
+        });
+      }
+    }
+    await new Promise((r) => out.end(r));
+
+    const digest = hash.digest('hex');
+    if (arc.sha256 && digest !== arc.sha256) {
+      fs.unlinkSync(tmp);
+      throw new Error('битый архив (sha256 не совпал)');
+    }
+
+    send({ phase: 'Распаковка движка…', percent: 93, downloaded: got, total });
+    fs.rmSync(ENGINE_DIR, { recursive: true, force: true });
+    fs.mkdirSync(ENGINE_DIR, { recursive: true });
+    // bsdtar есть в Windows 10 1803+ / 11 (C:\Windows\System32\tar.exe)
+    await new Promise((resolve, reject) => {
+      const { execFile } = require('node:child_process');
+      execFile('tar', ['-xzf', tmp, '-C', ENGINE_DIR], (err) => err ? reject(err) : resolve());
+    });
+    fs.unlinkSync(tmp);
+
+    fs.writeFileSync(ENGINE_MARKER, JSON.stringify({
+      version: man.version, entry: man.entry || 'flovmp.exe',
+      installedUtc: new Date().toISOString(), sha256: digest,
+    }, null, 1));
+
+    send({ phase: 'Движок установлен', percent: 100, downloaded: total || got, total: total || got, done: true });
+    return { ok: true, version: man.version };
+  } catch (err) {
+    send({ phase: `Ошибка загрузки движка: ${err.message}`, percent: 0, error: String(err.message), done: true });
+    return { ok: false, error: String(err.message) };
+  }
+});
+
 // ─── Автозапуск с Windows — настоящая системная настройка (не просто чекбокс),
 // через встроенный Electron API поверх реестра Run/Startup, ничего своего
 // в реестр не пишем напрямую (та же дисциплина, что и для BattlEye — не

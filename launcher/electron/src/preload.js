@@ -21,6 +21,12 @@ const api = {
   cancelPlay: () => ipcRenderer.invoke('native:cancelPlay'),
   onDownloadProgress: (cb) => ipcRenderer.on('download:progress', (_e, data) => cb(data)),
 
+  // Движок клиента alt:V — статус локальной установки и загрузка с CDN
+  // (%LOCALAPPDATA%\FloridaV\engine\). Прогресс идёт тем же каналом
+  // download:progress, что и загрузка файлов игры.
+  engineStatus: (cdnBase) => ipcRenderer.invoke('native:engineStatus', cdnBase),
+  downloadEngine: (cdnBase) => ipcRenderer.invoke('native:downloadEngine', cdnBase),
+
   // Реальные данные о текущем устройстве (для «Личного кабинета» → Устройства,
   // История входов). Возвращает { deviceId, hostname, userName, os, osArch,
   // localIp, bootTimeUtc, nowUtc } — только то, что система отдаёт локально.
