@@ -13,7 +13,17 @@ public static class PlayService
     public static LaunchResult Launch(string gtaPath, string serverHost, int serverPort, string nickname)
     {
         if (!GtaLocatorService.IsValidGtaFolder(gtaPath))
-            return new LaunchResult(false, "Папка GTA V не найдена или некорректна.");
+        {
+            var detected = GtaLocatorService.TryLocate();
+            if (detected != null && GtaLocatorService.IsValidGtaFolder(detected.Value.Path))
+            {
+                gtaPath = detected.Value.Path;
+            }
+            else
+            {
+                return new LaunchResult(false, "Папка GTA V не найдена. Укажите верный путь к игре в настройках лаунчера.");
+            }
+        }
 
         // Подготовка и развертывание профиля масштабирования (DLSS / FSR 3 / Neural DLSS 5) перед стартом
         try
@@ -120,6 +130,15 @@ public static class PlayService
             "FloridaV", "runtime", "client");
         if (Directory.Exists(appData)) return appData;
 
+        var appDataEngine = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FloridaV", "engine");
+        if (Directory.Exists(appDataEngine) &&
+            (File.Exists(Path.Combine(appDataEngine, "altv.exe")) || File.Exists(Path.Combine(appDataEngine, "flovmp.exe"))))
+        {
+            return appDataEngine;
+        }
+
         return null;
     }
 
@@ -152,6 +171,12 @@ public static class PlayService
             "FloridaV", "engine", "FloVMP.Connect.exe");
         if (File.Exists(appData)) return appData;
 
+        var runtimeClient = Path.Combine(baseDir, "runtime", "client", "FloVMP.Connect.exe");
+        if (File.Exists(runtimeClient)) return runtimeClient;
+
+        var hardcodedClient = @"C:\FloV-MP\runtime\client\FloVMP.Connect.exe";
+        if (File.Exists(hardcodedClient)) return hardcodedClient;
+
         var dir = baseDir;
         for (var i = 0; i < 8; i++)
         {
@@ -165,6 +190,9 @@ public static class PlayService
             var devDebug = Path.Combine(dir, "launcher", "src", "FloVMP.Connect",
                 "bin", "Debug", "net8.0-windows", "FloVMP.Connect.exe");
             if (File.Exists(devDebug)) return devDebug;
+
+            var runtimeSub = Path.Combine(dir, "runtime", "client", "FloVMP.Connect.exe");
+            if (File.Exists(runtimeSub)) return runtimeSub;
 
             var parent = Directory.GetParent(dir);
             if (parent == null) break;

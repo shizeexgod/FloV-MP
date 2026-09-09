@@ -63,6 +63,10 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(-8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        'view-in': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
         'pulse-ring': {
           '0%': { transform: 'scale(0.85)', opacity: '0.5' },
           '80%, 100%': { transform: 'scale(2)', opacity: '0' },
@@ -73,6 +77,7 @@ const config: Config = {
         'fade-in-fast': 'fade-in-fast 0.25s ease both',
         'scale-in': 'scale-in 0.2s ease both',
         'slide-down': 'slide-down 0.24s ease both',
+        'view-in': 'view-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both',
         'pulse-ring': 'pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },

@@ -99,7 +99,7 @@ export function PageHero({
       <Container className="py-16 sm:py-24">
         <Reveal>
           <Eyebrow value={eyebrow} />
-          <h1 className="mt-3 max-w-3xl text-[2rem] font-extrabold leading-[1.08] tracking-tight sm:text-[2.9rem]">
+          <h1 className="mt-3 max-w-3xl text-[1.75rem] font-extrabold leading-[1.14] tracking-tight sm:text-[2.4rem] sm:leading-[1.1]">
             <span className="h-grad">{title}</span>
           </h1>
           {sub ? <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-white/55">{sub}</p> : null}
@@ -124,7 +124,7 @@ export function SectionHeading({
   return (
     <Reveal className="mb-12 max-w-2xl">
       <Eyebrow value={eyebrow} />
-      <h2 className="mt-3 text-[1.65rem] font-extrabold leading-[1.12] tracking-tight sm:text-[2.15rem]">
+      <h2 className="mt-3 text-[1.4rem] font-extrabold leading-[1.18] tracking-tight sm:text-[1.85rem] sm:leading-[1.12]">
         <span className="h-grad">{title}</span>
       </h2>
       {sub ? <p className="mt-3.5 text-[14.5px] leading-relaxed text-white/50">{sub}</p> : null}

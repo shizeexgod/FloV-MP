@@ -884,13 +884,14 @@ export default function DashboardPage() {
                       <button
                         key={k}
                         onClick={() => setTab(k)}
-                        className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12.5px] font-semibold transition-colors ${
-                          on ? 'bg-white/[0.07] text-white' : 'text-white/45 hover:bg-white/[0.04] hover:text-white/80'
+                        className={`group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-[9px] text-left text-[12.5px] font-semibold transition-all duration-200 active:scale-[0.98] ${
+                          on
+                            ? 'bg-brand/[0.12] text-brand shadow-[inset_0_0_0_1px_rgba(255,61,138,0.25)]'
+                            : 'text-white/45 hover:bg-white/[0.05] hover:text-white/85'
                         }`}
                       >
-                        <Icon className={`h-4 w-4 flex-none ${on ? 'text-brand' : 'text-white/35 group-hover:text-white/55'}`} />
+                        <Icon className={`h-4 w-4 flex-none transition-colors ${on ? 'text-brand' : 'text-white/35 group-hover:text-white/60'}`} />
                         <span className="truncate">{D.tabs[k]}</span>
-                        {on && <span className="ml-auto h-1.5 w-1.5 flex-none rounded-full bg-brand" />}
                       </button>
                     );
                   })}
@@ -901,7 +902,7 @@ export default function DashboardPage() {
         </aside>
 
         {/* Active section */}
-        <main className="min-w-0">
+        <main key={tab} className="min-w-0 animate-view-in">
       {/* ============ PROJECTS & SERVERS ============ */}
       {tab === 'projects' && <ProjectsTab />}
 

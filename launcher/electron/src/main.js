@@ -206,10 +206,39 @@ const ENGINE_DIR = path.join(SHARED_DIR, 'engine');
 const ENGINE_MARKER = path.join(ENGINE_DIR, '.flovmp-engine.json');
 const DEFAULT_CDN = process.env.FLOVMP_CDN || 'http://188.127.229.224/cdn';
 
+function findLocalClientDir() {
+  const candidates = [
+    path.join(__dirname, '..', '..', '..', 'runtime', 'client'),
+    path.join(process.cwd(), 'runtime', 'client'),
+    'C:\\FloV-MP\\runtime\\client',
+    path.join(SHARED_DIR, 'runtime', 'client'),
+    ENGINE_DIR,
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(dir) && (fs.existsSync(path.join(dir, 'flovmp.exe')) || fs.existsSync(path.join(dir, 'altv.exe')))) {
+      return dir;
+    }
+  }
+  return null;
+}
+
 function readEngineMarker() {
   try { return JSON.parse(fs.readFileSync(ENGINE_MARKER, 'utf8')); } catch { return null; }
 }
 ipcMain.handle('native:engineStatus', async (_e, cdnBase) => {
+  const localDir = findLocalClientDir();
+  if (localDir) {
+    const marker = readEngineMarker();
+    return {
+      installed: true,
+      path: localDir,
+      version: marker?.version || '1.0.0',
+      latestVersion: marker?.version || '1.0.0',
+      upToDate: true,
+      sizeBytes: 0,
+    };
+  }
+
   const marker = readEngineMarker();
   const entry = marker?.entry || 'flovmp.exe';
   const entryOk = fs.existsSync(path.join(ENGINE_DIR, entry))
@@ -218,7 +247,7 @@ ipcMain.handle('native:engineStatus', async (_e, cdnBase) => {
   let latest = null;
   try {
     const base = (cdnBase || DEFAULT_CDN).replace(/\/+$/, '');
-    const res = await fetch(`${base}/engine/engine-manifest.json`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`${base}/engine/engine-manifest.json`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) latest = await res.json();
   } catch {}
   return {

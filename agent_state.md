@@ -585,9 +585,20 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
       - Клавиша **2** — запуск/остановка двигателя автомобиля (`/engine`).
       - Клавиша **L** — блокировка/разблокировка замков дверей автомобиля (`/lock`).
 11. **Статус тестов и сборок**:
-    - **222 / 222 тестов `FloVMP.Core.Tests`** успешно пройдены (0 failures, 0 warnings).
+    - **229 / 229 тестов `FloVMP.Core.Tests`** успешно пройдены (0 failures, 0 warnings).
     - **41 / 41 тестов `FloVMP.Launcher.Tests`** успешно пройдены (0 failures, 0 warnings).
-    - **Итого 263 / 263 теста** зелёные (100% pass).
+    - **Итого 270 / 270 тестов** зелёные (100% pass).
     - C# Gamemode (`FloVMP.Gamemode.dll`) собирается с 0 предупреждений и 0 ошибок.
     - Production build веб-портала Next.js 14 (`npm run build`) успешно генерирует 42/42 страниц без единой ошибки.
+
+12. **Харденинг цепочки запуска игры из лаунчера (FloV:MP Launcher & Connect Engine Resolution)**:
+    - **Устранение бага тихого сброса кнопки «ИГРАТЬ»**:
+      - В `main.js`: `native:engineStatus` проверял только `%LOCALAPPDATA%\FloridaV\engine`, игнорируя локально установленный движок в `runtime/client` и репозитории `c:\FloV-MP\runtime\client`. В результате лаунчер считал движок отсутствующим и пытался скачать его по сети с CDN (который не отдавал архив), после чего тихо закрывал модалку без ошибки.
+      - Добавлена функция `findLocalClientDir()`, проверяющая пути `runtime/client` и `c:\FloV-MP\runtime\client`. Если движок уже присутствует локально, `engineStatus` возвращает `installed: true, upToDate: true`, пропуская ненужное скачивание.
+      - В `native-bridge.js`: добавлен путь `launcher/electron/native-dist/FloVMP.Launcher.Native.exe` в список кандидатов.
+      - В `PlayService.cs`: реализован автоматический fallback к автоопределению пути GTA V через `GtaLocatorService.TryLocate()` при пустом/невалидном пути, а также расширен поиск `FloVMP.Connect.exe` и папки рантайма клиента.
+      - В `renderer.js`: устранено тихое подавление ошибок; добавлен перехват исключений при вызове `window.floridaV.play` и вывод понятных сообщений пользователю при любых сбоях.
+      - В `scripts/run-launcher.cmd`: добавлена автоматическая сборка `FloVMP.Connect` в Release-конфигурации.
+      - Скомпилированы актуальные автономные win-x64 бинарники в `launcher/electron/native-dist/` (`FloVMP.Launcher.Native.exe` и `FloVMP.Connect.exe`).
+      - Все 270 unit-тестов (229 Core + 41 Launcher) проходят со 100% успехом.
 

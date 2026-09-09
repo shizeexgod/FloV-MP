@@ -25,7 +25,8 @@ class NativeBridge extends EventEmitter {
     const candidates = [
       // Упакованное приложение: FloVMP.Launcher.Native.exe лежит в resources/native
       path.join(process.resourcesPath || '', 'native', 'FloVMP.Launcher.Native.exe'),
-      // Разработка: собранный .NET-проект рядом
+      // Разработка: собранный .NET-проект рядом или native-dist
+      path.join(__dirname, '..', 'native-dist', 'FloVMP.Launcher.Native.exe'),
       path.join(__dirname, '..', '..', 'src', 'FloVMP.Launcher.Native',
         'bin', 'Release', 'net8.0-windows', 'FloVMP.Launcher.Native.exe'),
       path.join(__dirname, '..', '..', 'src', 'FloVMP.Launcher.Native',

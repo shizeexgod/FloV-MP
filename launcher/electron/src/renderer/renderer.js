@@ -1476,9 +1476,7 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   clearTimeout(saveTimer);
   await window.floridaV.saveSettings(settings);
 
-  // Движок клиента FloV:MP — если не установлен/устарел, качаем с CDN один раз
-  // (прогресс в той же модалке). FloVMP.Connect потом берёт его из
-  // %LOCALAPPDATA%\FloridaV\engine\.
+  // Движок клиента FloV:MP — если не установлен локально и не обновлен, качаем с CDN один раз
   try {
     const eng = await window.floridaV.engineStatus?.();
     if (eng && (!eng.installed || !eng.upToDate)) {
@@ -1490,30 +1488,43 @@ document.getElementById('btn-play').addEventListener('click', async () => {
       if (!dl || !dl.ok) {
         closeLaunchModal();
         btn.disabled = false; btn.textContent = 'ИГРАТЬ';
-        const m = (dl && dl.error) || 'не удалось загрузить движок';
+        const m = (dl && dl.error) || 'не удалось загрузить движок с CDN';
         status.textContent = `Движок не установлен: ${m}`;
         status.classList.add('error');
+        alert(`Ошибка загрузки движка:\n${m}`);
         return;
       }
     }
-  } catch { /* engineStatus недоступен (старый мост) — пробуем запуск как есть */ }
+  } catch (e) {
+    console.warn('engineStatus check failed/skipped:', e);
+  }
 
   updateLaunchProgress({ phase: 'Инициализация коннектора…', percent: 20 });
 
-  const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);
+  try {
+    const result = await window.floridaV.play(settings.gtaPath, settings.serverHost, settings.serverPort, settings.nickname);
 
-  btn.disabled = false;
-  btn.textContent = 'ИГРАТЬ';
-  if (result && result.success) {
-    updateLaunchProgress({ phase: 'Игра запущена', percent: 100 });
-    setTimeout(closeLaunchModal, 900);
-    if (settings.minimizeOnPlay) setTimeout(() => window.floridaV.minimize(), 1500);
-  } else {
+    btn.disabled = false;
+    btn.textContent = 'ИГРАТЬ';
+    if (result && result.success) {
+      updateLaunchProgress({ phase: 'Игра запущена', percent: 100 });
+      setTimeout(closeLaunchModal, 900);
+      if (settings.minimizeOnPlay) setTimeout(() => window.floridaV.minimize(), 1500);
+    } else {
+      closeLaunchModal();
+      const errMsg = (result && result.error) || 'Неизвестная ошибка запуска.';
+      status.textContent = errMsg;
+      status.classList.add('error');
+      alert(`Ошибка запуска игры:\n${errMsg}`);
+    }
+  } catch (err) {
     closeLaunchModal();
-    const errMsg = (result && result.error) || 'Неизвестная ошибка запуска.';
-    status.textContent = errMsg;
+    btn.disabled = false;
+    btn.textContent = 'ИГРАТЬ';
+    const errMsg = err?.message || String(err);
+    status.textContent = `Сбой вызова: ${errMsg}`;
     status.classList.add('error');
-    alert(`Ошибка запуска игры:\n${errMsg}`);
+    alert(`Сбой вызова коннектора:\n${errMsg}`);
   }
 });
 

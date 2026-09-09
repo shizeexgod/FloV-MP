@@ -50,7 +50,7 @@ export default function HomePage() {
       <div className="relative">
         <Container className="py-20 sm:py-28">
           <Reveal>
-            <h1 className="max-w-4xl text-[2.6rem] font-extrabold leading-[1.06] tracking-tight sm:text-6xl">
+            <h1 className="max-w-4xl text-[1.9rem] font-extrabold leading-[1.12] tracking-tight sm:text-[3rem] sm:leading-[1.08]">
               <span className="h-grad">{t.home.h1a} </span>
               <span className="text-brand">{t.home.h1accent}</span>
               <span className="h-grad"> {t.home.h1b}</span>
