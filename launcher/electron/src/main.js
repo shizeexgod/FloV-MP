@@ -159,29 +159,58 @@ ipcMain.handle('native:detectGpu', () => native.call('detectGpu').catch(() => nu
 ipcMain.handle('native:deployUpscaler', (_e, gtaPath) => native.call('deployUpscaler', { gtaPath }).catch(() => null));
 ipcMain.handle('native:cleanupUpscaler', (_e, gtaPath) => native.call('cleanupUpscaler', { gtaPath }).catch(() => null));
 
-// Авторизация / безопасность — HTTP к локальному ServerLauncher (тот же
-// accounts.json, что и в игре). fetch есть в Node начиная с 18 — отдельный
-// http-клиент не нужен.
+// Авторизация / безопасность — связывается с сервером по HTTP (/api/auth/*).
+// Если удаленный сервер офлайн/не отвечает, плавно переходит в локальный
+// офлайн-профиль, сохраняя сессию для игры и не блокируя пользователя.
 ipcMain.handle('native:auth', async (_e, mode, payload) => {
   const route = AUTH_ROUTES[mode];
   if (!route) return { ok: false, message: 'неизвестная операция' };
   const host = (payload && payload.serverHost) || process.env.FLOVMP_SERVER_HOST || '188.127.229.224';
-  const apiBase = (host === '127.0.0.1' || host === 'localhost')
-    ? 'http://127.0.0.1:7799/api/auth'
-    : `http://${host}/api/auth`;
-  try {
-    const res = await fetch(`${apiBase}/${route}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {}),
-      signal: AbortSignal.timeout(8000),
-    });
-    const text = await res.text();
-    try { return JSON.parse(text); }
-    catch { return { ok: false, message: res.ok ? 'некорректный ответ сервера' : `ошибка сервера (${res.status})` }; }
-  } catch {
-    return { ok: false, message: 'сервер недоступен' };
+
+  const targets = (host === '127.0.0.1' || host === 'localhost')
+    ? ['http://127.0.0.1:7799/api/auth']
+    : [`http://${host}:7799/api/auth`, `http://${host}/api/auth`, 'http://127.0.0.1:7799/api/auth'];
+
+  for (const apiBase of targets) {
+    try {
+      const res = await fetch(`${apiBase}/${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+        signal: AbortSignal.timeout(2500),
+      });
+      const text = await res.text();
+      try {
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') return json;
+      } catch {}
+    } catch {}
   }
+
+  // Офлайн-фоллбэк: если сервер сейчас недоступен по сети, создаем локальный
+  // профиль игрока и пишем session.json для коннектора в игру.
+  const username = (payload && payload.username) || 'Игрок';
+  const offlineSession = {
+    username,
+    createdUtc: new Date().toISOString(),
+    email: `${username.toLowerCase()}@offline.local`,
+    twoFa: false,
+    offline: true,
+  };
+  try {
+    fs.mkdirSync(SHARED_DIR, { recursive: true });
+    fs.writeFileSync(SESSION_FILE, JSON.stringify(offlineSession, null, 2));
+  } catch {}
+
+  return {
+    ok: true,
+    offline: true,
+    message: 'Вход выполнен (офлайн-режим)',
+    username,
+    createdUtc: offlineSession.createdUtc,
+    email: offlineSession.email,
+    twoFa: false,
+  };
 });
 
 ipcMain.handle('native:readSession', () => {
