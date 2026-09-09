@@ -69,6 +69,9 @@ Console.WriteLine($"[connect] GTA V     : {gtaDir}");
 Console.WriteLine($"[connect] Файл игры : {gameExe}");
 Console.WriteLine($"[connect] Платформа : {detectedPlatform.ToUpperInvariant()}");
 
+// Настраиваем прямой маршрут к серверу в обход VPN/TUN (исключает таймауты загрузки ресурсов)
+EnsureDirectRouteToHost(connect);
+
 // Автоматически проверяем и поднимаем сервер, если подключаемся к локальному хосту
 if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
 {
@@ -711,6 +714,44 @@ static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPriv
 
 [DllImport("kernel32.dll", SetLastError = true)]
 static extern bool CloseHandle(IntPtr hObject);
+
+static void EnsureDirectRouteToHost(string connectTarget)
+{
+    try
+    {
+        var host = connectTarget.Split(':')[0].Trim();
+        if (host is "127.0.0.1" or "localhost" || string.IsNullOrWhiteSpace(host)) return;
+        if (!System.Net.IPAddress.TryParse(host, out _)) return;
+
+        // Ищем шлюз физического интерфейса (Ethernet/Wi-Fi), пропуская виртуальные VPN/TUN/TAP интерфейсы
+        var physicalGateway = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(ni => ni.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                     && ni.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback
+                     && !ni.Description.Contains("tun", StringComparison.OrdinalIgnoreCase)
+                     && !ni.Description.Contains("tap", StringComparison.OrdinalIgnoreCase)
+                     && !ni.Description.Contains("vpn", StringComparison.OrdinalIgnoreCase)
+                     && !ni.Name.Contains("happ", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(ni => ni.GetIPProperties().GatewayAddresses)
+            .Select(g => g.Address.ToString())
+            .FirstOrDefault(g => !string.IsNullOrEmpty(g) && g != "0.0.0.0");
+
+        if (!string.IsNullOrEmpty(physicalGateway))
+        {
+            Console.WriteLine($"[connect] Настройка прямого маршрута к {host} через шлюз {physicalGateway} (в обход VPN/TUN)...");
+            var psi = new ProcessStartInfo("route", $"add {host} mask 255.255.255.255 {physicalGateway} metric 1")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+            using var p = Process.Start(psi);
+            p?.WaitForExit(1000);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[connect] Предупреждение: не удалось добавить прямой маршрут: {ex.Message}");
+    }
+}
 
 delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 

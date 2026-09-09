@@ -15,6 +15,8 @@ if not exist "launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Conn
 set TARGET=%1
 if "%TARGET%"=="" set TARGET=188.127.229.224:7788
 
+route add 188.127.229.224 192.168.0.1 metric 1 > nul 2>&1
+
 echo [INFO] Target server: %TARGET%
 echo [INFO] Launching game...
 launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe -connect %TARGET% --client "%~dp0..\runtime\client"
