@@ -25,6 +25,9 @@ public sealed class InventorySystem
 {
     private readonly IInventoryStore _store;
     private readonly ConcurrentDictionary<uint, (Inventory inv, int accountId)> _live = new();
+    private readonly AtomicInventoryTransactionService _atomicTransactions = new();
+
+    public AtomicInventoryTransactionService AtomicTransactions => _atomicTransactions;
 
     public InventorySystem(string storePath)
     {
@@ -35,6 +38,7 @@ public sealed class InventorySystem
     {
         Alt.OnClient<int, int>("flovmp:inv:move", OnMove);
         Alt.OnClient<int, int>("flovmp:inv:drop", OnDrop);
+        Alt.OnClient<string>("flovmp:inv:pickup", OnPickup);
         Alt.OnClient<int>("flovmp:inv:use", OnUse);
         Alt.OnPlayerDisconnect += OnDisconnect;
     }
@@ -111,17 +115,35 @@ public sealed class InventorySystem
 
         var take = Math.Clamp(qty, 1, s.Quantity);
         var itemId = s.ItemId;
-        s.Quantity -= take;
-        if (s.Quantity <= 0)
-        {
-            e.inv.Slots[slot] = null;
-        }
+        var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
 
-        FloVMP.Core.Logging.GameLog.Item("drop",
-            FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, take);
-        // TODO: положить дроп на землю как объект мира (позже)
-        _store.Save(e.accountId, e.inv);
-        Sync(player, e.inv);
+        var drop = _atomicTransactions.DropItem(e.inv, itemId, take, pPos, player.Dimension, player.Id);
+        if (drop != null)
+        {
+            FloVMP.Core.Logging.GameLog.Item("drop",
+                FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), itemId, take);
+            _store.Save(e.accountId, e.inv);
+            Sync(player, e.inv);
+            player.Emit("flovmp:inv:notice", $"Вы выбросили {ItemCatalog.Get(itemId)?.Name ?? itemId} x{take}");
+        }
+    });
+
+    private void OnPickup(IPlayer player, string dropId) => Safe.Run("inv.OnPickup", () =>
+    {
+        if (!_live.TryGetValue(player.Id, out var e)) return;
+        var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+        if (_atomicTransactions.TryPickupGroundItem(player.Id, dropId, e.inv, pPos, 4.0f, out var picked) && picked != null)
+        {
+            _store.Save(e.accountId, e.inv);
+            Sync(player, e.inv);
+            player.Emit("flovmp:inv:notice", $"Вы подобрали {ItemCatalog.Get(picked.ItemId)?.Name ?? picked.ItemId} x{picked.Quantity}");
+            FloVMP.Core.Logging.GameLog.Item("pickup",
+                FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), picked.ItemId, picked.Quantity);
+        }
+        else
+        {
+            player.Emit("flovmp:inv:notice", "Не удалось подобрать предмет (слишком далеко или инвентарь полон)");
+        }
     });
 
     private void OnUse(IPlayer player, int slot) => Safe.Run("inv.OnUse", () =>
@@ -135,16 +157,72 @@ public sealed class InventorySystem
         switch (itemId)
         {
             case "bandage":
+                if (player.Health <= 0)
+                {
+                    player.Emit("flovmp:inv:notice", "Вы тяжело ранены и не можете перевязать себя");
+                    return;
+                }
+                if (player.Health >= 200)
+                {
+                    player.Emit("flovmp:inv:notice", "У вас уже максимальное здоровье (200 HP)");
+                    return;
+                }
                 player.Health = (ushort)Math.Min(200, player.Health + 25);
                 s.Quantity -= 1;
                 if (s.Quantity <= 0) e.inv.Slots[slot] = null;
-                player.Emit("flovmp:inv:notice", "Вы перевязали раны (+25 HP)");
+                player.Emit("flovmp:inv:notice", $"Вы перевязали раны (+25 HP). Текущее: {player.Health}/200");
                 break;
             case "medkit":
+                if (player.Health <= 0)
+                {
+                    player.Emit("flovmp:inv:notice", "Вы тяжело ранены и не можете использовать аптечку");
+                    return;
+                }
+                if (player.Health >= 200)
+                {
+                    player.Emit("flovmp:inv:notice", "У вас уже максимальное здоровье (200 HP)");
+                    return;
+                }
                 player.Health = (ushort)Math.Min(200, player.Health + 75);
                 s.Quantity -= 1;
                 if (s.Quantity <= 0) e.inv.Slots[slot] = null;
-                player.Emit("flovmp:inv:notice", "Вы использовали аптечку (+75 HP)");
+                player.Emit("flovmp:inv:notice", $"Вы использовали аптечку (+75 HP). Текущее: {player.Health}/200");
+                break;
+            case "armour":
+                if (player.Health <= 0)
+                {
+                    player.Emit("flovmp:inv:notice", "Вы тяжело ранены и не можете надеть бронежилет");
+                    return;
+                }
+                if (player.Armor >= 100)
+                {
+                    player.Emit("flovmp:inv:notice", "У вас уже максимальный уровень брони (100)");
+                    return;
+                }
+                player.Armor = (ushort)Math.Min(100, player.Armor + 100);
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы надели бронежилет (+100 брони)");
+                break;
+            case "radio":
+                player.Emit("flovmp:inv:notice", "Рация включена (настроена на общественную волну 100.0 MHz)");
+                break;
+            case "lockpick":
+                var lockVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 4.0f);
+                if (lockVeh == null)
+                {
+                    player.Emit("flovmp:inv:notice", "Рядом нет транспорта для взлома (до 4м)");
+                    return;
+                }
+                if (lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Unlocked)
+                {
+                    player.Emit("flovmp:inv:notice", "Этот транспорт уже открыт");
+                    return;
+                }
+                lockVeh.LockState = AltV.Net.Enums.VehicleLockState.Unlocked;
+                s.Quantity -= 1;
+                if (s.Quantity <= 0) e.inv.Slots[slot] = null;
+                player.Emit("flovmp:inv:notice", "Вы успешно взломали замок автомобиля отмычкой!");
                 break;
             case "repairkit":
                 var repVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);

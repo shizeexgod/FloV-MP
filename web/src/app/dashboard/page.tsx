@@ -32,21 +32,29 @@ import { ProjectSettingsModal } from '@/components/dashboard/ProjectSettingsModa
 import { InvoiceModal } from '@/components/dashboard/InvoiceModal';
 import type { TwoFaState } from '@/components/dashboard/_ctx';
 
-const TABS: { key: TabKey; icon: React.ElementType }[] = [
-  { key: 'projects', icon: Server },
-  { key: 'console', icon: Terminal },
-  { key: 'troubleshoot', icon: Zap },
-  { key: 'overview', icon: KeyRound },
-  { key: 'telemetry', icon: Activity },
-  { key: 'analytics', icon: BarChart3 },
-  { key: 'watchdog', icon: AlertTriangle },
-  { key: 'logs', icon: ScrollText },
-  { key: 'api', icon: Plug },
-  { key: 'sdk', icon: Download },
-  { key: 'builder', icon: Layers },
-  { key: 'billing', icon: CreditCard },
-  { key: 'affiliate', icon: Percent },
-  { key: 'settings', icon: Settings },
+const TAB_ICONS: Record<TabKey, React.ElementType> = {
+  projects: Server,
+  console: Terminal,
+  troubleshoot: Zap,
+  overview: KeyRound,
+  telemetry: Activity,
+  analytics: BarChart3,
+  watchdog: AlertTriangle,
+  logs: ScrollText,
+  api: Plug,
+  sdk: Download,
+  builder: Layers,
+  billing: CreditCard,
+  affiliate: Percent,
+  settings: Settings,
+};
+
+type NavGroupId = 'manage' | 'monitor' | 'tools' | 'account';
+const NAV_GROUPS: { id: NavGroupId; keys: TabKey[] }[] = [
+  { id: 'manage', keys: ['projects', 'overview', 'console', 'watchdog', 'logs'] },
+  { id: 'monitor', keys: ['telemetry', 'analytics'] },
+  { id: 'tools', keys: ['troubleshoot', 'api', 'sdk', 'builder'] },
+  { id: 'account', keys: ['billing', 'affiliate', 'settings'] },
 ];
 
 /* =============================================================== */
@@ -857,24 +865,43 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-white/[0.08] pb-2 no-scrollbar">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-              tab === t.key
-                ? 'bg-white/[0.06] text-white'
-                : 'text-white/40 hover:bg-white/[0.04] hover:text-white/80'
-            }`}
-          >
-            <t.icon className="h-4 w-4" style={{ color: tab === t.key ? 'var(--brand)' : undefined }} />
-            {D.tabs[t.key]}
-          </button>
-        ))}
-      </div>
+      {/* Sidebar + content */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[248px_1fr]">
+        {/* Left sidebar — sections grouped by category */}
+        <aside className="lg:sticky lg:top-6 lg:h-max">
+          <nav className="glass no-lift rounded-2xl p-2.5">
+            {NAV_GROUPS.map((g, gi) => (
+              <div key={g.id} className={gi > 0 ? 'mt-1.5' : ''}>
+                {gi > 0 && <hr className="rule-soft my-2" />}
+                <div className="px-2.5 pb-1 pt-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
+                  {D.navGroups[g.id]}
+                </div>
+                <div className="space-y-0.5">
+                  {g.keys.map((k) => {
+                    const Icon = TAB_ICONS[k];
+                    const on = tab === k;
+                    return (
+                      <button
+                        key={k}
+                        onClick={() => setTab(k)}
+                        className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[12.5px] font-semibold transition-colors ${
+                          on ? 'bg-white/[0.07] text-white' : 'text-white/45 hover:bg-white/[0.04] hover:text-white/80'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 flex-none ${on ? 'text-brand' : 'text-white/35 group-hover:text-white/55'}`} />
+                        <span className="truncate">{D.tabs[k]}</span>
+                        {on && <span className="ml-auto h-1.5 w-1.5 flex-none rounded-full bg-brand" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
+        {/* Active section */}
+        <main className="min-w-0">
       {/* ============ PROJECTS & SERVERS ============ */}
       {tab === 'projects' && <ProjectsTab />}
 
@@ -916,6 +943,8 @@ export default function DashboardPage() {
 
       {/* ============ SETTINGS ============ */}
       {tab === 'settings' && <SettingsTab />}
+        </main>
+      </div>
 
       {/* ============ MODALS ============ */}
       <IpBindModal />

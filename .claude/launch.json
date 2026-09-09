@@ -6,6 +6,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "serve", "-l", "5566", "-s", "launcher/electron/src/renderer"],
       "port": 5566
+    },
+    {
+      "name": "flovmp-web",
+      "runtimeExecutable": "web/node_modules/.bin/next.cmd",
+      "runtimeArgs": ["dev", "-p", "3300"],
+      "port": 3300,
+      "cwd": "web"
     }
   ]
 }

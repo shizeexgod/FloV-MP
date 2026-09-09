@@ -152,7 +152,9 @@ public class AntiCheatSystem
         if (acc != null)
         {
             _service.RemovePlayer(acc.Id);
+            _combatValidation.CleanupPlayer(acc.Id);
         }
+        _combatValidation.CleanupPlayer((int)player.Id);
     }
 
     public void NotifyAdminTeleport(IPlayer player, Position newPos)

@@ -231,6 +231,52 @@ public sealed class AuthServiceTests : IDisposable
         Assert.Equal(AuthOutcome.TwoFaRequired, s2.Login("Persist2fa", "secret6", "ip:x").Outcome);
         Assert.True(s2.Login("Persist2fa", "secret6", "ip:x", goodCode).Ok);
     }
+
+    [Fact]
+    public void ChangePassword_rate_limits_after_max_failures()
+    {
+        _svc.Register("BrutePw", "secret6");
+        for (var i = 0; i < 3; i++)
+        {
+            var res = _svc.ChangePassword("BrutePw", "wrongpass", "newpass123", "ip:brute");
+            Assert.Equal(AuthOutcome.WrongPassword, res.Outcome);
+        }
+
+        var blocked = _svc.ChangePassword("BrutePw", "wrongpass", "newpass123", "ip:brute");
+        Assert.Equal(AuthOutcome.RateLimited, blocked.Outcome);
+    }
+
+    [Fact]
+    public void Disable2fa_rate_limits_after_max_failures()
+    {
+        _svc.Register("Brute2fa", "secret6");
+        var secret = Totp.GenerateSecret();
+        var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
+        var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
+        _svc.Enable2fa("Brute2fa", secret, goodCode);
+
+        for (var i = 0; i < 3; i++)
+        {
+            var res = _svc.Disable2fa("Brute2fa", "badcode", "ip:brute2");
+            Assert.Equal(AuthOutcome.WrongCode, res.Outcome);
+        }
+
+        var blocked = _svc.Disable2fa("Brute2fa", "badcode", "ip:brute2");
+        Assert.Equal(AuthOutcome.RateLimited, blocked.Outcome);
+    }
+
+    [Fact]
+    public void Register_rate_limits_after_repeated_invalid_attempts()
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var res = _svc.Register("??bad??", "short", "ip:brutereg");
+            Assert.Equal(AuthOutcome.BadUsername, res.Outcome);
+        }
+
+        var blocked = _svc.Register("ValidUser", "validpassword", "ip:brutereg");
+        Assert.Equal(AuthOutcome.RateLimited, blocked.Outcome);
+    }
 }
 
 public sealed class SessionHandoffTests : IDisposable

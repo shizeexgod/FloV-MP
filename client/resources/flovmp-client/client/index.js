@@ -433,6 +433,7 @@ alt.onServer('flovmp:inv:sync', (json) => {
 
 alt.onServer('flovmp:inv:notice', (text) => {
     if (inventoryView) inventoryView.emit('flovmp:inv:notice', text);
+    if (chatView) chatView.emit('flovmp:chat:msg', 'system', 'Инвентарь', text);
 });
 
 // --- Состояние транспорта и спидометр ----------------------------------

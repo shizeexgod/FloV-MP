@@ -16,13 +16,15 @@ export default function FeaturesPage() {
       {t.features.groups.map((g, gi) => {
         const Icon = GROUP_ICONS[gi % GROUP_ICONS.length];
         return (
-          <section key={g.t} className="border-b border-white/[0.07]">
-            <Container className="py-14 sm:py-16">
+          <section key={g.t}>
+            <Container className="py-14 sm:py-20">
               <Reveal className="mb-8 flex items-center gap-3">
                 <span className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-brand">
                   <Icon className="h-4 w-4" />
                 </span>
-                <h2 className="text-xl font-semibold tracking-tight">{g.t}</h2>
+                <h2 className="text-[1.4rem] font-extrabold tracking-tight">
+                  <span className="h-grad">{g.t}</span>
+                </h2>
               </Reveal>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {g.items.map(([title, desc], i) => (
@@ -39,6 +41,9 @@ export default function FeaturesPage() {
                   </Reveal>
                 ))}
               </div>
+            </Container>
+            <Container>
+              <hr className="rule" />
             </Container>
           </section>
         );

@@ -15,7 +15,7 @@ import {
   Webhook,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { BtnLink, Container, CountUp, Reveal, Section, SectionHeading } from '@/components/site';
+import { BtnLink, Container, Reveal, Section, SectionHeading } from '@/components/site';
 
 interface ServerStatus {
   online: boolean;
@@ -44,36 +44,24 @@ export default function HomePage() {
       .catch(() => {});
   }, []);
 
-  const stats = [
-    { key: 'projects', value: 47, suffix: '', label: t.home.stats.projects },
-    { key: 'servers', value: 128, suffix: '', label: t.home.stats.servers },
-    { key: 'players', value: 9340, suffix: '', label: t.home.stats.players },
-    { key: 'uptime', value: 99.98, suffix: '%', decimals: 2, label: t.home.stats.uptime },
-  ];
-
   return (
     <div>
       {/* ---------------- HERO ---------------- */}
-      <div className="relative border-b border-white/[0.07]">
+      <div className="relative">
         <Container className="py-20 sm:py-28">
           <Reveal>
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand/30 bg-brand/10 px-3 py-1">
-              <span className="status-dot text-brand" />
-              <span className="eyebrow">{t.home.badge} • 2026</span>
-            </span>
-          </Reveal>
-
-          <Reveal delay={60}>
-            <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
-              {t.home.h1a} <span className="text-brand">{t.home.h1accent}</span> {t.home.h1b}
+            <h1 className="max-w-4xl text-[2.6rem] font-extrabold leading-[1.06] tracking-tight sm:text-6xl">
+              <span className="h-grad">{t.home.h1a} </span>
+              <span className="text-brand">{t.home.h1accent}</span>
+              <span className="h-grad"> {t.home.h1b}</span>
             </h1>
           </Reveal>
 
-          <Reveal delay={120}>
+          <Reveal delay={80}>
             <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-white/55 sm:text-lg">{t.home.sub}</p>
           </Reveal>
 
-          <Reveal delay={180}>
+          <Reveal delay={160}>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <BtnLink href="/pricing" variant="primary" arrow className="h-12 px-6 text-sm">
                 {t.home.ctaPrimary}
@@ -97,7 +85,7 @@ export default function HomePage() {
                   <span className={status.online ? 'status-dot text-ok' : 'status-dot text-err'} />
                   <div>
                     <div className="text-sm font-semibold text-white">{status.name}</div>
-                    <div className="font-mono text-[11px] text-white/40">188.127.229.224:7788</div>
+                    <div className="font-mono text-[11px] text-white/40">{t.home.statusRegion}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-5 font-mono text-[12px]">
@@ -124,26 +112,9 @@ export default function HomePage() {
         </Container>
       </div>
 
-      {/* ---------------- STATS ---------------- */}
-      <Section>
-        <SectionHeading eyebrow="00" title={t.home.statsTitle} />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {stats.map((s, i) => (
-            <Reveal key={s.key} delay={i * 60}>
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
-                <div className="text-[2rem] font-semibold tracking-tight text-white">
-                  <CountUp value={s.value} suffix={s.suffix} decimals={(s as any).decimals ?? 0} />
-                </div>
-                <div className="mt-1 text-[13px] text-white/45">{s.label}</div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </Section>
-
       {/* ---------------- PILLARS ---------------- */}
       <Section>
-        <SectionHeading eyebrow="01–03" title={t.home.pillarsTitle} />
+        <SectionHeading eyebrow="01" title={t.home.pillarsTitle} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {t.home.pillars.map((p, i) => (
             <Reveal key={p.n} delay={i * 70}>
@@ -159,7 +130,7 @@ export default function HomePage() {
 
       {/* ---------------- FEATURES ---------------- */}
       <Section>
-        <SectionHeading eyebrow="04" title={t.home.featuresTitle} sub={t.home.featuresSub} />
+        <SectionHeading eyebrow="02" title={t.home.featuresTitle} sub={t.home.featuresSub} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {t.home.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
@@ -185,7 +156,7 @@ export default function HomePage() {
 
       {/* ---------------- QUICK START ---------------- */}
       <Section>
-        <SectionHeading eyebrow="05" title={t.home.quickstartTitle} sub={t.home.quickstartSub} />
+        <SectionHeading eyebrow="03" title={t.home.quickstartTitle} sub={t.home.quickstartSub} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Reveal>
             <div className="card h-full p-6">
@@ -201,7 +172,8 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.06] pt-3 font-mono text-[11px] text-white/35">
+              <hr className="rule-soft mt-4" />
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-white/35">
                 <span>{t.home.quickstartPort}: UDP 7788</span>
                 <span>{t.home.quickstartConsole}: {t.home.quickstartConsoleVal}</span>
               </div>
@@ -228,7 +200,7 @@ export default function HomePage() {
 
       {/* ---------------- OWNERSHIP ---------------- */}
       <Section>
-        <SectionHeading eyebrow="06" title={t.home.ownershipTitle} sub={t.home.ownershipSub} />
+        <SectionHeading eyebrow="04" title={t.home.ownershipTitle} sub={t.home.ownershipSub} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {t.home.ownership.map((o, i) => (
             <Reveal key={o.t} delay={i * 70}>

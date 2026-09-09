@@ -147,6 +147,15 @@ public sealed class InventoryTests
         var fuel = ItemCatalog.Get("fuelcan");
         Assert.NotNull(fuel);
         Assert.Equal(4.0, fuel.Weight);
+
+        Assert.True(ItemCatalog.Exists("armour"));
+        Assert.True(ItemCatalog.Exists("radio"));
+        Assert.True(ItemCatalog.Exists("lockpick"));
+
+        var arm = ItemCatalog.Get("armour");
+        Assert.NotNull(arm);
+        Assert.Equal("Бронежилет", arm.Name);
+        Assert.Equal(2.5, arm.Weight);
     }
 }
 

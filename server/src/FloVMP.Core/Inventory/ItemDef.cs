@@ -26,6 +26,9 @@ public static class ItemCatalog
         new ItemDef("repairkit",  "Ремкомплект авто",    3.0,  3),
         new ItemDef("fuelcan",    "Канистра с бензином", 4.0,  2),
         new ItemDef("cash",       "Наличные",            0.0,  1_000_000),
+        new ItemDef("armour",     "Бронежилет",          2.5,  2),
+        new ItemDef("radio",      "Рация",               0.4,  1),
+        new ItemDef("lockpick",   "Отмычка",             0.1,  10),
         new ItemDef("pistol",     "Пистолет",            1.1,  1),
         new ItemDef("ammo9",      "Патроны 9мм",         0.01, 250),
     }.ToDictionary(d => d.Id);

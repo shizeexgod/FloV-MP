@@ -125,4 +125,22 @@ public class CombatValidationTests
         Assert.False(res.IsValid);
         Assert.Equal(CombatViolationType.CrossDimensionAttack, res.Violation);
     }
+
+    [Fact]
+    public void CleanupPlayer_ClearsCachedLastShots()
+    {
+        var combat = new CombatValidationService();
+        uint sniperHash = 0x05FC3C11;
+        var now = DateTime.UtcNow;
+
+        combat.ValidateHit(10, new Vector3D(0, 0, 0), 0, 2, new Vector3D(50, 0, 0), 0, 100f, 0f, sniperHash, HitboxZone.Torso, now);
+
+        // Без очистки повторный выстрел через 50мс был бы RapidFire
+        // Очищаем игрока при дисконнекте:
+        combat.CleanupPlayer(10);
+
+        // Новый выстрел с тем же интервалом принимается как первый выстрел новой сессии
+        var res = combat.ValidateHit(10, new Vector3D(0, 0, 0), 0, 2, new Vector3D(50, 0, 0), 0, 100f, 0f, sniperHash, HitboxZone.Torso, now.AddMilliseconds(50));
+        Assert.True(res.IsValid);
+    }
 }

@@ -101,7 +101,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-7 border-t border-white/[0.08] pt-6 text-center text-xs text-white/45">
+          <hr className="rule-soft mt-7" />
+          <div className="mt-6 text-center text-xs text-white/45">
             {t.auth.noAccount}{' '}
             <Link href="/auth/register" className="font-semibold text-brand hover:underline">
               {t.auth.toRegister}

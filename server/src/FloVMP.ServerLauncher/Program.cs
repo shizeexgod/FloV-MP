@@ -79,6 +79,8 @@ catch (Exception ex)
 // запросами HTTP API — некритично для редких login/register, встроенный
 // rate-limit самого alt:V-подключения (не этого API) всё равно на месте.
 var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+var accountStore = new JsonAccountStore(accountsPath);
+var authService = new AuthService(accountStore);
 
 _ = Task.Run(() =>
 {
@@ -101,7 +103,7 @@ _ = Task.Run(() =>
 
             if (path.StartsWith("/api/auth/") && ctx.Request.HttpMethod == "POST")
             {
-                HandleAuthRequest(ctx, path, accountsPath, jsonOpts);
+                HandleAuthRequest(ctx, path, authService, jsonOpts);
                 continue;
             }
 
@@ -195,10 +197,16 @@ return 0;
 //   register, login            — вход/регистрация (login принимает code для 2FA);
 //   change-password, change-email — смена данных (нужен текущий пароль);
 //   2fa/enable, 2fa/disable    — Google Authenticator.
-static void HandleAuthRequest(HttpListenerContext ctx, string path, string accountsPath, JsonSerializerOptions jsonOpts)
+static void HandleAuthRequest(HttpListenerContext ctx, string path, AuthService auth, JsonSerializerOptions jsonOpts)
 {
     try
     {
+        if (ctx.Request.ContentLength64 > 65536)
+        {
+            WriteJson(ctx, 413, new AuthResponseDto(false, "payload too large", null, null, "", false, false), jsonOpts);
+            return;
+        }
+
         using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
         var body = reader.ReadToEnd();
         var req = JsonSerializer.Deserialize<AuthRequestDto>(body, jsonOpts) ?? new AuthRequestDto(null, null, null, null, null, null);
@@ -206,17 +214,16 @@ static void HandleAuthRequest(HttpListenerContext ctx, string path, string accou
         var password = req.Password ?? "";
         var throttleKey = ctx.Request.RemoteEndPoint?.Address.ToString() ?? username;
 
-        var auth = new AuthService(new JsonAccountStore(accountsPath));
         var route = path["/api/auth/".Length..].TrimEnd('/');
 
         var result = route switch
         {
-            "register" => auth.Register(username, password),
+            "register" => auth.Register(username, password, throttleKey),
             "login" => auth.Login(username, password, throttleKey, req.Code),
-            "change-password" => auth.ChangePassword(username, password, req.NewPassword ?? ""),
-            "change-email" => auth.ChangeEmail(username, password, req.Email ?? ""),
-            "2fa/enable" => auth.Enable2fa(username, req.Secret ?? "", req.Code ?? ""),
-            "2fa/disable" => auth.Disable2fa(username, req.Code ?? ""),
+            "change-password" => auth.ChangePassword(username, password, req.NewPassword ?? "", throttleKey),
+            "change-email" => auth.ChangeEmail(username, password, req.Email ?? "", throttleKey),
+            "2fa/enable" => auth.Enable2fa(username, req.Secret ?? "", req.Code ?? "", throttleKey),
+            "2fa/disable" => auth.Disable2fa(username, req.Code ?? "", throttleKey),
             _ => new AuthResult(AuthOutcome.BadUsername, "неизвестная операция"),
         };
 

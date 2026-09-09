@@ -7,59 +7,42 @@ export async function GET() {
   const port = process.env.NEXT_PUBLIC_SERVER_PORT || '7788';
   const startTime = Date.now();
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+  const candidates = [
+    `http://${host}:7799/info`,
+    `http://${host}:${port}/info`,
+    `http://${host}/cdn/info.json`,
+  ];
 
-    const res = await fetch(`http://${host}:${port}/info`, {
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    clearTimeout(timeoutId);
-
-    const ping = Date.now() - startTime;
-
-    if (res.ok) {
-      const data = await res.json();
-      return NextResponse.json({
-        online: true,
-        host,
-        port,
-        name: data.name || 'Держава Онлайн',
-        gamemode: data.gamemode || 'RolePlay',
-        players: data.players || 0,
-        maxPlayers: data.maxplayers || 1500,
-        pingMs: ping,
-        version: data.version || 'v16.4.39-flov',
-      });
-    }
-  } catch {
-    // If HTTP info endpoint not directly responding or timing out, check port 80 /cdn/info.json
+  for (const url of candidates) {
     try {
-      const controller2 = new AbortController();
-      const timeoutId2 = setTimeout(() => controller2.abort(), 2000);
-      const res2 = await fetch(`http://${host}/cdn/info.json`, {
-        signal: controller2.signal,
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(url, {
+        signal: controller.signal,
         cache: 'no-store',
       });
-      clearTimeout(timeoutId2);
+      clearTimeout(timeoutId);
 
-      if (res2.ok) {
-        const data = await res2.json();
+      if (res.ok) {
+        const data = await res.json();
+        const ping = Date.now() - startTime;
         return NextResponse.json({
           online: true,
           host,
           port,
           name: data.name || 'Держава Онлайн',
           gamemode: data.gamemode || 'RolePlay',
-          players: data.players || 0,
-          maxPlayers: data.maxplayers || 1500,
-          pingMs: Date.now() - startTime,
+          players: data.players ?? 0,
+          maxPlayers: data.maxPlayers ?? data.maxplayers ?? 1500,
+          uptimeSeconds: data.uptimeSeconds ?? null,
+          memoryMb: data.memoryMb ?? null,
+          pingMs: ping,
           version: data.version || 'v16.4.39-flov',
         });
       }
     } catch {
-      // Fallback
+      // try next candidate
     }
   }
 

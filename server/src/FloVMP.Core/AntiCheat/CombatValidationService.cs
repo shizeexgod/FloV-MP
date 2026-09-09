@@ -72,6 +72,18 @@ public sealed class CombatValidationService
     }
 
     /// <summary>
+    /// Очищает кешированные данные стрельбы игрока при его отключении, предотвращая утечки памяти.
+    /// </summary>
+    public void CleanupPlayer(int playerId)
+    {
+        lock (_lock)
+        {
+            _lastShots.Remove(playerId);
+            _unprocessedDamageStrikes.Remove(playerId);
+        }
+    }
+
+    /// <summary>
     /// Валидирует выстрел и рассчитывает легитимный урон с учётом брони и зоны попадания.
     /// </summary>
     public HitValidationResult ValidateHit(

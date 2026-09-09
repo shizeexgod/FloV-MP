@@ -47,15 +47,20 @@ public sealed class AuthService
         _window = window ?? TimeSpan.FromMinutes(5);
     }
 
-    public AuthResult Register(string username, string password)
+    public AuthResult Register(string username, string password, string? throttleKey = null)
     {
-        if (!Account.IsValidUsername(username))
-            return new AuthResult(AuthOutcome.BadUsername, "имя: 3-20 символов, буквы/цифры/_");
-        if (!Account.IsValidPassword(password))
-            return new AuthResult(AuthOutcome.BadPassword, "пароль: 6-100 символов");
-        if (_store.Exists(username))
-            return new AuthResult(AuthOutcome.UserExists, "имя уже занято");
+        PruneAttempts();
+        if (throttleKey != null && IsRateLimited(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
 
+        if (!Account.IsValidUsername(username))
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.BadUsername, "имя: 3-20 символов, буквы/цифры/_") : new AuthResult(AuthOutcome.BadUsername, "имя: 3-20 символов, буквы/цифры/_");
+        if (!Account.IsValidPassword(password))
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.BadPassword, "пароль: 6-100 символов") : new AuthResult(AuthOutcome.BadPassword, "пароль: 6-100 символов");
+        if (_store.Exists(username))
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserExists, "имя уже занято") : new AuthResult(AuthOutcome.UserExists, "имя уже занято");
+
+        if (throttleKey != null) ClearAttempts(throttleKey);
         var acc = _store.Create(username, PasswordHasher.Hash(password));
         return new AuthResult(AuthOutcome.Ok, "регистрация успешна", acc);
     }
@@ -102,30 +107,46 @@ public sealed class AuthService
     // --- смена данных / 2FA -----------------------------------------------
 
     /// <summary>Смена пароля: нужен текущий пароль и новый (6-100 символов).</summary>
-    public AuthResult ChangePassword(string username, string currentPassword, string newPassword)
+    public AuthResult ChangePassword(string username, string currentPassword, string newPassword, string? throttleKey = null)
     {
+        PruneAttempts();
+        if (throttleKey != null && IsRateLimited(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
+
         var acc = _store.FindByUsername(username);
-        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (acc is null)
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока") : new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+
         if (!PasswordHasher.Verify(currentPassword, acc.PasswordHash))
-            return new AuthResult(AuthOutcome.WrongPassword, "текущий пароль неверный");
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.WrongPassword, "текущий пароль неверный") : new AuthResult(AuthOutcome.WrongPassword, "текущий пароль неверный");
+
         if (!Account.IsValidPassword(newPassword))
             return new AuthResult(AuthOutcome.BadPassword, "новый пароль: 6-100 символов");
 
+        if (throttleKey != null) ClearAttempts(throttleKey);
         acc.PasswordHash = PasswordHasher.Hash(newPassword);
         _store.Update(acc);
         return new AuthResult(AuthOutcome.Ok, "пароль изменён", acc);
     }
 
     /// <summary>Смена/установка почты: нужен пароль от аккаунта.</summary>
-    public AuthResult ChangeEmail(string username, string password, string email)
+    public AuthResult ChangeEmail(string username, string password, string email, string? throttleKey = null)
     {
+        PruneAttempts();
+        if (throttleKey != null && IsRateLimited(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
+
         var acc = _store.FindByUsername(username);
-        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (acc is null)
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока") : new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+
         if (!PasswordHasher.Verify(password, acc.PasswordHash))
-            return new AuthResult(AuthOutcome.WrongPassword, "пароль неверный");
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.WrongPassword, "пароль неверный") : new AuthResult(AuthOutcome.WrongPassword, "пароль неверный");
+
         if (!Account.IsValidEmail(email))
             return new AuthResult(AuthOutcome.EmailInvalid, "некорректный адрес почты");
 
+        if (throttleKey != null) ClearAttempts(throttleKey);
         acc.Email = email.Trim();
         _store.Update(acc);
         return new AuthResult(AuthOutcome.Ok, "почта сохранена", acc);
@@ -135,17 +156,26 @@ public sealed class AuthService
     /// Включение 2FA: клиент сгенерировал секрет и показал QR, игрок ввёл
     /// код — проверяем и, если сходится, сохраняем секрет и включаем флаг.
     /// </summary>
-    public AuthResult Enable2fa(string username, string secretBase32, string code)
+    public AuthResult Enable2fa(string username, string secretBase32, string code, string? throttleKey = null)
     {
+        PruneAttempts();
+        if (throttleKey != null && IsRateLimited(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
+
         var acc = _store.FindByUsername(username);
-        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (acc is null)
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока") : new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+
         if (acc.TwoFaEnabled)
             return new AuthResult(AuthOutcome.Ok, "двухфакторная защита уже включена", acc);
+
         if (string.IsNullOrWhiteSpace(secretBase32) || Totp.FromBase32Safe(secretBase32).Length < 10)
             return new AuthResult(AuthOutcome.WrongCode, "некорректный секрет");
-        if (!Totp.Verify(secretBase32, code, _now()))
-            return new AuthResult(AuthOutcome.WrongCode, "неверный код — проверьте время на устройстве");
 
+        if (!Totp.Verify(secretBase32, code, _now()))
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.WrongCode, "неверный код — проверьте время на устройстве") : new AuthResult(AuthOutcome.WrongCode, "неверный код — проверьте время на устройстве");
+
+        if (throttleKey != null) ClearAttempts(throttleKey);
         acc.TotpSecret = secretBase32.Trim();
         acc.TwoFaEnabled = true;
         _store.Update(acc);
@@ -153,18 +183,25 @@ public sealed class AuthService
     }
 
     /// <summary>Отключение 2FA: принимаем либо текущий код из приложения, либо пароль.</summary>
-    public AuthResult Disable2fa(string username, string codeOrPassword)
+    public AuthResult Disable2fa(string username, string codeOrPassword, string? throttleKey = null)
     {
+        PruneAttempts();
+        if (throttleKey != null && IsRateLimited(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
+
         var acc = _store.FindByUsername(username);
-        if (acc is null) return new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+        if (acc is null)
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока") : new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+
         if (!acc.TwoFaEnabled)
             return new AuthResult(AuthOutcome.Ok, "двухфакторная защита уже выключена", acc);
 
         var byCode = Totp.Verify(acc.TotpSecret, codeOrPassword, _now());
         var byPassword = PasswordHasher.Verify(codeOrPassword, acc.PasswordHash);
         if (!byCode && !byPassword)
-            return new AuthResult(AuthOutcome.WrongCode, "неверный код или пароль");
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.WrongCode, "неверный код или пароль") : new AuthResult(AuthOutcome.WrongCode, "неверный код или пароль");
 
+        if (throttleKey != null) ClearAttempts(throttleKey);
         acc.TotpSecret = "";
         acc.TwoFaEnabled = false;
         _store.Update(acc);
