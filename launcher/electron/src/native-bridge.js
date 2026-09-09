@@ -12,6 +12,10 @@ const { EventEmitter } = require('node:events');
  * {"id":N,"ok":true|false,"result"|"error":...}. Вся Windows-специфичная логика
  * (реестр, поиск GTA V, запуск через FloVMP.Connect) остаётся в .NET —
  * этот модуль только маршрутизирует запросы/ответы.
+ *
+ * Устойчивость: если C#-процесс неожиданно падает — автоматически
+ * перезапускается (с backoff и потолком), чтобы лаунчер не «умирал» до
+ * рестарта. Каждый вызов имеет таймаут — зависший хелпер не морозит UI.
  */
 class NativeBridge extends EventEmitter {
   constructor() {
@@ -19,6 +23,10 @@ class NativeBridge extends EventEmitter {
     this.proc = null;
     this.nextId = 1;
     this.pending = new Map();
+    this._stopping = false;      // true во время намеренного stop() — не перезапускаем
+    this._restarts = 0;          // счётчик перезапусков за короткое окно
+    this._lastRestartAt = 0;
+    this._defaultTimeoutMs = 60000;
   }
 
   _resolveExePath() {
@@ -36,20 +44,39 @@ class NativeBridge extends EventEmitter {
   }
 
   start() {
+    this._stopping = false;
     const exePath = this._resolveExePath();
     if (!exePath) {
       throw new Error('FloVMP.Launcher.Native.exe не найден — соберите launcher/src/FloVMP.Launcher.Native.');
     }
+    this._exePath = exePath;
+    this._spawn();
+  }
 
-    this.proc = spawn(exePath, [], { windowsHide: true });
+  _spawn() {
+    let proc;
+    try {
+      proc = spawn(this._exePath, [], { windowsHide: true });
+    } catch (err) {
+      console.error('[native] не удалось запустить процесс:', err.message);
+      this.proc = null;
+      this._scheduleRestart();
+      return;
+    }
+    this.proc = proc;
 
-    const rl = readline.createInterface({ input: this.proc.stdout });
+    // stdin ошибки (EPIPE при внезапной смерти процесса) — не роняем main
+    proc.stdin.on('error', (err) => {
+      console.error('[native] stdin error:', err.message);
+    });
+
+    const rl = readline.createInterface({ input: proc.stdout });
     rl.on('line', (line) => {
       if (!line.trim()) return;
       let msg;
       try { msg = JSON.parse(line); } catch { return; }
 
-      // Unprompted broadcast events from native process (e.g. download progress, game exit)
+      // Unprompted broadcast events from native process (download progress, game exit)
       if (msg.event) {
         this.emit(msg.event, msg);
         this.emit('event', msg.event, msg);
@@ -60,35 +87,97 @@ class NativeBridge extends EventEmitter {
         const waiter = this.pending.get(msg.id);
         if (!waiter) return;
         this.pending.delete(msg.id);
+        if (waiter.timer) clearTimeout(waiter.timer);
         if (msg.ok) waiter.resolve(msg.result);
         else waiter.reject(new Error(msg.error || 'native error'));
       }
     });
 
-    this.proc.on('exit', (code) => {
-      for (const waiter of this.pending.values()) waiter.reject(new Error('native helper exited'));
+    proc.on('exit', (code, signal) => {
+      try { rl.close(); } catch {}
+      // отклоняем все висящие запросы, чтобы await'ы в рендерере не зависли
+      for (const waiter of this.pending.values()) {
+        if (waiter.timer) clearTimeout(waiter.timer);
+        waiter.reject(new Error('native helper exited'));
+      }
       this.pending.clear();
-      this.proc = null;
+      if (this.proc === proc) this.proc = null;
+
+      if (!this._stopping) {
+        console.error(`[native] процесс завершился (code=${code}, signal=${signal}) — перезапуск`);
+        this.emit('native-exit', { code, signal });
+        this._scheduleRestart();
+      }
     });
 
-    this.proc.stderr.on('data', (chunk) => {
-      console.error('[native]', chunk.toString());
+    proc.stderr.on('data', (chunk) => {
+      // stderr нативного хелпера — диагностика C#, не обязательно ошибка
+      const s = chunk.toString().trim();
+      if (s) console.error('[native]', s);
     });
   }
 
-  call(cmd, args = {}) {
-    if (!this.proc) throw new Error('native helper is not running');
+  _scheduleRestart() {
+    if (this._stopping) return;
+    const now = Date.now();
+    // окно 30с: если перезапусков слишком много — не крутим бесконечный цикл
+    if (now - this._lastRestartAt > 30000) this._restarts = 0;
+    this._lastRestartAt = now;
+    this._restarts += 1;
+    if (this._restarts > 5) {
+      console.error('[native] слишком много перезапусков за 30с — останавливаюсь. Перезапустите лаунчер.');
+      this.emit('native-dead');
+      return;
+    }
+    const delay = Math.min(5000, 250 * this._restarts);
+    setTimeout(() => { if (!this._stopping) this._spawn(); }, delay);
+  }
+
+  /**
+   * @param {string} cmd
+   * @param {object} args
+   * @param {number} [timeoutMs]
+   */
+  call(cmd, args = {}, timeoutMs) {
+    if (!this.proc || !this.proc.stdin || this.proc.stdin.destroyed) {
+      return Promise.reject(new Error('нативный помощник недоступен'));
+    }
     const id = this.nextId++;
     const payload = JSON.stringify({ id, cmd, ...args });
+    const t = timeoutMs || this._defaultTimeoutMs;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.proc.stdin.write(payload + '\n');
+      const timer = setTimeout(() => {
+        if (this.pending.has(id)) {
+          this.pending.delete(id);
+          reject(new Error(`таймаут нативной команды "${cmd}" (${t}мс)`));
+        }
+      }, t);
+      this.pending.set(id, { resolve, reject, timer });
+      try {
+        this.proc.stdin.write(payload + '\n', (err) => {
+          if (err && this.pending.has(id)) {
+            this.pending.delete(id);
+            clearTimeout(timer);
+            reject(new Error('не удалось отправить команду нативному помощнику: ' + err.message));
+          }
+        });
+      } catch (err) {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(new Error('сбой записи в нативный помощник: ' + err.message));
+      }
     });
   }
 
   stop() {
+    this._stopping = true;
+    for (const waiter of this.pending.values()) {
+      if (waiter.timer) clearTimeout(waiter.timer);
+      waiter.reject(new Error('нативный помощник остановлен'));
+    }
+    this.pending.clear();
     if (this.proc) {
-      this.proc.kill();
+      try { this.proc.kill(); } catch {}
       this.proc = null;
     }
   }
