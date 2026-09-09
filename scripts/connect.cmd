@@ -7,18 +7,25 @@ rem and breaks line tokenization. Keep this file ASCII.
 
 cd /d "%~dp0.."
 
-set "CONNECT_EXE=launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
+rem Prefer the self-contained connector (native-dist) — it's the proven build
+rem that actually opens GTA (bin\Release framework-dependent build stays silent
+rem on some machines). Fall back to bin\Release only if native-dist is absent.
+set "CONNECT_EXE=launcher\electron\native-dist\FloVMP.Connect.exe"
+if not exist "%CONNECT_EXE%" set "CONNECT_EXE=launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
 
 if not exist "%CONNECT_EXE%" (
     echo [INFO] Building FloVMP.Connect ...
     dotnet build "launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release --nologo
+    set "CONNECT_EXE=launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
 )
 
 if not exist "%CONNECT_EXE%" (
-    echo [ERROR] FloVMP.Connect.exe not found after build. Aborting.
+    echo [ERROR] FloVMP.Connect.exe not found. Aborting.
     pause
     exit /b 1
 )
+
+echo [INFO] Connector: %CONNECT_EXE%
 
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=188.127.229.224:7788"
