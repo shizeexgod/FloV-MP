@@ -15,6 +15,7 @@
 |---|---|
 | [architecture/saas-ecosystem-blueprint.md](architecture/saas-ecosystem-blueprint.md) | **Мастер-спецификация SaaS-экосистемы**: 13 глав (Multiplayer Core, Server Core, SDK, Telemetry 60 Hz, txAdmin Remote Agent, AI Assistant, High-Load 1000+) |
 | [architecture/offline-admin-control-plane-spec.md](architecture/offline-admin-control-plane-spec.md) | **Спецификация серверной оффлайн-админки (Вариант В — Гибрид)**: прямое подключение к MariaDB `derzhava_rp`, Dual-Routing Engine (online RPC vs offline DB), репорты, досье, вайпы, Discord-бот `/bansc` |
+| [architecture/client-deployment-and-hardware-guide.md](architecture/client-deployment-and-hardware-guide.md) | **Развёртывание на серверах заказчиков**: профиль AMD 8C / 64GB, изоляция KVM/Docker, отказ от Apache в пользу Nginx, защита от DDoS без 3 серверов |
 | [architecture/product-boundaries.md](architecture/product-boundaries.md) | Разграничение: движок FloV:MP vs RP-проект «Держава Онлайн» |
 | [architecture/platform-boundaries.md](architecture/platform-boundaries.md) | Платформенные границы: что входит в сетевой движок, что является гейммодом |
 
