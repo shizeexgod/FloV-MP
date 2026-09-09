@@ -231,6 +231,26 @@ public sealed class LocalCdn : IDisposable
         string rel = i >= 0 ? path[(i + marker.Length)..] : Path.GetFileName(path);
         rel = rel.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
 
+        // De-race: клиент качает altv-client.dll в СВОЮ же папку (_clientDir),
+        // откуда CDN её и отдаёт → самоперезапись во время скачивания обнуляет
+        // файл. Патченую версию (обход WRONG_STABLE_BUILD) держим ОТДЕЛЬНО в
+        // patched/altv-client.dll и отдаём её — CDN читает staging, клиент
+        // пишет живой файл, пересечения нет. Живой altv-client.dll остаётся
+        // оригиналом (проходит любые проверки целостности до скачивания).
+        var staged = StagedClientDll(rel);
+        if (staged != null)
+        {
+            try
+            {
+                using var sfs = new FileStream(staged, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var sms = new MemoryStream();
+                sfs.CopyTo(sms);
+                Console.WriteLine("[cdn] altv-client.dll: отдаю патченую копию из staging (de-raced)");
+                return (200, "application/octet-stream", sms.ToArray());
+            }
+            catch (Exception ex) { Console.WriteLine($"[cdn] staged altv-client.dll read failed: {ex.Message}"); }
+        }
+
         var file = Path.GetFullPath(Path.Combine(_clientDir, rel));
         if (!file.StartsWith(Path.GetFullPath(_clientDir), StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
         {
@@ -268,12 +288,23 @@ public sealed class LocalCdn : IDisposable
         {
             var rel = Path.GetRelativePath(_clientDir, f).Replace('\\', '/');
             if (rel is "update.json" or "manifest.json") continue;
-            if (rel.StartsWith("cache/") || rel.StartsWith("logs/") || rel.StartsWith("backup/") || rel.StartsWith("cdn/")) continue;
+            if (rel.StartsWith("cache/") || rel.StartsWith("logs/") || rel.StartsWith("backup/")
+                || rel.StartsWith("cdn/") || rel.StartsWith("patched/")) continue;
+
+            // Для altv-client.dll хэш/размер берём из patched-копии (её же
+            // отдаёт CDN) — чтобы клиент увидел совпадение манифеста с тем,
+            // что скачает, и не крутил цикл перекачки.
+            var eff = f;
+            if (rel.Equals("altv-client.dll", StringComparison.OrdinalIgnoreCase))
+            {
+                var st = Path.Combine(_clientDir, "patched", "altv-client.dll");
+                if (File.Exists(st)) eff = st;
+            }
 
             if (!first) { hashes.Append(','); sizes.Append(','); }
             first = false;
-            hashes.Append('"').Append(rel).Append("\":\"").Append(Sha1(f)).Append('"');
-            sizes.Append('"').Append(rel).Append("\":").Append(new FileInfo(f).Length);
+            hashes.Append('"').Append(rel).Append("\":\"").Append(Sha1(eff)).Append('"');
+            sizes.Append('"').Append(rel).Append("\":").Append(new FileInfo(eff).Length);
         }
         return $"{{\"latestBuildNumber\":-1,\"version\":\"{Version}\",\"sdkVersion\":\"{SdkVersion}\"," +
                $"\"hashList\":{{{hashes}}},\"sizeList\":{{{sizes}}}}}";
@@ -298,6 +329,16 @@ public sealed class LocalCdn : IDisposable
             files.Append($"{{\"name\":\"{rel}\",\"hash\":\"{Sha1(f)}\",\"size\":{new FileInfo(f).Length}}}");
         }
         return $"{{\"files\":[{files}]}}";
+    }
+
+    // Возвращает путь к патченой altv-client.dll (staging), если запрошена
+    // именно она и файл patched/altv-client.dll существует; иначе null.
+    private string? StagedClientDll(string rel)
+    {
+        if (!Path.GetFileName(rel).Equals("altv-client.dll", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var staged = Path.Combine(_clientDir, "patched", "altv-client.dll");
+        return File.Exists(staged) ? staged : null;
     }
 
     private static byte[] Enc(string s) => Encoding.UTF8.GetBytes(s);
