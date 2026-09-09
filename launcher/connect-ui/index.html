@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Держава Онлайн — загрузка</title>
+<!--
+  Кастомный connect/loading-экран alt:V для FloV:MP («Держава Онлайн»).
+  Подставляется коннектором через флаг -customui (LocalCdn отдаёт этот файл).
+  Слушает события клиента alt:V по контракту (сверено с исходным бандлом):
+    alt.on('connection:connecting'|'connected'|'downloadingRuntimes'|
+           'downloadingResources'(done,total)|'validatingResources'|
+           'startingResources'|'preloadingMods'|'reloadingGameMap'|
+           'startingGame'|'joining'|'disconnected'(reason)|'failed'(reason))
+    alt.on('connectionState:update' | 'version:update' | 'ui:toggle')
+  Эмитит: alt.emit('ui:ready'), alt.emit('loaded'),
+          alt.emit('exit')  (Enter — выход),
+          alt.emit('console:execute','reconnect')  (R — переподключение).
+  Самодостаточный: шрифты ./fonts/*, логотип ./logo.png (рядом, отдаёт LocalCdn).
+-->
+<style>
+  @font-face { font-family:'Proxima'; src:url('./fonts/ProximaNova-Regular.ttf') format('truetype'); font-weight:400; font-display:swap; }
+  @font-face { font-family:'Proxima'; src:url('./fonts/ProximaNova-Bold.otf') format('opentype'); font-weight:700; font-display:swap; }
+  @font-face { font-family:'Proxima'; src:url('./fonts/ProximaNova-Black.otf') format('opentype'); font-weight:900; font-display:swap; }
+
+  :root{
+    --accent:#fdd015; --accent-2:#fc8c06; --accent-rgb:253,208,21;
+    --bg-0:#0b0b0d; --bg-1:#141416; --ink:#ffffff; --muted:#8b8b93; --muted-2:#5a5a62;
+    --ui:'Proxima','Segoe UI',system-ui,-apple-system,sans-serif;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:var(--bg-0); color:var(--ink); font-family:var(--ui); user-select:none; cursor:default; }
+  body{ -webkit-font-smoothing:antialiased; }
+
+  /* ── Фон: тёмный + золотое сияние снизу + виньетка + лёгкая текстура ── */
+  .bg{ position:fixed; inset:0; z-index:0;
+    background:
+      radial-gradient(120% 90% at 50% 118%, rgba(var(--accent-rgb),.16), transparent 55%),
+      radial-gradient(90% 70% at 50% -20%, rgba(255,255,255,.05), transparent 60%),
+      linear-gradient(180deg, var(--bg-1), var(--bg-0) 70%);
+  }
+  .bg::after{ content:''; position:absolute; inset:0; opacity:.4; pointer-events:none;
+    background:repeating-linear-gradient(115deg, rgba(255,255,255,.02) 0 2px, transparent 2px 9px); }
+  /* мягкий движущийся блик по низу */
+  .beam{ position:fixed; left:-30%; bottom:-40%; width:160%; height:70%; z-index:0; pointer-events:none;
+    background:radial-gradient(50% 60% at 50% 50%, rgba(var(--accent-rgb),.10), transparent 70%);
+    filter:blur(20px); animation:beam 9s ease-in-out infinite alternate; }
+  @keyframes beam{ from{ transform:translateX(-6%);} to{ transform:translateX(6%);} }
+
+  /* ── Центр ── */
+  .stage{ position:relative; z-index:2; width:100%; height:100%; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:0; }
+  .logo{ width:118px; height:118px; object-fit:contain; margin-bottom:22px;
+    filter:drop-shadow(0 10px 34px rgba(var(--accent-rgb),.45));
+    animation:logoIn .7s cubic-bezier(.16,1,.3,1) both, float 5.5s ease-in-out 1s infinite; }
+  @keyframes logoIn{ from{ opacity:0; transform:translateY(14px) scale(.9);} to{ opacity:1; transform:none;} }
+  @keyframes float{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-7px);} }
+
+  .title{ font-weight:900; letter-spacing:.06em; font-size:46px; line-height:1; text-transform:uppercase;
+    animation:rise .7s .05s cubic-bezier(.16,1,.3,1) both; }
+  .title span{ color:var(--accent); text-shadow:0 4px 26px rgba(var(--accent-rgb),.4); }
+  .subtitle{ margin-top:9px; font-size:12px; letter-spacing:.42em; text-transform:uppercase; color:var(--muted);
+    animation:rise .7s .12s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(12px);} to{ opacity:1; transform:none;} }
+
+  /* ── Прогресс ── */
+  .progress{ margin-top:40px; width:440px; max-width:64vw;
+    animation:rise .7s .2s cubic-bezier(.16,1,.3,1) both; }
+  .phase-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:11px; }
+  .phase{ font-size:14.5px; font-weight:700; color:#e9e9ee; letter-spacing:.01em; }
+  .phase .dots::after{ content:''; animation:dots 1.4s steps(4,end) infinite; }
+  @keyframes dots{ 0%{content:'';} 25%{content:'·';} 50%{content:'··';} 75%{content:'···';} }
+  .pct{ font-size:13px; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums; }
+
+  .bar{ position:relative; height:7px; border-radius:99px; background:rgba(255,255,255,.07);
+    overflow:hidden; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); }
+  .fill{ position:absolute; inset:0 auto 0 0; width:0%; border-radius:99px;
+    background:linear-gradient(90deg, var(--accent-2), var(--accent));
+    box-shadow:0 0 16px rgba(var(--accent-rgb),.55);
+    transition:width .35s cubic-bezier(.16,1,.3,1); }
+  .fill::after{ content:''; position:absolute; inset:0; border-radius:99px;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+    transform:translateX(-100%); animation:shine 1.6s ease-in-out infinite; }
+  @keyframes shine{ 0%{transform:translateX(-100%);} 60%,100%{transform:translateX(220%);} }
+  /* неопределённый режим (процент неизвестен) */
+  .bar.indet .fill{ width:34% !important; animation:indet 1.25s cubic-bezier(.65,0,.35,1) infinite; transition:none; }
+  @keyframes indet{ 0%{left:-36%;} 100%{left:104%;} }
+
+  .meta{ margin-top:11px; font-size:11.5px; color:var(--muted-2); text-align:center; min-height:15px; letter-spacing:.02em; }
+
+  /* ── Подсказки внизу ── */
+  .tips{ position:fixed; left:0; right:0; bottom:34px; z-index:2; text-align:center; padding:0 40px; }
+  .tips .kicker{ font-size:10px; letter-spacing:.34em; text-transform:uppercase; color:var(--accent);
+    opacity:.75; margin-bottom:8px; }
+  .tips .tip{ font-size:13.5px; color:#c6c6cd; max-width:640px; margin:0 auto; line-height:1.45;
+    transition:opacity .5s ease; }
+
+  /* ── Угловые метки ── */
+  .corner{ position:fixed; z-index:2; font-size:11px; color:var(--muted-2); letter-spacing:.04em; }
+  .corner.br{ right:22px; bottom:22px; }
+  .corner.bl{ left:22px; bottom:22px; }
+  .dot-on{ display:inline-block; width:7px; height:7px; border-radius:50%; background:#3fd98a; margin-right:7px;
+    box-shadow:0 0 8px #3fd98a; vertical-align:middle; }
+
+  /* ── Экран отключения ── */
+  .disc{ position:fixed; inset:0; z-index:5; display:none; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(120% 90% at 50% 50%, rgba(0,0,0,.55), rgba(0,0,0,.86)); backdrop-filter:blur(3px); }
+  .disc.show{ display:flex; animation:fade .35s ease both; }
+  @keyframes fade{ from{opacity:0;} to{opacity:1;} }
+  .disc-title{ font-weight:900; font-size:40px; letter-spacing:.05em; text-transform:uppercase; color:var(--accent);
+    text-shadow:0 6px 30px rgba(var(--accent-rgb),.35); }
+  .disc-rule{ width:min(560px,70vw); height:1px; margin:18px 0 16px;
+    background:linear-gradient(90deg, transparent, rgba(var(--accent-rgb),.5), transparent); }
+  .disc-reason{ font-size:15px; color:#d8d8de; max-width:620px; line-height:1.5; }
+  .disc-code{ margin-top:10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-2); }
+  .disc-actions{ margin-top:30px; display:flex; gap:26px; }
+  .disc-actions .act{ font-size:12.5px; color:#cfcfd6; display:flex; align-items:center; gap:9px; }
+  .disc-actions kbd{ font-family:var(--ui); font-weight:700; font-size:11px; color:#fff;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); border-bottom-width:2px;
+    border-radius:6px; padding:4px 9px; min-width:26px; text-align:center; }
+  .disc-actions .act.primary kbd{ color:var(--accent); border-color:rgba(var(--accent-rgb),.5); background:rgba(var(--accent-rgb),.10); }
+  .reconnecting{ margin-top:26px; font-size:13px; color:var(--muted); display:none; align-items:center; gap:10px; }
+  .reconnecting.show{ display:flex; }
+  .spin{ width:15px; height:15px; border-radius:50%; border:2px solid rgba(255,255,255,.15); border-top-color:var(--accent); animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg);} }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="beam"></div>
+
+  <main class="stage" id="loading">
+    <img class="logo" src="./logo.png" alt="Держава Онлайн" onerror="this.style.display='none'">
+    <div class="title">Держава <span>Онлайн</span></div>
+    <div class="subtitle">FloV:MP Multiplayer</div>
+
+    <div class="progress">
+      <div class="phase-row">
+        <div class="phase" id="phase">Инициализация<span class="dots"></span></div>
+        <div class="pct" id="pct"></div>
+      </div>
+      <div class="bar indet" id="bar"><div class="fill" id="fill"></div></div>
+      <div class="meta" id="meta"></div>
+    </div>
+  </main>
+
+  <div class="tips" id="tipsWrap">
+    <div class="kicker">Совет</div>
+    <div class="tip" id="tip">Добро пожаловать в Держава Онлайн.</div>
+  </div>
+
+  <div class="corner bl"><span class="dot-on"></span>Держава Онлайн · Басманный</div>
+  <div class="corner br" id="ver">FloV:MP v1.0.0</div>
+
+  <!-- Экран отключения -->
+  <div class="disc" id="disc">
+    <div class="disc-title" id="discTitle">Соединение прервано</div>
+    <div class="disc-rule"></div>
+    <div class="disc-reason" id="discReason">Соединение с сервером потеряно.</div>
+    <div class="disc-code" id="discCode"></div>
+    <div class="disc-actions">
+      <div class="act primary"><kbd>R</kbd><span>Переподключиться</span></div>
+      <div class="act"><kbd>Enter</kbd><span>Выход</span></div>
+    </div>
+    <div class="reconnecting" id="reconnecting"><div class="spin"></div><span>Переподключение…</span></div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+  // Мост к клиенту alt:V; в обычном браузере — заглушка (для отладки вёрстки).
+  var A = (typeof alt !== 'undefined' && alt) ? alt : {
+    on: function(){}, emit: function(){}, showCursor: function(){}, toggleGameControls: function(){},
+  };
+  var on = function (ev, fn) { try { A.on(ev, fn); } catch (e) {} };
+  var emit = function () { try { A.emit.apply(A, arguments); } catch (e) {} };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var phaseEl = $('phase'), pctEl = $('pct'), barEl = $('bar'), fillEl = $('fill'), metaEl = $('meta');
+  var discEl = $('disc'), discReason = $('discReason'), discCode = $('discCode'), discTitle = $('discTitle');
+  var reconnEl = $('reconnecting'), loadingEl = $('loading'), tipsWrap = $('tipsWrap'), verEl = $('ver');
+
+  var disconnected = false;
+
+  function fmtBytes(n) {
+    if (!n || n < 0) return '0 Б';
+    var u = ['Б','КБ','МБ','ГБ'], i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
+  }
+
+  // Устанавливает фазу; pct=null → индикатор «бегущей строки»
+  function setPhase(text, pct, meta) {
+    if (disconnected) return;
+    phaseEl.innerHTML = text + '<span class="dots"></span>';
+    if (pct === null || pct === undefined || isNaN(pct)) {
+      barEl.classList.add('indet'); pctEl.textContent = '';
+    } else {
+      pct = Math.max(0, Math.min(100, pct));
+      barEl.classList.remove('indet');
+      fillEl.style.width = pct + '%';
+      pctEl.textContent = Math.round(pct) + '%';
+    }
+    metaEl.textContent = meta || '';
+  }
+
+  // ── Фазы подключения (RU) ──
+  on('connection:connecting',          function () { setPhase('Подключение к серверу', null); });
+  on('connection:connected',           function () { setPhase('Сервер отвечает', 5); });
+  on('connection:inQueue',             function () { setPhase('Вы в очереди на вход', null); });
+  on('connection:downloadingRuntimes', function () { setPhase('Загрузка компонентов', null); });
+  on('connection:downloadingResources',function (done, total) {
+    if (typeof done === 'number' && typeof total === 'number' && total > 0) {
+      setPhase('Загрузка ресурсов', done / total * 100, fmtBytes(done) + ' / ' + fmtBytes(total));
+    } else { setPhase('Загрузка ресурсов', null); }
+  });
+  on('connection:validatingResources', function () { setPhase('Проверка файлов', 100); });
+  on('connection:startingResources',   function () { setPhase('Запуск ресурсов', null); });
+  on('connection:preloadingMods',      function () { setPhase('Подготовка модификаций', null); });
+  on('connection:reloadingGameMap',    function () { setPhase('Загрузка карты Москвы', null); });
+  on('connection:startingGame',        function () { setPhase('Запуск игры', 100); });
+  on('connection:joining',             function () { setPhase('Вход в игру', 100); });
+  on('connectionState:update',         function () { /* держим курсор/оверлей — клиент сам решает */ });
+  on('ui:toggle',                      function () {});
+  on('version:update',                 function (cur) { if (typeof cur === 'string' && cur) verEl.textContent = 'FloV:MP ' + cur; });
+
+  // ── Причины отключения (перевод понятным языком) ──
+  var REASONS = {
+    'WRONG_STABLE_BUILD':   ['Несовместимая версия игры', 'Ваш клиент не совпадает со сборкой сервера. Обновите игру через лаунчер Держава RP и зайдите снова.'],
+    'WRONG_BETA_BUILD':     ['Несовместимая бета-версия', 'Ваш клиент не совпадает со сборкой сервера. Обновите игру через лаунчер.'],
+    'WRONG_VERSION':        ['Несовместимая версия', 'Версия клиента не подходит к серверу. Обновите игру через лаунчер.'],
+    'Connection lost':      ['Соединение потеряно', 'Связь с сервером прервана. Проверьте интернет и переподключитесь.'],
+    'SERVER_FULL':          ['Сервер переполнен', 'На сервере нет свободных слотов. Попробуйте зайти чуть позже.'],
+    'KICKED':               ['Вы отключены', 'Администратор отключил вас от сервера.'],
+    'BANNED':               ['Доступ заблокирован', 'Ваш аккаунт заблокирован на этом сервере.'],
+    'TIMEOUT':              ['Тайм-аут соединения', 'Сервер не ответил вовремя. Проверьте соединение и попробуйте снова.'],
+  };
+  function showDisconnect(reason) {
+    disconnected = true;
+    var raw = (reason == null ? '' : String(reason)).trim();
+    var known = null, code = raw;
+    for (var k in REASONS) { if (raw === k || raw.toUpperCase().indexOf(k.toUpperCase()) !== -1) { known = REASONS[k]; break; } }
+    if (known) { discTitle.textContent = known[0]; discReason.textContent = known[1]; }
+    else if (raw) { discTitle.textContent = 'Соединение прервано'; discReason.textContent = raw; }
+    else { discTitle.textContent = 'Соединение прервано'; discReason.textContent = 'Связь с сервером потеряна.'; }
+    discCode.textContent = raw && (known ? raw : '') ? raw : '';
+    loadingEl.classList.add('hidden'); tipsWrap.classList.add('hidden');
+    discEl.classList.add('show');
+    emit('ui:open', true);
+  }
+  on('connection:disconnected', function (r) { showDisconnect(r); });
+  on('connection:failed',       function (r) { showDisconnect(r); });
+
+  // ── Клавиши на экране отключения: R — reconnect, Enter — exit ──
+  document.addEventListener('keydown', function (e) {
+    if (!disconnected) return;
+    var k = e.key || e.code;
+    if (k === 'Enter' || k === 'NumpadEnter') {
+      e.preventDefault(); e.stopPropagation(); emit('exit');
+    } else if (k === 'r' || k === 'R' || k === 'KeyR') {
+      e.preventDefault(); e.stopPropagation();
+      reconnEl.classList.add('show');
+      emit('console:execute', 'reconnect');
+    }
+  }, true);
+
+  // ── Подсказки (RP-тематика) ──
+  var TIPS = [
+    'Нажмите T, чтобы открыть чат и общаться с игроками.',
+    'Инвентарь открывается клавишей I — до 30 предметов.',
+    'Двигатель авто — клавиша 2, замки — L, ремень — B.',
+    'Голосовая связь работает по близости: говорите естественно.',
+    'Начните с честной работы, чтобы накопить на первое авто.',
+    'Уважайте RolePlay: отыгрывайте роль, а не «стреляйте во всех».',
+    'Команда /help покажет доступные команды на сервере.',
+    'Банкоматы: /deposit, /withdraw, переводы — /transfer.',
+    'Карта — реальные улицы Москвы: Кремль, Арбат, Сити.',
+    'Держава Онлайн работает на собственном движке FloV:MP.',
+  ];
+  var ti = Math.floor(Math.random() * TIPS.length), tipEl = $('tip');
+  tipEl.textContent = TIPS[ti];
+  setInterval(function () {
+    if (disconnected) return;
+    ti = (ti + 1) % TIPS.length;
+    tipEl.style.opacity = '0';
+    setTimeout(function () { tipEl.textContent = TIPS[ti]; tipEl.style.opacity = '1'; }, 500);
+  }, 5200);
+
+  // Сообщаем клиенту, что UI готов.
+  emit('ui:ready');
+  emit('loaded');
+  // Пока не пришло ни одного события — показываем «Подключение».
+  setPhase('Подключение к серверу', null);
+})();
+</script>
+</body>
+</html>
