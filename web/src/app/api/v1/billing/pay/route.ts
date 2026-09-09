@@ -5,6 +5,17 @@ import { PLANS, generateLicenseKey } from '@/lib/license';
 
 export async function POST(req: NextRequest) {
   try {
+    // ВАЖНО: реального платёжного шлюза нет — этот эндпоинт просто помечает
+    // счёт оплаченным и выдаёт лицензию. Пока не подключён PSP + проверка
+    // вебхука, он должен быть выключен, иначе лицензии бесплатны для всех.
+    // Включается осознанно: BILLING_ENABLED=true.
+    if (process.env.BILLING_ENABLED !== 'true') {
+      return NextResponse.json(
+        { error: 'Оплата пока не подключена. Свяжитесь с администрацией.' },
+        { status: 501 },
+      );
+    }
+
     const session = getSessionUser();
     if (!session) {
       return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
