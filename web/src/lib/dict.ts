@@ -24,6 +24,13 @@ const ru = {
     from: 'от',
     allRightsReserved: 'Все права защищены.',
     backHome: 'На главную',
+    appearance: 'Оформление',
+    accent: 'Акцентный цвет',
+    language: 'Язык',
+    theme: 'Тема',
+    themeLight: 'Светлая',
+    themeDark: 'Тёмная',
+    menu: 'Меню',
   },
 
   nav: {
@@ -825,6 +832,13 @@ const en: typeof ru = {
     from: 'from',
     allRightsReserved: 'All rights reserved.',
     backHome: 'Back home',
+    appearance: 'Appearance',
+    accent: 'Accent color',
+    language: 'Language',
+    theme: 'Theme',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    menu: 'Menu',
   },
 
   nav: {
