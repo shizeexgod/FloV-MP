@@ -27,6 +27,7 @@ public class LauncherSettings
     /// <summary>Крестик сворачивает лаунчер в трей вместо закрытия.</summary>
     [JsonPropertyName("trayOnClose")] public bool TrayOnClose { get; set; } = false;
     [JsonPropertyName("lastSettingsTab")] public string LastSettingsTab { get; set; } = "general";
+    [JsonPropertyName("lastPage")] public string LastPage { get; set; } = "play";
     [JsonPropertyName("autostart")] public bool Autostart { get; set; } = false;
     [JsonPropertyName("minimizeOnPlay")] public bool MinimizeOnPlay { get; set; } = true;
     [JsonPropertyName("updateChannel")] public string UpdateChannel { get; set; } = "stable";

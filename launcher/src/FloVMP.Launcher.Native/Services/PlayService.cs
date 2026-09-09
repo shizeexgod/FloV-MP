@@ -52,7 +52,42 @@ public static class PlayService
         var clientDir = FindClientDir();
         var clientArg = !string.IsNullOrWhiteSpace(clientDir) ? $" --client \"{clientDir}\"" : "";
 
-        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\"{clientArg}";
+        var detectedPlatform = GtaLocatorService.DetectPlatform(safeGtaPath);
+        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\" --platform {detectedPlatform}{clientArg}";
+
+        if (detectedPlatform == "egs")
+        {
+            try
+            {
+                if (Process.GetProcessesByName("EpicGamesLauncher").Length == 0)
+                {
+                    var epicCandidates = new[]
+                    {
+                        @"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
+                        @"C:\Program Files (x86)\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
+                    };
+                    var foundEpic = epicCandidates.FirstOrDefault(File.Exists);
+                    if (foundEpic != null)
+                    {
+                        Process.Start(new ProcessStartInfo(foundEpic, "-Silent") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Minimized });
+                    }
+                    else
+                    {
+                        Process.Start(new ProcessStartInfo("com.epicgames.launcher://") { UseShellExecute = true });
+                    }
+                    for (int i = 0; i < 20; i++)
+                    {
+                        Thread.Sleep(300);
+                        if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
+                        {
+                            Thread.Sleep(2000);
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
 
         // Настройки запуска из settings.json (те же, что редактируются на
         // вкладке «Игра»). Раньше сохранялись, но никуда не передавались —
@@ -152,7 +187,7 @@ public static class PlayService
         switch (s.GtaWindowMode)
         {
             case "windowed": parts.Add("-windowed"); break;
-            case "borderless": parts.Add("-borderless"); break;
+            case "borderless": parts.Add("-windowed"); parts.Add("-borderless"); break;
             case "fullscreen": parts.Add("-fullscreen"); break;
         }
         if (!string.IsNullOrWhiteSpace(s.LaunchArgs))

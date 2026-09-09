@@ -34,7 +34,7 @@ if (args.Contains("--cdn-only"))
 var opts = ParseArgs(args);
 if (opts is null) return 1;
 
-var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname) = opts.Value;
+var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname, gameArgs, priority, fpsLimit, gfxPreset) = opts.Value;
 
 var flovmpExe = Path.Combine(clientDir, "flovmp.exe");
 var clientExe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(clientDir, "altv.exe");
@@ -126,7 +126,7 @@ if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
 
 // Закрываем зависшие прошлые процессы игры/клиента и служб
 var currentPid = Environment.ProcessId;
-foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE", "SocialClubHelper", "RockstarErrorHandler", "Launcher", "LauncherPatcher" })
+foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE", "SocialClubHelper", "RockstarErrorHandler" })
 {
     foreach (var pr in Process.GetProcessesByName(stale))
     {
@@ -140,6 +140,37 @@ foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv",
         catch { }
     }
 }
+
+// Если GTA5 не запущена, сбрасываем зависшие процессы Rockstar Launcher, чтобы сбросить вечный статус «Запуск» в Epic Games
+if (Process.GetProcessesByName("GTA5").Length == 0 && Process.GetProcessesByName("GTA5_Enhanced").Length == 0)
+{
+    foreach (var rglName in new[] { "Launcher", "LauncherPatcher" })
+    {
+        foreach (var pr in Process.GetProcessesByName(rglName))
+        {
+            try
+            {
+                var mod = pr.MainModule?.FileName;
+                if (mod != null && (mod.Contains("Rockstar", StringComparison.OrdinalIgnoreCase) || mod.Contains("Social Club", StringComparison.OrdinalIgnoreCase)))
+                {
+                    Console.WriteLine($"[connect] Сбрасываю зависший Rockstar {rglName} (PID {pr.Id}) для чистого запуска");
+                    pr.Kill(true);
+                    pr.WaitForExit(2000);
+                }
+            }
+            catch { }
+        }
+    }
+}
+
+// Прогрев платформы Epic Games, если игра куплена в Epic Games
+if (detectedPlatform == "egs")
+{
+    EnsureEpicGamesLauncherRunning();
+}
+
+// Подготовка параметров запуска через commandline.txt в папке GTA V
+PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
 
 // Очищаем старый кэш ресурсов клиента (кроме skin.bin), чтобы обновления скриптов применялись мгновенно
 var cacheDir = Path.Combine(clientDir, "cache");
@@ -198,6 +229,7 @@ try
 
     // 4) Ждём завершения
     var gtaSeen = false;
+    var waitStopwatch = Stopwatch.StartNew();
     const string windowTitle = "Держава Онлайн (FloV:MP)";
     while (true)
     {
@@ -205,7 +237,12 @@ try
         var gtaUp = IsUp("GTA5.exe") || IsUp("GTA5_Enhanced.exe");
         if (gtaUp)
         {
-            gtaSeen = true;
+            if (!gtaSeen)
+            {
+                Console.WriteLine("[connect] GTA5.exe обнаружен в процессах! Игра успешно запущена.");
+                gtaSeen = true;
+                ApplyGamePriority(priority);
+            }
             UpdateGameWindowTitle(windowTitle);
         }
         else if (altvUp)
@@ -213,17 +250,27 @@ try
             UpdateGameWindowTitle(windowTitle);
         }
 
-        if (gtaSeen && !gtaUp) break;
-        if (!gtaSeen && !altvUp)
+        if (gtaSeen && !gtaUp)
         {
-            await Task.Delay(3000);
-            if (!IsUp("altv.exe") && !IsUp("flovmp.exe") && !IsUp("GTA5.exe") && !IsUp("GTA5_Enhanced.exe")) break;
+            Console.WriteLine("[connect] Процесс GTA V завершен.");
+            break;
+        }
+
+        if (!gtaSeen)
+        {
+            // Ждем до 75 секунд, пока Rockstar Launcher и Epic Games проводят авторизацию и запускают игру
+            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(75) && !altvUp)
+            {
+                Console.WriteLine("[connect] Время ожидания старта игры истекло (75 сек).");
+                break;
+            }
         }
         await Task.Delay(500);
     }
 }
 finally
 {
+    CleanupGameCommandLine(gtaDir);
     Console.WriteLine("[connect] Игра закрыта, останавливаю локальный бэкенд.");
 }
 
@@ -286,9 +333,11 @@ static string? FindGameExecutable(string gtaDir)
     return null;
 }
 
-static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride, string? nickname)? ParseArgs(string[] a)
+static (string connect, string clientDir, string gtaDir, int port, bool debug, bool keepOpen, bool noDirectLaunch, string? platformOverride, string? nickname, string? gameArgs, string? priority, int fpsLimit, string? gfxPreset)? ParseArgs(string[] a)
 {
     string? connect = null, client = null, gta = null, platformOverride = null, nickname = null, host = null;
+    string? gameArgs = null, priority = null, gfxPreset = null;
+    int fpsLimit = 0;
     int? sPort = null;
     var port = 9988;
     var debug = true;
@@ -310,6 +359,10 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
             case "--no-debug": debug = false; break;
             case "--keep-open": keepOpen = true; break;
             case "--no-directlaunch": noDirectLaunch = true; break;
+            case "--game-args" when i + 1 < a.Length: gameArgs = a[++i]; break;
+            case "--priority" when i + 1 < a.Length: priority = a[++i]; break;
+            case "--fps-limit" when i + 1 < a.Length && int.TryParse(a[i + 1], out var fl): fpsLimit = fl; i++; break;
+            case "--gfx-preset" when i + 1 < a.Length: gfxPreset = a[++i]; break;
         }
     }
 
@@ -347,7 +400,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
         return null;
     }
 
-    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride, nickname);
+    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride, nickname, gameArgs, priority, fpsLimit, gfxPreset);
 }
 
 static string? ResolveClientDir()
@@ -428,5 +481,91 @@ static string? PromptUserForGtaFolder()
     return selected;
 }
 
+static void EnsureEpicGamesLauncherRunning()
+{
+    if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0) return;
+    Console.WriteLine("[connect] Epic Games Launcher не запущен. Выполняю предварительный прогрев EGS...");
+    var epicCandidates = new[]
+    {
+        @"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
+        @"C:\Program Files (x86)\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
+    };
+    var found = epicCandidates.FirstOrDefault(File.Exists);
+    try
+    {
+        if (found != null)
+        {
+            Process.Start(new ProcessStartInfo(found, "-Silent") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Minimized });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo("com.epicgames.launcher://") { UseShellExecute = true });
+        }
+        for (int i = 0; i < 30; i++)
+        {
+            Thread.Sleep(500);
+            if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
+            {
+                Console.WriteLine("[connect] Epic Games Launcher обнаружен и инициализирован.");
+                Thread.Sleep(3000);
+                break;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[connect] Предупреждение EGS: {ex.Message}");
+    }
+}
+
+static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
+{
+    var cmdFile = Path.Combine(gtaDir, "commandline.txt");
+    var parts = new List<string>();
+    if (!string.IsNullOrWhiteSpace(gameArgs)) parts.Add(gameArgs.Trim());
+    if (fpsLimit > 0) parts.Add($"-FPSLimit {fpsLimit}");
+    if (parts.Count > 0)
+    {
+        try
+        {
+            File.WriteAllLines(cmdFile, parts);
+            Console.WriteLine($"[connect] Применены параметры в commandline.txt: {string.Join(' ', parts)}");
+        }
+        catch { }
+    }
+}
+
+static void CleanupGameCommandLine(string gtaDir)
+{
+    try
+    {
+        var cmdFile = Path.Combine(gtaDir, "commandline.txt");
+        if (File.Exists(cmdFile)) File.Delete(cmdFile);
+    }
+    catch { }
+}
+
+static void ApplyGamePriority(string? priority)
+{
+    if (string.IsNullOrWhiteSpace(priority) || priority == "normal") return;
+    try
+    {
+        foreach (var name in new[] { "GTA5", "GTA5_Enhanced" })
+        {
+            foreach (var pr in Process.GetProcessesByName(name))
+            {
+                if (pr.HasExited) continue;
+                if (priority == "high" && pr.PriorityClass != ProcessPriorityClass.High)
+                {
+                    pr.PriorityClass = ProcessPriorityClass.High;
+                    Console.WriteLine($"[connect] Выставлен высокий приоритет процесса для {name} (PID {pr.Id})");
+                }
+            }
+        }
+    }
+    catch { }
+}
+
 delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
 

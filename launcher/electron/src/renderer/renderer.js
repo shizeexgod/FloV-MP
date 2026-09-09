@@ -12,6 +12,8 @@ function navigateTo(target) {
     if (b.classList.contains('rail-item')) b.classList.toggle('active', b.dataset.page === target);
   });
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === `page-${target}`));
+  settings.lastPage = target;
+  if (settings.rememberTab) saveSettingsDebounced();
 }
 document.querySelectorAll('[data-page]').forEach((btn) => {
   btn.addEventListener('click', () => navigateTo(btn.dataset.page));
@@ -353,6 +355,7 @@ let settings = {
   uiSounds: false,
   trayOnClose: false,
   lastSettingsTab: 'general',
+  lastPage: 'play',
   autostart: false,
   minimizeOnPlay: true,
   region: 'auto',
@@ -390,6 +393,7 @@ const SETTINGS_MAP = [
   ['set-port', 'serverPort', 'value'],
   ['set-autoupdate', 'autoUpdate', 'checked'],
   ['set-update-channel', 'updateChannel', 'value'],
+  ['set-autostart', 'autostart', 'checked'],
   ['set-language', 'language', 'value'],
   ['set-animations', 'animations', 'checked'],
   ['set-compact', 'compactMode', 'checked'],
@@ -1362,6 +1366,13 @@ function saveSettingsDebounced() {
     await window.floridaV.saveSettings(settings);
   }, 300);
 }
+async function flushSettingsNow() {
+  clearTimeout(saveTimer);
+  await window.floridaV.saveSettings(settings);
+}
+window.addEventListener('beforeunload', () => {
+  try { window.floridaV.saveSettings(settings); } catch {}
+});
 
 document.getElementById('set-host').addEventListener('input', (e) => {
   settings.serverHost = e.target.value;
@@ -1720,15 +1731,17 @@ async function initGpuInfo() {
 
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
-  renderAccentPicker();
-  enhanceSelects();
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
   settings.autostart = await window.floridaV.getAutostart().catch(() => settings.autostart);
 
-  // Ник — производное от аккаунта, не из файла: чинит ситуацию, когда в
-  // settings.json остался старый/битый nickname без account.
+  renderAccentPicker();
+  enhanceSelects();
   applySettingsToUI();
+
+  if (settings.rememberTab && settings.lastPage) {
+    navigateTo(settings.lastPage);
+  }
   if (isLoggedIn()) {
     const emailEl = document.getElementById('sec-email-value');
     if (emailEl) emailEl.textContent = settings.account.email || 'не указана';

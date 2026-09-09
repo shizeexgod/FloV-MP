@@ -6,22 +6,38 @@ public record ServerStatusResult(bool Online, int Players, int MaxPlayers);
 
 public static class ServerStatusService
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(3) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMilliseconds(1000) };
 
     public static async Task<ServerStatusResult> CheckAsync(string host, int port)
     {
+        if (string.IsNullOrWhiteSpace(host)) host = "188.127.229.224";
+        if (port <= 0) port = 7788;
+
         var urls = new[] { $"http://{host}:{port}/info", $"http://{host}/info" };
         foreach (var url in urls)
         {
             try
             {
-                var response = await Http.GetStringAsync(url).ConfigureAwait(false);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+                var response = await Http.GetStringAsync(url, cts.Token).ConfigureAwait(false);
                 var players = ExtractInt(response, "\"players\"");
                 var maxPlayers = ExtractInt(response, "\"maxPlayers\"");
                 return new ServerStatusResult(true, players, maxPlayers > 0 ? maxPlayers : 128);
             }
             catch { }
         }
+
+        try
+        {
+            using var tcp = new TcpClient();
+            var connectTask = tcp.ConnectAsync(host, port);
+            if (await Task.WhenAny(connectTask, Task.Delay(1500)).ConfigureAwait(false) == connectTask && tcp.Connected)
+            {
+                return new ServerStatusResult(true, 1, 128);
+            }
+        }
+        catch { }
+
         return new ServerStatusResult(false, 0, 0);
     }
 
