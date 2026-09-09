@@ -1,5 +1,5 @@
 @echo off
-title FloV:MP Launcher (Держава Онлайн)
+title FloV-MP Launcher - Derzhava Online
 cd /d "%~dp0.."
 
 if not exist "launcher\src\FloVMP.Launcher.Native\bin\Release\net8.0-windows\FloVMP.Launcher.Native.exe" (
