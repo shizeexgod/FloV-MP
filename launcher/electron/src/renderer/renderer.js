@@ -685,10 +685,13 @@ function applySettingsToUI() {
   document.documentElement.classList.toggle('compact', !!settings.compactMode);
   document.documentElement.classList.toggle('no-anim', !settings.animations);
 
+  settings.uiScale = 100;
   const s = document.getElementById('dl-speed-val'); if (s) s.textContent = dlSpeedLabel(settings.dlSpeed);
   const t = document.getElementById('dl-threads-val'); if (t) t.textContent = String(settings.dlThreads);
   const vt = document.getElementById('voice-thr-val'); if (vt) vt.textContent = voiceThrLabel(settings.voiceThreshold);
-  const us = document.getElementById('ui-scale-val'); if (us) us.textContent = `${settings.uiScale}%`;
+  const us = document.getElementById('ui-scale-val'); if (us) us.textContent = '100%';
+  const scaleInput = document.getElementById('set-ui-scale');
+  if (scaleInput) { scaleInput.value = 100; scaleInput.disabled = true; }
 
   updateUpscalerUI();
 
@@ -728,13 +731,15 @@ function applyAccountUI() {
   if (cabStatus) cabStatus.textContent = isLoggedIn() ? 'Вход выполнен' : 'Не выполнен вход';
 }
 
-// ─── Масштаб интерфейса — нативный setZoomFactor через Chromium webFrame.
-// Полностью исключает артефакты CSS zoom и сбои hit-testing Windows.
+// ─── Масштаб интерфейса — зафиксирован строго на 100% (zoom 1.0).
+// Полностью устраняет критический баг Chromium на Windows: в безрамочном окне (frame: false)
+// любой zoomFactor != 1 смещает координаты hit-testing вглубь экрана и делает элементы
+// (кнопки «ИГРАТЬ», новости, окно закрытия) полностью некликабельными.
 function applyUiScale() {
-  const s = Math.max(80, Math.min(140, Number(settings.uiScale) || 100));
+  settings.uiScale = 100;
   try {
     if (window.floridaV?.setZoom) {
-      window.floridaV.setZoom(s / 100);
+      window.floridaV.setZoom(1.0);
     }
   } catch {}
 }
@@ -859,7 +864,7 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
     settings[key] = v;
     if (id === 'set-compact') document.documentElement.classList.toggle('compact', v);
     if (id === 'set-animations') document.documentElement.classList.toggle('no-anim', !v);
-    if (isUiScale) { document.getElementById('ui-scale-val').textContent = `${v}%`; applyUiScale(); }
+    if (isUiScale) { settings.uiScale = 100; document.getElementById('ui-scale-val').textContent = '100%'; applyUiScale(); }
     if (id === 'set-tray-on-close') window.floridaV.setTrayOnClose?.(v);
     if (id === 'set-dl-speed') document.getElementById('dl-speed-val').textContent = dlSpeedLabel(v);
     if (id === 'set-dl-threads') document.getElementById('dl-threads-val').textContent = String(v);
@@ -872,9 +877,8 @@ SETTINGS_MAP.forEach(([id, key, prop]) => {
     saveSettingsDebounced();
   });
   if (isUiScale) {
-    // живая подпись при перетаскивании, без применения zoom
-    el.addEventListener('input', (e) => {
-      document.getElementById('ui-scale-val').textContent = `${e.target.value}%`;
+    el.addEventListener('input', () => {
+      document.getElementById('ui-scale-val').textContent = '100%';
     });
   }
   if (id === 'set-upscaler-sharpness') {
@@ -1733,6 +1737,7 @@ async function initGpuInfo() {
 (async function init() {
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
+  settings.uiScale = 100;
   settings.autostart = await window.floridaV.getAutostart().catch(() => settings.autostart);
 
   renderAccentPicker();

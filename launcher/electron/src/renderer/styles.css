@@ -1273,3 +1273,16 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
   font-size: 12px;
   line-height: 1.45;
 }
+
+/* Гарантированное исключение перехвата кликов скрытыми оверлеями */
+.settings-overlay.hidden,
+.cabinet-overlay.hidden,
+.auth-overlay.hidden,
+.cab-sub-overlay.hidden,
+.news-modal-overlay.hidden,
+.launch-overlay.hidden,
+.res-flyout.hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

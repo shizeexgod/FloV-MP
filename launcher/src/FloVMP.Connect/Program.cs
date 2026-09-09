@@ -13,6 +13,7 @@ using FloVMP.Launcher.Services;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
+EnableDebugPrivilege();
 
 // FloV:MP connector — автономный запуск alt:V на наш сервер без внешнего бэкенда alt:V.
 //
@@ -483,8 +484,15 @@ static string? PromptUserForGtaFolder()
 
 static void EnsureEpicGamesLauncherRunning()
 {
-    if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0) return;
-    Console.WriteLine("[connect] Epic Games Launcher не запущен. Выполняю предварительный прогрев EGS...");
+    var egsProc = Process.GetProcessesByName("EpicGamesLauncher");
+    var egsWeb = Process.GetProcessesByName("EpicWebHelper");
+    if (egsProc.Length > 0 && egsWeb.Length > 0)
+    {
+        Console.WriteLine("[connect] Epic Games Launcher активен и готов.");
+        return;
+    }
+
+    Console.WriteLine("[connect] Epic Games Launcher не готов. Выполняю предварительный прогрев EGS...");
     var epicCandidates = new[]
     {
         @"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
@@ -501,13 +509,19 @@ static void EnsureEpicGamesLauncherRunning()
         {
             Process.Start(new ProcessStartInfo("com.epicgames.launcher://") { UseShellExecute = true });
         }
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 40; i++)
         {
             Thread.Sleep(500);
-            if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
+            if (Process.GetProcessesByName("EpicWebHelper").Length > 0)
             {
-                Console.WriteLine("[connect] Epic Games Launcher обнаружен и инициализирован.");
-                Thread.Sleep(3000);
+                Console.WriteLine("[connect] Epic Games Launcher инициализирован. Ожидаю EOS аутентификацию (2.5 сек)...");
+                Thread.Sleep(2500);
+                break;
+            }
+            else if (i > 10 && Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
+            {
+                Console.WriteLine("[connect] Epic Games Launcher обнаружен. Ожидаю готовность...");
+                Thread.Sleep(2000);
                 break;
             }
         }
@@ -566,6 +580,48 @@ static void ApplyGamePriority(string? priority)
     catch { }
 }
 
+static void EnableDebugPrivilege()
+{
+    try
+    {
+        const uint TOKEN_ADJUST_PRIVILEGES = 0x0020;
+        const uint TOKEN_QUERY = 0x0008;
+        const uint SE_PRIVILEGE_ENABLED = 0x00000002;
+        if (OpenProcessToken(Process.GetCurrentProcess().Handle, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out var hToken))
+        {
+            if (LookupPrivilegeValue(null, "SeDebugPrivilege", out var luid))
+            {
+                var tp = new TOKEN_PRIVILEGES
+                {
+                    PrivilegeCount = 1,
+                    Luid = luid,
+                    Attributes = SE_PRIVILEGE_ENABLED
+                };
+                AdjustTokenPrivileges(hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            }
+            CloseHandle(hToken);
+        }
+    }
+    catch { }
+}
+
+[DllImport("advapi32.dll", SetLastError = true)]
+static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+
+[DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+static extern bool LookupPrivilegeValue(string? lpSystemName, string lpName, out LUID lpLuid);
+
+[DllImport("advapi32.dll", SetLastError = true)]
+static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges, ref TOKEN_PRIVILEGES NewState, uint BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+
+[DllImport("kernel32.dll", SetLastError = true)]
+static extern bool CloseHandle(IntPtr hObject);
+
 delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+[StructLayout(LayoutKind.Sequential)]
+struct LUID { public uint LowPart; public int HighPart; }
+
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+struct TOKEN_PRIVILEGES { public uint PrivilegeCount; public LUID Luid; public uint Attributes; }
 

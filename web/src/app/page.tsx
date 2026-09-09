@@ -1,48 +1,27 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   ArrowRight,
   Boxes,
   Cloud,
   Gauge,
   Layers,
-  Lock,
-  Radio,
+  Mic,
+  Plug,
+  Rocket,
+  ScrollText,
   ShieldCheck,
   Terminal,
-  Users,
-  Webhook,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { BtnLink, Container, Reveal, Section, SectionHeading } from '@/components/site';
 
-interface ServerStatus {
-  online: boolean;
-  name: string;
-  players: number;
-  maxPlayers: number;
-  pingMs: number;
-}
-
-const FEATURE_ICONS = [Radio, Users, Cloud, Layers, Gauge, Boxes, Lock, Webhook];
+// Порядок соответствует t.home.features
+const FEATURE_ICONS = [Gauge, Boxes, Mic, ShieldCheck, ScrollText, Cloud, Rocket, Plug];
 
 export default function HomePage() {
   const t = useT();
-  const [status, setStatus] = useState<ServerStatus>({
-    online: true,
-    name: 'Держава Онлайн',
-    players: 1,
-    maxPlayers: 1500,
-    pingMs: 24,
-  });
-
-  useEffect(() => {
-    fetch('/api/server-status')
-      .then((r) => r.json())
-      .then((d) => d && setStatus((s) => ({ ...s, ...d })))
-      .catch(() => {});
-  }, []);
 
   return (
     <div>
@@ -75,39 +54,6 @@ export default function HomePage() {
 
           <Reveal delay={240}>
             <p className="mt-6 font-mono text-[11px] text-white/35">{t.home.trustLine}</p>
-          </Reveal>
-
-          {/* live status card */}
-          <Reveal delay={300}>
-            <div className="mt-12 max-w-2xl rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className={status.online ? 'status-dot text-ok' : 'status-dot text-err'} />
-                  <div>
-                    <div className="text-sm font-semibold text-white">{status.name}</div>
-                    <div className="font-mono text-[11px] text-white/40">{t.home.statusRegion}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-5 font-mono text-[12px]">
-                  <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-wider text-white/35">ping</div>
-                    <div className="font-semibold text-white">{status.pingMs} ms</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] uppercase tracking-wider text-white/35">{t.projects.thOnline}</div>
-                    <div className="font-semibold text-white">
-                      {status.players} / {status.maxPlayers}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className="h-full rounded-full bg-brand transition-all duration-700"
-                  style={{ width: `${Math.max(2, Math.round((status.players / status.maxPlayers) * 100))}%` }}
-                />
-              </div>
-            </div>
           </Reveal>
         </Container>
       </div>

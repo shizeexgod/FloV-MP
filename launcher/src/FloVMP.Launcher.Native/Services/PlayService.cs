@@ -59,7 +59,9 @@ public static class PlayService
         {
             try
             {
-                if (Process.GetProcessesByName("EpicGamesLauncher").Length == 0)
+                var egsRunning = Process.GetProcessesByName("EpicGamesLauncher").Length > 0;
+                var webRunning = Process.GetProcessesByName("EpicWebHelper").Length > 0;
+                if (!egsRunning || !webRunning)
                 {
                     var epicCandidates = new[]
                     {
@@ -75,10 +77,15 @@ public static class PlayService
                     {
                         Process.Start(new ProcessStartInfo("com.epicgames.launcher://") { UseShellExecute = true });
                     }
-                    for (int i = 0; i < 20; i++)
+                    for (int i = 0; i < 40; i++)
                     {
-                        Thread.Sleep(300);
-                        if (Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
+                        Thread.Sleep(500);
+                        if (Process.GetProcessesByName("EpicWebHelper").Length > 0)
+                        {
+                            Thread.Sleep(2500);
+                            break;
+                        }
+                        else if (i > 10 && Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
                         {
                             Thread.Sleep(2000);
                             break;
@@ -116,7 +123,7 @@ public static class PlayService
             {
                 FileName = connectExe,
                 Arguments = args,
-                UseShellExecute = false,
+                UseShellExecute = true,
                 WorkingDirectory = Path.GetDirectoryName(connectExe),
             };
             var proc = Process.Start(psi);

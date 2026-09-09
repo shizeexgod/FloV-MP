@@ -51,19 +51,16 @@ const api = {
   setAutostart: (enabled) => ipcRenderer.invoke('native:setAutostart', enabled),
   getAutostart: () => ipcRenderer.invoke('native:getAutostart'),
 
-  // Масштабирование через Chromium webFrame (без CSS zoom, исключает сбои hit-testing)
-  setZoom: (factor) => {
+  // Масштабирование зафиксировано строго на 1.0: в Chromium на Windows
+  // при frame: false любой zoomFactor != 1 смещает координаты hit-testing в elementFromPoint
+  // и делает элементы интерфейса некликабельными.
+  setZoom: (_factor) => {
     try {
       const { webFrame } = require('electron');
-      webFrame.setZoomFactor(Number(factor) || 1);
+      webFrame.setZoomFactor(1.0);
     } catch {}
   },
-  getZoom: () => {
-    try {
-      const { webFrame } = require('electron');
-      return webFrame.getZoomFactor();
-    } catch { return 1; }
-  },
+  getZoom: () => 1.0,
 };
 
 contextBridge.exposeInMainWorld('floridaV', api);
