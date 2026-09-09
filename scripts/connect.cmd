@@ -13,7 +13,7 @@ if not exist "launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Conn
 )
 
 set TARGET=%1
-if "%TARGET%"=="" set TARGET=127.0.0.1:7788
+if "%TARGET%"=="" set TARGET=188.127.229.224:7788
 
 echo [INFO] Target server: %TARGET%
 echo [INFO] Launching game...
