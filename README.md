@@ -15,7 +15,7 @@
 | **Сервер (гейм-логика)** | C# / .NET 8 (`coreclr-module`) | MariaDB 10.6 пул, экономика, транспорт, 8-уровневая админка |
 | **Лаунчер** | Electron (Chromium UI) + C# Native | Аппаратное ускорение, кастомные акценты, безопасный запуск |
 | **Клиентский UI/HUD** | HTML5 / React / TypeScript (CEF) | NUI-интерфейсы с 60+ FPS |
-| **Веб-портал (SaaS)** | Next.js 14 / Tailwind / TypeScript | Личный кабинет, привязка IP, генерация ключей `FLV-XXXX` |
+| **Веб-портал (SaaS)** | Next.js 14 / Tailwind / TypeScript | Личный кабинет, биллинг, генерация лаунчеров, серверная оффлайн-админка |
 
 ## Структура репозитория
 
@@ -26,7 +26,7 @@ FloV-MP/
 ├── launcher/     — Лаунчер проекта:
 │   ├── electron/ — Основной UI лаунчера (Chromium, HTML5, CSS)
 │   └── src/      — Нативный C# помощник (Connect, Launcher.Native, Core)
-├── web/          — SaaS веб-портал (Next.js 14, ЛК, биллинг, верификация лицензий)
+├── web/          — SaaS веб-портал (Next.js 14, ЛК, биллинг, верификация лицензий, оффлайн Control Plane)
 ├── sql/          — Схемы MariaDB (игровая schema.sql, портальная portal_schema.sql)
 ├── config/       — server.toml и профили подключения
 ├── scripts/      — Утилиты запуска и обслуживания (run-launcher, run-server, connect)
@@ -57,19 +57,21 @@ scripts\connect.cmd
 ### 4. Запуск SaaS веб-портала
 ```cmd
 cd web
-npm start
+npm run dev
 ```
 *(Доступен по адресу `http://localhost:3000`)*
 
 ## Тестирование и верификация
 
 ```powershell
-# Тесты серверного ядра (81 тест)
+# Тесты серверного ядра (229 тестов, 100% green)
 dotnet test server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj
 
-# Тесты нативного лаунчера (28 тестов)
+# Тесты нативного лаунчера (41 тест, 100% green)
 dotnet test launcher/tests/FloVMP.Launcher.Tests/FloVMP.Launcher.Tests.csproj
 
-# Сборка веб-портала (15 роутов)
+# Суммарно: 270 автоматических тестов пройдено
+
+# Сборка веб-портала (44 роута)
 cd web; npm run build
 ```
