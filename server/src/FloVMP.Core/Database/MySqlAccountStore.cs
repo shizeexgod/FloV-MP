@@ -60,11 +60,14 @@ public sealed class MySqlAccountStore : IAccountStore
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
+        // salt: соль уже вшита в строку PBKDF2-хеша (pbkdf2$sha256$iters$salt$hash),
+        // отдельная колонка — легаси. Пишем '' явно, чтобы INSERT не падал на
+        // схеме, где salt объявлен NOT NULL без DEFAULT.
         cmd.CommandText = @"
-            INSERT INTO accounts (username, password_hash, cash, bank, admin_level, is_banned, created_at)
-            VALUES (@username, @password_hash, @cash, @bank, @admin_level, 0, NOW());
+            INSERT INTO accounts (username, password_hash, salt, cash, bank, admin_level, is_banned, created_at)
+            VALUES (@username, @password_hash, '', @cash, @bank, @admin_level, 0, NOW());
             SELECT LAST_INSERT_ID();";
-        
+
         cmd.Parameters.AddWithValue("@username", username);
         cmd.Parameters.AddWithValue("@password_hash", passwordHash);
         cmd.Parameters.AddWithValue("@cash", Account.StartingCash);

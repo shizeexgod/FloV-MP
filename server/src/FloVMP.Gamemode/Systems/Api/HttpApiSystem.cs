@@ -251,11 +251,23 @@ public sealed class HttpApiSystem
         string body;
         using (var r = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) body = r.ReadToEnd();
 
-        var req = JsonSerializer.Deserialize<AuthRequestDto>(body, Json)
-                  ?? new AuthRequestDto(null, null, null, null, null, null);
+        AuthRequestDto? req;
+        try { req = JsonSerializer.Deserialize<AuthRequestDto>(body, Json); }
+        catch
+        {
+            WriteJson(ctx, 400, new AuthResponseDto(false, "некорректный JSON", null, null, "", false, false));
+            return;
+        }
+        req ??= new AuthRequestDto(null, null, null, null, null, null);
         var username = req.Username?.Trim() ?? "";
         var password = req.Password ?? "";
-        var throttleKey = ctx.Request.RemoteEndPoint?.Address.ToString() ?? username;
+        // за nginx реальный адрес — в X-Real-IP / X-Forwarded-For; RemoteEndPoint
+        // это всегда 127.0.0.1 (прокси), по нему троттлинг был бы глобальным.
+        var throttleKey = FirstNonEmpty(
+            ctx.Request.Headers["X-Real-IP"],
+            ctx.Request.Headers["X-Forwarded-For"]?.Split(',')[0],
+            ctx.Request.RemoteEndPoint?.Address.ToString(),
+            username);
 
         var route = path["/api/auth/".Length..].TrimEnd('/');
 
@@ -280,6 +292,13 @@ public sealed class HttpApiSystem
             result.Outcome == AuthOutcome.TwoFaRequired);
 
         WriteJson(ctx, result.Ok ? 200 : 400, resp);
+    }
+
+    private static string FirstNonEmpty(params string?[] vals)
+    {
+        foreach (var v in vals)
+            if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
+        return "?";
     }
 
     private static void WriteJson(HttpListenerContext ctx, int status, object payload)
