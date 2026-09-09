@@ -26,9 +26,9 @@ rem %LOCALAPPDATA%\FloridaV\connect.log, so this window stays quiet - that is
 rem normal, watch the log for progress. bin\Release is built from current
 rem source (has the CDN de-race fix); native-dist is a fallback.
 set "CONNECT_EXE=launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
-rem Всегда пересобираем из актуального исходника (быстрый инкрементальный
-rem билд). Если старый коннектор ещё висит и держит DLL - билд не пройдёт,
-rem поэтому сначала закройте прошлое окно коннектора и GTA.
+rem Always rebuild from current source (fast incremental build). If an old
+rem connector is still running it locks the DLL and the build fails - so
+rem close the previous connector window and GTA first.
 echo [INFO] Building FloVMP.Connect (latest source) ...
 dotnet build "launcher\src\FloVMP.Connect\FloVMP.Connect.csproj" -c Release --nologo -v q
 if not exist "%CONNECT_EXE%" set "CONNECT_EXE=launcher\electron\native-dist\FloVMP.Connect.exe"
