@@ -1,5 +1,6 @@
 {
   "version": "0.0.1",
+  "autoPort": true,
   "configurations": [
     {
       "name": "launcher-preview",
@@ -9,8 +10,8 @@
     },
     {
       "name": "flovmp-web",
-      "runtimeExecutable": "web/node_modules/.bin/next.cmd",
-      "runtimeArgs": ["dev", "-p", "3300"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
       "port": 3300,
       "cwd": "web"
     }

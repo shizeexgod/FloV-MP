@@ -13,10 +13,14 @@ Updated: 2026-09-09 (спринт /goal — Харденинг безопасн�
 - **Enterprise Core Systems** — Dynamic Spatial Asset Streaming Protocol, Server Crash Watchdog (авторестарт при фризах >15s), Dynamic Resource Manager (горячий старт/стоп ресурсов), FloV:ID & HWID Enforcement с гибкими политиками (Strict, Lenient, Disabled).
 - **Иерархия Account -> Projects -> Servers** — лицензия привязывается к проекту, внутри которого запускаются изолированные среды (Production, Development, Test) без коллизии ключей.
 
-## Архитектурный SaaS Blueprint (согласовано с концептом enterprise-экосистемы)
+## Архитектурный SaaS Blueprint & Offline Control Plane (зафиксировано)
 
-В `docs/architecture/saas-ecosystem-blueprint.md` зафиксирована полная архитектурная спецификация (ответы на 15 вопросов и 13 глав архитектуры: Multiplayer Core, Server Core, SDK, API, Telemetry, Project Licensing, txAdmin Agent, AI Assistant, High-Load Scaling 1000+).
-Движок `FloVMP.Core` полностью очищен от специфики карты и RP-лора («Держава Онлайн» изолирована в `FloVMP.Gamemode/Presets/`).
+В `docs/architecture/saas-ecosystem-blueprint.md` зафиксирована полная архитектурная спецификация экосистемы (Multiplayer Core, Server Core, SDK, API, Telemetry, txAdmin Agent, AI Assistant).
+В `docs/architecture/offline-admin-control-plane-spec.md` зафиксирована исчерпывающая архитектурная спецификация для **Claude Code**:
+- **Вариант В (Гибридная модель):** Встроенный модуль в SaaS дашборд FloV:MP + возможность переноса/встраивания как отдельное приложение/компонент на домен RP-проекта (`admin.derzhava-online.ru`).
+- **Схема базы данных MariaDB:** таблицы тикетов/репортов (`admin_reports`), смен (`admin_activity_shifts`), штрафных баллов (`admin_penalty_points`), отпусков (`admin_vacations`), семей (`families`, `family_members`), очереди оффлайн-действий (`offline_pending_actions`).
+- **Dual-Routing Engine:** автоматическое разделение на live RPC сокет-исполнение (если цель онлайн) и прямые транзакции в MariaDB (если оффлайн) с перехватом сессии через `Security Handshake Pipeline`.
+- **Модули управления (референс ragemp.pro):** Медиация/Репорты с KPI времени ответа и часовыми графиками нагрузки, Экономика/Банк/RMT-мониторинг, Недвижимость/Транспорт/Инспекция багажников, Управление персонажами/Wipe/Статы, 5 уровней оффлайн-наказаний, Античит и аудит-логи.
 
 ## Актуальный статус серверов и сервисов на VDS REDL (`188.127.229.224`)
 
