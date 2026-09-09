@@ -715,42 +715,108 @@ static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPriv
 [DllImport("kernel32.dll", SetLastError = true)]
 static extern bool CloseHandle(IntPtr hObject);
 
+static bool IsRunningAsAdmin()
+{
+    try
+    {
+        using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var principal = new System.Security.Principal.WindowsPrincipal(id);
+        return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
+    catch { return false; }
+}
+
+/// <summary>
+/// Добавляет прямой /32-маршрут к серверу через ФИЗИЧЕСКИЙ шлюз в обход
+/// активного VPN/TUN (Happ и т.п.) — иначе загрузка ресурсов уходит в
+/// таймаут (curl error 28), т.к. TUN перехватывает 0.0.0.0/0. route add
+/// требует прав администратора: если их нет, поднимаем ТОЛЬКО эту команду
+/// через UAC (один запрос), не элевируя саму игру.
+/// </summary>
 static void EnsureDirectRouteToHost(string connectTarget)
 {
     try
     {
         var host = connectTarget.Split(':')[0].Trim();
         if (host is "127.0.0.1" or "localhost" || string.IsNullOrWhiteSpace(host)) return;
-        if (!System.Net.IPAddress.TryParse(host, out _)) return;
+        if (!System.Net.IPAddress.TryParse(host, out var hostIp)
+            || hostIp.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return;
 
-        // Ищем шлюз физического интерфейса (Ethernet/Wi-Fi), пропуская виртуальные VPN/TUN/TAP интерфейсы
+        // Шлюз ТОЛЬКО физического интерфейса (Ethernet/Wi-Fi) и ТОЛЬКО IPv4 —
+        // иначе route add с IPv6-шлюзом (fe80::…) невалиден и падает.
         var physicalGateway = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
             .Where(ni => ni.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
                      && ni.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback
+                     && ni.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Tunnel
                      && !ni.Description.Contains("tun", StringComparison.OrdinalIgnoreCase)
                      && !ni.Description.Contains("tap", StringComparison.OrdinalIgnoreCase)
                      && !ni.Description.Contains("vpn", StringComparison.OrdinalIgnoreCase)
+                     && !ni.Description.Contains("wintun", StringComparison.OrdinalIgnoreCase)
+                     && !ni.Description.Contains("sing-box", StringComparison.OrdinalIgnoreCase)
                      && !ni.Name.Contains("happ", StringComparison.OrdinalIgnoreCase))
             .SelectMany(ni => ni.GetIPProperties().GatewayAddresses)
+            .Where(g => g?.Address != null
+                     && g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
             .Select(g => g.Address.ToString())
             .FirstOrDefault(g => !string.IsNullOrEmpty(g) && g != "0.0.0.0");
 
-        if (!string.IsNullOrEmpty(physicalGateway))
+        if (string.IsNullOrEmpty(physicalGateway))
         {
-            Console.WriteLine($"[connect] Настройка прямого маршрута к {host} через шлюз {physicalGateway} (в обход VPN/TUN)...");
-            var psi = new ProcessStartInfo("route", $"add {host} mask 255.255.255.255 {physicalGateway} metric 1")
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(1000);
+            Console.WriteLine("[connect] Прямой маршрут: физический IPv4-шлюз не найден — пропускаю (при активном VPN возможен таймаут загрузки).");
+            return;
         }
+
+        Console.WriteLine($"[connect] Прямой маршрут к {host} через физический шлюз {physicalGateway} (в обход VPN/TUN)...");
+        var admin = IsRunningAsAdmin();
+
+        // Снимаем возможный устаревший маршрут (с другим шлюзом) — молча.
+        RunRoute($"delete {host}", admin, silent: true);
+
+        var ok = RunRoute($"add {host} mask 255.255.255.255 {physicalGateway} metric 1", admin, silent: false);
+        if (ok)
+            Console.WriteLine("[connect] Прямой маршрут добавлен — трафик к серверу идёт мимо VPN.");
+        else if (!admin)
+            Console.WriteLine("[connect] ВНИМАНИЕ: маршрут не добавлен (нет прав администратора). Запустите лаунчер/коннектор от имени администратора, иначе при активном VPN загрузка ресурсов уйдёт в таймаут.");
+        else
+            Console.WriteLine("[connect] ВНИМАНИЕ: команда route add вернула ошибку — проверьте активные VPN/маршруты.");
     }
     catch (Exception ex)
     {
         Console.WriteLine($"[connect] Предупреждение: не удалось добавить прямой маршрут: {ex.Message}");
     }
+}
+
+/// <summary>Запускает route.exe; если нет прав админа — поднимает через UAC (runas).</summary>
+static bool RunRoute(string args, bool admin, bool silent)
+{
+    try
+    {
+        var psi = new ProcessStartInfo("route", args) { CreateNoWindow = true };
+        if (admin)
+        {
+            psi.UseShellExecute = false;
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+        }
+        else
+        {
+            // route add требует элевации — поднимаем ТОЛЬКО эту команду (один UAC)
+            psi.UseShellExecute = true;
+            psi.Verb = "runas";
+            psi.WindowStyle = ProcessWindowStyle.Hidden;
+        }
+        using var p = Process.Start(psi);
+        if (p == null) return false;
+        p.WaitForExit(4000);
+        return p.HasExited && p.ExitCode == 0;
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        // пользователь отклонил UAC — не критично для delete, критично для add (залогируем выше)
+        if (!silent) Console.WriteLine("[connect] UAC-запрос на добавление маршрута отклонён.");
+        return false;
+    }
+    catch { return false; }
 }
 
 delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
