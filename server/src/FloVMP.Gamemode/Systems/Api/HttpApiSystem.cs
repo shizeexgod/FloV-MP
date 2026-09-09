@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -26,6 +27,8 @@ public sealed class HttpApiSystem
     };
 
     private readonly IAccountStore _store;
+    private readonly AuthService _auth;
+    private readonly DateTime _startTime = DateTime.UtcNow;
     private readonly Func<int> _playerCount;
     private readonly int _maxPlayers;
     private readonly string _serverName;
@@ -39,6 +42,13 @@ public sealed class HttpApiSystem
     private volatile bool _running;
     private readonly Action<string> _log;
 
+    private const int MaxBodyBytes = 16 * 1024;
+    private const int MaxInFlight = 64;
+    private const int RateWindowSec = 10;
+    private const int RateMaxPerWindow = 30;
+    private int _inFlight;
+    private readonly ConcurrentDictionary<string, (int count, DateTime start)> _rate = new();
+
     public HttpApiSystem(
         IAccountStore store,
         Func<int> playerCount,
@@ -50,6 +60,7 @@ public sealed class HttpApiSystem
         string? infoJsonMirror = "/var/www/cdn/info.json")
     {
         _store = store;
+        _auth = new AuthService(store);
         _playerCount = playerCount;
         _maxPlayers = maxPlayers;
         _serverName = serverName;
@@ -63,17 +74,32 @@ public sealed class HttpApiSystem
     {
         try
         {
+            // По умолчанию слушаем ТОЛЬКО loopback — публичная точка входа это
+            // nginx на :80 (proxy_pass → 127.0.0.1:7799), он же режет флуд и
+            // размер тела. FLOVMP_API_BIND=public открывает все интерфейсы —
+            // только если nginx перед сервером нет.
+            var bindPublic = string.Equals(
+                Environment.GetEnvironmentVariable("FLOVMP_API_BIND"), "public",
+                StringComparison.OrdinalIgnoreCase);
+
             _listener = new HttpListener();
-            // http://+:port/ требует прав (root под systemd — ок). Фолбэк на loopback.
-            _listener.Prefixes.Add($"http://+:{_port}/");
-            try { _listener.Start(); }
-            catch (HttpListenerException)
+            if (bindPublic)
             {
-                _listener = new HttpListener();
+                _listener.Prefixes.Add($"http://+:{_port}/");
+                try { _listener.Start(); }
+                catch (HttpListenerException)
+                {
+                    _listener = new HttpListener();
+                    _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
+                    _listener.Start();
+                    _log($"[FloV:MP] http-api: no privilege for +:{_port}, loopback only");
+                }
+            }
+            else
+            {
                 _listener.Prefixes.Add($"http://127.0.0.1:{_port}/");
                 _listener.Prefixes.Add($"http://localhost:{_port}/");
                 _listener.Start();
-                _log($"[FloV:MP] http-api: bound to loopback:{_port} (no privilege for +:{_port})");
             }
 
             _running = true;
@@ -100,19 +126,57 @@ public sealed class HttpApiSystem
 
     private void Loop()
     {
-        while (_running && _listener is { IsListening: true })
+        while (_running)
         {
             HttpListenerContext ctx;
-            try { ctx = _listener.GetContext(); }
-            catch { break; }
+            try { ctx = _listener!.GetContext(); }
+            catch (ObjectDisposedException) { break; }
+            catch (HttpListenerException) { if (!_running) break; Thread.Sleep(50); continue; }
+            catch { if (!_running) break; Thread.Sleep(50); continue; }
+
+            // словарь rate-limit не должен расти без конца
+            if (_rate.Count > 8192)
+            {
+                var cutoff = DateTime.UtcNow.AddSeconds(-RateWindowSec * 6);
+                foreach (var kv in _rate)
+                    if (kv.Value.start < cutoff) _rate.TryRemove(kv.Key, out _);
+            }
 
             // каждый запрос — в пуле, чтобы медленный клиент не держал цикл
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                try { Handle(ctx); }
+                if (Interlocked.Increment(ref _inFlight) > MaxInFlight)
+                {
+                    Interlocked.Decrement(ref _inFlight);
+                    try { WriteJson(ctx, 429, new { ok = false, message = "server busy" }); } catch { }
+                    return;
+                }
+
+                try
+                {
+                    var ip = ctx.Request.RemoteEndPoint?.Address.ToString() ?? "unknown";
+                    var now = DateTime.UtcNow;
+                    var window = _rate.AddOrUpdate(ip,
+                        _ => (1, now),
+                        (_, cur) => (now - cur.start).TotalSeconds > RateWindowSec ? (1, now) : (cur.count + 1, cur.start));
+
+                    if (window.count > RateMaxPerWindow)
+                    {
+                        WriteJson(ctx, 429, new { ok = false, message = "too many requests" });
+                        return;
+                    }
+
+                    Handle(ctx);
+                }
                 catch (Exception ex)
                 {
-                    try { WriteJson(ctx, 500, new { ok = false, message = ex.Message }); } catch { }
+                    // деталь исключения — только в лог сервера, не клиенту
+                    _log($"[FloV:MP] http-api: handler error: {ex.Message}");
+                    try { WriteJson(ctx, 500, new { ok = false, message = "внутренняя ошибка" }); } catch { }
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref _inFlight);
                 }
             });
         }
@@ -150,6 +214,8 @@ public sealed class HttpApiSystem
         maxPlayers = _maxPlayers,
         name = _serverName,
         gamemode = _gamemode,
+        uptimeSeconds = (long)(DateTime.UtcNow - _startTime).TotalSeconds,
+        memoryMb = Math.Round(GC.GetTotalMemory(false) / (1024.0 * 1024.0), 2),
         updatedUtc = DateTime.UtcNow.ToString("O"),
     };
 
@@ -176,6 +242,12 @@ public sealed class HttpApiSystem
 
     private void HandleAuth(HttpListenerContext ctx, string path)
     {
+        if (ctx.Request.ContentLength64 > 65536)
+        {
+            WriteJson(ctx, 413, new AuthResponseDto(false, "payload too large", null, null, "", false, false));
+            return;
+        }
+
         string body;
         using (var r = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) body = r.ReadToEnd();
 
@@ -185,17 +257,16 @@ public sealed class HttpApiSystem
         var password = req.Password ?? "";
         var throttleKey = ctx.Request.RemoteEndPoint?.Address.ToString() ?? username;
 
-        var auth = new AuthService(_store);
         var route = path["/api/auth/".Length..].TrimEnd('/');
 
         var result = route switch
         {
-            "register" => auth.Register(username, password),
-            "login" => auth.Login(username, password, throttleKey, req.Code),
-            "change-password" => auth.ChangePassword(username, password, req.NewPassword ?? ""),
-            "change-email" => auth.ChangeEmail(username, password, req.Email ?? ""),
-            "2fa/enable" => auth.Enable2fa(username, req.Secret ?? "", req.Code ?? ""),
-            "2fa/disable" => auth.Disable2fa(username, req.Code ?? ""),
+            "register" => _auth.Register(username, password, throttleKey),
+            "login" => _auth.Login(username, password, throttleKey, req.Code),
+            "change-password" => _auth.ChangePassword(username, password, req.NewPassword ?? "", throttleKey),
+            "change-email" => _auth.ChangeEmail(username, password, req.Email ?? "", throttleKey),
+            "2fa/enable" => _auth.Enable2fa(username, req.Secret ?? "", req.Code ?? "", throttleKey),
+            "2fa/disable" => _auth.Disable2fa(username, req.Code ?? "", throttleKey),
             _ => new AuthResult(AuthOutcome.BadUsername, "неизвестная операция"),
         };
 

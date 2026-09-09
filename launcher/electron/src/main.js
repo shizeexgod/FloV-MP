@@ -273,23 +273,67 @@ ipcMain.handle('native:downloadEngine', async (_e, cdnBase) => {
     await new Promise((r) => out.end(r));
 
     const digest = hash.digest('hex');
-    if (arc.sha256 && digest !== arc.sha256) {
+    if (!arc.sha256) { fs.unlinkSync(tmp); throw new Error('в манифесте нет sha256 архива'); }
+    if (digest !== arc.sha256) {
       fs.unlinkSync(tmp);
       throw new Error('битый архив (sha256 не совпал)');
     }
+
+    const { execFile } = require('node:child_process');
+    const run = (args) => new Promise((resolve, reject) => {
+      execFile('tar', args, { windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+        (err, stdout) => err ? reject(err) : resolve(stdout || ''));
+    });
+
+    // Защита от path-traversal: до распаковки смотрим список записей и
+    // отклоняем архив, где есть '..', абсолютный путь или буква диска —
+    // иначе вредонос по MITM мог бы положить файл в Автозагрузку и т.п.
+    send({ phase: 'Проверка архива…', percent: 92 });
+    let listing = '';
+    try { listing = await run(['-tzf', tmp]); }
+    catch (e) { fs.unlinkSync(tmp); throw new Error(`не удалось прочитать архив (нет tar?): ${e.message}`); }
+    const bad = listing.split(/\r?\n/).find((p) => {
+      const s = p.trim(); if (!s) return false;
+      return s.startsWith('/') || s.startsWith('\\') || /^[a-zA-Z]:/.test(s)
+        || s.split(/[\\/]/).some((seg) => seg === '..');
+    });
+    if (bad) { fs.unlinkSync(tmp); throw new Error(`подозрительный путь в архиве: ${bad.trim()}`); }
 
     send({ phase: 'Распаковка движка…', percent: 93, downloaded: got, total });
     fs.rmSync(ENGINE_DIR, { recursive: true, force: true });
     fs.mkdirSync(ENGINE_DIR, { recursive: true });
     // bsdtar есть в Windows 10 1803+ / 11 (C:\Windows\System32\tar.exe)
-    await new Promise((resolve, reject) => {
-      const { execFile } = require('node:child_process');
-      execFile('tar', ['-xzf', tmp, '-C', ENGINE_DIR], (err) => err ? reject(err) : resolve());
-    });
+    await run(['-xzf', tmp, '-C', ENGINE_DIR, '--no-same-owner', '--no-same-permissions']);
     fs.unlinkSync(tmp);
 
+    // Сверяем распакованное с манифестом (хэши по файлам) — на случай
+    // подмены содержимого при совпадающем размере архива.
+    if (Array.isArray(man.files) && man.files.length) {
+      send({ phase: 'Проверка файлов движка…', percent: 97 });
+      const crypto = require('node:crypto');
+      let checked = 0;
+      for (const f of man.files) {
+        if (!f || !f.path || !f.sha256) continue;
+        const rel = String(f.path).replace(/\\/g, '/');
+        if (rel.includes('..') || rel.startsWith('/')) throw new Error(`манифест: плохой путь ${rel}`);
+        const abs = path.join(ENGINE_DIR, rel);
+        if (!abs.startsWith(ENGINE_DIR)) throw new Error(`манифест: выход за пределы (${rel})`);
+        let h;
+        try { h = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex'); }
+        catch { throw new Error(`после распаковки нет файла: ${rel}`); }
+        if (h !== f.sha256) throw new Error(`файл движка не совпал с манифестом: ${rel}`);
+        checked++;
+      }
+      send({ phase: `Проверено файлов: ${checked}`, percent: 99 });
+    }
+
+    const entryName = man.entry || 'flovmp.exe';
+    if (!fs.existsSync(path.join(ENGINE_DIR, entryName)) && !fs.existsSync(path.join(ENGINE_DIR, 'altv.exe'))) {
+      throw new Error('в распакованном движке нет исполняемого файла клиента');
+    }
+
     fs.writeFileSync(ENGINE_MARKER, JSON.stringify({
-      version: man.version, entry: man.entry || 'flovmp.exe',
+      version: man.version, entry: entryName,
       installedUtc: new Date().toISOString(), sha256: digest,
     }, null, 1));
 
