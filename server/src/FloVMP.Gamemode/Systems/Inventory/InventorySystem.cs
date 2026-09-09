@@ -26,6 +26,9 @@ public sealed class InventorySystem
     private readonly IInventoryStore _store;
     private readonly ConcurrentDictionary<uint, (Inventory inv, int accountId)> _live = new();
     private readonly AtomicInventoryTransactionService _atomicTransactions = new();
+    // недоверенный клиент может спамить :move/:use/:drop — каждый обработчик
+    // пишет JSON на диск + шлёт sync. Гейт: ≤10 действий/сек на игрока.
+    private readonly Systems.ClientRateGate _gate = new(maxPerWindow: 10, windowMs: 1000);
 
     public AtomicInventoryTransactionService AtomicTransactions => _atomicTransactions;
 
@@ -94,20 +97,24 @@ public sealed class InventorySystem
 
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("inv.OnDisconnect", () =>
     {
+        _gate.Forget(player.Id);
         if (_live.TryRemove(player.Id, out var e))
             _store.Save(e.accountId, e.inv);
     });
 
     private void OnMove(IPlayer player, int from, int to) => Safe.Run("inv.OnMove", () =>
     {
+        if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
-        e.inv.Move(from, to);
+        var res = e.inv.Move(from, to);
+        if (!res.Ok) return;               // ничего не поменялось — не пишем на диск
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
     });
 
     private void OnDrop(IPlayer player, int slot, int qty) => Safe.Run("inv.OnDrop", () =>
     {
+        if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         if (slot < 0 || slot >= e.inv.SlotCount) return;
         var s = e.inv.Slots[slot];
@@ -130,6 +137,8 @@ public sealed class InventorySystem
 
     private void OnPickup(IPlayer player, string dropId) => Safe.Run("inv.OnPickup", () =>
     {
+        if (!_gate.Allow(player.Id)) return;
+        if (string.IsNullOrEmpty(dropId) || dropId.Length > 64) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
         if (_atomicTransactions.TryPickupGroundItem(player.Id, dropId, e.inv, pPos, 4.0f, out var picked) && picked != null)
@@ -148,6 +157,7 @@ public sealed class InventorySystem
 
     private void OnUse(IPlayer player, int slot) => Safe.Run("inv.OnUse", () =>
     {
+        if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         if (slot < 0 || slot >= e.inv.SlotCount) return;
         var s = e.inv.Slots[slot];
@@ -271,8 +281,14 @@ public sealed class InventorySystem
                 }
                 else
                 {
-                    player.GiveWeapon(pistolHash, 50, true);
-                    player.Emit("flovmp:inv:notice", "Пистолет взведён и готов к стрельбе");
+                    // ammo=0: боезапас даёт только патронный предмет (ammo9),
+                    // иначе тоггл предмета фармил бы по 50 патронов бесплатно.
+                    player.GiveWeapon(pistolHash, 0, true);
+                    var rounds = e.inv.CountOf("ammo9");
+                    if (rounds > 0) player.SetWeaponAmmo(pistolHash, (ushort)Math.Min(rounds, 250));
+                    player.Emit("flovmp:inv:notice", rounds > 0
+                        ? "Пистолет взведён и заряжён"
+                        : "Пистолет взведён, но патронов нет");
                 }
                 break;
             default:

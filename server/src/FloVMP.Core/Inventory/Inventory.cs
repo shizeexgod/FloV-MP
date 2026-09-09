@@ -161,9 +161,21 @@ public sealed class Inventory
         for (var i = 0; i < SlotCount; i++)
         {
             var s = i < slots.Count ? slots[i] : null;
-            Slots[i] = s is null || string.IsNullOrEmpty(s.ItemId) || s.Quantity <= 0
-                ? null
-                : new ItemStack { ItemId = s.ItemId, Quantity = s.Quantity };
+            if (s is null || string.IsNullOrEmpty(s.ItemId) || s.Quantity <= 0)
+            {
+                Slots[i] = null;
+                continue;
+            }
+            // не доверяем файлу вслепую: неизвестный предмет — выкинуть,
+            // количество — зажать в [1..MaxStack], чтобы битый/подменённый
+            // inventories.json не обходил стек/вес.
+            var def = ItemCatalog.Get(s.ItemId);
+            if (def is null) { Slots[i] = null; continue; }
+            Slots[i] = new ItemStack
+            {
+                ItemId = s.ItemId,
+                Quantity = Math.Clamp(s.Quantity, 1, Math.Max(1, def.MaxStack)),
+            };
         }
     }
 }

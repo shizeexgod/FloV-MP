@@ -1031,8 +1031,30 @@ public sealed class ChatSystem
         SendSystem(player, $"Неизвестная команда: /{cmd}. Введите /help для списка.");
     }
 
+    // Команды, которые нельзя применять к админу РАВНОГО или ВЫШЕ ранга —
+    // иначе средний админ мог бы забанить/разжаловать/обокрасть руководство
+    // или устроить админ-войну. Руководитель проекта (8) — исключение.
+    private static readonly HashSet<string> RankSensitiveCmds = new(StringComparer.Ordinal)
+    {
+        "freeze", "kick", "mute", "jail", "ban", "banip", "slap", "warn", "bansc",
+        "hwidban", "macban", "hardban", "takemoney", "sethp", "setarmor", "setskin",
+        "setdim", "gethere", "tp", "tpm", "makeadmin", "clearadmin", "setadminlevel",
+    };
+
     private void HandleAdminCommand(IPlayer player, Account acc, string cmd, string[] args, AdminCommandDef def)
     {
+        // Защита иерархии: нельзя трогать равного/старшего админа.
+        if (RankSensitiveCmds.Contains(cmd) && args.Length > 0 && acc.AdminLevel < 8)
+        {
+            var victim = FindPlayer(args[0]) is { } vp ? _accountOf(vp) : _findAccountByName?.Invoke(args[0]);
+            if (victim != null && victim.Id != acc.Id && victim.AdminLevel >= acc.AdminLevel)
+            {
+                SendSystem(player, $"Нельзя применить /{cmd} к администрации равного или старшего ранга ({AdminTitles.GetTitle(victim.AdminLevel)}).");
+                GameLog.Admin("blocked_hierarchy", LogActor.Admin(acc.Id, acc.Username), victim.Username, ("cmd", cmd));
+                return;
+            }
+        }
+
         switch (cmd)
         {
             // ── Уровень 1: Хелпер ──────────────────────
