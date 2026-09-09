@@ -1,6 +1,6 @@
 # Agent State — FloV:MP / Держава Онлайн
 
-Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-Портала, Биллинга, Телеметрии и 2FA)
+Updated: 2026-09-09 (спринт /goal — Харденинг безопасности, античита, сетевого движка и развертывание)
 
 ## Архитектура продукта (зафиксировано)
 
@@ -21,18 +21,39 @@ Updated: 2026-09-06 (спринт /goal — разработка SaaS Веб-П�
 ## Актуальный статус серверов и сервисов на VDS REDL (`188.127.229.224`)
 
 1. **Серверный движок FloV:MP (`flovmp.service`):**
-   - Активен и работает на порту **UDP 7788** (Online: True, 1500 слотов).
+   - Запущен напрямую как собственный автономный процесс `./flovmp-server --no-module-path`.
+   - Активен и слушает на портах: **UDP 7788** (сетевой движок), **TCP 7788** (HTTP стриминг ассетов/манифестов), **TCP 7799** (FloV:MP HTTP API).
    - CoreCLR / .NET 8 Runtime интегрирован на VDS (`/usr/share/dotnet`).
-   - C#-гейммод (`FloVMP.Core.dll`, `FloVMP.Gamemode.dll`, `MySqlConnector.dll`) загружен в рантайм.
+   - Время старта сервера снижено с 4 минут до **0 секунд** благодаря флагу `disableDependencyDownload = true`.
+   - Свежие скомпилированные сборки (`FloVMP.Core.dll`, `FloVMP.Gamemode.dll`, `MySqlConnector.dll`) успешно развернуты в `/opt/flovmp/resources/flovmp-core/`.
 2. **База данных MariaDB (`mariadb.service`):**
    - Установлена и запущена на VDS (MariaDB 10.6.23).
    - Создана база данных `derzhava_rp`, выделен пользователь `flovmp`.
    - Развёрнуты все таблицы гейммода и SaaS-портала (`accounts`, `characters`, `character_inventory`, `vehicles`, `punishments`, `admin_audit_logs`, `bank_transactions`, `portal_users`, `portal_licenses`, `portal_invoices`, `portal_launcher_builds`, `portal_telemetry`).
 3. **Nginx FastDL & CDN (HTTP :80 & HTTP :7788):**
-   - Эндпоинт `/info` отдаёт актуальный JSON статус в UTF-8 (`{"online":true,"players":0,"maxPlayers":1500,"name":"Держава Онлайн","gamemode":"Держава RP"}`).
+   - Эндпоинт `/info` и зеркало `/cdn/info.json` отдают актуальный JSON статус в UTF-8 (`{"online":true,"players":0,"maxPlayers":1500,"name":"Держава Онлайн","gamemode":"Держава RP","uptimeSeconds":...,"memoryMb":...}`).
    - `/cdn/` раздаёт статические файлы и манифесты (`manifest-map.json`, архив карты Москвы `moscow_map.zip`, серверные дистрибутивы).
 
 ## Реализованные системы гейммода и ядра (FloVMP.Core & FloVMP.Gamemode)
+
+- **Комплексный харденинг безопасности и API:**
+  - Устранена уязвимость сброса лимитов попыток ввода пароля (перенесен `AuthService` в единый синглтон-экземпляр).
+  - Добавлена защита от перебора на смену пароля (`ChangePassword`), смену email (`ChangeEmail`), привязку и отключение 2FA (`Enable2fa`, `Disable2fa`).
+  - Ограничение размера тела входящих HTTP-запросов (64 KB) для защиты от истощения памяти (DoS).
+  - Встроенный лимитер параллельных запросов (`MaxInFlight = 64`) и ограничение частоты запросов с одного IP (30 запросов в 10 секунд).
+- **Устранение утечек памяти в античите FloV:Shield:**
+  - Реализован метод `CleanupPlayer(int playerId)` в `CombatValidationService.cs` для очистки кеша выстрелов и страйков при отключении игроков.
+  - Подключена автоматическая очистка в `AntiCheatSystem.OnDisconnect`.
+- **Геймплей и расширенный инвентарь:**
+  - Валидация применения медицинских предметов: бинты и аптечки нельзя использовать при нулевом здоровье (без сознания) или при максимальном уровне (200 HP).
+  - Добавлены новые предметы в каталог `ItemCatalog`: `armour` (+100 брони), `radio` (рация), `lockpick` (отмычка для взлома замков транспорта через `VehicleLockState`).
+  - Интеграция потокобезопасного механизма подбора предметов с пола через Compare-And-Swap (CAS) `AtomicInventoryTransactionService`.
+- **Сетевой мост LocalCdn:**
+  - Добавлена полная поддержка MIME-типов для изображений (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.ico`) и веб-шрифтов (`.woff`, `.woff2`, `.ttf`, `.otf`), исключающая сбои рендеринга интерфейсов Chromium.
+- **Тестовое покрытие ядра:**
+  - **229 automated tests passing** в `FloVMP.Core.Tests` (0 failures, 0 warnings).
+  - **41 automated tests passing** в `FloVMP.Launcher.Tests` (0 failures, 0 warnings).
+  - **Суммарно: 270 тестов 100% green.**
 
 - **8-уровневая админ-система (Levels 1–8):**
   - Модели: `AdminRank`, `AdminTitles` (префиксы, цвета, наименования), `AdminCommandDef`, `AdminCommandRegistry`.
