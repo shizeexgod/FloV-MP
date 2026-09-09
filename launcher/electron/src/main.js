@@ -27,6 +27,13 @@ const AUTH_ROUTES = {
   '2fa-disable': '2fa/disable',
 };
 
+// GPU shader disk-cache на Windows периодически падает с "Unable to move
+// the cache: Access Denied" / "Gpu Cache Creation failed" — это шумные, но
+// безвредные ошибки Chromium при гонке за кэш-каталог. Отключаем именно
+// дисковый кэш шейдеров (перф почти не страдает — рекомпиляция шейдеров
+// оболочки лаунчера пренебрежимо мала), чтобы консоль была чистой.
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+
 const native = new NativeBridge();
 let mainWindow = null;
 let splashWindow = null;
@@ -422,19 +429,35 @@ ipcMain.handle('native:setAutostart', (_e, enabled) => {
 });
 ipcMain.handle('native:getAutostart', () => app.getLoginItemSettings().openAtLogin);
 
-app.whenReady().then(() => {
-  createSplash();
-  try {
-    native.start();
-  } catch (err) {
-    console.error('Не удалось запустить нативный помощник:', err.message);
-  }
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// Одна копия лаунчера на машину. Без этого вторая копия дерётся с первой
+// за кэш-каталог Chromium → "Unable to move the cache: Access Denied" и
+// множество GPU-cache ошибок в консоли (главная жалоба на "ошибки").
+// Вторую копию гасим, окно первой — на передний план.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
   });
-});
+
+  app.whenReady().then(() => {
+    createSplash();
+    try {
+      native.start();
+    } catch (err) {
+      console.error('Не удалось запустить нативный помощник:', err.message);
+    }
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
   native.stop();
