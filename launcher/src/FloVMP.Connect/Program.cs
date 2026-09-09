@@ -179,12 +179,7 @@ if (detectedPlatform == "egs")
     EnsureEpicGamesLauncherRunning();
 }
 
-// GTA V (любая платформа) при старте инициализирует Rockstar Games Launcher /
-// Social Club. Если RGL не поднят — игра ЗАВИСАЕТ на "RGL initialization" и
-// не доходит до alt:V-клиента (частая жалоба). Выше мы гасим ЗАВИСШИЙ RGL для
-// сброса ghost-статуса Epic; здесь поднимаем СВЕЖИЙ и ждём готовности, чтобы
-// GTA5 сразу прошла инициализацию Social Club.
-EnsureRockstarLauncherRunning();
+// EnsureRockstarLauncherRunning(); // Отключено: запуск RGL с -silent без токенов Epic Games вызывает ошибку 00000009 (отсутствие entitlement). GTA V сама корректно инициализирует RGL через Epic Games.
 
 // Подготовка параметров запуска через commandline.txt в папке GTA V
 PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
