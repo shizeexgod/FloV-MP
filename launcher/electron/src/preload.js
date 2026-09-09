@@ -50,7 +50,28 @@ const api = {
   // не просто галочка в settings.json.
   setAutostart: (enabled) => ipcRenderer.invoke('native:setAutostart', enabled),
   getAutostart: () => ipcRenderer.invoke('native:getAutostart'),
+
+  // Масштабирование через Chromium webFrame (без CSS zoom, исключает сбои hit-testing)
+  setZoom: (factor) => {
+    try {
+      const { webFrame } = require('electron');
+      webFrame.setZoomFactor(Number(factor) || 1);
+    } catch {}
+  },
+  getZoom: () => {
+    try {
+      const { webFrame } = require('electron');
+      return webFrame.getZoomFactor();
+    } catch { return 1; }
+  },
 };
 
 contextBridge.exposeInMainWorld('floridaV', api);
 contextBridge.exposeInMainWorld('flovmp', api);
+
+window.addEventListener('error', (e) => {
+  console.error('[UNCAUGHT_RENDERER_ERROR]', e.message, 'at', e.filename + ':' + e.lineno + ':' + e.colno, e.error);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[UNHANDLED_REJECTION]', e.reason);
+});

@@ -42,8 +42,7 @@ function createSplash() {
     width: 380,
     height: 280,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#0c0c0c',
     resizable: false,
     center: true,
     show: true,
@@ -63,8 +62,7 @@ function createWindow() {
     minHeight: 600,
     center: true,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: '#0c0c0c',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -74,8 +72,14 @@ function createWindow() {
     },
   });
 
-  mainWindow.webContents.on('console-message', (_e, _level, message) => {
-    console.log('[renderer]', message);
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[renderer-gone]', details);
+  });
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error('[did-fail-load]', code, desc, url);
   });
 
   mainWindow.removeMenu();
@@ -85,7 +89,9 @@ function createWindow() {
     const elapsed = Date.now() - splashShownAt;
     const wait = Math.max(0, SPLASH_MIN_MS - elapsed);
     setTimeout(() => {
-      if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.destroy();
+      }
       splashWindow = null;
       mainWindow.show();
       mainWindow.focus();

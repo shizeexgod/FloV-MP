@@ -48,17 +48,17 @@ export interface LegalConfig {
 }
 
 export const LEGAL: LegalConfig = {
-  // --- TODO: заполнить из опросника ---
-  status: '',
-  ownerName: '',
-  inn: '',
+  // --- данные исполнителя (опросник от 09.09.2026) ---
+  status: 'Самозанятый (НПД)',
+  ownerName: 'Ремигайло Герман Андреевич',
+  inn: '781628450324',
   ogrn: '',
   address: '',
-  email: '',
-  phone: '',
-  phoneDisplay: '',
-  telegramUrl: '',
-  telegramHandle: '',
+  email: 'flov-mp@yandex.ru',
+  phone: '+79643704817',
+  phoneDisplay: '+7 964 370-48-17',
+  telegramUrl: 'https://t.me/shizexgod_dev',
+  telegramHandle: '@shizexgod_dev',
   telegramChannelUrl: '',
   supportHours: 'Пн–Пт, 10:00–19:00 (МСК)',
 
@@ -70,7 +70,7 @@ export const LEGAL: LegalConfig = {
   paymentProvider: 'Robokassa',
   siteUrl: 'https://flovmp.ru',
   offerDate: '9 сентября 2026 г.',
-  refundDays: 7,
+  refundDays: 0,
 };
 
 /** Значение или тире, если поле ещё не заполнено. */

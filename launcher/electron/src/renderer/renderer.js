@@ -1,4 +1,5 @@
 'use strict';
+console.log('[renderer.js] STARTING INITIALIZATION');
 
 // ─── Титлбар: управление окном ─────────────────────────────────────────────
 document.getElementById('btn-min').addEventListener('click', () => window.floridaV.minimize());
@@ -723,14 +724,15 @@ function applyAccountUI() {
   if (cabStatus) cabStatus.textContent = isLoggedIn() ? 'Вход выполнен' : 'Не выполнен вход';
 }
 
-// ─── Масштаб интерфейса — zoom на #app (с компенсацией размеров в CSS).
-// НЕ на documentElement: тогда 100vw/100vh не совпадают с окном и всё
-// вылезает за край. Применяем по 'change' (отпустил ползунок), а не по
-// 'input' — иначе перекомпоновка на каждый кадр и ползунок «убегает».
+// ─── Масштаб интерфейса — нативный setZoomFactor через Chromium webFrame.
+// Полностью исключает артефакты CSS zoom и сбои hit-testing Windows.
 function applyUiScale() {
   const s = Math.max(80, Math.min(140, Number(settings.uiScale) || 100));
-  const app = document.getElementById('app');
-  if (app) app.style.setProperty('--ui-scale', String(s / 100));
+  try {
+    if (window.floridaV?.setZoom) {
+      window.floridaV.setZoom(s / 100);
+    }
+  } catch {}
 }
 
 // ─── Звук в интерфейсе ──────────────────────────────────────────────────
@@ -1745,5 +1747,6 @@ async function initGpuInfo() {
   pollSession();
   setInterval(pollSession, 5000);
   window.addEventListener('focus', pollSession);
+  console.log('[renderer.js] COMPLETED INITIALIZATION');
 })();
 

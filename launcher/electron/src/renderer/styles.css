@@ -155,19 +155,18 @@ body{
 .icon-search{ -webkit-mask-image:url('assets/icons/search.svg'); mask-image:url('assets/icons/search.svg'); }
 
 #app{
-  /* Масштаб интерфейса: zoom на #app + компенсация размеров через calc,
-     иначе 100vw/100vh при zoom!=1 не совпадают с окном и всё вылезает. */
-  --ui-scale: 1;
-  zoom: var(--ui-scale);
-  width: calc(100vw / var(--ui-scale));
-  height: calc(100vh / var(--ui-scale));
+  width: 100vw;
+  height: 100vh;
   background: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 30px 80px -20px rgba(0,0,0,.85);
+}
+
+/* Все интерактивные элементы гарантированно получают события мыши и не захватываются областью drag */
+button, a, input, select, textarea, .rail-item, .srv-play, .news-card, .win-btn, .res-link, .cabinet-item, .cab-logout, .sec-btn, [role="button"] {
+  -webkit-app-region: no-drag !important;
 }
 
 /* ---------- титлбар ---------- */
@@ -184,7 +183,7 @@ body{
 }
 .titlebar .brand{ display:none; }
 /* Отдельные иконки-кнопки прямо на титлбаре + версия слева от них. */
-.win-controls{ margin-left:auto; display:flex; align-items:center; gap:2px; -webkit-app-region: no-drag; }
+.win-controls{ margin-left:auto; display:flex; align-items:center; gap:2px; -webkit-app-region: no-drag !important; }
 .win-version{
   font-family: var(--ui-font); font-size:12px; color: var(--white-400);
   margin-right:12px; letter-spacing:.01em;
