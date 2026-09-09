@@ -7,7 +7,7 @@ rem and breaks line tokenization. Keep this file ASCII.
 
 cd /d "%~dp0.."
 
-rem Prefer the self-contained connector (native-dist) — it's the proven build
+rem Prefer the self-contained connector (native-dist) - it is the proven build
 rem that actually opens GTA (bin\Release framework-dependent build stays silent
 rem on some machines). Fall back to bin\Release only if native-dist is absent.
 set "CONNECT_EXE=launcher\electron\native-dist\FloVMP.Connect.exe"
