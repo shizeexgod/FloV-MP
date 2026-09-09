@@ -274,6 +274,8 @@ function closeHud() {
 }
 
 // --- Инвентарь (Клавиша I) -----------------------------------------------
+let cachedInventoryJson = null;
+
 function openInventory() {
     if (inventoryView || !inGame || authView || chatTyping || consoleView) return;
     inventoryView = new alt.WebView('http://resource/client/html/inventory/index.html');
@@ -281,10 +283,24 @@ function openInventory() {
     alt.showCursor(true);
     alt.toggleGameControls(false);
 
+    inventoryView.on('flovmp:inv:ready', () => {
+        if (cachedInventoryJson && inventoryView) {
+            inventoryView.emit('flovmp:inv:sync', cachedInventoryJson);
+        }
+    });
+
     inventoryView.on('flovmp:inv:close', closeInventory);
     inventoryView.on('flovmp:inv:use', (slot) => alt.emitServer('flovmp:inv:use', slot));
     inventoryView.on('flovmp:inv:drop', (slot, qty) => alt.emitServer('flovmp:inv:drop', slot, qty));
     inventoryView.on('flovmp:inv:move', (from, to) => alt.emitServer('flovmp:inv:move', from, to));
+
+    if (cachedInventoryJson) {
+        alt.setTimeout(() => {
+            if (inventoryView && cachedInventoryJson) {
+                inventoryView.emit('flovmp:inv:sync', cachedInventoryJson);
+            }
+        }, 100);
+    }
 }
 
 function closeInventory() {
@@ -417,6 +433,10 @@ alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
+alt.onServer('flovmp:chat:clear', () => {
+    if (chatView) chatView.emit('flovmp:chat:clear');
+});
+
 alt.onServer('flovmp:hud:init', (serverName) => {
     openHud();
     if (hudView) hudView.emit('flovmp:hud:init', serverName);
@@ -428,6 +448,7 @@ alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
 });
 
 alt.onServer('flovmp:inv:sync', (json) => {
+    cachedInventoryJson = json;
     if (inventoryView) inventoryView.emit('flovmp:inv:sync', json);
 });
 

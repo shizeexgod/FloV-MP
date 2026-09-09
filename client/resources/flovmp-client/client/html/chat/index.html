@@ -56,6 +56,9 @@
   .line.system { color: var(--sys); }
   .line.me { color: var(--me); font-style: italic; }
   .line.player .who { color: var(--accent); }
+  .line.shout { color: #ff9800; font-weight: 600; }
+  .line.shout .who { color: #ffb74d; }
+  .line.ooc { color: #90a4ae; font-style: italic; }
 
   #inputwrap {
     margin-top: 8px;
@@ -98,8 +101,12 @@
     el.className = "line " + kind;
     if (kind === "player") {
       el.innerHTML = '<span class="who">' + esc(author) + ':</span> ' + esc(text);
+    } else if (kind === "shout") {
+      el.innerHTML = '<span class="who">' + esc(author) + ':</span> ' + esc(text) + '!!';
     } else if (kind === "me") {
       el.innerHTML = '* ' + esc(author) + ' ' + esc(text);
+    } else if (kind === "ooc") {
+      el.innerHTML = '<span class="who">' + esc(author) + '</span> ' + esc(text);
     } else {
       el.innerHTML = esc(text);
     }
@@ -142,6 +149,10 @@
   if (typeof alt !== "undefined") {
     alt.on("flovmp:chat:msg", function (kind, author, text) { push(kind, author, text); });
     alt.on("flovmp:chat:openinput", openInput);
+    alt.on("flovmp:chat:clear", function () {
+      log.innerHTML = "";
+      lines = [];
+    });
   } else {
     push("system", "", "(превью вне игры)");
     push("player", "Тестер", "привет мир");

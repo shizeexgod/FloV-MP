@@ -165,7 +165,7 @@ public sealed class ChatSystem
         switch (cmd)
         {
             case "help":
-                var helpMsg = "Игровые команды:\n/help, /passport, /lic, /pay, /bank, /factions, /f, /d, /invite, /uninvite, /giverank, /cuff, /uncuff, /arrest, /me, /b, /do, /try, /todo, /engine, /lock, /online, /pos";
+                var helpMsg = "Игровые команды:\n/help, /passport, /lic, /pay, /bank, /factions, /f, /d, /invite, /uninvite, /giverank, /cuff, /uncuff, /arrest, /me, /b, /do, /try, /todo, /s, /w, /clear, /engine, /lock, /online, /pos";
                 if (acc.AdminLevel > 0)
                     helpMsg += $"\n[Админ] Доступно {AdminCommandRegistry.GetAvailableCommands(acc.AdminLevel).Count} команд. Введите /ahelp";
                 SendSystem(player, helpMsg);
@@ -197,6 +197,43 @@ public sealed class ChatSystem
                 foreach (var p in Alt.GetAllPlayers())
                     if (p.Exists && _accountOf(p) is not null && p.Dimension == bDim && p.Position.Distance(bPos) <= 25.0f)
                         p.Emit("flovmp:chat:msg", "ooc", acc.Username, $"(( {oocMsg} ))");
+                return;
+
+            case "s":
+            case "shout":
+                if (args.Length == 0) { SendSystem(player, "Использование: /s <сообщение>"); return; }
+                var sMsg = string.Join(' ', args);
+                var sPos = player.Position;
+                var sDim = player.Dimension;
+                foreach (var p in Alt.GetAllPlayers())
+                    if (p.Exists && _accountOf(p) is not null && p.Dimension == sDim && p.Position.Distance(sPos) <= 55.0f)
+                        p.Emit("flovmp:chat:msg", "shout", acc.Username, sMsg);
+                return;
+
+            case "w":
+            case "whisper":
+                if (args.Length < 2) { SendSystem(player, "Использование: /w <ID/ник> <сообщение>"); return; }
+                var wTarget = FindPlayer(args[0]);
+                if (wTarget == null || !wTarget.Exists) { SendSystem(player, "Игрок не найден."); return; }
+                var wTargetAcc = _accountOf(wTarget);
+                if (wTargetAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                if (player.Dimension != wTarget.Dimension || player.Position.Distance(wTarget.Position) > 3.5f)
+                {
+                    SendSystem(player, "Игрок слишком далеко, чтобы шептать ему на ухо (максимум 3.5м).");
+                    return;
+                }
+                var wMsg = string.Join(' ', args[1..]);
+                SendSystem(player, $"[Шёпот для {wTargetAcc.Username}] {wMsg}");
+                SendSystem(wTarget, $"[{acc.Username} шепчет вам на ухо] {wMsg}");
+                foreach (var p in Alt.GetAllPlayers())
+                {
+                    if (p.Exists && p != player && p != wTarget && p.Dimension == player.Dimension && p.Position.Distance(player.Position) <= 2.0f)
+                        p.Emit("flovmp:chat:msg", "me", acc.Username, $"что-то прошептал на ухо {wTargetAcc.Username}");
+                }
+                return;
+
+            case "clear":
+                player.Emit("flovmp:chat:clear");
                 return;
 
             case "online":

@@ -174,6 +174,7 @@
       $("notice").textContent = text || "";
       setTimeout(function () { $("notice").textContent = ""; }, 2500);
     });
+    send("flovmp:inv:ready");
   } else {
     state.slots = [{ itemId: "phone", qty: 1 }, { itemId: "water", qty: 2 }];
     state.defs = { phone: { name: "Телефон" }, water: { name: "Вода" } };
