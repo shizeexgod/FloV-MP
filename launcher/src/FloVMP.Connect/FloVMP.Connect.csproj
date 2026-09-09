@@ -16,7 +16,10 @@
     Console-app; позже WPF-лаунчер (#дизайн) вызывает эту же логику.
   -->
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe: коннектор — техническая деталь «под капотом», игрок НЕ должен
+         видеть его консольное окно. GUI-подсистема = окно консоли не создаётся;
+         весь вывод перенаправляется в файл-лог (%LOCALAPPDATA%\FloridaV\connect.log). -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>false</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>

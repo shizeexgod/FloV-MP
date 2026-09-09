@@ -11,8 +11,17 @@ using System.Windows.Forms;
 using FloVMP.Connect;
 using FloVMP.Launcher.Services;
 
-Console.OutputEncoding = Encoding.UTF8;
-Console.InputEncoding = Encoding.UTF8;
+// WinExe без консоли: весь вывод коннектора уходит в файл-лог, чтобы игрок
+// не видел техническую консоль, но диагностика сохранялась для поддержки.
+try
+{
+    var _logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FloridaV");
+    Directory.CreateDirectory(_logDir);
+    var _sw = new StreamWriter(Path.Combine(_logDir, "connect.log"), append: false, new UTF8Encoding(false)) { AutoFlush = true };
+    Console.SetOut(_sw);
+    Console.SetError(_sw);
+}
+catch { /* если лог недоступен — просто работаем без него, окна всё равно нет */ }
 EnableDebugPrivilege();
 
 // FloV:MP connector — автономный запуск alt:V на наш сервер без внешнего бэкенда alt:V.
@@ -169,6 +178,13 @@ if (detectedPlatform == "egs")
 {
     EnsureEpicGamesLauncherRunning();
 }
+
+// GTA V (любая платформа) при старте инициализирует Rockstar Games Launcher /
+// Social Club. Если RGL не поднят — игра ЗАВИСАЕТ на "RGL initialization" и
+// не доходит до alt:V-клиента (частая жалоба). Выше мы гасим ЗАВИСШИЙ RGL для
+// сброса ghost-статуса Epic; здесь поднимаем СВЕЖИЙ и ждём готовности, чтобы
+// GTA5 сразу прошла инициализацию Social Club.
+EnsureRockstarLauncherRunning();
 
 // Подготовка параметров запуска через commandline.txt в папке GTA V
 PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
@@ -530,6 +546,90 @@ static void EnsureEpicGamesLauncherRunning()
     {
         Console.WriteLine($"[connect] Предупреждение EGS: {ex.Message}");
     }
+}
+
+// Прогрев Rockstar Games Launcher / Social Club — чтобы GTA V не зависла на
+// "RGL initialization". Стартуем в тихом свёрнутом режиме и ждём готовности.
+static void EnsureRockstarLauncherRunning()
+{
+    if (IsRockstarLauncherReady())
+    {
+        Console.WriteLine("[connect] Rockstar Games Launcher активен и готов.");
+        return;
+    }
+
+    var path = FindRockstarLauncher();
+    if (path == null)
+    {
+        Console.WriteLine("[connect] Rockstar Games Launcher не найден — пропускаю прогрев (игра запустит его сама).");
+        return;
+    }
+
+    Console.WriteLine("[connect] Rockstar Games Launcher не готов. Выполняю предварительный прогрев...");
+    try
+    {
+        Process.Start(new ProcessStartInfo(path, "-silent")
+        {
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Minimized,
+        });
+        for (int i = 0; i < 50; i++) // до ~25 секунд
+        {
+            Thread.Sleep(500);
+            if (IsRockstarLauncherReady())
+            {
+                Console.WriteLine("[connect] Rockstar Games Launcher инициализирован. Ожидаю готовность Social Club (2 сек)...");
+                Thread.Sleep(2000);
+                return;
+            }
+        }
+        Console.WriteLine("[connect] Rockstar Games Launcher не подтвердил готовность за 25с — продолжаю запуск.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[connect] Предупреждение RGL: {ex.Message}");
+    }
+}
+
+static bool IsRockstarLauncherReady()
+{
+    // Rockstar-овский Launcher.exe (не Epic'овский) ИЛИ SocialClubHelper —
+    // признаки, что Social Club/RGL поднялся и готов обслуживать GTA5.
+    if (Process.GetProcessesByName("SocialClubHelper").Length > 0) return true;
+    foreach (var p in Process.GetProcessesByName("Launcher"))
+    {
+        try
+        {
+            var m = p.MainModule?.FileName;
+            if (m != null && m.Contains("Rockstar", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        catch { /* доступ к MainModule может кинуть — игнорируем */ }
+    }
+    return false;
+}
+
+static string? FindRockstarLauncher()
+{
+    try
+    {
+        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Rockstar Games\Launcher")
+                     ?? Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Rockstar Games\Launcher");
+        if (key?.GetValue("InstallFolder") is string folder && !string.IsNullOrWhiteSpace(folder))
+        {
+            var exe = Path.Combine(folder, "Launcher.exe");
+            if (File.Exists(exe)) return exe;
+        }
+    }
+    catch { /* нет прав к реестру — падаем на дефолтные пути */ }
+
+    foreach (var c in new[]
+    {
+        @"C:\Program Files\Rockstar Games\Launcher\Launcher.exe",
+        @"C:\Program Files (x86)\Rockstar Games\Launcher\Launcher.exe",
+    })
+        if (File.Exists(c)) return c;
+
+    return null;
 }
 
 static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
