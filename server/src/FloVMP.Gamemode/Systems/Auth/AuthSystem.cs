@@ -113,7 +113,9 @@ public sealed class AuthSystem
     {
         if (!player.Exists || IsAuthed(player)) return;
 
-        var res = _auth.Register(username ?? "", password ?? "");
+        // throttleKey (IP) — иначе клиент мог бы спамить регистрацию: забить
+        // БД пустышками + нагрузить CPU PBKDF2 (120k итераций на попытку).
+        var res = _auth.Register(username ?? "", password ?? "", ThrottleKey(player));
         if (!res.Ok)
         {
             player.Emit("flovmp:auth:result", false, res.Message);

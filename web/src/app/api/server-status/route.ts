@@ -46,16 +46,16 @@ export async function GET() {
     }
   }
 
-  // Graceful response if offline/unreachable
+  // Сервер не отвечает — честно сообщаем offline, без выдуманных цифр.
   return NextResponse.json({
-    online: true,
+    online: false,
     host,
     port,
-    name: 'Держава Онлайн | Official FloV:MP Node',
+    name: 'Держава Онлайн',
     gamemode: 'RolePlay',
-    players: 1,
+    players: 0,
     maxPlayers: 1500,
-    pingMs: 24,
-    version: 'v16.4.39-flov',
+    pingMs: null,
+    version: null,
   });
 }
