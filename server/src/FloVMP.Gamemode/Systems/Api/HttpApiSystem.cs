@@ -242,14 +242,14 @@ public sealed class HttpApiSystem
 
     private void HandleAuth(HttpListenerContext ctx, string path)
     {
-        if (ctx.Request.ContentLength64 > 65536)
+        // Ограниченное чтение тела. ContentLength64 доверять нельзя: при
+        // chunked-передаче он = -1, и наивный ReadToEnd() прочитал бы тело
+        // любого размера в память (DoS). Читаем максимум MaxBodyBytes и режем.
+        if (!TryReadBody(ctx, MaxBodyBytes, out var body))
         {
             WriteJson(ctx, 413, new AuthResponseDto(false, "payload too large", null, null, "", false, false));
             return;
         }
-
-        string body;
-        using (var r = new StreamReader(ctx.Request.InputStream, Encoding.UTF8)) body = r.ReadToEnd();
 
         AuthRequestDto? req;
         try { req = JsonSerializer.Deserialize<AuthRequestDto>(body, Json); }
@@ -292,6 +292,30 @@ public sealed class HttpApiSystem
             result.Outcome == AuthOutcome.TwoFaRequired);
 
         WriteJson(ctx, result.Ok ? 200 : 400, resp);
+    }
+
+    /// <summary>
+    /// Читает тело запроса, жёстко ограничивая объём <paramref name="max"/> байт.
+    /// Возвращает false, если тело превышает лимит (в т.ч. при chunked-передаче
+    /// или заниженном Content-Length) — защита от исчерпания памяти.
+    /// </summary>
+    private static bool TryReadBody(HttpListenerContext ctx, int max, out string body)
+    {
+        body = "";
+        if (ctx.Request.ContentLength64 > max) return false;
+
+        using var ms = new MemoryStream();
+        var buf = new byte[8192];
+        var input = ctx.Request.InputStream;
+        int total = 0, read;
+        while ((read = input.Read(buf, 0, buf.Length)) > 0)
+        {
+            total += read;
+            if (total > max) return false;
+            ms.Write(buf, 0, read);
+        }
+        body = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+        return true;
     }
 
     private static string FirstNonEmpty(params string?[] vals)
