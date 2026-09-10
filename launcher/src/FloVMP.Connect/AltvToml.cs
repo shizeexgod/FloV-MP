@@ -15,14 +15,16 @@ public static class AltvToml
             : platformOverride.Trim().ToLowerInvariant();
         var playerName = string.IsNullOrWhiteSpace(nickname) ? "shize5" : nickname.Trim();
 
-        // Ветка клиента. На 'release' движок делает строгую проверку stable-build
-        // против (мёртвого) CDN alt:V и рвёт коннект с WRONG_STABLE_BUILD.
-        // На 'internal' эта проверка не выполняется — а сервер уже патчен
-        // принимать любого клиента, поэтому коннект проходит без патча клиента.
-        // Переопределяется переменной окружения FLOVMP_BRANCH.
+        // Ветка клиента. ВАЖНО: alt:V принимает только 'release' / 'rc' / 'dev'.
+        // 'internal' — НЕвалидна: лаунчер падает с "Указана недопустимая ветка
+        // (0x30,012)" и GTA не запускается вовсе. Поэтому дефолт — 'release'
+        // (клиент запускается и открывает игру). WRONG_STABLE_BUILD на release
+        // снимается отдельно (патч сервера/клиента силами RE), не веткой.
+        // FLOVMP_BRANCH позволяет попробовать 'dev'/'rc' при необходимости.
         var branch = Environment.GetEnvironmentVariable("FLOVMP_BRANCH");
-        if (string.IsNullOrWhiteSpace(branch)) branch = "internal";
+        if (string.IsNullOrWhiteSpace(branch)) branch = "release";
         branch = branch.Trim().ToLowerInvariant();
+        if (branch != "release" && branch != "rc" && branch != "dev") branch = "release";
 
         var toml = $"""
             audioFrameLimit = false
