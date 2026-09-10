@@ -231,6 +231,14 @@ public sealed class LocalCdn : IDisposable
         string rel = i >= 0 ? path[(i + marker.Length)..] : Path.GetFileName(path);
         rel = rel.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
 
+        // Никогда не отдаём и не перезаписываем конфиги или кэш клиента через CDN
+        if (rel.Equals("altv.toml", StringComparison.OrdinalIgnoreCase) ||
+            rel.Equals("flovmp.toml", StringComparison.OrdinalIgnoreCase) ||
+            rel.Contains("cache", StringComparison.OrdinalIgnoreCase))
+        {
+            return (404, "text/plain", "Not Found"u8.ToArray());
+        }
+
         // De-race: клиент качает altv-client.dll в СВОЮ же папку (_clientDir),
         // откуда CDN её и отдаёт → самоперезапись во время скачивания обнуляет
         // файл. Патченую версию (обход WRONG_STABLE_BUILD) держим ОТДЕЛЬНО в
@@ -287,9 +295,15 @@ public sealed class LocalCdn : IDisposable
         foreach (var f in Directory.EnumerateFiles(_clientDir, "*", SearchOption.AllDirectories))
         {
             var rel = Path.GetRelativePath(_clientDir, f).Replace('\\', '/');
-            if (rel is "update.json" or "manifest.json") continue;
+            if (rel is "update.json" or "manifest.json" or "altv.toml" or "flovmp.toml" or "commandline.txt" or "MISSING.txt") continue;
             if (rel.StartsWith("cache/") || rel.StartsWith("logs/") || rel.StartsWith("backup/")
-                || rel.StartsWith("cdn/") || rel.StartsWith("patched/")) continue;
+                || rel.StartsWith("cdn/") || rel.StartsWith("patched/") || rel.StartsWith("ui/")
+                || rel.Contains("/cache/") || rel.Contains("cache/")
+                || rel.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+                || rel.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)
+                || rel.EndsWith(".pma", StringComparison.OrdinalIgnoreCase)
+                || rel.EndsWith(".LOCK", StringComparison.OrdinalIgnoreCase)
+                || rel.EndsWith(".bak", StringComparison.OrdinalIgnoreCase)) continue;
 
             // Для altv-client.dll хэш/размер берём из patched-копии (её же
             // отдаёт CDN) — чтобы клиент увидел совпадение манифеста с тем,
