@@ -156,11 +156,25 @@ public class AntiCheatSystem
         if (!player.Exists) return;
         var pos = new Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
         var state = _service.GetOrCreateState(account.Id, account.Username, pos);
-        if (account.AdminLevel > 0)
+        // Создатель проекта и администраторы освобождены от античита полностью.
+        if (account.AdminLevel > 0 || IsOwner(account.Username))
         {
             _service.SetAdminExemption(account.Id, true);
         }
     }
+
+    // Владельцы проекта из env FLOVMP_OWNER (список ников через запятую) — полное
+    // освобождение от античита. Проверки нет ни для них, ни для админов.
+    private static readonly HashSet<string> _owners = ParseOwners();
+    private static HashSet<string> ParseOwners()
+    {
+        var raw = Environment.GetEnvironmentVariable("FLOVMP_OWNER") ?? "";
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            set.Add(name);
+        return set;
+    }
+    private static bool IsOwner(string username) => _owners.Contains(username);
 
     public void OnDisconnect(IPlayer player)
     {
@@ -240,14 +254,11 @@ public class AntiCheatSystem
             }
         }
 
+        // Report-only: не глушим мотор и не наказываем — только рапорт админам.
         if (driver != null && driver.Exists)
         {
-            if (driver.Vehicle != null && driver.Vehicle.Exists)
-            {
-                driver.Vehicle.EngineOn = false;
-                driver.Vehicle.ScriptMaxSpeed = 0.1f;
-            }
-            driver.Emit("flovmp:chat:msg", "system", "", $"[FloV:Shield] Зафиксировано нарушение физики транспорта ({type}): {reason}");
+            var uname = _accountOf(driver)?.Username ?? driver.Name;
+            ReportToAdmins($"{uname} (acc:{driverId}): физика транспорта ({type}): {reason}");
         }
     }
 
@@ -289,29 +300,40 @@ public class AntiCheatSystem
 
         if (target == null || !target.Exists) return;
 
+        var uname = _accountOf(target)?.Username ?? target.Name;
         switch (action)
         {
-            case AntiCheatAction.TeleportBack:
-                var state = _service.GetOrCreateState(accountId, target.Name, Vector3D.Zero);
-                if (state.LastValidPosition != Vector3D.Zero)
-                {
-                    target.Position = new Position(state.LastValidPosition.X, state.LastValidPosition.Y, state.LastValidPosition.Z);
-                }
-                target.Emit("flovmp:chat:msg", "system", "", "[FloV:Shield] Обнаружена рассинхронизация перемещения. Вы возвращены на позицию.");
-                break;
-
             case AntiCheatAction.Disarm:
+                // Изъятие запрещённого тяжёлого оружия (миниган/RPG и т.п.) —
+                // защитная мера, не наказание игрока. Оставляем.
                 target.RemoveWeapon(target.CurrentWeapon);
-                target.Emit("flovmp:chat:msg", "system", "", "[FloV:Shield] Запрещённое оружие изъято сервером.");
+                ReportToAdmins($"{uname} (acc:{accountId}): {reason} [оружие изъято]");
                 break;
 
+            // Перемещение/скорость/телепорт — ТОЛЬКО рапорт администрации.
+            // Анти-чит не кикает, не телепортит и не наказывает игрока: это
+            // инструмент сработок/варнингов для админов (по требованию владельца).
+            case AntiCheatAction.TeleportBack:
             case AntiCheatAction.Kick:
-                target.Kick($"[FloV:Shield] {reason}");
-                break;
-
             case AntiCheatAction.Warning:
-                target.Emit("flovmp:chat:msg", "system", "", $"[FloV:Shield Предупреждение] {reason}");
+            default:
+                ReportToAdmins($"{uname} (acc:{accountId}): {reason}");
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Отправить сработку античита всей онлайн-администрации (AdminLevel > 0) и
+    /// в системный лог. Игрока НЕ трогаем — только рапорт.
+    /// </summary>
+    private void ReportToAdmins(string text)
+    {
+        var msg = $"[FloV:Shield] {text}";
+        foreach (var p in Alt.GetAllPlayers())
+        {
+            if (!p.Exists) continue;
+            if ((_accountOf(p)?.AdminLevel ?? 0) > 0)
+                p.Emit("flovmp:chat:msg", "system", "Античит", msg);
         }
     }
 }

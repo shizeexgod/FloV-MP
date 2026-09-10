@@ -22,7 +22,10 @@ public class AntiCheatConfig
     public float MaxFallSpeedMps { get; set; } = 90.0f;
     public float MaxTeleportThresholdMeters { get; set; } = 100.0f;
     public int MaxConsecutiveViolations { get; set; } = 3;
-    public AntiCheatAction DefaultViolationAction { get; set; } = AntiCheatAction.Kick;
+    // Анти-чит НЕ кикает и не наказывает игроков — это инструмент РАПОРТА:
+    // сработки/варнинги уходят администрации + в лог. Владелец/админы вообще
+    // освобождены от проверок. Поэтому дефолт — Warning (рапорт), не Kick.
+    public AntiCheatAction DefaultViolationAction { get; set; } = AntiCheatAction.Warning;
     public bool Enabled { get; set; } = true;
 
     // Prohibited high-damage explosive / destructive weapons in standard RP
