@@ -11,6 +11,12 @@ alt.log('[FloV:MP] Клиентский модуль FloV:MP загружен');
 let authView = null;
 let authCamera = null;
 let inGame = false;
+
+// Зеркало SpawnPoints.DefaultSpawn (сервер) — для предзагрузки зоны спавна
+// во время авторизации. Если сервер сменит точку спавна, обновить и здесь;
+// худший случай при рассинхроне — обычная (не ускоренная) загрузка на входе,
+// без поломки.
+const SPAWN_PREFETCH = { x: -262.0, y: -955.0, z: 31.5 };
 let chatView = null;
 let chatTyping = false;
 let settingsView = null;
@@ -197,6 +203,15 @@ function openAuth() {
     } catch (err) {
         alt.log('[FloV:MP] Камера авторизации: ' + err);
     }
+
+    // Предзагрузка зоны спавна, пока игрок вводит логин: к моменту спавна
+    // земля/коллизия уже прогружены -> появление в мире почти мгновенное
+    // ('в лёт', как на RageMP). Координаты зеркалят SpawnPoints.DefaultSpawn
+    // на сервере (Legion Square). Фокус снимается в loadCollisionAndUnfreeze.
+    try {
+        native.setFocusPosAndVel(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z, 0, 0, 0);
+        native.requestCollisionAtCoord(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z);
+    } catch (e) { }
 
     try {
         authView = new alt.WebView('http://resource/client/html/auth/index.html');
