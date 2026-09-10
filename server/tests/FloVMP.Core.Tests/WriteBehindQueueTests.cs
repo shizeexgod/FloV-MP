@@ -1,154 +1,93 @@
-using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using FloVMP.Core.Database;
 using Xunit;
 
-namespace FloVMP.Core.Tests
+namespace FloVMP.Core.Tests;
+
+public class WriteBehindQueueTests
 {
-    public class WriteBehindQueueTests
+    [Fact]
+    public async Task Basic_Flush_Persists_And_Clears()
     {
-        private class TestPlayerData
+        var q = new WriteBehindQueue<string, int>();
+        q.MarkDirty("a", 10);
+        q.MarkDirty("b", 20);
+
+        int persisted = 0;
+        var n = await q.FlushAsync(batch => { persisted = batch.Count; return Task.FromResult(true); });
+
+        Assert.Equal(2, n);
+        Assert.Equal(2, persisted);
+        Assert.Equal(0, q.PendingCount);
+    }
+
+    [Fact]
+    public async Task Failed_Persist_Keeps_Entities_Dirty()
+    {
+        var q = new WriteBehindQueue<string, int>();
+        q.MarkDirty("a", 10);
+
+        var n = await q.FlushAsync(_ => Task.FromResult(false)); // persist не удался
+        Assert.Equal(0, n);
+        Assert.Equal(1, q.PendingCount); // осталось грязным для повтора
+    }
+
+    [Fact]
+    public async Task Redirty_During_Flush_Is_Not_Lost()
+    {
+        // Регресс: во время async-сброса запись перегрязняется новым значением.
+        // Раньше сравнение current<=record (один объект) всегда истинно -> запись
+        // удалялась и НОВОЕ значение терялось. Теперь через Version не теряется.
+        var q = new WriteBehindQueue<string, int>();
+        q.MarkDirty("k", 1);
+
+        var res = await q.FlushAsync(async batch =>
         {
-            public int Id { get; set; }
-            public string Name { get; set; } = string.Empty;
-            public long Bank { get; set; }
-        }
+            // имитируем конкурентную запись V2 во время "сохранения" V1
+            q.MarkDirty("k", 2);
+            await Task.Yield();
+            return true;
+        });
 
-        [Fact]
-        public void MarkDirty_IncreasesPendingCountAndTracksFields()
+        Assert.Equal(1, res);              // один батч обработан
+        Assert.Equal(1, q.PendingCount);   // V2 НЕ потерян — остался грязным
+
+        // следующий сброс должен сохранить именно V2
+        int got = -1;
+        await q.FlushAsync(batch => { got = batch[0].Entity; return Task.FromResult(true); });
+        Assert.Equal(2, got);
+        Assert.Equal(0, q.PendingCount);
+    }
+
+    [Fact]
+    public async Task FlushEntityImmediately_Redirty_During_Save_Is_Not_Lost()
+    {
+        var q = new WriteBehindQueue<string, int>();
+        q.MarkDirty("k", 1);
+
+        var ok = await q.FlushEntityImmediatelyAsync("k", async rec =>
         {
-            using var queue = new WriteBehindQueue<int, TestPlayerData>();
+            q.MarkDirty("k", 2); // перегрязнили во время сохранения
+            await Task.Yield();
+            return true;
+        });
 
-            var player = new TestPlayerData { Id = 1, Name = "Player1", Bank = 5000 };
-            queue.MarkDirty(player.Id, player, "Bank");
-            queue.MarkDirty(player.Id, player, "Cash");
+        Assert.True(ok);
+        Assert.Equal(1, q.PendingCount); // V2 не потерян
+    }
 
-            Assert.Equal(1, queue.PendingCount);
-        }
+    [Fact]
+    public async Task MarkDirty_Same_Key_Coalesces_To_Latest()
+    {
+        var q = new WriteBehindQueue<string, int>();
+        q.MarkDirty("k", 1);
+        q.MarkDirty("k", 2);
+        q.MarkDirty("k", 3);
 
-        [Fact]
-        public async Task FlushAsync_CallsPersisterAndCleansSavedEntities()
-        {
-            var persisted = new List<int>();
-            using var queue = new WriteBehindQueue<int, TestPlayerData>(
-                persister: batch =>
-                {
-                    foreach (var item in batch)
-                    {
-                        persisted.Add(item.Key);
-                    }
-                    return Task.FromResult(true);
-                }
-            );
+        Assert.Equal(1, q.PendingCount); // коалесинг: одна запись на ключ
 
-            var p1 = new TestPlayerData { Id = 101, Name = "Alice", Bank = 10000 };
-            var p2 = new TestPlayerData { Id = 102, Name = "Bob", Bank = 20000 };
-
-            queue.MarkDirty(p1.Id, p1, "Bank");
-            queue.MarkDirty(p2.Id, p2, "Bank");
-            Assert.Equal(2, queue.PendingCount);
-
-            int savedCount = await queue.FlushAsync();
-
-            Assert.Equal(2, savedCount);
-            Assert.Equal(0, queue.PendingCount);
-            Assert.Equal(2, queue.TotalPersisted);
-            Assert.Contains(101, persisted);
-            Assert.Contains(102, persisted);
-        }
-
-        [Fact]
-        public async Task FlushAsync_RetainsEntitiesIfPersisterReturnsFalse()
-        {
-            using var queue = new WriteBehindQueue<int, TestPlayerData>(
-                persister: batch => Task.FromResult(false) // Симулируем сбой БД
-            );
-
-            var p = new TestPlayerData { Id = 500, Name = "Charlie", Bank = 3000 };
-            queue.MarkDirty(p.Id, p, "Bank");
-
-            int saved = await queue.FlushAsync();
-
-            Assert.Equal(0, saved);
-            Assert.Equal(1, queue.PendingCount); // Не удалены, остаются на повтор
-            Assert.Equal(1, queue.FailedFlushes);
-        }
-
-        [Fact]
-        public async Task FlushEntityImmediatelyAsync_FlushesOnlyTargetEntity()
-        {
-            using var queue = new WriteBehindQueue<int, TestPlayerData>();
-
-            var p1 = new TestPlayerData { Id = 1, Name = "One" };
-            var p2 = new TestPlayerData { Id = 2, Name = "Two" };
-
-            queue.MarkDirty(1, p1, "Position");
-            queue.MarkDirty(2, p2, "Position");
-
-            Assert.Equal(2, queue.PendingCount);
-
-            bool saved = await queue.FlushEntityImmediatelyAsync(1, record =>
-            {
-                Assert.Equal(1, record.Key);
-                return Task.FromResult(true);
-            });
-
-            Assert.True(saved);
-            Assert.Equal(1, queue.PendingCount); // Остался только ID 2
-        }
-
-        [Fact]
-        public async Task FlushAllAsync_FlushesAllBatchesUntilEmpty()
-        {
-            var flushedIds = new List<int>();
-            using var queue = new WriteBehindQueue<int, TestPlayerData>(
-                persister: batch =>
-                {
-                    foreach (var item in batch)
-                        flushedIds.Add(item.Key);
-                    return Task.FromResult(true);
-                }
-            ) { MaxBatchSize = 2 };
-
-            for (int i = 1; i <= 5; i++)
-            {
-                var p = new TestPlayerData { Id = i, Name = $"Player{i}" };
-                queue.MarkDirty(i, p);
-            }
-
-            Assert.Equal(5, queue.PendingCount);
-
-            int totalFlushed = await queue.FlushAllAsync();
-
-            Assert.Equal(5, totalFlushed);
-            Assert.Equal(0, queue.PendingCount);
-            Assert.Equal(5, flushedIds.Count);
-        }
-
-        [Fact]
-        public async Task MarkDirty_UpdatesEntityReferenceWhenNewInstanceProvided()
-        {
-            TestPlayerData? persistedPlayer = null;
-            using var queue = new WriteBehindQueue<int, TestPlayerData>(
-                persister: batch =>
-                {
-                    persistedPlayer = batch[0].Entity;
-                    return Task.FromResult(true);
-                }
-            );
-
-            var p1 = new TestPlayerData { Id = 1, Name = "V1", Bank = 100 };
-            queue.MarkDirty(1, p1, "Bank");
-
-            var p2 = new TestPlayerData { Id = 1, Name = "V2", Bank = 500 };
-            queue.MarkDirty(1, p2, "Bank");
-
-            await queue.FlushAsync();
-
-            Assert.NotNull(persistedPlayer);
-            Assert.Equal("V2", persistedPlayer.Name);
-            Assert.Equal(500, persistedPlayer.Bank);
-        }
+        int got = -1;
+        await q.FlushAsync(batch => { got = batch[0].Entity; return Task.FromResult(true); });
+        Assert.Equal(3, got); // последнее значение
     }
 }

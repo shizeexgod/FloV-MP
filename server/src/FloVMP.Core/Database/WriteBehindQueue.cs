@@ -18,6 +18,11 @@ public sealed class DirtyEntityRecord<TKey, TEntity>
     public DateTime FirstDirtiedUtc { get; }
     public DateTime LastDirtiedUtc { get; private set; }
 
+    // Монотонная версия изменения. Растёт при каждом изменении записи. Используется
+    // для точного детекта «перегрязнили во время сброса» — в отличие от LastDirtiedUtc
+    // (DateTime.UtcNow ~15мс), не путается на суб-15мс гонках.
+    public long Version { get; private set; }
+
     public DirtyEntityRecord(TKey key, TEntity entity, IEnumerable<string>? initialFields = null)
     {
         Key = key;
@@ -25,17 +30,20 @@ public sealed class DirtyEntityRecord<TKey, TEntity>
         DirtyFields = initialFields != null ? new HashSet<string>(initialFields, StringComparer.OrdinalIgnoreCase) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         FirstDirtiedUtc = DateTime.UtcNow;
         LastDirtiedUtc = DateTime.UtcNow;
+        Version = 1;
     }
 
     public void UpdateEntity(TEntity entity)
     {
         Entity = entity;
         LastDirtiedUtc = DateTime.UtcNow;
+        Version++;
     }
 
     public void Touch()
     {
         LastDirtiedUtc = DateTime.UtcNow;
+        Version++;
     }
 
     public void MarkDirty(string field)
@@ -45,6 +53,7 @@ public sealed class DirtyEntityRecord<TKey, TEntity>
             DirtyFields.Add(field);
         }
         LastDirtiedUtc = DateTime.UtcNow;
+        Version++;
     }
 }
 
@@ -150,6 +159,7 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
         if (persister == null) return 0;
 
         List<DirtyEntityRecord<TKey, TEntity>> batch;
+        Dictionary<TKey, long> batchStamps;
 
         lock (_lock)
         {
@@ -160,6 +170,12 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
 
             _isFlushing = true;
             batch = _dirtyEntities.Values.Take(MaxBatchSize).ToList();
+            // Снимок ВЕРСИЙ на момент батча. Записи в _dirtyEntities — те же объекты,
+            // что в batch; при повторном MarkDirty во время async-сброса их Version
+            // растёт. Сравнивать надо с этим снимком, иначе current и record — один
+            // объект, сравнение всегда истинно, и перегрязнённая запись удаляется ->
+            // последнее изменение теряется (не доходит до БД).
+            batchStamps = batch.ToDictionary(r => r.Key, r => r.Version);
         }
 
         try
@@ -171,8 +187,11 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
                 {
                     foreach (var record in batch)
                     {
-                        // Удаляем только если сущность не была повторно модифицирована во время сброса
-                        if (_dirtyEntities.TryGetValue(record.Key, out var current) && current.LastDirtiedUtc <= record.LastDirtiedUtc)
+                        // Удаляем только если сущность не была повторно модифицирована во
+                        // время сброса — сравниваем текущую метку со СНИМКОМ на момент батча.
+                        if (_dirtyEntities.TryGetValue(record.Key, out var current)
+                            && batchStamps.TryGetValue(record.Key, out var stamp)
+                            && current.Version <= stamp)
                         {
                             _dirtyEntities.Remove(record.Key);
                         }
@@ -210,6 +229,7 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
     public async Task<bool> FlushEntityImmediatelyAsync(TKey key, Func<DirtyEntityRecord<TKey, TEntity>, Task<bool>> immediatePersister)
     {
         DirtyEntityRecord<TKey, TEntity>? target;
+        long stamp;
 
         lock (_lock)
         {
@@ -217,6 +237,9 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
             {
                 return true; // Не было изменений, сохранять не нужно
             }
+            // Снимок версии до persist (target — тот же объект, что в словаре, и мог бы
+            // быть перегрязнён во время сохранения; сравнение с самим собой всегда истинно).
+            stamp = target.Version;
         }
 
         try
@@ -226,7 +249,7 @@ public sealed class WriteBehindQueue<TKey, TEntity> : IDisposable where TKey : n
             {
                 lock (_lock)
                 {
-                    if (_dirtyEntities.TryGetValue(key, out var current) && current.LastDirtiedUtc <= target.LastDirtiedUtc)
+                    if (_dirtyEntities.TryGetValue(key, out var current) && current.Version <= stamp)
                     {
                         _dirtyEntities.Remove(key);
                     }
