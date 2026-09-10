@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS `accounts` (
   `social_club` VARCHAR(128) DEFAULT NULL,
   `last_ip` VARCHAR(45) DEFAULT NULL,
   `admin_level` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  -- Экономика на уровне аккаунта (модель в ходу: JsonAccountStore/MySqlAccountStore
+  -- держат баланс на аккаунте; таблица characters — под будущую систему персонажей).
+  `cash` BIGINT NOT NULL DEFAULT 0,
+  `bank` BIGINT NOT NULL DEFAULT 0,
   `is_banned` TINYINT(1) NOT NULL DEFAULT 0,
   `ban_reason` VARCHAR(255) DEFAULT NULL,
   `ban_until_utc` DATETIME DEFAULT NULL,
