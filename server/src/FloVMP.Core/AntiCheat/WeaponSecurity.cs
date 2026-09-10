@@ -28,8 +28,8 @@ public class WeaponSecurity
         if (state.IsAdminExempt || !_config.Enabled)
             return true;
 
-        // Fist / Unarmed (0xA2719248) is always allowed
-        if (weaponHash == 0 || weaponHash == 0xA2719248)
+        // Fist / Unarmed (0xA2719263 and 0xA2719248) is always allowed
+        if (weaponHash == 0 || weaponHash == 0xA2719263 || weaponHash == 0xA2719248)
             return true;
 
         if (IsWeaponBlacklisted(weaponHash))

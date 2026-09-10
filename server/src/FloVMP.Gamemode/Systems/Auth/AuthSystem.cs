@@ -73,11 +73,30 @@ public sealed class AuthSystem
         // (flovmp:client:ready). Иначе auth:show может уйти раньше, чем
         // index.js навесит обработчики — и игрок застрянет на чёрном экране.
         Alt.Log($"[FloV:MP] auth: {player.Name} подключился, ждём готовности клиента");
+
+        var playerId = player.Id;
+        Task.Delay(2000).ContinueWith(_ =>
+        {
+            try
+            {
+                var p = Alt.GetAllPlayers().FirstOrDefault(x => x.Id == playerId);
+                if (p != null && p.Exists && !IsAuthed(p))
+                {
+                    Alt.Log($"[FloV:MP] auth: страховочная отправка flovmp:auth:show для {p.Name}");
+                    p.Emit("flovmp:auth:show");
+                }
+            }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP] auth fallback warning: {ex.Message}");
+            }
+        });
     });
 
     private void OnClientReady(IPlayer player) => Safe.Run("auth.OnClientReady", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
+        Alt.Log($"[FloV:MP] auth: клиент {player.Name} готов, отправляем flovmp:auth:show");
         player.Emit("flovmp:auth:show");
     });
 
@@ -167,6 +186,17 @@ public sealed class AuthSystem
         // Хэндофф в лаунчер: если игрок зашёл в игру без входа в лаунчере,
         // после этого лаунчер подхватит аккаунт из session.json.
         SessionHandoff.Write(account);
+
+        try
+        {
+            player.SetSyncedMetaData("authed", true);
+            player.SetSyncedMetaData("username", account.Username);
+            player.SetSyncedMetaData("admin_level", account.AdminLevel);
+        }
+        catch (Exception ex)
+        {
+            Alt.Log($"[FloV:MP] auth metadata error: {ex.Message}");
+        }
 
         player.Emit("flovmp:auth:hide");
         _onAuthed(player, account);

@@ -29,7 +29,7 @@
     --ui:'Proxima','Segoe UI',system-ui,-apple-system,sans-serif;
   }
   *{ margin:0; padding:0; box-sizing:border-box; }
-  html,body{ width:100%; height:100%; overflow:hidden; background:var(--bg-0); color:var(--ink); font-family:var(--ui); user-select:none; cursor:default; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:transparent; color:var(--ink); font-family:var(--ui); user-select:none; cursor:default; }
   body{ -webkit-font-smoothing:antialiased; }
 
   /* ── Фон: тёмный + золотое сияние снизу + виньетка + лёгкая текстура ── */
@@ -207,24 +207,90 @@
     metaEl.textContent = meta || '';
   }
 
+  var uiClosed = false;
+
+  function closeUi() {
+    if (disconnected) return;
+    uiClosed = true;
+    try { emit('ui:open', false); } catch (e) {}
+    try { emit('cursor', false); } catch (e) {}
+    try {
+      if (typeof alt !== 'undefined' && alt) {
+        if (alt.emit) {
+          alt.emit('ui:open', false);
+          alt.emit('cursor', false);
+        }
+        if (alt.showCursor) alt.showCursor(false);
+        if (alt.toggleGameControls) alt.toggleGameControls(true);
+      }
+    } catch (e) {}
+    if (loadingEl) loadingEl.classList.add('hidden');
+    if (tipsWrap) tipsWrap.classList.add('hidden');
+    document.body.style.display = 'none';
+    document.body.style.background = 'transparent';
+    document.documentElement.style.display = 'none';
+    document.documentElement.style.background = 'transparent';
+  }
+
+  function openUi() {
+    uiClosed = false;
+    document.documentElement.style.display = '';
+    document.documentElement.style.background = '';
+    document.body.style.display = '';
+    document.body.style.background = '';
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (tipsWrap) tipsWrap.classList.remove('hidden');
+    try { emit('ui:open', true); } catch (e) {}
+    try { emit('cursor', true); } catch (e) {}
+    try {
+      if (typeof alt !== 'undefined' && alt) {
+        if (alt.emit) {
+          alt.emit('ui:open', true);
+          alt.emit('cursor', true);
+        }
+        if (alt.showCursor) alt.showCursor(true);
+        if (alt.toggleGameControls) alt.toggleGameControls(false);
+      }
+    } catch (e) {}
+  }
+
   // ── Фазы подключения (RU) ──
-  on('connection:connecting',          function () { setPhase('Подключение к серверу', null); });
-  on('connection:connected',           function () { setPhase('Сервер отвечает', 5); });
-  on('connection:inQueue',             function () { setPhase('Вы в очереди на вход', null); });
-  on('connection:downloadingRuntimes', function () { setPhase('Загрузка компонентов', null); });
+  on('connection:connecting',          function () { openUi(); setPhase('Подключение к серверу', null); });
+  on('connection:connected',           function () {
+    setPhase('Вход в игру', 100);
+    setTimeout(closeUi, 300);
+  });
+  on('connection:inQueue',             function () { openUi(); setPhase('Вы в очереди на вход', null); });
+  on('connection:downloadingRuntimes', function () { openUi(); setPhase('Загрузка компонентов', null); });
   on('connection:downloadingResources',function (done, total) {
+    openUi();
     if (typeof done === 'number' && typeof total === 'number' && total > 0) {
       setPhase('Загрузка ресурсов', done / total * 100, fmtBytes(done) + ' / ' + fmtBytes(total));
     } else { setPhase('Загрузка ресурсов', null); }
   });
-  on('connection:validatingResources', function () { setPhase('Проверка файлов', 100); });
-  on('connection:startingResources',   function () { setPhase('Запуск ресурсов', null); });
-  on('connection:preloadingMods',      function () { setPhase('Подготовка модификаций', null); });
-  on('connection:reloadingGameMap',    function () { setPhase('Загрузка карты Москвы', null); });
-  on('connection:startingGame',        function () { setPhase('Запуск игры', 100); });
-  on('connection:joining',             function () { setPhase('Вход в игру', 100); });
+  on('connection:validatingResources', function () { openUi(); setPhase('Проверка файлов', 100); });
+  on('connection:startingResources',   function () { openUi(); setPhase('Запуск ресурсов', null); });
+  on('connection:preloadingMods',      function () { openUi(); setPhase('Подготовка модификаций', null); });
+  on('connection:reloadingGameMap',    function () { openUi(); setPhase('Загрузка карты Москвы', null); });
+  on('connection:startingGame',        function () {
+    setPhase('Запуск игры', 100);
+    setTimeout(closeUi, 300);
+  });
+  on('connection:joining',             function () {
+    setPhase('Вход в игру', 100);
+    setTimeout(closeUi, 300);
+  });
   on('connectionState:update',         function () { /* держим курсор/оверлей — клиент сам решает */ });
-  on('ui:toggle',                      function () {});
+  on('ui:toggle',                      function (state) {
+    if (state === false) {
+      closeUi();
+    } else if (state === true) {
+      openUi();
+    } else {
+      if (document.body.style.display === 'none') openUi();
+      else closeUi();
+    }
+  });
   on('version:update',                 function (cur) { if (typeof cur === 'string' && cur) verEl.textContent = 'FloV:MP ' + cur; });
 
   // ── Причины отключения (перевод понятным языком) ──
@@ -240,6 +306,7 @@
   };
   function showDisconnect(reason) {
     disconnected = true;
+    openUi();
     var raw = (reason == null ? '' : String(reason)).trim();
     var known = null, code = raw;
     for (var k in REASONS) { if (raw === k || raw.toUpperCase().indexOf(k.toUpperCase()) !== -1) { known = REASONS[k]; break; } }
@@ -254,10 +321,16 @@
   on('connection:disconnected', function (r) { showDisconnect(r); });
   on('connection:failed',       function (r) { showDisconnect(r); });
 
-  // ── Клавиши на экране отключения: R — reconnect, Enter — exit ──
+  // ── Клавиши: Escape — скрыть экран загрузки (если в игре); R — reconnect, Enter — exit ──
   document.addEventListener('keydown', function (e) {
-    if (!disconnected) return;
     var k = e.key || e.code;
+    if (k === 'Escape') {
+      if (!disconnected) {
+        closeUi();
+      }
+      return;
+    }
+    if (!disconnected) return;
     if (k === 'Enter' || k === 'NumpadEnter') {
       e.preventDefault(); e.stopPropagation(); emit('exit');
     } else if (k === 'r' || k === 'R' || k === 'KeyR') {

@@ -50,6 +50,25 @@ public sealed class PlayerLifecycle
         player.Emit("flovmp:client:welcome", player.Name, index);
 
         Alt.Log($"[FloV:MP] spawn: {player.Name} (acc {accountId}) -> #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
+
+        // Страховочная отправка событий через 300мс после инициализации сетевого педа движком alt:V
+        var p = player;
+        var pName = player.Name;
+        Task.Delay(300).ContinueWith(_ =>
+        {
+            try
+            {
+                if (p.Exists)
+                {
+                    p.Emit("flovmp:auth:hide");
+                    p.Emit("flovmp:client:welcome", pName, index);
+                }
+            }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP] post-spawn emit warning: {ex.Message}");
+            }
+        });
     }
 
     private static void OnPlayerDisconnect(IPlayer player, string reason)

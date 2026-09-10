@@ -43,6 +43,7 @@ public class AntiCheatSystem
         Alt.OnWeaponDamage += OnWeaponDamage;
         Alt.OnPlayerEnterVehicle += OnPlayerEnterVehicle;
         Alt.OnPlayerLeaveVehicle += OnPlayerLeaveVehicle;
+        Alt.OnClient<bool>("flovmp:admin:noclip", OnClientNoClip);
     }
 
     public void Detach()
@@ -50,6 +51,21 @@ public class AntiCheatSystem
         Alt.OnWeaponDamage -= OnWeaponDamage;
         Alt.OnPlayerEnterVehicle -= OnPlayerEnterVehicle;
         Alt.OnPlayerLeaveVehicle -= OnPlayerLeaveVehicle;
+    }
+
+    private void OnClientNoClip(IPlayer player, bool enabled)
+    {
+        if (!player.Exists) return;
+        var acc = _accountOf(player);
+        if (acc == null) return;
+        if (acc.AdminLevel > 0 || _service.IsAdminExempt(acc.Id))
+        {
+            _service.SetAdminExemption(acc.Id, enabled);
+            if (!enabled)
+            {
+                NotifyAdminTeleport(player, player.Position);
+            }
+        }
     }
 
     private WeaponDamageResponse OnWeaponDamage(

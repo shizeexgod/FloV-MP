@@ -27,7 +27,7 @@ public class TeleportDetector
             return true;
 
         var timeSinceTeleport = (currentTime - state.LastSpawnOrTeleportTime).TotalSeconds;
-        if (wasLegitimateTeleport || (timeSinceTeleport >= 0 && timeSinceTeleport < 2.0))
+        if (wasLegitimateTeleport || (timeSinceTeleport >= 0 && timeSinceTeleport < 5.0))
         {
             return true;
         }

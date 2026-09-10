@@ -254,6 +254,7 @@ try
     // 4) Ждём завершения
     var gtaSeen = false;
     var waitStopwatch = Stopwatch.StartNew();
+    var lastRglCheck = Stopwatch.StartNew();
     const string windowTitle = "Держава Онлайн (FloV:MP)";
     while (true)
     {
@@ -272,6 +273,12 @@ try
         else if (altvUp)
         {
             UpdateGameWindowTitle(windowTitle);
+        }
+
+        if (!gtaSeen && lastRglCheck.ElapsedMilliseconds >= 1000)
+        {
+            lastRglCheck.Restart();
+            DismissRockstarCloudSyncDialog();
         }
 
         if (gtaSeen && !gtaUp)
@@ -313,6 +320,54 @@ static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId)
 
 [DllImport("user32.dll")]
 static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+[DllImport("user32.dll", SetLastError = true)]
+static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+[DllImport("user32.dll", SetLastError = true)]
+static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+[DllImport("user32.dll")]
+static extern bool IsWindowVisible(IntPtr hWnd);
+
+[DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+
+static void DismissRockstarCloudSyncDialog()
+{
+    try
+    {
+        EnumWindows((hWnd, lParam) =>
+        {
+            if (!IsWindowVisible(hWnd)) return true;
+            var sb = new StringBuilder(256);
+            GetClassName(hWnd, sb, 256);
+            var cls = sb.ToString();
+            if (cls == "Rockstar Games Launcher")
+            {
+                if (GetWindowRect(hWnd, out var rect))
+                {
+                    int w = rect.Right - rect.Left;
+                    int h = rect.Bottom - rect.Top;
+                    if (w >= 400 && h >= 300)
+                    {
+                        int btnX = (int)(w * 0.35);
+                        int btnY = (int)(h * 0.675);
+                        IntPtr btnLParam = (IntPtr)((btnY << 16) | (btnX & 0xFFFF));
+                        const uint WM_LBUTTONDOWN = 0x0201;
+                        const uint WM_LBUTTONUP = 0x0202;
+                        PostMessage(hWnd, WM_LBUTTONDOWN, (IntPtr)1, btnLParam);
+                        Thread.Sleep(30);
+                        PostMessage(hWnd, WM_LBUTTONUP, IntPtr.Zero, btnLParam);
+                    }
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+    }
+    catch { }
+}
 
 static void UpdateGameWindowTitle(string newTitle)
 {
@@ -666,18 +721,15 @@ static string? FindRockstarLauncher()
 static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
 {
     var cmdFile = Path.Combine(gtaDir, "commandline.txt");
-    var parts = new List<string>();
+    var parts = new List<string> { "-scDisableCloudSaves", "-noCloud" };
     if (!string.IsNullOrWhiteSpace(gameArgs)) parts.Add(gameArgs.Trim());
     if (fpsLimit > 0) parts.Add($"-FPSLimit {fpsLimit}");
-    if (parts.Count > 0)
+    try
     {
-        try
-        {
-            File.WriteAllLines(cmdFile, parts);
-            Console.WriteLine($"[connect] Применены параметры в commandline.txt: {string.Join(' ', parts)}");
-        }
-        catch { }
+        File.WriteAllLines(cmdFile, parts);
+        Console.WriteLine($"[connect] Применены параметры в commandline.txt: {string.Join(' ', parts)}");
     }
+    catch { }
 }
 
 static void CleanupGameCommandLine(string gtaDir)
@@ -859,4 +911,7 @@ struct LUID { public uint LowPart; public int HighPart; }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 struct TOKEN_PRIVILEGES { public uint PrivilegeCount; public LUID Luid; public uint Attributes; }
+
+[StructLayout(LayoutKind.Sequential)]
+struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 

@@ -47,6 +47,7 @@ function toggleNoClip() {
         native.resetEntityAlpha(player.scriptID);
         alt.log('[FloV:MP] NoClip выключен (видимый)');
     }
+    try { alt.emitServer('flovmp:admin:noclip', noClip); } catch (e) { }
 }
 
 // --- Постоянный игровой цикл (Каждый тик) --------------------------------
@@ -177,9 +178,14 @@ alt.everyTick(() => {
 // --- Авторизация ---------------------------------------------------------
 function openAuth() {
     if (authView) return;
+    alt.log('[FloV:MP] openAuth: отображаем окно авторизации');
     try {
         // Закрываем оверлей Social Club или меню паузы, если они были открыты при старте
         native.setFrontendActive(false);
+    } catch (e) { }
+    try {
+        alt.emit('ui:toggle', false);
+        alt.emit('ui:open', false);
     } catch (e) { }
     try {
         // Камера с видом на Красную площадь / Кремль (Москва)
@@ -192,24 +198,38 @@ function openAuth() {
         alt.log('[FloV:MP] Камера авторизации: ' + err);
     }
 
-    authView = new alt.WebView('http://resource/client/html/auth/index.html');
-    authView.focus();
-    alt.showCursor(true);
-    alt.toggleGameControls(false);
+    try {
+        authView = new alt.WebView('http://resource/client/html/auth/index.html');
+        authView.focus();
+        alt.showCursor(true);
+        alt.toggleGameControls(false);
 
-    authView.on('flovmp:auth:submit', (mode, user, pass) => {
-        const evt = mode === 'reg' ? 'flovmp:auth:register' : 'flovmp:auth:login';
-        alt.emitServer(evt, String(user), String(pass));
-    });
+        authView.on('flovmp:auth:submit', (mode, user, pass) => {
+            const evt = mode === 'reg' ? 'flovmp:auth:register' : 'flovmp:auth:login';
+            alt.log(`[FloV:MP] auth: отправка ${evt} для пользователя ${user}`);
+            alt.emitServer(evt, String(user), String(pass));
+        });
+        authView.on('flovmp:auth:close', () => {
+            alt.log('[FloV:MP] authView запросил закрытие по событию flovmp:auth:close');
+            closeAuth();
+            openChat();
+            openHud();
+            inGame = true;
+        });
+        alt.log('[FloV:MP] authView успешно создан');
+    } catch (err) {
+        alt.log('[FloV:MP] Ошибка создания authView: ' + err);
+    }
 }
 
 function closeAuth() {
+    alt.log('[FloV:MP] closeAuth вызвана');
     if (authView) {
-        authView.destroy();
+        try { authView.destroy(); } catch (e) { alt.log('[FloV:MP] authView.destroy warning: ' + e); }
         authView = null;
     }
     try { alt.showCursor(false); } catch (e) { }
-    alt.toggleGameControls(true);
+    try { alt.toggleGameControls(true); } catch (e) { }
 
     try {
         native.renderScriptCams(false, false, 0, true, false, 0);
@@ -424,8 +444,13 @@ function loadCollisionAndUnfreeze(targetPos) {
 }
 
 // --- Обработчики событий -------------------------------------------------
-alt.onServer('flovmp:auth:show', openAuth);
+alt.onServer('flovmp:auth:show', () => {
+    alt.log('[FloV:MP] flovmp:auth:show получен от сервера');
+    openAuth();
+});
+
 alt.onServer('flovmp:auth:hide', () => {
+    alt.log('[FloV:MP] flovmp:auth:hide получен от сервера');
     closeAuth();
     openChat();
     openHud();
@@ -438,7 +463,29 @@ alt.onServer('flovmp:auth:hide', () => {
 });
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
+    alt.log(`[FloV:MP] flovmp:auth:result получен: ok=${ok}, message=${message}`);
     if (authView) authView.emit('flovmp:auth:result', ok, message);
+    if (ok) {
+        alt.setTimeout(() => {
+            if (authView) {
+                alt.log('[FloV:MP] Автозакрытие authView по успешному auth:result');
+                closeAuth();
+                openChat();
+                openHud();
+                inGame = true;
+            }
+        }, 350);
+    }
+});
+
+alt.on('syncedMetaChange', (entity, key, value) => {
+    if (entity === alt.Player.local && key === 'authed' && value === true) {
+        alt.log('[FloV:MP] syncedMeta authed=true -> гарантированное закрытие authView');
+        closeAuth();
+        openChat();
+        openHud();
+        inGame = true;
+    }
 });
 
 alt.onServer('flovmp:chat:msg', (kind, author, text) => {
@@ -581,7 +628,9 @@ alt.on('keyup', (key) => {
 
     if (chatTyping || inventoryView) return;
 
-    if (key === 115) { // F4
+    if (key === 113) { // F2 — Окно авторизации (если не в игре)
+        if (!inGame) openAuth();
+    } else if (key === 115) { // F4
         toggleNoClip();
     } else if (key === 84) { // T
         startTyping();
@@ -594,6 +643,14 @@ alt.on('keyup', (key) => {
 alt.on('connectionComplete', () => {
     alt.log('[FloV:MP] Успешное подключение к серверу');
     alt.emitServer('flovmp:client:ready');
+    openAuth();
+    alt.setTimeout(() => {
+        if (!inGame && !authView) {
+            alt.log('[FloV:MP] Повторный запрос готовности клиента');
+            alt.emitServer('flovmp:client:ready');
+            openAuth();
+        }
+    }, 1500);
 });
 
 alt.on('disconnect', () => {
@@ -611,3 +668,11 @@ alt.on('disconnect', () => {
 alt.onServer('flovmp:client:welcome', (name, index) => {
     alt.log(`[Держава Онлайн] Добро пожаловать на сервер, ${name}!`);
 });
+
+// Если скрипт загрузился уже после установки соединения — открываем окно авторизации
+alt.setTimeout(() => {
+    if (!inGame && !authView) {
+        alt.log('[FloV:MP] Автозапуск openAuth по таймеру готовности');
+        openAuth();
+    }
+}, 500);

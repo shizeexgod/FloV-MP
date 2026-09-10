@@ -84,6 +84,14 @@ public class AntiCheatService
 
         var now = timestamp ?? DateTime.UtcNow;
 
+        if (state.IsAdminExempt || !_config.Enabled)
+        {
+            state.ResetViolations();
+            state.LastValidPosition = currentPos;
+            state.LastTrackedTime = now;
+            return true;
+        }
+
         // Check Teleport
         if (!_teleportDetector.ValidateTeleport(state, currentPos, now, inVehicle, false, out var dist, out var teleReason))
         {

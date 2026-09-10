@@ -53,7 +53,7 @@ public static class AltvToml
             externalConsoleY = 0
             gtaPlatform = '{platform}'
             gtapath = '{gtaPath}'
-            heapSize = 1024
+            heapSize = 2048
             lang = 'ru'
             lastip = ''
             launcherSkin = 'default'

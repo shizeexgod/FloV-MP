@@ -125,7 +125,23 @@
 <script>
   var mode = "login";
   var busy = false;
+  var waitTimer = null;
   var $ = function (id) { return document.getElementById(id); };
+
+  // Сторожевой таймаут: если сервер не ответил за 8с — снимаем блокировку
+  // кнопки и честно сообщаем, что ответа нет (раньше окно навсегда висело
+  // на «Отправка…», и это выглядело как «сервер ничего не отдаёт»).
+  function clearWait() { if (waitTimer) { clearTimeout(waitTimer); waitTimer = null; } }
+  function armWait() {
+    clearWait();
+    waitTimer = setTimeout(function () {
+      waitTimer = null;
+      if (busy) {
+        setBusy(false);
+        setMsg("Сервер не ответил. Проверьте соединение и попробуйте снова.", "err");
+      }
+    }, 8000);
+  }
 
   function setMode(m) {
     mode = m;
@@ -159,14 +175,23 @@
     setBusy(true);
     setMsg("Отправка…", "");
     if (typeof alt !== "undefined") {
+      armWait();
       alt.emit("flovmp:auth:submit", mode, user, pass);
     }
   });
 
   if (typeof alt !== "undefined") {
     alt.on("flovmp:auth:result", function (ok, message) {
+      clearWait();
       setBusy(false);
       setMsg(message || (ok ? "Готово" : "Ошибка"), ok ? "ok" : "err");
+      if (ok) {
+        setTimeout(function () {
+          if (typeof alt !== "undefined") {
+            alt.emit("flovmp:auth:close");
+          }
+        }, 300);
+      }
     });
   }
 

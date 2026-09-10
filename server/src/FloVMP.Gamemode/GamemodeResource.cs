@@ -326,11 +326,11 @@ public class GamemodeResource : Resource
 
     private void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("core.OnPlayerAuthed", () =>
     {
+        _antiCheat?.OnAuthed(player, account);
         _playerLifecycle?.SpawnAuthed(player, account.Id);
         _hud?.OnAuthed(player, account);
         _inv?.OnAuthed(player, account);
         _chat?.OnPlayerAuthed(player, account);
-        _antiCheat?.OnAuthed(player, account);
     });
 
     private void OnPlayerDisconnect(IPlayer player, string reason) => Safe.Run("core.OnPlayerDisconnect", () =>

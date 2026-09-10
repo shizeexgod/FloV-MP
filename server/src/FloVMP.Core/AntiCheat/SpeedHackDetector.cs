@@ -25,9 +25,9 @@ public class SpeedHackDetector
         if (state.IsAdminExempt || !_config.Enabled)
             return true;
 
-        // Skip check right after spawn or admin teleport (grace period 2 seconds)
+        // Skip check right after spawn or admin teleport (grace period 5 seconds)
         var timeSinceTeleport = (currentTime - state.LastSpawnOrTeleportTime).TotalSeconds;
-        if (timeSinceTeleport >= 0 && timeSinceTeleport < 2.0)
+        if (timeSinceTeleport >= 0 && timeSinceTeleport < 5.0)
         {
             return true;
         }
