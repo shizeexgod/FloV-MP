@@ -21,6 +21,13 @@ if %errorlevel% neq 0 (
 setlocal
 cd /d "%~dp0.."
 
+rem Clean slate: close any stale connector / alt:V launcher from a previous
+rem attempt. A stuck connector locks the exe (rebuild fails) and a stuck
+rem flovmp.exe holds the game in limbo. GTA5.exe itself is NOT touched.
+taskkill /F /IM FloVMP.Connect.exe >nul 2>&1
+taskkill /F /IM flovmp.exe >nul 2>&1
+ping -n 2 127.0.0.1 >nul
+
 rem The connector is a WinExe (no console): its output goes to the log file
 rem %LOCALAPPDATA%\FloridaV\connect.log, so this window stays quiet - that is
 rem normal, watch the log for progress. bin\Release is built from current

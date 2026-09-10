@@ -504,54 +504,76 @@ static string? PromptUserForGtaFolder()
     return selected;
 }
 
-static void EnsureEpicGamesLauncherRunning()
+static string? ResolveEpicLauncherPath()
 {
-    var egsProc = Process.GetProcessesByName("EpicGamesLauncher");
-    var egsWeb = Process.GetProcessesByName("EpicWebHelper");
-    if (egsProc.Length > 0 && egsWeb.Length > 0)
-    {
-        Console.WriteLine("[connect] Epic Games Launcher активен и готов.");
-        return;
-    }
-
-    Console.WriteLine("[connect] Epic Games Launcher не готов. Выполняю предварительный прогрев EGS...");
-    var epicCandidates = new[]
+    var candidates = new[]
     {
         @"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
         @"C:\Program Files (x86)\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe",
     };
-    var found = epicCandidates.FirstOrDefault(File.Exists);
+    var found = candidates.FirstOrDefault(File.Exists);
+    if (found != null) return found;
+
+    // Реестр: HKLM\...\Epic Games\EpicGamesLauncher AppPath (папка Launcher/Portal/Binaries/Win64)
+    foreach (var root in new[] { @"SOFTWARE\WOW6432Node\Epic Games\EpicGamesLauncher", @"SOFTWARE\Epic Games\EpicGamesLauncher" })
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(root);
+            var appPath = key?.GetValue("AppPath") as string;
+            if (!string.IsNullOrWhiteSpace(appPath) && File.Exists(appPath)) return appPath;
+        }
+        catch { }
+    }
+    return null;
+}
+
+/// <summary>
+/// Гарантирует, что Epic Games Launcher реально готов выдать игру. «Закрытый»
+/// EGL часто оставляет фоновые процессы в трее, но игра через них НЕ
+/// запускается (flovmp.exe -directlaunch зависает в ожидании entitlement).
+/// Поэтому не доверяем простому наличию процессов — всегда будим EGL
+/// (идемпотентно, он single-instance) и ждём готовности EpicWebHelper.
+/// </summary>
+static void EnsureEpicGamesLauncherRunning()
+{
+    bool WebReady() => Process.GetProcessesByName("EpicWebHelper").Length > 0;
+    bool MainRunning() => Process.GetProcessesByName("EpicGamesLauncher").Length > 0;
+
+    var found = ResolveEpicLauncherPath();
+    Console.WriteLine(MainRunning()
+        ? "[connect] Epic Games Launcher: есть фоновые процессы — пробуждаю до рабочего состояния..."
+        : "[connect] Epic Games Launcher не запущен — запускаю и жду готовности...");
+
     try
     {
         if (found != null)
-        {
             Process.Start(new ProcessStartInfo(found, "-Silent") { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Minimized });
-        }
         else
-        {
             Process.Start(new ProcessStartInfo("com.epicgames.launcher://") { UseShellExecute = true });
-        }
-        for (int i = 0; i < 40; i++)
-        {
-            Thread.Sleep(500);
-            if (Process.GetProcessesByName("EpicWebHelper").Length > 0)
-            {
-                Console.WriteLine("[connect] Epic Games Launcher инициализирован. Ожидаю EOS аутентификацию (2.5 сек)...");
-                Thread.Sleep(2500);
-                break;
-            }
-            else if (i > 10 && Process.GetProcessesByName("EpicGamesLauncher").Length > 0)
-            {
-                Console.WriteLine("[connect] Epic Games Launcher обнаружен. Ожидаю готовность...");
-                Thread.Sleep(2000);
-                break;
-            }
-        }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[connect] Предупреждение EGS: {ex.Message}");
+        Console.WriteLine($"[connect] Предупреждение EGS (запуск): {ex.Message}");
     }
+
+    // Ждём EpicWebHelper — это признак, что EGS/EOS поднялись и готовы
+    // авторизовать запуск игры. До 40 сек.
+    for (int i = 0; i < 80; i++)
+    {
+        Thread.Sleep(500);
+        if (WebReady())
+        {
+            Console.WriteLine("[connect] Epic Games Launcher готов (EpicWebHelper активен). Добиваю EOS-аутентификацию...");
+            Thread.Sleep(3000);
+            return;
+        }
+    }
+
+    if (MainRunning())
+        Console.WriteLine("[connect] EGL запущен, но EpicWebHelper не поднялся. Вероятно, нужен вход в аккаунт Epic — открой EGL, войди и повтори запуск.");
+    else
+        Console.WriteLine("[connect] ВНИМАНИЕ: не удалось запустить Epic Games Launcher. Открой его вручную, войди в аккаунт и повтори.");
 }
 
 // Прогрев Rockstar Games Launcher / Social Club — чтобы GTA V не зависла на
