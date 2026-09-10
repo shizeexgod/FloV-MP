@@ -15,7 +15,7 @@ using FloVMP.Launcher.Services;
 // не видел техническую консоль, но диагностика сохранялась для поддержки.
 try
 {
-    var _logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FloridaV");
+    var _logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FloVMP");
     Directory.CreateDirectory(_logDir);
     var _sw = new StreamWriter(Path.Combine(_logDir, "connect.log"), append: false, new UTF8Encoding(false)) { AutoFlush = true };
     Console.SetOut(_sw);
@@ -282,10 +282,12 @@ try
 
         if (!gtaSeen)
         {
-            // Ждем до 75 секунд, пока Rockstar Launcher и Epic Games проводят авторизацию и запускают игру
-            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(75) && !altvUp)
+            // Ждем до 240 секунд, пока Rockstar Launcher и Epic Games проводят авторизацию и запускают игру.
+            // Первый запуск: компиляция шейдеров + RGL/EGS авторизация может занять 2-3 минуты.
+            // Если alt:V уже запущен — не применяем таймаут (игра грузится, просто ждём).
+            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(240) && !altvUp)
             {
-                Console.WriteLine("[connect] Время ожидания старта игры истекло (75 сек).");
+                Console.WriteLine("[connect] Время ожидания старта игры истекло (240 сек).");
                 break;
             }
         }

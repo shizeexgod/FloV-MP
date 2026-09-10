@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -18,24 +18,51 @@ public static class SkinPatcher
 
         try
         {
-            var content = File.ReadAllText(skinBinPath, Encoding.Latin1);
-            const string marker = "\"customUiUrl\": [";
-            var startIdx = content.IndexOf(marker, StringComparison.Ordinal);
+            // BUGFIX: работаем с байтами напрямую, чтобы не повредить бинарные
+            // данные при text-кодировании. Ищем ASCII-маркер в сырых байтах,
+            // заменяем значение в квадратных скобках, пишем обратно как binary.
+            var data = File.ReadAllBytes(skinBinPath);
+            var markerBytes = Encoding.ASCII.GetBytes("\"customUiUrl\": [");
+            int startIdx = FindBytes(data, markerBytes);
             if (startIdx < 0) return false;
 
-            var endIdx = content.IndexOf(']', startIdx);
-            if (endIdx < 0) return false;
+            int bracketStart = startIdx + markerBytes.Length;
+            int bracketEnd = -1;
+            for (int i = bracketStart; i < data.Length; i++)
+            {
+                if (data[i] == (byte)']') { bracketEnd = i; break; }
+            }
+            if (bracketEnd < 0) return false;
 
             var hash = ComputeSha256Hex(customUiUrl);
-            var replacement = $"\"customUiUrl\": [\"{hash}\"]";
+            var replacementValue = Encoding.ASCII.GetBytes($"\"{hash}\"");
 
-            var updated = content.Substring(0, startIdx) + replacement + content.Substring(endIdx + 1);
-            File.WriteAllText(skinBinPath, updated, Encoding.Latin1);
+            // Собираем новый файл: [до bracketStart] + replacementValue + [после bracketEnd]
+            var result = new byte[bracketStart + replacementValue.Length + (data.Length - bracketEnd)];
+            Buffer.BlockCopy(data, 0, result, 0, bracketStart);
+            Buffer.BlockCopy(replacementValue, 0, result, bracketStart, replacementValue.Length);
+            Buffer.BlockCopy(data, bracketEnd, result, bracketStart + replacementValue.Length, data.Length - bracketEnd);
+
+            File.WriteAllBytes(skinBinPath, result);
             return true;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static int FindBytes(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i <= haystack.Length - needle.Length; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < needle.Length; j++)
+            {
+                if (haystack[i + j] != needle[j]) { match = false; break; }
+            }
+            if (match) return i;
+        }
+        return -1;
     }
 }

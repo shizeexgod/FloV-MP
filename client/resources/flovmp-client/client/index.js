@@ -16,6 +16,8 @@ let chatTyping = false;
 let settingsView = null;
 let hudView = null;
 let inventoryView = null;
+let consoleView = null;
+let consoleStatsInterval = null;
 
 // --- NoClip (Полет на F4 с невидимостью) ---------------------------------
 let noClip = false;
@@ -25,6 +27,7 @@ function toggleNoClip() {
     if (!inGame || authView || chatTyping) return;
     const player = alt.Player.local;
     if (!player || !player.valid) return;
+    if (player.vehicle) return; // BUG-10: NoClip в транспорте вызывает рассинхрон
 
     noClip = !noClip;
 
@@ -93,6 +96,13 @@ alt.everyTick(() => {
     // 5) Блокировка вызова Social Club оверлея на клавишу HOME
     native.disableControlAction(0, 212, true); // INPUT_FRONTEND_SOCIAL_CLUB_HOME
     native.disableControlAction(0, 213, true); // INPUT_FRONTEND_SOCIAL_CLUB_SECONDARY
+
+    // 5.1) Блокировка Escape → меню паузы, пока открыто любое NUI-окно
+    // BUG-12: без этого Escape из чата/инвентаря/настроек открывал GTA Map.
+    if (chatTyping || inventoryView || settingsView || consoleView || authView) {
+        native.disableControlAction(0, 199, true); // INPUT_FRONTEND_PAUSE
+        native.disableControlAction(0, 200, true); // INPUT_FRONTEND_PAUSE_ALTERNATE
+    }
 
     // 6) Логика NoClip
     if (noClip && player && player.valid) {
@@ -321,8 +331,6 @@ function toggleInventory() {
 }
 
 // --- Внутриигровая консоль разработчика (F8 / F11) ------------------------
-let consoleView = null;
-let consoleStatsInterval = null;
 
 function openDevConsole() {
     if (consoleView) return;
@@ -528,7 +536,7 @@ alt.on('keyup', (key) => {
     if (consoleView) return;
 
     if (key === 73) { // I (73) — Инвентарь
-        if (inGame && !chatTyping && !authView) {
+        if (inGame && !chatTyping && !authView && !settingsView && !consoleView) {
             toggleInventory();
             return;
         }

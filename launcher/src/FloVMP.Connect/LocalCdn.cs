@@ -69,11 +69,26 @@ public sealed class LocalCdn : IDisposable
         {
             try
             {
-                var buffer = new byte[8192];
-                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _cts.Token);
-                if (bytesRead == 0) return;
+                // Читаем HTTP-запрос до конца первой строки (GET /path HTTP/1.1\r\n)
+                // или до 64 КБ — чтобы длинные заголовки alt:V клиента не обрезали URL.
+                var buffer = new byte[65536];
+                int totalRead = 0;
+                bool foundFirstLine = false;
+                while (totalRead < buffer.Length)
+                {
+                    var bytesRead = await stream.ReadAsync(buffer, totalRead, buffer.Length - totalRead, _cts.Token);
+                    if (bytesRead == 0) break;
+                    totalRead += bytesRead;
+                    // Нам достаточно первой строки — ищем \n
+                    for (int j = totalRead - bytesRead; j < totalRead; j++)
+                    {
+                        if (buffer[j] == (byte)'\n') { foundFirstLine = true; break; }
+                    }
+                    if (foundFirstLine) break;
+                }
+                if (totalRead == 0) return;
 
-                var requestText = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                var requestText = Encoding.ASCII.GetString(buffer, 0, totalRead);
                 var firstLine = requestText.Split('\n')[0].Trim();
                 var parts = firstLine.Split(' ');
                 if (parts.Length < 2) return;

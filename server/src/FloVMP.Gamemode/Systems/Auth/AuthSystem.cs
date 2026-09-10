@@ -105,8 +105,19 @@ public sealed class AuthSystem
             return;
         }
 
-        player.Emit("flovmp:auth:result", true, res.Message);
-        Finish(player, res.Account);
+        // BUGFIX: если player.Emit или Finish бросят исключение (игрок отключился
+        // между Claim и Finish), освобождаем блокировку аккаунта в _activeAccounts.
+        // Без этого аккаунт зависал со статусом «в игре» до рестарта сервера.
+        try
+        {
+            player.Emit("flovmp:auth:result", true, res.Message);
+            Finish(player, res.Account);
+        }
+        catch
+        {
+            _activeAccounts.TryRemove(new KeyValuePair<int, uint>(res.Account.Id, player.Id));
+            throw; // Safe.Run залогирует
+        }
     });
 
     private void OnRegister(IPlayer player, string username, string password) => Safe.Run("auth.OnRegister", () =>
@@ -129,10 +140,18 @@ public sealed class AuthSystem
             return;
         }
 
-        FloVMP.Core.Logging.GameLog.Account("register",
-            FloVMP.Core.Logging.LogActor.Player(login.Account.Id, login.Account.Username), Ip(player));
-        player.Emit("flovmp:auth:result", true, "регистрация и вход выполнены");
-        Finish(player, login.Account);
+        try
+        {
+            FloVMP.Core.Logging.GameLog.Account("register",
+                FloVMP.Core.Logging.LogActor.Player(login.Account.Id, login.Account.Username), Ip(player));
+            player.Emit("flovmp:auth:result", true, "регистрация и вход выполнены");
+            Finish(player, login.Account);
+        }
+        catch
+        {
+            _activeAccounts.TryRemove(new KeyValuePair<int, uint>(login.Account.Id, player.Id));
+            throw;
+        }
     });
 
     private bool TryClaimAccount(int accountId, uint playerId) =>
