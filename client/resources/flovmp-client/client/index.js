@@ -168,6 +168,10 @@ alt.everyTick(() => {
 function openAuth() {
     if (authView) return;
     try {
+        // Закрываем оверлей Social Club или меню паузы, если они были открыты при старте
+        native.setFrontendActive(false);
+    } catch (e) { }
+    try {
         // Камера с видом на Красную площадь / Кремль (Москва)
         authCamera = native.createCamWithParams(
             'DEFAULT_SCRIPTED_CAMERA',
