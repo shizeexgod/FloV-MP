@@ -219,14 +219,15 @@ try
     // 3) Запуск игрового клиента FloV:MP
     var url = $"altv://connect/{connect}";
     var direct = noDirectLaunch ? "" : " -directlaunch";
-    // ВАЖНО: НЕ передаём -noupdate. С -noupdate клиент грузит ЛОКАЛЬНУЮ
-    // altv-client.dll (оригинал) и не запрашивает её у CDN — тогда наша
-    // патченая staging-версия (обход WRONG_STABLE_BUILD) не доставляется.
-    // Без -noupdate клиент идёт по update-флоу через наш локальный CDN
-    // (внешние alt:V-хосты заглушены), сверяет хэши с манифестом (в нём
-    // altv-client.dll = хэш патченой копии) и докачивает ИМЕННО её из
-    // patched/ (де-рейс, без обнуления). Опция --noupdate это отключает.
-    var noUpd = args.Contains("--noupdate") ? " -noupdate" : "";
+    // Локальная altv-client.dll теперь — ПОДЛИННЫЙ клиент 16.4.39, совпадающий
+    // с билдом сервера (см. scripts/fix-client-build.cmd). Патч и де-рейс через
+    // CDN больше не нужны, поэтому ПО УМОЛЧАНИЮ передаём -noupdate: клиент грузит
+    // локальную altv-client.dll напрямую и НЕ идёт в update-флоу. Это убирает
+    // петлю перекачки altv-client.dll (update.json -> dll -> update.json ...),
+    // из-за которой клиент зависал на этапе лаунчера и GTA не стартовала.
+    // Вернуть старый де-рейс (докачку патченой копии из patched/) можно флагом
+    // --force-update.
+    var noUpd = args.Contains("--force-update") ? "" : " -noupdate";
     var argLine = $"-connecturl \"{url}\"{direct} -customui {customUi}{noUpd}";
     var exeName = Path.GetFileName(clientExe);
     Console.WriteLine($"[connect] Запуск: {exeName} {argLine}");
