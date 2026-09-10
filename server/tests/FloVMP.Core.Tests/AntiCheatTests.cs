@@ -86,6 +86,45 @@ public class AntiCheatTests
     }
 
     [Fact]
+    public void Fast_Car_At_Max_Speed_With_Tick_Jitter_Is_Not_Teleport()
+    {
+        // Регресс: авто у предела скорости (120 м/с) при тике ~0.6с проходит
+        // ~72м — раньше фикс-порог 70м ложно считал это телепортом и глушил мотор.
+        var g = new VehiclePhysicsGuardian();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+
+        VehicleViolationType? v = null;
+        g.OnVehicleViolation += (_, _, type, _) => v = type;
+
+        var vel = new Vector3D(120, 0, 0); // 120 м/с горизонтально
+        // первый тик — задаёт базу
+        g.ValidateTick(1, 10, new Vector3D(0, 0, 30), vel, 1000f, false, t0);
+        // второй тик через 0.6с: сместились на 72м на легитимной макс. скорости
+        var res = g.ValidateTick(1, 10, new Vector3D(72, 0, 30), vel, 1000f, false, t0.AddSeconds(0.6));
+
+        Assert.Equal(VehicleViolationType.None, res);
+        Assert.Null(v);
+    }
+
+    [Fact]
+    public void Vehicle_Real_Teleport_Is_Detected()
+    {
+        var g = new VehiclePhysicsGuardian();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+
+        VehicleViolationType? v = null;
+        g.OnVehicleViolation += (_, _, type, _) => v = type;
+
+        var vel = new Vector3D(30, 0, 0);
+        g.ValidateTick(1, 10, new Vector3D(0, 0, 30), vel, 1000f, false, t0);
+        // скачок на 500м за 0.5с — заведомо больше физически возможного
+        var res = g.ValidateTick(1, 10, new Vector3D(500, 0, 30), vel, 1000f, false, t0.AddSeconds(0.5));
+
+        Assert.Equal(VehicleViolationType.VehicleTeleport, res);
+        Assert.Equal(VehicleViolationType.VehicleTeleport, v);
+    }
+
+    [Fact]
     public void Vehicle_Speed_Within_Limit_Is_Permitted()
     {
         var ac = new AntiCheatService();

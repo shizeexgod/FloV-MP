@@ -91,6 +91,10 @@ public sealed class VehiclePhysicsGuardian
                     DriverId = driverId,
                     LastPosition = newPosition,
                     LastVelocity = velocity,
+                    // ВАЖНО: инициализируем и скалярную скорость, иначе следующий
+                    // тик увидит ложное ускорение 0->скорость (авто, впервые
+                    // отслеженное уже на ходу, ловилось на SuperAcceleration).
+                    LastSpeedMps = (float)Math.Sqrt(velocity.X * velocity.X + velocity.Y * velocity.Y + velocity.Z * velocity.Z),
                     Health = currentHealth,
                     LastUpdateUtc = timestampUtc
                 };
@@ -105,8 +109,14 @@ public sealed class VehiclePhysicsGuardian
             float currentSpeed = (float)Math.Sqrt(velocity.X * velocity.X + velocity.Y * velocity.Y + velocity.Z * velocity.Z);
             float horizontalSpeed = (float)Math.Sqrt(velocity.X * velocity.X + velocity.Y * velocity.Y);
 
-            // 1. Проверка на телепортацию на авто
-            if (dist > MaxTeleportDistance && dt < 1.0f)
+            // 1. Проверка на телепортацию на авто. Порог скорость-зависимый:
+            // телепорт = смещение БОЛЬШЕ, чем физически возможно на макс. скорости
+            // за dt (с запасом на джиттер тика). Фикс-порог 70м оставлен как пол
+            // для малых dt. Раньше фикс-70м ложно срабатывал на авто у предела
+            // скорости при задержке тика (120 м/с × 0.6с = 72м > 70м) → двигатель
+            // выключался у легитимного гонщика.
+            float maxPlausibleDist = System.Math.Max(MaxTeleportDistance, MaxHorizontalSpeedMps * dt * 1.4f);
+            if (dist > maxPlausibleDist && dt < 1.0f)
             {
                 TriggerViolation(vehicleId, driverId, VehicleViolationType.VehicleTeleport,
                     $"Резкий скачок позиции на {dist:F1}м за {dt:F2}с");
