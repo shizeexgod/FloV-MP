@@ -67,6 +67,16 @@ copy /Y "%SRC%" "%RC%\altv-client.dll.orig.bak" >nul || goto :failcopy
 if not exist "%RC%\patched" mkdir "%RC%\patched" >nul 2>&1
 copy /Y "%SRC%" "%RC%\patched\altv-client.dll"  >nul || goto :failcopy
 
+rem Remove the STALE static CDN manifest. LocalCdn serves cdn\client_update.json
+rem verbatim if it exists; the old one still lists altv-client.dll as the 52 MB
+rem 16.3.15 build, so the launcher rejects the new 16.4.39 dll and fails with
+rem "Не удалось обновить клиент (0x30,027)". Deleting it makes the CDN compute
+rem the manifest live from the real files -> matches -> launcher injects local.
+if exist "%RC%\cdn\client_update.json" (
+    del /F /Q "%RC%\cdn\client_update.json" >nul 2>&1
+    echo [INFO] Removed stale cdn\client_update.json (CDN will compute manifest live).
+)
+
 echo.
 echo [INFO] Verifying installed copies (all must be %WANT_HASH%):
 call :printhash "%RC%\altv-client.dll"
