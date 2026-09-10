@@ -15,11 +15,20 @@ public static class AltvToml
             : platformOverride.Trim().ToLowerInvariant();
         var playerName = string.IsNullOrWhiteSpace(nickname) ? "shize5" : nickname.Trim();
 
+        // Ветка клиента. На 'release' движок делает строгую проверку stable-build
+        // против (мёртвого) CDN alt:V и рвёт коннект с WRONG_STABLE_BUILD.
+        // На 'internal' эта проверка не выполняется — а сервер уже патчен
+        // принимать любого клиента, поэтому коннект проходит без патча клиента.
+        // Переопределяется переменной окружения FLOVMP_BRANCH.
+        var branch = Environment.GetEnvironmentVariable("FLOVMP_BRANCH");
+        if (string.IsNullOrWhiteSpace(branch)) branch = "internal";
+        branch = branch.Trim().ToLowerInvariant();
+
         var toml = $"""
             audioFrameLimit = false
             autoBackup = true
             autoFindMic = false
-            branch = 'release'
+            branch = '{branch}'
             cachePath = '{cache}'
             cefAlwaysFullCopy = false
             cefUseHardwareAcceleration = true
