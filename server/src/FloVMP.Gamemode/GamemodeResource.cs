@@ -76,8 +76,19 @@ public class GamemodeResource : Resource
             port: apiPort);
         _httpApi.Start();
 
-        _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
-        _inv.Attach();
+        // Режим гейммода: base = ПЛАТФОРМА (спавн + чат + анти-чит + модерация,
+        // без готового геймплея); full = RP-пример (Держава со всеми системами).
+        // Платформа поставляется в base; full — опционально для примера/теста.
+        // Фолбэк при проблемах: FLOVMP_MODE=full мгновенно возвращает старое поведение.
+        var gamemodeMode = (Environment.GetEnvironmentVariable("FLOVMP_MODE") ?? "base").Trim().ToLowerInvariant();
+        bool fullMode = gamemodeMode == "full";
+        Alt.Log($"[FloV:MP] core: режим гейммода = {(fullMode ? "full (RP-пример)" : "base (платформа)")}");
+
+        if (fullMode)
+        {
+            _inv = new InventorySystem(Path.Combine(dataDir, "inventories.json"));
+            _inv.Attach();
+        }
 
         _antiCheat = new AntiCheatSystem(
             accountOf: p => _auth?.AccountOf(p),
@@ -86,18 +97,23 @@ public class GamemodeResource : Resource
         _playerLifecycle = new PlayerLifecycle(notifyTeleport: (p, pos) => _antiCheat?.NotifyAdminTeleport(p, pos));
         _playerLifecycle.Attach();
 
-        _hud = new HudSystem(ServerName);
+        // RP-геймплей (HUD денег, экономика, фракции, документы, жильё, униформы)
+        // — только в full-режиме. В base их нет: сервер-владелец строит своё.
+        // Все обращения к ним в OnTick/OnPlayerAuthed уже под null-guard.
+        if (fullMode)
+        {
+            _hud = new HudSystem(ServerName);
 
-        _economy = new FloVMP.Core.Economy.EconomyService();
-        _factions = new FloVMP.Core.Factions.FactionService();
-        Presets.DerzhavaFactions.RegisterAll(_factions);
-        _documents = new FloVMP.Core.Documents.DocumentService();
-        _housing = new FloVMP.Core.Housing.HousingService();
-        Presets.DerzhavaHousing.RegisterAll(_housing);
-        _uniforms = new FloVMP.Core.Characters.FactionUniformService();
-        Presets.DerzhavaUniforms.RegisterAll(_uniforms);
-        Presets.DerzhavaUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
-
+            _economy = new FloVMP.Core.Economy.EconomyService();
+            _factions = new FloVMP.Core.Factions.FactionService();
+            Presets.DerzhavaFactions.RegisterAll(_factions);
+            _documents = new FloVMP.Core.Documents.DocumentService();
+            _housing = new FloVMP.Core.Housing.HousingService();
+            Presets.DerzhavaHousing.RegisterAll(_housing);
+            _uniforms = new FloVMP.Core.Characters.FactionUniformService();
+            Presets.DerzhavaUniforms.RegisterAll(_uniforms);
+            Presets.DerzhavaUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
+        }
 
         _chat = new ChatSystem(
             accountOf: p => _auth.AccountOf(p),
@@ -115,7 +131,8 @@ public class GamemodeResource : Resource
                 await Task.Delay(sec * 1000);
                 Safe.Run("core.restart.save", () => _inv?.SaveAll());
                 Alt.StopServer();
-            }));
+            }),
+            platformMode: !fullMode);
         _chat.Attach();
 
         _console = new ConsoleCommands(

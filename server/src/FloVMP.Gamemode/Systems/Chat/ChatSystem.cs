@@ -30,6 +30,10 @@ public sealed class ChatSystem
     private readonly Action<int>? _restartServer;
     private readonly Action<IPlayer, Position>? _notifyTeleport;
     private readonly Action<int, bool>? _setAdminExempt;
+    // Платформенный режим: RP-геймплей (экономика/фракции/документы/транспорт)
+    // не входит в платформу — эти команды недоступны, сервер-владелец добавляет
+    // свои. Базовый чат/инфо/модерация остаются.
+    private readonly bool _platformMode;
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
@@ -46,7 +50,8 @@ public sealed class ChatSystem
         InventorySystem? inventory = null,
         Action<int>? restartServer = null,
         Action<IPlayer, Position>? notifyTeleport = null,
-        Action<int, bool>? setAdminExempt = null)
+        Action<int, bool>? setAdminExempt = null,
+        bool platformMode = false)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -59,7 +64,17 @@ public sealed class ChatSystem
         _restartServer = restartServer;
         _notifyTeleport = notifyTeleport;
         _setAdminExempt = setAdminExempt;
+        _platformMode = platformMode;
     }
+
+    // RP-команды игрока (экономика/фракции/документы/транспорт) — в платформенном
+    // режиме отклоняются: это геймплей сервера-владельца, а не платформы.
+    private static readonly HashSet<string> RpPlayerCommands = new(StringComparer.Ordinal)
+    {
+        "passport", "lic", "licenses", "pay", "bank", "balance", "deposit", "withdraw",
+        "transfer", "factions", "f", "d", "invite", "uninvite", "giverank",
+        "cuff", "uncuff", "arrest", "engine", "lock",
+    };
 
     public void Attach()
     {
@@ -160,6 +175,13 @@ public sealed class ChatSystem
     private void HandleCommand(IPlayer player, Account acc, string text)
     {
         var (cmd, args) = ChatSanitizer.ParseCommand(text);
+
+        // Платформенный режим: RP-геймплей не входит в платформу.
+        if (_platformMode && RpPlayerCommands.Contains(cmd))
+        {
+            SendSystem(player, "Эта команда — часть геймплея сервера, а не платформы FloV:MP.");
+            return;
+        }
 
         // 1. Игровые команды для всех
         switch (cmd)
