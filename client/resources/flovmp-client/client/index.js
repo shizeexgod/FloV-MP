@@ -211,10 +211,7 @@ function openAuth() {
         });
         authView.on('flovmp:auth:close', () => {
             alt.log('[FloV:MP] authView запросил закрытие по событию flovmp:auth:close');
-            closeAuth();
-            openChat();
-            openHud();
-            inGame = true;
+            enterWorld();
         });
         alt.log('[FloV:MP] authView успешно создан');
     } catch (err) {
@@ -240,6 +237,50 @@ function closeAuth() {
     } catch (err) {
         alt.log('[FloV:MP] Сброс камеры: ' + err);
     }
+}
+
+// --- Единый вход в мир после авторизации ---------------------------------
+// RageMP-стиль: затемняем экран, закрываем авторизацию, спавн уже сделан
+// сервером — грузим коллизию местности и плавно показываем прогруженный мир.
+// Раньше вход шёл из 4 мест, и коллизию грузил только путь auth:hide — с
+// фолбэков (auth:result/syncedMeta/ручное закрытие) игрок мог провалиться
+// сквозь ещё не подгруженную землю или увидеть чёрный экран. Теперь все пути
+// зовут одну идемпотентную точку.
+let entering = false;
+function enterWorld() {
+    if (inGame && !authView) {
+        // Уже в мире — просто гарантируем, что экран не остался чёрным.
+        try { native.doScreenFadeIn(300); } catch (e) { }
+        return;
+    }
+    if (entering) return;
+    entering = true;
+
+    // Затемняем сразу: прячем переключение камеры авторизации на игрока и
+    // подгрузку текстур/коллизии (иначе виден «прыжок» и низко-детальный мир).
+    try { native.doScreenFadeOut(300); } catch (e) { }
+
+    alt.setTimeout(() => {
+        closeAuth();
+        openChat();
+        openHud();
+        inGame = true;
+
+        const player = alt.Player.local;
+        if (player && player.valid) {
+            loadCollisionAndUnfreeze(player.pos);
+        } else {
+            try { native.doScreenFadeIn(500); } catch (e) { }
+            entering = false;
+        }
+
+        // Жёсткая страховка: экран НИКОГДА не должен остаться чёрным, даже
+        // если загрузка коллизии зависла (иначе игрок видит «краш»/чёрный).
+        alt.setTimeout(() => {
+            try { if (native.isScreenFadedOut()) native.doScreenFadeIn(600); } catch (e) { }
+            entering = false;
+        }, 7000);
+    }, 320);
 }
 
 // --- Чат -----------------------------------------------------------------
@@ -424,6 +465,8 @@ function loadCollisionAndUnfreeze(targetPos) {
         if (!player || !player.valid) {
             alt.clearInterval(interval);
             native.clearFocus();
+            try { native.doScreenFadeIn(500); } catch (e) { }
+            entering = false;
             return;
         }
 
@@ -438,6 +481,9 @@ function loadCollisionAndUnfreeze(targetPos) {
                 native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ + 0.5, false, false, false, true);
             }
             native.freezeEntityPosition(player.scriptID, false);
+            // Мир прогружен — плавно показываем его (снимаем затемнение входа).
+            try { native.doScreenFadeIn(700); } catch (e) { }
+            entering = false;
             alt.log(`[FloV:MP] Коллизия местности загружена (попыток: ${attempts}, groundZ: ${hasGround ? groundZ.toFixed(2) : 'n/a'})`);
         }
     }, 100);
@@ -451,15 +497,7 @@ alt.onServer('flovmp:auth:show', () => {
 
 alt.onServer('flovmp:auth:hide', () => {
     alt.log('[FloV:MP] flovmp:auth:hide получен от сервера');
-    closeAuth();
-    openChat();
-    openHud();
-    inGame = true;
-
-    const player = alt.Player.local;
-    if (player && player.valid) {
-        loadCollisionAndUnfreeze(player.pos);
-    }
+    enterWorld();
 });
 
 alt.onServer('flovmp:auth:result', (ok, message) => {
@@ -469,10 +507,7 @@ alt.onServer('flovmp:auth:result', (ok, message) => {
         alt.setTimeout(() => {
             if (authView) {
                 alt.log('[FloV:MP] Автозакрытие authView по успешному auth:result');
-                closeAuth();
-                openChat();
-                openHud();
-                inGame = true;
+                enterWorld();
             }
         }, 350);
     }
@@ -480,11 +515,8 @@ alt.onServer('flovmp:auth:result', (ok, message) => {
 
 alt.on('syncedMetaChange', (entity, key, value) => {
     if (entity === alt.Player.local && key === 'authed' && value === true) {
-        alt.log('[FloV:MP] syncedMeta authed=true -> гарантированное закрытие authView');
-        closeAuth();
-        openChat();
-        openHud();
-        inGame = true;
+        alt.log('[FloV:MP] syncedMeta authed=true -> вход в мир');
+        enterWorld();
     }
 });
 
