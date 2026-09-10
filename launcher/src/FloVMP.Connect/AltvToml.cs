@@ -13,7 +13,12 @@ public static class AltvToml
         var platform = string.IsNullOrWhiteSpace(platformOverride)
             ? DetectPlatform(gtaPath)
             : platformOverride.Trim().ToLowerInvariant();
-        var playerName = string.IsNullOrWhiteSpace(nickname) ? "shize5" : nickname.Trim();
+        // Ник идёт в TOML literal-строку name = '...'. В TOML одинарные кавычки
+        // внутри такой строки НЕэкранируемы, а лаунчерный/session.json-ник (в
+        // отличие от серверного) может содержать что угодно. Ник вроде O'Brien
+        // сломал бы весь altv.toml -> клиент не стартует. Санитизируем: оставляем
+        // буквы/цифры/пробел/._- , режем длину, пустой -> дефолт.
+        var playerName = SanitizeName(nickname);
 
         // Ветка клиента. ВАЖНО: alt:V принимает только 'release' / 'rc' / 'dev'.
         // 'internal' — НЕвалидна: лаунчер падает с "Указана недопустимая ветка
@@ -79,6 +84,25 @@ public static class AltvToml
 
         File.WriteAllText(Path.Combine(clientDir, "flovmp.toml"), toml);
         File.WriteAllText(Path.Combine(clientDir, "altv.toml"), toml);
+    }
+
+    /// <summary>
+    /// Приводит ник к безопасному для TOML literal-строки виду: только буквы,
+    /// цифры, пробел и <c>. _ -</c>; управляющие символы и кавычки убираются;
+    /// длина ≤ 32. Пустой результат -> дефолт 'shize5'.
+    /// </summary>
+    private static string SanitizeName(string? nickname)
+    {
+        if (string.IsNullOrWhiteSpace(nickname)) return "shize5";
+        var sb = new System.Text.StringBuilder(nickname.Length);
+        foreach (var ch in nickname.Trim())
+        {
+            if (sb.Length >= 32) break;
+            if (char.IsLetterOrDigit(ch) || ch is ' ' or '.' or '_' or '-')
+                sb.Append(ch);
+        }
+        var name = sb.ToString().Trim();
+        return name.Length == 0 ? "shize5" : name;
     }
 
     public static string DetectPlatform(string gtaPath)
