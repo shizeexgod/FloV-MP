@@ -46,11 +46,16 @@ if /I not "%SRC_HASH%"=="%WANT_HASH%" (
 )
 echo [OK] Source verified as genuine 16.4.39 (SHA1 %SRC_HASH%).
 
-rem Close any running client so the dll is not locked.
+rem Close any running client so the dll is not locked. GTA5.exe loads
+rem altv-client.dll into memory and locks the file, so it MUST be closed for
+rem this one-time swap (unlike connect.cmd, which never touches GTA5).
+taskkill /F /IM GTA5.exe           >nul 2>&1
+taskkill /F /IM GTA5_Enhanced.exe  >nul 2>&1
+taskkill /F /IM altv-webengine.exe >nul 2>&1
 taskkill /F /IM altv.exe           >nul 2>&1
 taskkill /F /IM flovmp.exe         >nul 2>&1
 taskkill /F /IM FloVMP.Connect.exe >nul 2>&1
-ping -n 2 127.0.0.1 >nul
+ping -n 4 127.0.0.1 >nul
 
 echo [INFO] Backing up current (16.3.15) dll ...
 if not exist "%RC%\backup" mkdir "%RC%\backup" >nul 2>&1
