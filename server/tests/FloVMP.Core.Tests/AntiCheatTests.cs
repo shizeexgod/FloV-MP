@@ -46,6 +46,46 @@ public class AntiCheatTests
     }
 
     [Fact]
+    public void Falling_From_Height_Is_Not_A_SpeedHack()
+    {
+        // Регресс: падение с высоты (вертикаль ~55 м/с) не должно считаться
+        // спидхаком. Раньше бралась 3D-скорость и падение = ложный кик.
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        // старт в прошлом, чтобы 5-сек грейс-период спавна не маскировал проверку
+        ac.GetOrCreateState(1, "Faller", new Vector3D(0, 0, 300), t0);
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        // Падение на 55 м вниз за 1 сек (55 м/с вертикально, 0 горизонтально)
+        bool valid = ac.CheckMovement(1, new Vector3D(0, 0, 245), inVehicle: false, timestamp: t0.AddSeconds(1.0));
+
+        Assert.True(valid);
+        Assert.Null(violation);
+    }
+
+    [Fact]
+    public void Vertical_Fly_Hack_On_Foot_Is_Detected()
+    {
+        // Взлёт пешком вверх на 95 м за 1 сек (95 м/с) — выше терминальной (90),
+        // но ниже порога телепорта (100 м), чтобы сработала именно проверка
+        // вертикальной скорости, а не детектор телепорта.
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(1, "FlyHacker", new Vector3D(0, 0, 30), t0);
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        bool valid = ac.CheckMovement(1, new Vector3D(0, 0, 125), inVehicle: false, timestamp: t0.AddSeconds(1.0));
+
+        Assert.False(valid);
+        Assert.NotNull(violation);
+        Assert.Contains("вертикальная скорость", violation);
+    }
+
+    [Fact]
     public void Vehicle_Speed_Within_Limit_Is_Permitted()
     {
         var ac = new AntiCheatService();

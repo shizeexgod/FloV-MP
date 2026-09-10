@@ -14,8 +14,12 @@ public enum AntiCheatAction
 
 public class AntiCheatConfig
 {
-    public float MaxOnFootSpeedMps { get; set; } = 12.5f; // ~45 km/h
+    public float MaxOnFootSpeedMps { get; set; } = 12.5f; // ~45 km/h (горизонталь)
     public float MaxVehicleSpeedMps { get; set; } = 125.0f; // ~450 km/h
+    // Вертикаль пешком: падение в GTA достигает ~55 м/с (терминальная),
+    // скайдайв/парашют ещё быстрее. Лимит с запасом, чтобы легитимное падение
+    // НЕ считалось спидхаком (иначе прыжок с высоты = ложный кик).
+    public float MaxFallSpeedMps { get; set; } = 90.0f;
     public float MaxTeleportThresholdMeters { get; set; } = 100.0f;
     public int MaxConsecutiveViolations { get; set; } = 3;
     public AntiCheatAction DefaultViolationAction { get; set; } = AntiCheatAction.Kick;
