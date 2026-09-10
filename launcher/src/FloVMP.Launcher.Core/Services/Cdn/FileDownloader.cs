@@ -101,6 +101,18 @@ public sealed class FileDownloader
         Action<long> onBytes, CancellationToken ct)
     {
         var dest = Path.Combine(rootDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+
+        // Защита от path-traversal: entry.Path приходит из сетевого манифеста.
+        // Если в нём '..' или абсолютный путь, Path.Combine мог бы вывести dest
+        // за пределы rootDir (произвольная запись, напр. в Автозагрузку). Режем.
+        var rootFull = Path.GetFullPath(rootDir);
+        var destFull = Path.GetFullPath(dest);
+        var rootPrefix = rootFull.EndsWith(Path.DirectorySeparatorChar)
+            ? rootFull : rootFull + Path.DirectorySeparatorChar;
+        if (!destFull.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"манифест: путь выходит за пределы папки движка: {entry.Path}");
+        dest = destFull;
+
         Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
         var part = dest + ".part";
         var uri = ResolveUri(manifest, entry);
