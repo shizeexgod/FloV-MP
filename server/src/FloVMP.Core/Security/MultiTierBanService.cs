@@ -165,10 +165,17 @@ public class MultiTierBanService
             bool macMatch = ban.Flags.HasFlag(BanFlags.Mac) && !string.IsNullOrEmpty(macAddress) && string.Equals(ban.MacAddress, macAddress, StringComparison.OrdinalIgnoreCase);
             bool scMatch = ban.Flags.HasFlag(BanFlags.SocialClub) && !string.IsNullOrEmpty(socialClubId) && string.Equals(ban.SocialClubId, socialClubId, StringComparison.OrdinalIgnoreCase);
             bool ipMatch = ban.Flags.HasFlag(BanFlags.Ip) && !string.IsNullOrEmpty(ip) && string.Equals(ban.Ip, ip, StringComparison.OrdinalIgnoreCase);
+            // BUGFIX: флаг Subnet ставился в /hardban, но НЕ проверялся — забаненный
+            // заходил с того же /24 с другим IP. Теперь матчим подсеть /24.
+            bool subnetMatch = ban.Flags.HasFlag(BanFlags.Subnet) && SameSubnet24(ban.Ip, ip);
 
-            if (hwidMatch || macMatch || scMatch || ipMatch)
+            if (hwidMatch || macMatch || scMatch || ipMatch || subnetMatch)
             {
-                var matchedFlag = hwidMatch ? BanFlags.Hwid : (macMatch ? BanFlags.Mac : (scMatch ? BanFlags.SocialClub : BanFlags.Ip));
+                var matchedFlag = hwidMatch ? BanFlags.Hwid
+                    : macMatch ? BanFlags.Mac
+                    : scMatch ? BanFlags.SocialClub
+                    : ipMatch ? BanFlags.Ip
+                    : BanFlags.Subnet;
 
                 if (policy == HwidPolicyMode.Strict)
                 {
@@ -214,4 +221,22 @@ public class MultiTierBanService
     }
 
     public IReadOnlyList<BanRecord> GetAllBans() => _bans.Values.ToList();
+
+    /// <summary>
+    /// true, если два IPv4-адреса в одной подсети /24 (совпадают первые 3 октета).
+    /// Пустой/не-IPv4 вход → false (не блокируем по мусору).
+    /// </summary>
+    public static bool SameSubnet24(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        var pa = a.Trim().Split('.');
+        var pb = b.Trim().Split('.');
+        if (pa.Length != 4 || pb.Length != 4) return false;
+        for (int i = 0; i < 3; i++)
+        {
+            if (!byte.TryParse(pa[i], out var oa) || !byte.TryParse(pb[i], out var ob)) return false;
+            if (oa != ob) return false;
+        }
+        return true;
+    }
 }
