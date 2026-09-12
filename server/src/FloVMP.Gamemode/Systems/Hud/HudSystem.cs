@@ -56,9 +56,12 @@ public sealed class HudSystem
             var online = _players.Count;
             var (hour, minute) = ServerClock();
 
-            foreach (var player in Alt.GetAllPlayers())
+            // Zero-allocation итерация по зарегистрированным игрокам (без Alt.GetAllPlayers() на 2000+ слотов)
+            foreach (var kvp in _players)
             {
-                if (!player.Exists || !_players.TryGetValue(player.Id, out var acc)) continue;
+                var player = Alt.GetPlayerById(kvp.Key);
+                if (player == null || !player.Exists) continue;
+                var acc = kvp.Value;
 
                 // alt:V/GTA: здоровье игрока 100..200 (100 = смерть). HUD: 0..100.
                 var health = Math.Clamp((int)player.Health - 100, 0, 100);

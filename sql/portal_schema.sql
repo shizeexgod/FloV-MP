@@ -2,7 +2,11 @@
 -- FloV:MP SaaS Portal Database Schema (MariaDB / MySQL)
 -- =============================================================================
 
-USE `derzhava_rp`;
+CREATE DATABASE IF NOT EXISTS `flovmp_portal`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE `flovmp_portal`;
 
 CREATE TABLE IF NOT EXISTS `portal_users` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

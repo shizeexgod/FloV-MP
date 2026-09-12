@@ -70,10 +70,10 @@ public sealed class TotpTests
     [Fact]
     public void BuildUri_is_valid_otpauth()
     {
-        var uri = Totp.BuildUri("JBSWY3DPEHPK3PXP", "Игрок123", "Derzhava RP");
+        var uri = Totp.BuildUri("JBSWY3DPEHPK3PXP", "Игрок123", "FloV:MP Server");
         Assert.StartsWith("otpauth://totp/", uri);
         Assert.Contains("secret=JBSWY3DPEHPK3PXP", uri);
-        Assert.Contains("issuer=Derzhava", uri);
+        Assert.Contains("issuer=FloV", uri);
         Assert.Contains("period=30", uri);
     }
 

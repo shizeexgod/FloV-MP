@@ -1,16 +1,15 @@
 -- =============================================================================
--- FloV:MP / Держава Онлайн — База данных (MariaDB / MySQL)
+-- FloV:MP — База данных сервера (MariaDB / MySQL)
 -- =============================================================================
--- Проект: «Держава Онлайн»
--- Движок: FloV:MP (alt:V 16.4.39 runtime)
+-- Движок: FloV:MP Standalone Engine
 -- Кодировка: utf8mb4_unicode_ci
 -- =============================================================================
 
-CREATE DATABASE IF NOT EXISTS `derzhava_rp`
+CREATE DATABASE IF NOT EXISTS `flovmp_rp`
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE `derzhava_rp`;
+USE `flovmp_rp`;
 
 -- -----------------------------------------------------------------------------
 -- 1. Таблица аккаунтов (Accounts)

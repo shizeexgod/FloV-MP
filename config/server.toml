@@ -5,13 +5,13 @@
 #  стартом (в бэкапе примеров конфига не было — см. docs/server-config.md).
 # =====================================================================
 
-name        = "FloV:MP Server"
+name        = "RolePlay Server"
 host        = "0.0.0.0"
 port        = 7788
-players     = 1500
-description = "FloV:MP Standalone Multiplayer Server"
-gamemode    = "FloV:MP Roleplay"
-website     = "flov-mp.ru"
+players     = 2000
+description = "Standalone RolePlay Server"
+gamemode    = "RolePlay"
+website     = "example-rp.ru"
 language    = "ru"
 
 # --- Изоляция: НИКАКИХ обращений к инфраструктуре alt:V ---------------
@@ -34,18 +34,22 @@ debug = false
 # duplicatePlayers: сколько подключений допускать с одного HWID.
 duplicatePlayers = 4
 
-# --- Оптимизация производительности движка (для высокого онлайна) ---
+# --- Оптимизация производительности движка (для 2000+ онлайна) ---
 # Ключи верифицированы по бинарнику flovmp-server (alt:V 16.4.39)
-streamingDistance = 300
-migrationDistance = 150
+streamingDistance = 250
+migrationDistance = 120
 colShapeTickRate  = 300
 
 [maxStreaming]
-peds     = 64
-vehicles = 64
+peds     = 48
+vehicles = 48
+objects  = 64
 
 [threads]
-streamer = 1
+streamer    = 2
+migration   = 1
+syncSend    = 1
+syncReceive = 1
 
 # --- Модули движка --------------------------------------------------
 # csharp-module — серверный геймод на C# (flovmp-core)

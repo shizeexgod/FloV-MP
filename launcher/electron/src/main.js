@@ -126,7 +126,7 @@ function ensureTray() {
     if (!img.isEmpty()) img = img.resize({ width: 16, height: 16 });
   } catch { img = nativeImage.createEmpty(); }
   tray = new Tray(img);
-  tray.setToolTip('Держава RP Launcher');
+  tray.setToolTip('FloV:MP Launcher');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Открыть', click: () => { mainWindow?.show(); mainWindow?.focus(); } },
     { type: 'separator' },

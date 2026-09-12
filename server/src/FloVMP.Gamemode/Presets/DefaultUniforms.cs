@@ -4,15 +4,15 @@ using FloVMP.Core.Characters;
 namespace FloVMP.Gamemode.Presets;
 
 /// <summary>
-/// Пресеты служебной формы государственных ведомств г. Москвы для RP-проекта «Держава Онлайн».
+/// Пресеты служебной формы государственных ведомств для RP-гейммода FloV:MP.
 /// </summary>
-public static class DerzhavaUniforms
+public static class DefaultUniforms
 {
     public static void RegisterAll(FactionUniformService? service = null)
     {
         var target = service ?? FactionUniformService.Default;
 
-        // 1. Мэрия Москвы (Деловой костюм)
+        // 1. Администрация (Деловой костюм)
         target.RegisterUniform(1, (appearance, rankLevel) =>
         {
             bool isMale = appearance.Gender == 0;
@@ -34,11 +34,11 @@ public static class DerzhavaUniforms
             }
         });
 
-        // 2. ГУ МВД по г. Москве (Полиция)
+        // 2. Полиция
         target.RegisterUniform(2, (appearance, rankLevel) =>
         {
             bool isMale = appearance.Gender == 0;
-            if (rankLevel >= 6) // Старший комсостав (Майор+)
+            if (rankLevel >= 6) // Старший комсостав
             {
                 if (isMale)
                 {
@@ -59,14 +59,14 @@ public static class DerzhavaUniforms
                     appearance.SetProp(0, 45, 0);
                 }
             }
-            else // Рядовой, сержант, лейтенант (Патрульная служба ППСП)
+            else // Патрульная служба
             {
                 if (isMale)
                 {
                     appearance.SetCloth(11, 55, 0); // Полицейская куртка/рубашка
                     appearance.SetCloth(3, 0, 0);
                     appearance.SetCloth(8, 58, 0);  // Тактический жилет
-                    appearance.SetCloth(9, 10, 0);  // Бронежилет МВД
+                    appearance.SetCloth(9, 10, 0);  // Бронежилет
                     appearance.SetCloth(4, 35, 0);  // Тактические штаны
                     appearance.SetCloth(6, 25, 0);  // Берцы
                     appearance.SetProp(0, 46, 0);   // Фуражка/кепка
@@ -84,16 +84,16 @@ public static class DerzhavaUniforms
             }
         });
 
-        // 3. УФСБ России
+        // 3. Служба безопасности
         target.RegisterUniform(3, (appearance, rankLevel) =>
         {
             bool isMale = appearance.Gender == 0;
             if (isMale)
             {
-                appearance.SetCloth(11, 53, 0); // Спецназ ФСБ (Тактический чёрный)
+                appearance.SetCloth(11, 53, 0); // Спецназ (Тактический чёрный)
                 appearance.SetCloth(3, 1, 0);
                 appearance.SetCloth(8, 15, 0);
-                appearance.SetCloth(9, 12, 1);  // Тяжёлый бронежилет ФСБ
+                appearance.SetCloth(9, 12, 1);  // Тяжёлый бронежилет
                 appearance.SetCloth(4, 31, 0);
                 appearance.SetCloth(6, 25, 0);
                 appearance.SetCloth(1, 52, 0);  // Тактическая балаклава
@@ -112,7 +112,7 @@ public static class DerzhavaUniforms
             }
         });
 
-        // 4. ГКБ им. Боткина (Медицинская служба)
+        // 4. Медицинская служба
         target.RegisterUniform(4, (appearance, rankLevel) =>
         {
             bool isMale = appearance.Gender == 0;
@@ -136,16 +136,16 @@ public static class DerzhavaUniforms
             }
         });
 
-        // 5. Воинская часть ВС РФ (Армия)
+        // 5. Национальная гвардия / Армия
         target.RegisterUniform(5, (appearance, rankLevel) =>
         {
             bool isMale = appearance.Gender == 0;
             if (isMale)
             {
-                appearance.SetCloth(11, 221, 0); // Камуфляж ВС РФ
+                appearance.SetCloth(11, 221, 0); // Камуфляж
                 appearance.SetCloth(3, 17, 0);
                 appearance.SetCloth(8, 15, 0);
-                appearance.SetCloth(9, 16, 0);   // Армейский бронежилет Ратник
+                appearance.SetCloth(9, 16, 0);   // Армейский бронежилет
                 appearance.SetCloth(4, 87, 0);
                 appearance.SetCloth(6, 62, 0);
                 appearance.SetProp(0, 107, 0);   // Армейская каска

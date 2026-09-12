@@ -103,8 +103,8 @@
 <body>
 <div class="backdrop">
   <div class="card">
-    <div class="brand" id="brandTitle">FloV<span>:MP</span></div>
-    <div class="sub" id="brandSub">Мультиплеерная платформа нового поколения</div>
+    <div class="brand" id="brandTitle">RolePlay Server</div>
+    <div class="sub" id="brandSub">Авторизация в игровом мире</div>
 
     <div class="tabs">
       <button id="tab-login" class="active">Вход</button>
@@ -181,6 +181,16 @@
   });
 
   if (typeof alt !== "undefined") {
+    alt.on("flovmp:auth:init", function (serverName, subtitle) {
+      if (serverName) {
+        $("brandTitle").textContent = serverName;
+        document.title = serverName;
+      }
+      if (subtitle) {
+        $("brandSub").textContent = subtitle;
+      }
+    });
+
     alt.on("flovmp:auth:result", function (ok, message) {
       clearWait();
       setBusy(false);

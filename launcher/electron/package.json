@@ -1,10 +1,10 @@
 {
-  "name": "derzhava-rp-launcher",
-  "productName": "Derzhava RP Launcher",
+  "name": "flovmp-launcher",
+  "productName": "FloV:MP Launcher",
   "version": "1.0.0",
-  "description": "Держава RP Launcher — окно запуска для FloV:MP",
+  "description": "FloV:MP Launcher — окно запуска",
   "main": "src/main.js",
-  "author": "Derzhava RP",
+  "author": "FloV:MP Team",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -21,8 +21,8 @@
     "playwright": "^1.62.1"
   },
   "build": {
-    "appId": "ru.derzhavarp.launcher",
-    "productName": "Derzhava RP Launcher",
+    "appId": "net.flovmp.launcher",
+    "productName": "FloV:MP Launcher",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -49,9 +49,9 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Держава RP",
-      "uninstallDisplayName": "Держава RP Launcher",
-      "artifactName": "DerzhavaRP-Launcher-Setup-${version}.${ext}"
+      "shortcutName": "FloV:MP",
+      "uninstallDisplayName": "FloV:MP Launcher",
+      "artifactName": "FloVMP-Launcher-Setup-${version}.${ext}"
     }
   }
 }

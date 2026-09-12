@@ -23,20 +23,22 @@ public sealed class AuthSystem
 {
     private readonly IAccountStore _store;
     private readonly AuthService _auth;
+    private readonly string _serverName;
     private readonly ConcurrentDictionary<uint, Account> _authed = new();
     // accountId → playerId: не пускаем один аккаунт с двух клиентов
     private readonly ConcurrentDictionary<int, uint> _activeAccounts = new();
     private readonly Action<IPlayer, Account> _onAuthed;
 
-    public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed)
+    public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server")
     {
         _store = store;
         _auth = new AuthService(_store);
         _onAuthed = onAuthed;
+        _serverName = serverName;
     }
 
-    public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed)
-        : this(new JsonAccountStore(accountsPath), onAuthed)
+    public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server")
+        : this(new JsonAccountStore(accountsPath), onAuthed, serverName)
     {
     }
 
@@ -83,7 +85,7 @@ public sealed class AuthSystem
                 if (p != null && p.Exists && !IsAuthed(p))
                 {
                     Alt.Log($"[FloV:MP] auth: страховочная отправка flovmp:auth:show для {p.Name}");
-                    p.Emit("flovmp:auth:show");
+                    p.Emit("flovmp:auth:show", _serverName);
                 }
             }
             catch (Exception ex)
@@ -97,7 +99,7 @@ public sealed class AuthSystem
     {
         if (!player.Exists || IsAuthed(player)) return;
         Alt.Log($"[FloV:MP] auth: клиент {player.Name} готов, отправляем flovmp:auth:show");
-        player.Emit("flovmp:auth:show");
+        player.Emit("flovmp:auth:show", _serverName);
     });
 
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("auth.OnDisconnect", () =>

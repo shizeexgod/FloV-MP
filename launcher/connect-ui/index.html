@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Держава Онлайн — загрузка</title>
+<title>FloV:MP — загрузка</title>
 <!--
-  Кастомный connect/loading-экран alt:V для FloV:MP («Держава Онлайн»).
+  Кастомный connect/loading-экран для FloV:MP.
   Подставляется коннектором через флаг -customui (LocalCdn отдаёт этот файл).
   Слушает события клиента alt:V по контракту (сверено с исходным бандлом):
     alt.on('connection:connecting'|'connected'|'downloadingRuntimes'|
@@ -133,9 +133,9 @@
   <div class="beam"></div>
 
   <main class="stage" id="loading">
-    <img class="logo" src="./logo.png" alt="Держава Онлайн" onerror="this.style.display='none'">
-    <div class="title">Держава <span>Онлайн</span></div>
-    <div class="subtitle">FloV:MP Multiplayer</div>
+    <img class="logo" src="./logo.png" alt="FloV:MP" onerror="this.style.display='none'">
+    <div class="title">FloV<span>:MP</span></div>
+    <div class="subtitle">Multiplayer Engine</div>
 
     <div class="progress">
       <div class="phase-row">
@@ -149,10 +149,10 @@
 
   <div class="tips" id="tipsWrap">
     <div class="kicker">Совет</div>
-    <div class="tip" id="tip">Добро пожаловать в Держава Онлайн.</div>
+    <div class="tip" id="tip">Добро пожаловать в игровой мир.</div>
   </div>
 
-  <div class="corner bl"><span class="dot-on"></span>Держава Онлайн · Басманный</div>
+  <div class="corner bl"><span class="dot-on"></span>Сервер подключён</div>
   <div class="corner br" id="ver">FloV:MP v1.0.0</div>
 
   <!-- Экран отключения -->
@@ -295,7 +295,7 @@
 
   // ── Причины отключения (перевод понятным языком) ──
   var REASONS = {
-    'WRONG_STABLE_BUILD':   ['Несовместимая версия игры', 'Ваш клиент не совпадает со сборкой сервера. Обновите игру через лаунчер Держава RP и зайдите снова.'],
+    'WRONG_STABLE_BUILD':   ['Несовместимая версия игры', 'Ваш клиент не совпадает со сборкой сервера. Обновите игру через лаунчер и зайдите снова.'],
     'WRONG_BETA_BUILD':     ['Несовместимая бета-версия', 'Ваш клиент не совпадает со сборкой сервера. Обновите игру через лаунчер.'],
     'WRONG_VERSION':        ['Несовместимая версия', 'Версия клиента не подходит к серверу. Обновите игру через лаунчер.'],
     'Connection lost':      ['Соединение потеряно', 'Связь с сервером прервана. Проверьте интернет и переподключитесь.'],
@@ -350,8 +350,8 @@
     'Уважайте RolePlay: отыгрывайте роль, а не «стреляйте во всех».',
     'Команда /help покажет доступные команды на сервере.',
     'Банкоматы: /deposit, /withdraw, переводы — /transfer.',
-    'Карта — реальные улицы Москвы: Кремль, Арбат, Сити.',
-    'Держава Онлайн работает на собственном движке FloV:MP.',
+    'Карта — детальные улицы, высотки и загородные трассы.',
+    'Сервер работает на собственном движке FloV:MP.',
   ];
   var ti = Math.floor(Math.random() * TIPS.length), tipEl = $('tip');
   tipEl.textContent = TIPS[ti];

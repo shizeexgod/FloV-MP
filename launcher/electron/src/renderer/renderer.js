@@ -23,12 +23,12 @@ const openUrl = (url) => window.open(url, '_blank');
 
 // ─── Ресурсы: сайт/форум/донат + соцсети, флайаут по одной иконке ──────────
 const RESOURCE_URLS = {
-  site: 'https://derzhava-rp.ru',
-  forum: 'https://forum.derzhava-rp.ru',
-  donate: 'https://donate.derzhava-rp.ru',
-  discord: 'https://discord.gg/derzhavarp',
-  telegram: 'https://t.me/derzhavarp',
-  youtube: 'https://youtube.com/@derzhavarp',
+  site: 'https://flov-mp.ru',
+  forum: 'https://forum.flov-mp.ru',
+  donate: 'https://flov-mp.ru/donate',
+  discord: 'https://discord.gg/flovmp',
+  telegram: 'https://t.me/flovmp',
+  youtube: 'https://youtube.com/@flovmp',
 };
 (function initResources() {
   const btn = document.getElementById('btn-resources');
@@ -61,13 +61,13 @@ const NEWS = [
   {
     id: 1,
     badge: 'ОТКРЫТИЕ',
-    title: 'Открытие Держава RP — добро пожаловать!',
+    title: 'Открытие сервера — добро пожаловать!',
     date: '30.08.2026',
     likes: 214,
     views: 3180,
     image: 'assets/news/cover-opening.svg',
     summary: 'Долгожданный запуск сервера на независимом движке FloV:MP.',
-    body: `<p>Мы рады приветствовать всех первопроходцев проекта <b>Держава RP</b>! Это масштабный мир на базе собственного высокопроизводительного мультиплеера <b>FloV:MP</b>, свободного от ограничений старых платформ.</p>
+    body: `<p>Мы рады приветствовать всех первопроходцев! Это масштабный мир на базе собственного высокопроизводительного мультиплеера <b>FloV:MP</b>, свободного от ограничений старых платформ.</p>
     <p>Что вас ждёт на старте:</p>
     <ul>
       <li>Уникальная экономическая система с реальными профессиями и бизнесами;</li>
@@ -721,7 +721,7 @@ function applyAccountUI() {
   const cabAvatar = document.getElementById('cabinet-avatar');
   if (cabAvatar) cabAvatar.textContent = initial;
   const cabSub = document.getElementById('cabinet-sub');
-  if (cabSub) cabSub.textContent = isLoggedIn() ? 'Аккаунт Держава RP' : 'Гость — войдите в аккаунт';
+  if (cabSub) cabSub.textContent = isLoggedIn() ? 'Игровой аккаунт' : 'Гость — войдите в аккаунт';
 
   const cabProfileNick = document.getElementById('cab-nick');
   if (cabProfileNick) cabProfileNick.textContent = isLoggedIn() ? settings.account.username : '—';
@@ -1046,14 +1046,14 @@ document.getElementById('btn-clear-cache')?.addEventListener('click', () => {
 });
 document.getElementById('btn-verify-files')?.addEventListener('click', () => window.floridaV.verifyFiles?.());
 document.getElementById('btn-open-logs')?.addEventListener('click', () => window.floridaV.openLogs?.());
-document.getElementById('btn-open-changelog')?.addEventListener('click', () => openUrl('https://derzhava-rp.ru/changelog'));
+document.getElementById('btn-open-changelog')?.addEventListener('click', () => openUrl('https://flov-mp.ru/changelog'));
 
 // «Скопировать сведения о системе» — для отправки в поддержку. Только то,
 // что уже отдаёт deviceInfo + версия лаунчера, без личных данных.
 document.getElementById('btn-copy-sysinfo')?.addEventListener('click', async (e) => {
   const info = await loadDeviceInfo();
   const lines = [
-    `Держава RP Launcher — сведения о системе`,
+    `FloV:MP Launcher — сведения о системе`,
     `Версия лаунчера: ${document.querySelector('.about-version')?.textContent || '—'}`,
     `ОС: ${info?.os || '—'} (${info?.osArch || '—'})`,
     `Устройство: ${info?.hostname || '—'}`,
@@ -1198,7 +1198,7 @@ async function secSubmit(mode, payload, errorEl, okMsg) {
     errorEl.textContent = '';
     return true;
   } catch {
-    errorEl.textContent = 'Сервер недоступен — запустите Держава RP и попробуйте снова';
+    errorEl.textContent = 'Сервер недоступен — запустите сервер игры и попробуйте снова';
     return false;
   }
 }
@@ -1252,8 +1252,8 @@ document.getElementById('sec-btn-2fa').addEventListener('click', () => {
   if (!on) {
     _twoFaSecret = base32Secret();
     document.getElementById('cab-2fa-secret').textContent = _twoFaSecret.replace(/(.{4})/g, '$1 ').trim();
-    const label = encodeURIComponent(`Держава RP:${settings.account?.username || 'игрок'}`);
-    const uri = `otpauth://totp/${label}?secret=${_twoFaSecret}&issuer=Derzhava%20RP&digits=6&period=30`;
+    const label = encodeURIComponent(`FloV:MP:${settings.account?.username || 'игрок'}`);
+    const uri = `otpauth://totp/${label}?secret=${_twoFaSecret}&issuer=FloV%3AMP&digits=6&period=30`;
     renderQr(document.getElementById('cab-2fa-qr'), uri);
   }
   openCabSub('cab-sub-2fa');
@@ -1355,8 +1355,8 @@ document.getElementById('btn-check-update').addEventListener('click', (e) => {
   label.textContent = ' Сервер обновлений ещё не подключён';
   setTimeout(() => { label.textContent = original; }, 2500);
 });
-document.getElementById('btn-open-site').addEventListener('click', () => openUrl('https://derzhava-rp.ru'));
-document.getElementById('btn-open-support').addEventListener('click', () => openUrl('https://discord.gg/derzhavarp'));
+document.getElementById('btn-open-site').addEventListener('click', () => openUrl('https://flov-mp.ru'));
+document.getElementById('btn-open-support').addEventListener('click', () => openUrl('https://discord.gg/flovmp'));
 
 function setEditionToggle(edition) {
   document.getElementById('toggle-legacy').classList.toggle('on', edition === 'Legacy');
@@ -1670,7 +1670,7 @@ document.getElementById('btn-auth-submit').addEventListener('click', async () =>
     adoptAccount(data, login);
     closeAuth();
   } catch (e) {
-    errorEl.textContent = 'Сервер сейчас недоступен — запусти Держава RP и попробуй снова';
+    errorEl.textContent = 'Сервер сейчас недоступен — запустите сервер игры и попробуйте снова';
   } finally {
     submitBtn.disabled = false;
     submitBtn.classList.remove('is-busy');

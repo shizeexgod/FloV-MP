@@ -22,7 +22,7 @@ public static class SpawnPoints
     /// <summary>Москва: Городская больница / Склиф.</summary>
     public static readonly Position MoscowHospital = new(310.0f, -590.0f, 43.3f);
 
-    /// <summary>Основная точка спавна проекта Держава Онлайн.</summary>
+    /// <summary>Основная точка спавна сервера.</summary>
     public static readonly Position DefaultSpawn = MoscowRedSquare;
 
     /// <summary>Обратная совместимость (Legion Square = Красная площадь в URF RMRP).</summary>

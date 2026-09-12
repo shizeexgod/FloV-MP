@@ -1,4 +1,4 @@
-﻿using FloVMP.Core.Database;
+using FloVMP.Core.Database;
 using FloVMP.Core.Auth;
 using Xunit;
 
@@ -26,7 +26,7 @@ public sealed class DatabaseTests : IDisposable
         {
             Host = "188.127.229.224",
             Port = 3306,
-            Database = "derzhava_rp",
+            Database = "flovmp_rp",
             User = "flovmp",
             Password = "MySecretPassword123"
         };
@@ -34,7 +34,7 @@ public sealed class DatabaseTests : IDisposable
         var cs = cfg.BuildConnectionString();
         Assert.Contains("Server=188.127.229.224", cs);
         Assert.Contains("Port=3306", cs);
-        Assert.Contains("Database=derzhava_rp", cs);
+        Assert.Contains("Database=flovmp_rp", cs);
         Assert.Contains("User ID=flovmp", cs);
         Assert.Contains("Password=MySecretPassword123", cs);
     }

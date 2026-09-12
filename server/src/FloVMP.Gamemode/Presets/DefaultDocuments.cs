@@ -5,21 +5,20 @@ using FloVMP.Core.Documents;
 namespace FloVMP.Gamemode.Presets;
 
 /// <summary>
-/// Генератор и регистратор документов российского образца для RP-проекта «Держава Онлайн».
-/// Содержит специфичные для Москвы серии, органы выдачи и форматы справок.
+/// Генератор и регистратор базовых документов для RP-гейммода FloV:MP.
 /// </summary>
-public static class DerzhavaDocuments
+public static class DefaultDocuments
 {
     private static readonly Random Rand = new();
 
-    public static PlayerDocument IssueRussianPassport(
+    public static PlayerDocument IssuePassport(
         DocumentService service,
         int accountId,
         string fullName,
         DateTime birthDate,
         string gender,
         string residence,
-        string issuedBy = "Отдел УФМС ГУ МВД по г. Москве")
+        string issuedBy = "Паспортный стол центрального района")
     {
         var series = $"45 {Rand.Next(10, 25):D2}";
         var number = $"{Rand.Next(100000, 999999)}";
@@ -35,13 +34,13 @@ public static class DerzhavaDocuments
             residence: residence);
     }
 
-    public static PlayerDocument IssueRussianDriverLicense(
+    public static PlayerDocument IssueDriverLicense(
         DocumentService service,
         int accountId,
         string fullName,
         IEnumerable<string> categories,
         int validityDays = 30,
-        string issuedBy = "1-й ОСБ ДПС ГИБДД по г. Москве")
+        string issuedBy = "Отдел дорожной инспекции")
     {
         var series = $"77 {Rand.Next(10, 25):D2}";
         var number = $"{Rand.Next(100000, 999999)}";
@@ -56,14 +55,14 @@ public static class DerzhavaDocuments
             issuedBy: issuedBy);
     }
 
-    public static PlayerDocument IssueRussianWeaponLicense(
+    public static PlayerDocument IssueWeaponLicense(
         DocumentService service,
         int accountId,
         string fullName,
         int validityDays = 30,
-        string issuedBy = "ЦЛРР Главного управления Росгвардии")
+        string issuedBy = "Лицензионно-разрешительный отдел")
     {
-        var series = $"РОХа {Rand.Next(10, 99):D2}";
+        var series = $"WL-{Rand.Next(10, 99):D2}";
         var number = $"{Rand.Next(100000, 999999)}";
         var docNumber = $"{series} {number}";
 
@@ -75,14 +74,14 @@ public static class DerzhavaDocuments
             issuedBy: issuedBy);
     }
 
-    public static PlayerDocument IssueRussianMedicalCard(
+    public static PlayerDocument IssueMedicalCard(
         DocumentService service,
         int accountId,
         string fullName,
         bool isPsychHealthy,
         bool isSubstanceFree,
         int validityDays = 14,
-        string issuedBy = "ГКБ им. С.П. Боткина")
+        string issuedBy = "Центральная городская больница")
     {
         var docNumber = $"МК-{Rand.Next(10000, 99999)}";
         var doc = service.IssueMedicalCard(

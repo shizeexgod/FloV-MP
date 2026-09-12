@@ -35,7 +35,8 @@ EXTENSIONS_TO_CHECK = {
 
 IGNORED_DIRS = {
     ".git", "node_modules", ".next", "bin", "obj", ".vs", "scratch",
-    "dist", "native-dist", "out", "release", "build"
+    "dist", "native-dist", "out", "release", "build", "runtime", "flovmp-data",
+    "archive", ".native-stage"
 }
 
 def generate_byte_signatures(term):

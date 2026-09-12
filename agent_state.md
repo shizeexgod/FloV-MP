@@ -1,8 +1,58 @@
-# Agent State — FloV:MP / Держава Онлайн
+# Agent State — FloV:MP
 
-Updated: 2026-09-12 (Аудит отчёта Claude Code на VDS, очистка от брендинга check-package-clean.py, фиксы курсора/WebView, анализ FreeMode и Ragemp.pro)
+Updated: 2026-09-12 (7 Ключевых задач платформы: White-Labeling, 2000+ Highload, Zero-Brand Leak, Физика Shift+W, F8 Консоль с графиками, и Scaffold Вариант 3)
 
-## Аудит Claude Code, Очистка Брендинга и Анализ Ресурсов (2026-09-12)
+## 7 Ключевых Задач Платформы FloV:MP (2026-09-12)
+
+1. **Динамический White-Labeling (Собственный брендинг для RP-проектов):**
+   - Устранено любое захардкоженное имя сервера для подключающихся игроков.
+   - Имя сервера динамически конфигурируется через переменную окружения `FLOVMP_SERVER_NAME` или параметр `name` в `config/server.toml`.
+   - C# сервер (`GamemodeResource`, `AuthSystem`, `HudSystem`, `ChatSystem`) отдаёт актуальное имя сервера клиенту при авторизации (`flovmp:auth:show`).
+   - NUI-экраны авторизации (`brandTitle`), HUD (`#server`), чат выводят настроенное имя RP-проекта. Игроки видят только бренд конкретного проекта.
+
+2. **Архитектура Высокой Нагрузки (2000+ Онлайна):**
+   - В `config/server.toml` внесены верифицированные параметры многопоточности alt:V 16.4.39:
+     - `streamingDistance = 250`, `migrationDistance = 120`, `colShapeTickRate = 300`
+     - `[maxStreaming]` peds = 48, vehicles = 48, objects = 64 (защита пула `CPed` в GTA V от переполнения при массовых скоплениях)
+     - `[threads]` streamer = 2, migration = 1, syncSend = 1, syncReceive = 1
+   - В `HudSystem.cs` устранён вызов `Alt.GetAllPlayers()` в цикле тика таймера; используется прямой перебор `_players` с нулевыми аллокациями.
+
+3. **Абсолютная чистота бренда платформы (Zero-Leak):**
+   - Устранены любые следы приватного тестового сервера во всех файлах ядра, пресетах, схемах БД, тестах и лаунчере.
+   - Пресеты C# переименованы в нейтральные инженерные `DefaultFactions.cs`, `DefaultHousing.cs`, `DefaultUniforms.cs`, `DefaultDocuments.cs`.
+   - Сканер `scripts/check-package-clean.py` проверил 373 файла репозитория и 54 файла scaffold-дистрибутива в UTF-8, UTF-16LE, UTF-16BE и CP1251 — **100% PASSED (0 маркеров)**.
+   - 243/243 C# unit-тестов пройдены успешно.
+
+4. **Синхронизация движения и физики (Фикс рывка при беге Shift+W с места):**
+   - Локализована корневая причина: при спавне персонаж помещался на `groundZ + 0.5` в состоянии падения. При зажатии Shift+W движок GTA V сбрасывал фазу старта анимации бега и мгновенно дергал скорость персонажа вперёд.
+   - Персонаж теперь ставится ровно на `groundZ` коллизии.
+   - Добавлены `native.setEntityVelocity(player.scriptID, 0, 0, 0)` до и на `nextTick` после `freezePosition(false)`, `native.clearPedTasksImmediately()`, и ограничение `setRunSprintMultiplierForPlayer(player.scriptID, 1.0)`.
+
+5. **Точечный ребрендинг AltV -> FloV:MP:**
+   - Все видимые пользователям и разработчикам упоминания заменены на FloV:MP.
+   - Строго сохранены системные биндинги C# `AltV.Net` и клиентские JS `alt-client` / `natives`.
+
+6. **Редизайн F8 Консоли разработчика:**
+   - Стеклянный дизайн (Glass UI, backdrop-blur, тёмная тема).
+   - Вкладки:
+     - **Console/Logs**: вывод логов, фильтры (ALL/INFO/WARN/ERR), автодополнение по кнопке Tab.
+     - **Net & Perf**: живые SVG-графики FPS и пинга (RTT) в реальном времени.
+     - **Entities**: инспектор пространственной сетки PVS (`SpatialHashGrid`), игроки/транспорт в радиусе.
+     - **Hot-Reload**: менеджер горячей перезагрузки NUI WebView без перезапуска клиента.
+
+7. **Готовый шаблон проекта (Scaffold, Вариант 3):**
+   - Разработан автоматический упаковщик `scripts/pack-scaffold.ps1`.
+   - Созданы чистые шаблоны в `scripts/scaffold-templates/`:
+     - `start-server.cmd` / `start.cmd` (Windows)
+     - `start-server.sh` / `start.sh` (Linux)
+     - `backup-db.cmd` / `backup-db.sh` (бэкапы БД)
+     - `update-license.cmd` / `update-license.sh` (проверка лицензии)
+     - `flovmp.env.example`, `license.flv`, `README.md`
+   - Написана подробная документация `docs/STRUCTURE.md` с описанием слоев, White-Labeling, highload-тюнинга, структуры БД и расширения C# гейммода.
+   - Сборка дистрибутива в `dist/scaffold` полностью автономна и протестирована.
+
+---
+
 
 1. **Анализ отчёта Claude Code на VDS (Скрины 1–4):**
    - **Открытие тикрейта:** OnTick в alt:V 16.4.39 вызывается ~900 раз/сек (54 012 тиков за 60 с), а не 60. Любые лямбды с захватом `this` в цикле создавали 900 аллокаций/сек. Вся логика вынесена в фиксированные методы.

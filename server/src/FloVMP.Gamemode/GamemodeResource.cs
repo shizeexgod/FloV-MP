@@ -20,7 +20,7 @@ namespace FloVMP.Gamemode;
 /// </summary>
 public class GamemodeResource : Resource
 {
-    private const string ServerName = "Держава RP";
+    private readonly string ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ?? "RolePlay Server";
     private const int AutoSaveIntervalMs = 60_000;
 
     private PlayerLifecycle? _playerLifecycle;
@@ -60,7 +60,7 @@ public class GamemodeResource : Resource
                      new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         var accountStore = FloVMP.Core.Database.AccountStoreFactory.Create(dbConn, Path.Combine(dataDir, "accounts.json"));
 
-        _auth = new AuthSystem(accountStore, OnPlayerAuthed);
+        _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName);
         _auth.Attach();
 
         // Встроенный HTTP-API (:7799) — авторизация для лаунчера + живой /info.
@@ -69,20 +69,19 @@ public class GamemodeResource : Resource
         _httpApi = new FloVMP.Gamemode.Systems.Api.HttpApiSystem(
             store: accountStore,
             playerCount: () => Alt.GetAllPlayers().Count,
-            maxPlayers: 1500,
-            serverName: "Держава Онлайн",
-            gamemode: ServerName,
+            maxPlayers: 2000,
+            serverName: ServerName,
+            gamemode: "RolePlay",
             log: msg => Alt.Log(msg),
             port: apiPort);
         _httpApi.Start();
 
         // Режим гейммода: base = ПЛАТФОРМА (спавн + чат + анти-чит + модерация,
-        // без готового геймплея); full = RP-пример (Держава со всеми системами).
-        // Платформа поставляется в base; full — опционально для примера/теста.
-        // Фолбэк при проблемах: FLOVMP_MODE=full мгновенно возвращает старое поведение.
+        // без готового геймплея); full = RP-мод со всеми системами.
+        // Платформа поставляется в base; full — опционально для RP.
         var gamemodeMode = (Environment.GetEnvironmentVariable("FLOVMP_MODE") ?? "base").Trim().ToLowerInvariant();
         bool fullMode = gamemodeMode == "full";
-        Alt.Log($"[FloV:MP] core: режим гейммода = {(fullMode ? "full (RP-пример)" : "base (платформа)")}");
+        Alt.Log($"[FloV:MP] core: режим гейммода = {(fullMode ? "full (RP-мод)" : "base (платформа)")}");
 
         if (fullMode)
         {
@@ -106,13 +105,13 @@ public class GamemodeResource : Resource
 
             _economy = new FloVMP.Core.Economy.EconomyService();
             _factions = new FloVMP.Core.Factions.FactionService();
-            Presets.DerzhavaFactions.RegisterAll(_factions);
+            Presets.DefaultFactions.RegisterAll(_factions);
             _documents = new FloVMP.Core.Documents.DocumentService();
             _housing = new FloVMP.Core.Housing.HousingService();
-            Presets.DerzhavaHousing.RegisterAll(_housing);
+            Presets.DefaultHousing.RegisterAll(_housing);
             _uniforms = new FloVMP.Core.Characters.FactionUniformService();
-            Presets.DerzhavaUniforms.RegisterAll(_uniforms);
-            Presets.DerzhavaUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
+            Presets.DefaultUniforms.RegisterAll(_uniforms);
+            Presets.DefaultUniforms.RegisterAll(FloVMP.Core.Characters.FactionUniformService.Default);
         }
 
         _chat = new ChatSystem(

@@ -11,6 +11,7 @@ alt.log('[FloV:MP] Клиентский модуль FloV:MP загружен');
 let authView = null;
 let authCamera = null;
 let inGame = false;
+let currentServerName = 'RolePlay Server';
 
 // Зеркало SpawnPoints.DefaultSpawn (сервер) — для предзагрузки зоны спавна
 // во время авторизации. Если сервер сменит точку спавна, обновить и здесь;
@@ -210,7 +211,7 @@ function openAuth() {
         alt.emit('ui:open', false);
     } catch (e) { }
     try {
-        // Камера с видом на Красную площадь / Кремль (Москва)
+        // Камера с видом на центральную площадь
         authCamera = native.createCamWithParams(
             'DEFAULT_SCRIPTED_CAMERA',
             -220.0, -1080.0, 65.0, -15.0, 0.0, 340.0, 60.0, false, 2);
@@ -223,7 +224,7 @@ function openAuth() {
     // Предзагрузка зоны спавна, пока игрок вводит логин: к моменту спавна
     // земля/коллизия уже прогружены -> появление в мире почти мгновенное
     // ('в лёт', как на RageMP). Координаты зеркалят SpawnPoints.DefaultSpawn
-    // на сервере (Legion Square). Фокус снимается в loadCollisionAndUnfreeze.
+    // на сервере. Фокус снимается в loadCollisionAndUnfreeze.
     try {
         native.setFocusPosAndVel(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z, 0, 0, 0);
         native.requestCollisionAtCoord(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z);
@@ -233,6 +234,7 @@ function openAuth() {
         authView = new alt.WebView('http://resource/client/html/auth/index.html');
         authView.on('load', () => {
             try { authView.focus(); } catch (e) { }
+            try { authView.emit('flovmp:auth:init', currentServerName, 'Авторизация в игровом мире'); } catch (e) { }
         });
         pushCursor();
         alt.toggleGameControls(false);
@@ -517,9 +519,22 @@ function loadCollisionAndUnfreeze(targetPos) {
             alt.clearInterval(interval);
             native.clearFocus();
             if (hasGround && Math.abs(groundZ - targetPos.z) < 25.0) {
-                native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ + 0.5, false, false, false, true);
+                // Ставим координаты ровно на уровень земли без искусственного приподнимания
+                native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ, false, false, false, true);
             }
+            // Сброс физической скорости и буферизованных задач перед разморозкой,
+            // предотвращающий паразитный рывок/проскальзывание при старте бега (Shift+W)
+            native.setEntityVelocity(player.scriptID, 0, 0, 0);
+            native.clearPedTasksImmediately(player.scriptID);
+            native.setRunSprintMultiplierForPlayer(player.scriptID, 1.0);
+            native.setPedCanRagdoll(player.scriptID, true);
             native.freezeEntityPosition(player.scriptID, false);
+            // Дополнительный сброс остаточного вектора движения на следующем кадре
+            alt.nextTick(() => {
+                if (player && player.valid) {
+                    native.setEntityVelocity(player.scriptID, 0, 0, 0);
+                }
+            });
             // Мир прогружен — плавно показываем его (снимаем затемнение входа).
             try { native.doScreenFadeIn(700); } catch (e) { }
             entering = false;
@@ -529,8 +544,9 @@ function loadCollisionAndUnfreeze(targetPos) {
 }
 
 // --- Обработчики событий -------------------------------------------------
-alt.onServer('flovmp:auth:show', () => {
-    alt.log('[FloV:MP] flovmp:auth:show получен от сервера');
+alt.onServer('flovmp:auth:show', (serverName) => {
+    if (serverName) currentServerName = serverName;
+    alt.log(`[FloV:MP] flovmp:auth:show получен от сервера (${currentServerName})`);
     openAuth();
 });
 
@@ -737,7 +753,7 @@ alt.on('disconnect', () => {
 });
 
 alt.onServer('flovmp:client:welcome', (name, index) => {
-    alt.log(`[FloV:MP] Добро пожаловать на сервер, ${name}!`);
+    alt.log(`[${currentServerName}] Добро пожаловать на сервер, ${name}!`);
 });
 
 // Если скрипт загрузился уже после установки соединения — открываем окно авторизации

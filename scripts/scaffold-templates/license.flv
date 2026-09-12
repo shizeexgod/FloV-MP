@@ -1,0 +1,9 @@
+{
+  "licenseKey": "FLV-DEMO-0000-0000",
+  "project": "RolePlay Server",
+  "plan": "developer",
+  "maxPlayers": 2000,
+  "issuedAt": "2026-09-01T00:00:00Z",
+  "expiresAt": "2027-09-01T00:00:00Z",
+  "signature": "FLV_OFFLINE_DEV_KEY"
+}

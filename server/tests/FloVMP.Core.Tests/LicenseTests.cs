@@ -44,7 +44,7 @@ public class LicenseTests
     {
         var config = new LicenseConfig
         {
-            LicenseKey = "FLV-ENTERPRISE-2026-DERZHAVA",
+            LicenseKey = "FLV-ENTERPRISE-2026-DEV",
             ServerIp = "188.127.229.224",
             VerifyUrl = "http://mock-license/verify"
         };
@@ -54,8 +54,8 @@ public class LicenseTests
             var json = JsonSerializer.Serialize(new
             {
                 valid = true,
-                licenseKey = "FLV-ENTERPRISE-2026-DERZHAVA",
-                serverName = "Держава Онлайн",
+                licenseKey = "FLV-ENTERPRISE-2026-DEV",
+                serverName = "RolePlay Server",
                 plan = "enterprise",
                 maxPlayers = 1500,
                 boundIp = "188.127.229.224",
@@ -91,7 +91,7 @@ public class LicenseTests
 
         var config = new LicenseConfig
         {
-            LicenseKey = "FLV-ENTERPRISE-2026-DERZHAVA",
+            LicenseKey = "FLV-ENTERPRISE-2026-DEV",
             ServerIp = "188.127.229.224",
             VerifyUrl = "http://mock-license/verify"
         };
@@ -102,8 +102,8 @@ public class LicenseTests
             var json = JsonSerializer.Serialize(new
             {
                 valid = true,
-                licenseKey = "FLV-ENTERPRISE-2026-DERZHAVA",
-                serverName = "Держава Онлайн",
+                licenseKey = "FLV-ENTERPRISE-2026-DEV",
+                serverName = "RolePlay Server",
                 plan = "enterprise",
                 maxPlayers = 1500,
                 boundIp = "188.127.229.224",
@@ -137,7 +137,7 @@ public class LicenseTests
     {
         var config = new LicenseConfig
         {
-            LicenseKey = "FLV-ENTERPRISE-2026-DERZHAVA",
+            LicenseKey = "FLV-ENTERPRISE-2026-DEV",
             TelemetryUrl = "http://mock-telemetry/heartbeat"
         };
 
