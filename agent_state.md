@@ -785,3 +785,31 @@ hash-match** (`scripts/import-altv-client.ps1`). Все 4 открытых во�
       - Все 270 тестов пройдены успешно (229 FloVMP.Core + 41 FloVMP.Launcher).
       - Обновлены и собраны бинарники `FloVMP.Launcher.Native.exe` и `FloVMP.Connect.exe` в `launcher/electron/native-dist`.
 
+14. **Комплексная безопасность F8 Консоли, RBAC-модель и Редизайн с Lucide-иконками (2026-09-12)**:
+    - **Серверный контроль прав (Zero Trust to Client)**:
+      - В `StarterResource.cs` внедрена система ролей на базе `ConcurrentDictionary<uint, int> _adminLevels`.
+      - Локальный хост (`127.0.0.1` / `::1` / `localhost`) автоматически получает максимальный уровень доступа 8 (Главный разработчик / Владелец).
+      - Команда авторизации `/adminauth <password>` защищена переменной окружения `FLOVMP_ADMIN_PASSWORD` (по умолчанию `flovmp2026`).
+      - Команда `/setadmin <ID> <0-8>` доступна только администраторам 8 уровня.
+      - Все чувствительные команды (`/tpm`, `/car`, `/noclip`, `/heal`, `/weather`, `/time`) и клиентские события (`starter:teleportWaypoint`, `starter:toggleNoClip`) строго валидируют `IsAdmin(player, 1)` на стороне C# сервера.
+      - Любая попытка несанкционированного вызова отклоняется сервером, блокирует выполнение и пишет предупреждение в лог безопасности `[Security Violation]`.
+    - **Клиентская изоляция и защита F8 Dev-Консоли**:
+      - В `client/index.js` хранится `currentAdminLevel = 0`. Клиентские методы `toggleNoClip()` и консольные команды проверяют уровень перед отправкой на сервер.
+      - Событие `flovmp:console:setAdmin` синхронизирует статус с NUI WebView.
+      - Для обычного игрока (`adminLevel == 0`) из интерфейса консоли полностью скрываются (через CSS `.admin-only`) вкладка «Дев-тулс», кнопки быстрого вызова (`TPM`, `F4 FLY`, `POS`), а автокомплит в строке ввода исключает любые админ-команды.
+      - Обычный игрок имеет доступ только к безопасным командам: `netgraph`, `clear`, `cls`, `help`, `quit`, `reconnect`, `pos` (для багрепортов).
+    - **3 Минималистичные тёмные темы консоли с Lucide SVG иконками**:
+      - Полностью устранён радужный шум; цвета сведены к премиальной сдержанной монохромной палитре с акцентами.
+      - Встроены 13 векторных Lucide SVG иконок (Terminal, Shield, Activity, Layers, Refresh, Wrench, Navigation, Zap, MapPin, Palette, Copy, Trash, X) без внешних сетевых шрифтов и зависимостей.
+      - **Тема 1: Obsidian Minimalist** (по умолчанию): глубокий черный `#09090b`, строгие рамки `#27272a`, стиль Linear/Vercel.
+      - **Тема 2: Slate Terminal**: тёмный графит `#0d1117`, серые разделители `#21262d`, инженерный стиль Warp/Raycast.
+      - **Тема 3: Glass Monolith**: дымчатое стекло `rgba(8, 8, 12, 0.80)` с `backdrop-filter: blur(34px)`, стиль Apple VisionOS.
+      - Переключатель тем вынесен прямо в заголовок консоли (кнопка с палитрой), выбранная тема сохраняется в `localStorage`.
+    - **Харденинг Native Bridge (`FloVMP.Launcher.Native`)**:
+      - Внедрён именованный мьютекс `Local\FloVMP_Launcher_Native_Bridge` в `Program.cs`, исключающий появление зомби-процессов и параллельных мостов.
+      - `DeviceInfoService.cs` расширен полями `cpuCores`, `ramTotalGb`, и `isElevated` (проверка прав Windows Administrator через `WindowsPrincipal`).
+    - **Синхронизация и Чистота**:
+      - Все обновленные файлы скопированы в демонстрационный SDK `C:\FloV-MP-SDK`.
+      - Сканер `scripts/check-package-clean.py` подтвердил 100% чистоту от брендовых маркеров (380 файлов в репозитории, 296 файлов в SDK).
+      - Все 288 unit-тестов (247 Core + 41 Launcher) пройдены со 100% успехом.
+
