@@ -53,7 +53,7 @@ public static class AdminCommandRegistry
         Register("hwidban", 5, "/hwidban <ID/ник> <дней> [причина]", "Аппаратная блокировка по железу (HWID + MAC)");
         Register("macban", 5, "/macban <ID/ник> <дней> [причина]", "Аппаратная блокировка по сетевому MAC-адресу");
         Register("tp", 5, "/tp <X> <Y> <Z>", "Телепорт по точным координатам");
-        Register("tpm", 5, "/tpm [redsquare|city|police|hospital]", "Быстрый телепорт по ключевым локациям Москвы");
+        Register("tpm", 5, "/tpm [redsquare|city|police|hospital]", "Быстрый телепорт по ключевым локациям сервера");
         Register("setweather", 5, "/setweather <ID_погоды>", "Изменить погоду на сервере");
         Register("settime", 5, "/settime <часы 0-23> [минуты]", "Изменить игровое время");
         Register("setskin", 5, "/setskin <ID/ник> <модель>", "Изменить модель персонажа (скин)");

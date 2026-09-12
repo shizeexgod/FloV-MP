@@ -955,6 +955,9 @@
       const now = time || new Date().toTimeString().split(' ')[0];
       const item = { time: now, tag, text };
       logs.push(item);
+      if (logs.length > 500) {
+        logs.shift();
+      }
 
       if (currentTab === 'logs') {
         const matchesFilter = currentFilter === 'ALL' || item.tag === currentFilter;
@@ -983,7 +986,9 @@
       return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function setFilter(tag) {

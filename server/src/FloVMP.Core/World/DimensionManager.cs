@@ -52,7 +52,7 @@ public class DimensionManager
     public DimensionManager()
     {
         // Регистрируем базовые системные миры
-        Register(new DimensionInfo(GlobalDimension, DimensionType.Global, "Общий мир (Москва / Overworld)", null, DateTime.UtcNow));
+        Register(new DimensionInfo(GlobalDimension, DimensionType.Global, "Общий игровой мир (Overworld)", null, DateTime.UtcNow));
         Register(new DimensionInfo(AdminJailDimension, DimensionType.AdminJail, "Деморган (Админ-тюрьма)", null, DateTime.UtcNow));
         Register(new DimensionInfo(EventDimension, DimensionType.EventZone, "Зона игровых мероприятий", null, DateTime.UtcNow));
     }
@@ -134,6 +134,20 @@ public class DimensionManager
         lock (newSet)
         {
             newSet.Add(entityId);
+        }
+    }
+
+    /// <summary>
+    /// Удаляет сущность из измерения при отключении или уничтожении
+    /// </summary>
+    public void TrackEntityRemove(long entityId, int dimension)
+    {
+        if (_entitiesInDimension.TryGetValue(dimension, out var set))
+        {
+            lock (set)
+            {
+                set.Remove(entityId);
+            }
         }
     }
 

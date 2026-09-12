@@ -522,6 +522,9 @@ function openDevConsole() {
             if (typeof alt.disconnect === 'function') alt.disconnect();
         } catch (e) { }
     });
+    consoleView.on('flovmp:console:close', () => {
+        closeDevConsole();
+    });
 
     if (consoleStatsInterval) alt.clearInterval(consoleStatsInterval);
     consoleStatsInterval = alt.setInterval(() => {
@@ -914,7 +917,7 @@ alt.onServer('starter:requestWaypointTp', () => {
     const blip = native.getFirstBlipInfoId(8);
     if (!native.doesBlipExist(blip)) {
         if (chatView) {
-            chatView.emit('chat:add', '{f87171}[FloV:MP] Поставьте метку (waypoint) на карте перед использованием /tpm!');
+            chatView.emit('flovmp:chat:msg', 'system', '', '{f87171}[FloV:MP] Поставьте метку (waypoint) на карте перед использованием /tpm!');
         }
         return;
     }
@@ -929,7 +932,7 @@ alt.onServer('starter:copyCoords', (x, y, z, yaw) => {
         const text = `${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}, ${yaw.toFixed(2)}`;
         alt.copyToClipboard(text);
         if (chatView) {
-            chatView.emit('chat:add', `{34d399}[FloV:MP] Координаты скопированы в буфер: ${text}`);
+            chatView.emit('flovmp:chat:msg', 'system', '', `{34d399}[FloV:MP] Координаты скопированы в буфер: ${text}`);
         }
     } catch (e) { }
 });

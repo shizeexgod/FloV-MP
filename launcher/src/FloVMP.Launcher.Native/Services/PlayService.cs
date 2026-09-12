@@ -167,10 +167,24 @@ public static class PlayService
             return hardcoded;
         }
 
+        var appDataFlovmp = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FloVMP", "runtime", "client");
+        if (Directory.Exists(appDataFlovmp)) return appDataFlovmp;
+
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "FloridaV", "runtime", "client");
         if (Directory.Exists(appData)) return appData;
+
+        var appDataFlovmpEngine = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FloVMP", "engine");
+        if (Directory.Exists(appDataFlovmpEngine) &&
+            (File.Exists(Path.Combine(appDataFlovmpEngine, "altv.exe")) || File.Exists(Path.Combine(appDataFlovmpEngine, "flovmp.exe"))))
+        {
+            return appDataFlovmpEngine;
+        }
 
         var appDataEngine = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -207,6 +221,11 @@ public static class PlayService
         var baseDir = AppContext.BaseDirectory;
         var candidate1 = Path.Combine(baseDir, "FloVMP.Connect.exe");
         if (File.Exists(candidate1)) return candidate1;
+
+        var appDataFlovmp = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FloVMP", "engine", "FloVMP.Connect.exe");
+        if (File.Exists(appDataFlovmp)) return appDataFlovmp;
 
         var appData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

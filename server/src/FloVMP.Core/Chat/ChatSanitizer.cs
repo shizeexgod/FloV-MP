@@ -38,12 +38,15 @@ public static class ChatSanitizer
     }
 
     /// <summary>true, если сообщение — команда (начинается с одиночного '/').</summary>
-    public static bool IsCommand(string text) =>
-        text.Length > 1 && text[0] == '/' && text[1] != '/';
+    public static bool IsCommand(string? text) =>
+        !string.IsNullOrEmpty(text) && text.Length > 1 && text[0] == '/' && text[1] != '/';
 
     /// <summary>Разбирает "/cmd arg1 arg2" → ("cmd", ["arg1","arg2"]).</summary>
-    public static (string cmd, string[] args) ParseCommand(string text)
+    public static (string cmd, string[] args) ParseCommand(string? text)
     {
+        if (string.IsNullOrWhiteSpace(text) || text.Length < 2 || text[0] != '/')
+            return ("", Array.Empty<string>());
+
         var parts = text[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return ("", Array.Empty<string>());
         return (parts[0].ToLowerInvariant(), parts[1..]);

@@ -564,12 +564,12 @@
     const colorRegex = /\{([0-9a-fA-F]{6})\}/g;
     let openCount = 0;
     let res = safe.replace(colorRegex, function (match, hex) {
-      openCount++;
-      return '<span style="color: #' + hex + '">';
+      const prefix = openCount > 0 ? "</span>" : "";
+      openCount = 1;
+      return prefix + '<span style="color: #' + hex + '">';
     });
-    while (openCount > 0) {
+    if (openCount > 0) {
       res += '</span>';
-      openCount--;
     }
     return res;
   }
@@ -825,6 +825,12 @@
   if (typeof alt !== "undefined") {
     alt.on("flovmp:chat:msg", function (kind, author, text) {
       pushMessage(kind, author, text);
+    });
+    alt.on("chat:add", function (text) {
+      pushMessage("system", "", text);
+    });
+    alt.on("chat:message", function (author, text) {
+      pushMessage("player", author, text);
     });
     alt.on("flovmp:chat:openinput", function (initialValue) {
       openInput(initialValue);

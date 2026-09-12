@@ -64,6 +64,23 @@ namespace FloVMP.Core.Tests
         }
 
         [Fact]
+        public void TrackEntityRemove_DecrementsEntityCountOnDisconnect()
+        {
+            var manager = new DimensionManager();
+            var dim = manager.AllocateHousingDimension(300, "Villa", "acc-300");
+
+            manager.TrackEntityMove(2001, DimensionManager.GlobalDimension, dim);
+            Assert.Equal(1, manager.GetEntityCountInDimension(dim));
+
+            manager.TrackEntityRemove(2001, dim);
+            Assert.Equal(0, manager.GetEntityCountInDimension(dim));
+
+            // Should be no-op on non-existing entity
+            manager.TrackEntityRemove(9999, dim);
+            Assert.Equal(0, manager.GetEntityCountInDimension(dim));
+        }
+
+        [Fact]
         public void Unregister_SystemDimensionsCannotBeDeleted()
         {
             var manager = new DimensionManager();
