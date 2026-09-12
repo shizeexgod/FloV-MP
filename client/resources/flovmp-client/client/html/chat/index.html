@@ -1,96 +1,506 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8" />
-<title>FloV:MP — чат</title>
-<script>
-(function(){
-  var PRESETS = {
-    gold:{accent:'#fdd015',dim:'#b3790a',ink:'#1a1206'},
-    pink:{accent:'#ff3d8a',dim:'#b3316f',ink:'#1a0410'},
-    blue:{accent:'#4ac3ff',dim:'#2e8fdb',ink:'#031420'},
-    green:{accent:'#3fd98a',dim:'#22b86b',ink:'#031b10'},
-    purple:{accent:'#c084fc',dim:'#8b3fe8',ink:'#1a0f26'},
-    red:{accent:'#ff5d5d',dim:'#c23a3a',ink:'#210404'}
-  };
-  var id = 'gold';
-  try { id = localStorage.getItem('flovmp:accent') || 'gold'; } catch (e) {}
-  var p = PRESETS[id] || PRESETS.gold;
-  var s = document.documentElement.style;
-  s.setProperty('--accent', p.accent);
-  s.setProperty('--accent-dim', p.dim);
-  s.setProperty('--accent-ink', p.ink);
-})();
-</script>
-<style>
-  :root {
-    --accent: #fdd015;
-    --sys: #e3b341;
-    --me: #b98cff;
-    --text0: #eef0f6;
-    --text1: #aab0c2;
-    --panel: rgba(15, 16, 21, .55);
-    --stroke: rgba(255, 255, 255, .08);
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    width: 100%; height: 100%;
-    font-family: "Segoe UI", system-ui, sans-serif;
-    background: transparent; color: var(--text0);
-    overflow: hidden; user-select: none;
-  }
-  #chat {
-    position: absolute; left: 20px; top: 20px;
-    width: 460px;
-  }
-  #log {
-    max-height: 260px; overflow: hidden;
-    display: flex; flex-direction: column; justify-content: flex-end;
-    gap: 2px;
-    font-size: 13px; line-height: 1.35;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
-  }
-  #log.dim { opacity: .35; transition: opacity .4s; }
-  .line { word-wrap: break-word; }
-  .line .who { font-weight: 600; }
-  .line.system { color: var(--sys); }
-  .line.me { color: var(--me); font-style: italic; }
-  .line.player .who { color: var(--accent); }
-  .line.shout { color: #ff9800; font-weight: 600; }
-  .line.shout .who { color: #ffb74d; }
-  .line.ooc { color: #90a4ae; font-style: italic; }
+  <meta charset="utf-8" />
+  <title>FloV:MP — Чат</title>
+  <script>
+    (function () {
+      const PRESETS = {
+        gold:   { accent: '#fdd015', dim: '#b3790a', ink: '#1a1206' },
+        pink:   { accent: '#ff3d8a', dim: '#b3316f', ink: '#1a0410' },
+        blue:   { accent: '#38bdf8', dim: '#0284c7', ink: '#031420' },
+        green:  { accent: '#34d399', dim: '#059669', ink: '#031b10' },
+        purple: { accent: '#c084fc', dim: '#7c3aed', ink: '#1a0f26' },
+        red:    { accent: '#f87171', dim: '#dc2626', ink: '#210404' },
+        slate:  { accent: '#e4e4e7', dim: '#71717a', ink: '#09090b' }
+      };
+      let id = 'gold';
+      try { id = localStorage.getItem('flovmp:accent') || 'gold'; } catch (e) {}
+      const p = PRESETS[id] || PRESETS.gold;
+      const s = document.documentElement.style;
+      s.setProperty('--accent', p.accent);
+      s.setProperty('--accent-dim', p.dim);
+      s.setProperty('--accent-ink', p.ink);
+    })();
+  </script>
+  <style>
+    :root {
+      --accent: #fdd015;
+      --accent-dim: #b3790a;
+      --accent-ink: #1a1206;
+      --bg-panel: rgba(14, 14, 18, 0.72);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(255, 255, 255, 0.22);
+      --text-main: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --text-dim: #71717a;
+      --tag-ic: #e4e4e7;
+      --tag-ooc: #94a3b8;
+      --tag-me: #c084fc;
+      --tag-do: #38bdf8;
+      --tag-shout: #fbbf24;
+      --tag-whisper: #67e8f9;
+      --tag-sys: #fdd015;
+      --tag-admin: #f43f5e;
+    }
 
-  #inputwrap {
-    margin-top: 8px;
-    display: none;
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: 8px;
-    padding: 6px 10px;
-    backdrop-filter: blur(4px);
-  }
-  #inputwrap.on { display: block; }
-  #input {
-    width: 100%;
-    background: transparent; border: none; outline: none;
-    color: var(--text0); font-size: 13px; font-family: inherit;
-  }
-</style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ─── CHAT MAIN CONTAINER ─────────────────────────────────── */
+    #chat-wrapper {
+      position: absolute;
+      left: 24px;
+      top: 24px;
+      width: 500px;
+      max-width: 90vw;
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    #chat-wrapper.interactive {
+      pointer-events: auto;
+    }
+
+    /* ─── LOG CONTAINER ───────────────────────────────────────── */
+    #log-container {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+
+    #chat-wrapper.interactive #log-container {
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    }
+
+    #log-area {
+      max-height: 290px;
+      min-height: 50px;
+      padding: 8px 12px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 1px rgba(0, 0, 0, 0.9);
+      user-select: text;
+      -webkit-user-select: text;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    }
+
+    #log-area::-webkit-scrollbar {
+      width: 4px;
+    }
+    #log-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+    }
+
+    /* Auto-dim state when inactive */
+    #chat-wrapper.dimmed {
+      opacity: 0.22;
+    }
+    #chat-wrapper:hover {
+      opacity: 1 !important;
+    }
+
+    /* ─── MESSAGE ROWS & BADGES ───────────────────────────────── */
+    .msg-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      word-break: break-word;
+      animation: chatRowIn 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes chatRowIn {
+      from {
+        opacity: 0;
+        transform: translateY(3px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-time {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+
+    .msg-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      line-height: 1.2;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    .badge-ic       { color: #ffffff; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
+    .badge-ooc      { color: #94a3b8; background: rgba(148, 163, 184, 0.1);  border-color: rgba(148, 163, 184, 0.22); }
+    .badge-me       { color: #d8b4fe; background: rgba(192, 132, 252, 0.1);  border-color: rgba(192, 132, 252, 0.25); }
+    .badge-do       { color: #7dd3fc; background: rgba(56, 189, 248, 0.1);   border-color: rgba(56, 189, 248, 0.25); }
+    .badge-shout    { color: #fde047; background: rgba(251, 191, 36, 0.1);   border-color: rgba(251, 191, 36, 0.25); }
+    .badge-whisper  { color: #a5f3fc; background: rgba(103, 232, 249, 0.1);  border-color: rgba(103, 232, 249, 0.25); }
+    .badge-sys      { color: #fef08a; background: rgba(253, 208, 21, 0.12);  border-color: rgba(253, 208, 21, 0.3); }
+    .badge-admin    { color: #fca5a5; background: rgba(244, 63, 94, 0.15);   border-color: rgba(244, 63, 94, 0.3); }
+    .badge-try      { color: #f472b6; background: rgba(244, 114, 182, 0.1);  border-color: rgba(244, 114, 182, 0.25); }
+
+    .msg-content {
+      color: var(--text-main);
+    }
+
+    .author-name {
+      font-weight: 600;
+      color: #ffffff;
+      margin-right: 4px;
+    }
+    .author-name.accent-color {
+      color: var(--accent);
+    }
+
+    /* Style variants by message kind */
+    .kind-ooc .msg-content {
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .kind-me .msg-content {
+      color: #d8b4fe;
+      font-style: italic;
+    }
+    .kind-do .msg-content {
+      color: #7dd3fc;
+      font-style: italic;
+    }
+    .kind-shout .msg-content {
+      color: #fde047;
+      font-weight: 600;
+    }
+    .kind-whisper .msg-content {
+      color: #a5f3fc;
+      font-style: italic;
+    }
+    .kind-admin .msg-content {
+      color: #fecdd3;
+      font-weight: 600;
+    }
+
+    /* ─── INPUT PANEL ─────────────────────────────────────────── */
+    #input-wrap {
+      margin-top: 8px;
+      display: none;
+      background: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      padding: 6px 10px;
+      flex-direction: column;
+      gap: 6px;
+      animation: inputWrapIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      position: relative;
+    }
+
+    #input-wrap.active {
+      display: flex;
+    }
+
+    @keyframes inputWrapIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Tactile Send Flash */
+    #input-wrap.input-send-flash {
+      border-color: rgba(255, 255, 255, 0.45) !important;
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.12), 0 10px 30px rgba(0, 0, 0, 0.7);
+      transition: all 0.1s ease-out;
+    }
+
+    /* Channel Tabs Bar */
+    .channel-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .ch-tab {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      transition: all 0.1s ease;
+      white-space: nowrap;
+    }
+    .ch-tab:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+    .ch-tab.active {
+      background: rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Input Field Row */
+    .input-field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mode-indicator {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #ffffff;
+      flex-shrink: 0;
+      transition: all 0.12s ease;
+    }
+
+    #chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.4;
+    }
+    #chat-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .input-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 9.5px;
+      color: var(--text-dim);
+      padding-top: 2px;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .key-hints {
+      display: flex;
+      gap: 8px;
+    }
+    .key-hints span {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+    kbd {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 8.5px;
+      font-family: inherit;
+      color: var(--text-muted);
+    }
+
+    .char-counter {
+      font-family: ui-monospace, monospace;
+    }
+    .char-counter.warning {
+      color: #fbbf24;
+    }
+    .char-counter.danger {
+      color: #f87171;
+    }
+
+    /* ─── AUTOCOMPLETE POPUP ──────────────────────────────────── */
+    #chat-autocomplete {
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: rgba(15, 15, 18, 0.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      max-height: 160px;
+      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      z-index: 100;
+      animation: acSlideUp 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes acSlideUp {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ac-item {
+      padding: 5px 10px;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      transition: background 0.12s ease, padding-left 0.12s ease, color 0.12s ease;
+    }
+    .ac-item:hover, .ac-item.selected {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      padding-left: 14px;
+    }
+    .ac-item strong {
+      color: #ffffff;
+    }
+    .ac-desc {
+      font-size: 9.5px;
+      color: var(--text-dim);
+    }
+  </style>
 </head>
 <body>
-<div id="chat">
-  <div id="log" class="dim"></div>
-  <div id="inputwrap"><input id="input" maxlength="256" autocomplete="off" /></div>
+<div id="chat-wrapper" class="dimmed">
+  <div id="log-container">
+    <div id="log-area"></div>
+  </div>
+
+  <div id="input-wrap">
+    <!-- Autocomplete Popup -->
+    <div id="chat-autocomplete"></div>
+
+    <!-- Quick Channel Switcher -->
+    <div class="channel-tabs">
+      <button class="ch-tab active" data-prefix="" onclick="selectChannel('')">Все</button>
+      <button class="ch-tab" data-prefix="/b " onclick="selectChannel('/b ')">OOC (( ))</button>
+      <button class="ch-tab" data-prefix="/me " onclick="selectChannel('/me ')">Действие /me</button>
+      <button class="ch-tab" data-prefix="/do " onclick="selectChannel('/do ')">Окружение /do</button>
+      <button class="ch-tab" data-prefix="/s " onclick="selectChannel('/s ')">Крик /s</button>
+      <button class="ch-tab" data-prefix="/w " onclick="selectChannel('/w ')">Шепот /w</button>
+      <button class="ch-tab" data-prefix="/" onclick="selectChannel('/')">Команда /</button>
+    </div>
+
+    <!-- Input Bar -->
+    <div class="input-field-row">
+      <span class="mode-indicator" id="mode-badge">IC</span>
+      <input id="chat-input" maxlength="256" placeholder="Введите сообщение или /команду..." autocomplete="off" />
+    </div>
+
+    <!-- Footer Meta -->
+    <div class="input-meta">
+      <div class="key-hints">
+        <span><kbd>Enter</kbd> Отправить</span>
+        <span><kbd>Esc</kbd> Закрыть</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> История</span>
+        <span><kbd>Tab</kbd> Дополнить</span>
+      </div>
+      <div class="char-counter" id="char-counter">0 / 256</div>
+    </div>
+  </div>
 </div>
 
 <script>
-  var log = document.getElementById("log");
-  var wrap = document.getElementById("inputwrap");
-  var input = document.getElementById("input");
-  var lines = [];
-  var history = [];
-  var historyIndex = -1;
-  var dimTimer = null;
+  const chatWrapper = document.getElementById("chat-wrapper");
+  const logArea = document.getElementById("log-area");
+  const inputWrap = document.getElementById("input-wrap");
+  const chatInput = document.getElementById("chat-input");
+  const modeBadge = document.getElementById("mode-badge");
+  const charCounter = document.getElementById("char-counter");
+  const acPopup = document.getElementById("chat-autocomplete");
+  const channelTabs = document.querySelectorAll(".ch-tab");
+
+  const lines = [];
+  const history = [];
+  let historyIndex = -1;
+  let dimTimer = null;
+  let isInputOpen = false;
+
+  const AUTOCOMPLETE_COMMANDS = [
+    { cmd: 'help', desc: 'Список всех команд' },
+    { cmd: 'me', desc: 'Действие персонажа от 1-го лица' },
+    { cmd: 'do', desc: 'Описание ситуации или окружения' },
+    { cmd: 'b', desc: 'Внеигровой чат (OOC)' },
+    { cmd: 's', desc: 'Крик на большую дистанцию' },
+    { cmd: 'w', desc: 'Шепот игроку (/w id текст)' },
+    { cmd: 'pos', desc: 'Текущие координаты игрока' },
+    { cmd: 'adminauth', desc: 'Авторизация администратора' },
+    { cmd: 'clear', desc: 'Очистить историю чата' },
+    { cmd: 'noclip', desc: 'Полет сквозь стены (F4)' },
+    { cmd: 'car', desc: 'Создать транспорт (/car model)' },
+    { cmd: 'fix', desc: 'Починить транспорт' },
+    { cmd: 'heal', desc: 'Восстановить здоровье' },
+    { cmd: 'armor', desc: 'Установить броню (/armor 100)' },
+    { cmd: 'god', desc: 'Режим бессмертия' },
+    { cmd: 'tpm', desc: 'Телепорт на метку карты' },
+    { cmd: 'tp', desc: 'Телепорт по координатам' },
+    { cmd: 'goto', desc: 'Телепорт к игроку (/goto id)' },
+    { cmd: 'gethere', desc: 'Телепорт игрока к себе (/gethere id)' },
+    { cmd: 'weather', desc: 'Сменить погоду (/weather type)' },
+    { cmd: 'time', desc: 'Установить время (/time h m)' },
+    { cmd: 'speed', desc: 'Множитель скорости бега' },
+    { cmd: 'dim', desc: 'Сменить виртуальный мир' },
+    { cmd: 'skin', desc: 'Сменить скин игрока' },
+    { cmd: 'kick', desc: 'Исключить игрока с сервера' },
+    { cmd: 'a', desc: 'Чат администрации' }
+  ];
+
+  let filteredAc = [];
+  let acSelectedIndex = -1;
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -100,10 +510,10 @@
 
   function formatColors(s) {
     if (!s) return "";
-    var safe = esc(s);
-    var colorRegex = /\{([0-9a-fA-F]{6})\}/g;
-    var openCount = 0;
-    var res = safe.replace(colorRegex, function (match, hex) {
+    let safe = esc(s);
+    const colorRegex = /\{([0-9a-fA-F]{6})\}/g;
+    let openCount = 0;
+    let res = safe.replace(colorRegex, function (match, hex) {
       openCount++;
       return '<span style="color: #' + hex + '">';
     });
@@ -114,97 +524,372 @@
     return res;
   }
 
-  function push(kind, author, text) {
-    var el = document.createElement("div");
-    el.className = "line " + kind;
-    if (kind === "player") {
-      el.innerHTML = '<span class="who">' + esc(author) + ':</span> ' + formatColors(text);
-    } else if (kind === "shout") {
-      el.innerHTML = '<span class="who">' + esc(author) + ':</span> ' + formatColors(text) + '!!';
-    } else if (kind === "me") {
-      el.innerHTML = '* ' + esc(author) + ' ' + formatColors(text);
-    } else if (kind === "ooc") {
-      el.innerHTML = '<span class="who">' + esc(author) + '</span> ' + formatColors(text);
-    } else {
-      el.innerHTML = formatColors(text);
+  function getFormattedTime() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
+  function pushMessage(kind, author, text) {
+    const row = document.createElement("div");
+    row.className = `msg-row kind-${kind}`;
+
+    const time = getFormattedTime();
+    let badgeHtml = '';
+    let bodyHtml = '';
+
+    switch (kind) {
+      case 'player':
+        badgeHtml = `<span class="msg-badge badge-ic">IC</span>`;
+        bodyHtml = `<span class="author-name accent-color">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`;
+        break;
+      case 'ooc':
+        badgeHtml = `<span class="msg-badge badge-ooc">OOC</span>`;
+        bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">(( ${formatColors(text)} ))</span>`;
+        break;
+      case 'me':
+        badgeHtml = `<span class="msg-badge badge-me">ME</span>`;
+        bodyHtml = `<span class="msg-content">* ${esc(author)} ${formatColors(text)}</span>`;
+        break;
+      case 'do':
+        badgeHtml = `<span class="msg-badge badge-do">DO</span>`;
+        bodyHtml = `<span class="msg-content">* ${formatColors(text)} (( ${esc(author)} ))</span>`;
+        break;
+      case 'shout':
+        badgeHtml = `<span class="msg-badge badge-shout">КРИК</span>`;
+        bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}!</span>`;
+        break;
+      case 'whisper':
+        badgeHtml = `<span class="msg-badge badge-whisper">ШЕПОТ</span>`;
+        bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">(шепотом) ${formatColors(text)}</span>`;
+        break;
+      case 'admin':
+        badgeHtml = `<span class="msg-badge badge-admin">АДМИН</span>`;
+        bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`;
+        break;
+      case 'try':
+        badgeHtml = `<span class="msg-badge badge-try">УДАЧА</span>`;
+        bodyHtml = `<span class="msg-content">* ${esc(author)} ${formatColors(text)}</span>`;
+        break;
+      case 'todo':
+        badgeHtml = `<span class="msg-badge badge-me">ФРАЗА</span>`;
+        bodyHtml = `<span class="msg-content">${formatColors(text)}</span>`;
+        break;
+      case 'cmd':
+        badgeHtml = `<span class="msg-badge badge-ic">ИНФО</span>`;
+        bodyHtml = author
+          ? `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`
+          : `<span class="msg-content">${formatColors(text)}</span>`;
+        break;
+      case 'system':
+      default:
+        badgeHtml = `<span class="msg-badge badge-sys">СИСТЕМА</span>`;
+        bodyHtml = author
+          ? `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`
+          : `<span class="msg-content">${formatColors(text)}</span>`;
+        break;
     }
-    log.appendChild(el);
-    lines.push(el);
-    while (lines.length > 50) { log.removeChild(lines.shift()); }
+
+    row.innerHTML = `
+      <span class="msg-time">[${time}]</span>
+      ${badgeHtml}
+      <div style="flex: 1; word-break: break-word;">${bodyHtml}</div>
+    `;
+
+    const isNearBottom = (logArea.scrollHeight - logArea.scrollTop - logArea.clientHeight) < 60;
+    logArea.appendChild(row);
+    lines.push(row);
+
+    while (lines.length > 70) {
+      const old = lines.shift();
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+    }
+
+    if (isNearBottom || !isInputOpen) {
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
     wake();
   }
 
   function wake() {
-    log.classList.remove("dim");
+    chatWrapper.classList.remove("dimmed");
     if (dimTimer) clearTimeout(dimTimer);
     dimTimer = setTimeout(function () {
-      if (!wrap.classList.contains("on")) log.classList.add("dim");
-    }, 8000);
+      if (!isInputOpen) {
+        chatWrapper.classList.add("dimmed");
+      }
+    }, 10000);
   }
 
-  function openInput() {
-    wrap.classList.add("on");
-    log.classList.remove("dim");
-    input.value = "";
+  function openInput(initialValue = '') {
+    isInputOpen = true;
+    chatWrapper.classList.remove("dimmed");
+    chatWrapper.classList.add("interactive");
+    inputWrap.classList.add("active");
+
+    chatInput.value = initialValue || '';
     historyIndex = -1;
-    input.focus();
+    updateModeAndTabs();
+    updateCharCounter();
+    hideAutocomplete();
+
+    // Scroll to bottom when opening input
+    logArea.scrollTop = logArea.scrollHeight;
+
+    setTimeout(() => {
+      chatInput.focus();
+      if (initialValue) {
+        chatInput.setSelectionRange(initialValue.length, initialValue.length);
+      }
+    }, 20);
   }
 
   function closeInput(send) {
-    var v = input.value.trim();
-    wrap.classList.remove("on");
-    input.blur();
+    const raw = chatInput.value.trim();
+    hideAutocomplete();
+    inputWrap.classList.remove("active");
+    chatWrapper.classList.remove("interactive");
+    isInputOpen = false;
+    chatInput.blur();
     wake();
-    if (send && v.length > 0) {
-      history.unshift(v);
+
+    if (send && raw.length > 0) {
+      // Tactile flash on submit
+      inputWrap.classList.remove('input-send-flash');
+      void inputWrap.offsetWidth;
+      inputWrap.classList.add('input-send-flash');
+      setTimeout(() => inputWrap.classList.remove('input-send-flash'), 200);
+
+      // History
+      history.unshift(raw);
       if (history.length > 30) history.pop();
+
       if (typeof alt !== "undefined") {
-        alt.emit("flovmp:chat:say", v);
+        alt.emit("flovmp:chat:say", raw);
       }
     }
+
     if (typeof alt !== "undefined") {
       alt.emit("flovmp:chat:done");
     }
   }
 
-  input.addEventListener("keydown", function (e) {
+  function selectChannel(prefix) {
+    chatInput.value = prefix;
+    chatInput.focus();
+    updateModeAndTabs();
+    updateCharCounter();
+    updateAutocomplete(chatInput.value);
+  }
+
+  function updateModeAndTabs() {
+    const val = chatInput.value.trimStart();
+    let currentPrefix = '';
+
+    if (val.startsWith('/b ') || val.startsWith('/ooc ')) {
+      modeBadge.textContent = 'OOC';
+      modeBadge.className = 'mode-indicator badge-ooc';
+      currentPrefix = '/b ';
+    } else if (val.startsWith('/me ')) {
+      modeBadge.textContent = 'ME';
+      modeBadge.className = 'mode-indicator badge-me';
+      currentPrefix = '/me ';
+    } else if (val.startsWith('/do ')) {
+      modeBadge.textContent = 'DO';
+      modeBadge.className = 'mode-indicator badge-do';
+      currentPrefix = '/do ';
+    } else if (val.startsWith('/s ') || val.startsWith('/shout ')) {
+      modeBadge.textContent = 'КРИК';
+      modeBadge.className = 'mode-indicator badge-shout';
+      currentPrefix = '/s ';
+    } else if (val.startsWith('/w ') || val.startsWith('/whisper ')) {
+      modeBadge.textContent = 'ШЕПОТ';
+      modeBadge.className = 'mode-indicator badge-whisper';
+      currentPrefix = '/w ';
+    } else if (val.startsWith('/a ')) {
+      modeBadge.textContent = 'АДМИН';
+      modeBadge.className = 'mode-indicator badge-admin';
+      currentPrefix = '/a ';
+    } else if (val.startsWith('/')) {
+      modeBadge.textContent = 'КОМАНДА';
+      modeBadge.className = 'mode-indicator badge-sys';
+      currentPrefix = '/';
+    } else {
+      modeBadge.textContent = 'IC';
+      modeBadge.className = 'mode-indicator badge-ic';
+      currentPrefix = '';
+    }
+
+    channelTabs.forEach(tab => {
+      const p = tab.getAttribute('data-prefix');
+      tab.classList.toggle('active', p === currentPrefix);
+    });
+  }
+
+  function updateCharCounter() {
+    const len = chatInput.value.length;
+    charCounter.textContent = `${len} / 256`;
+    charCounter.classList.toggle('warning', len >= 220 && len < 250);
+    charCounter.classList.toggle('danger', len >= 250);
+  }
+
+  // ─── AUTOCOMPLETE ─────────────────────────────────────────────
+  function updateAutocomplete(text) {
+    if (!text.startsWith('/') || text.includes(' ')) {
+      hideAutocomplete();
+      return;
+    }
+    const q = text.slice(1).toLowerCase();
+    filteredAc = AUTOCOMPLETE_COMMANDS.filter(item => item.cmd.toLowerCase().startsWith(q));
+
+    if (filteredAc.length === 0) {
+      hideAutocomplete();
+      return;
+    }
+
+    acSelectedIndex = 0;
+    let html = '';
+    filteredAc.forEach((item, idx) => {
+      html += `
+        <div class="ac-item ${idx === 0 ? 'selected' : ''}" onclick="applyAcItem('${item.cmd}')">
+          <strong>/${item.cmd}</strong>
+          <span class="ac-desc">${item.desc}</span>
+        </div>
+      `;
+    });
+    acPopup.innerHTML = html;
+    acPopup.style.display = 'flex';
+  }
+
+  function hideAutocomplete() {
+    acPopup.style.display = 'none';
+    filteredAc = [];
+    acSelectedIndex = -1;
+  }
+
+  function applyAcItem(cmd) {
+    chatInput.value = `/${cmd} `;
+    hideAutocomplete();
+    updateModeAndTabs();
+    updateCharCounter();
+    chatInput.focus();
+  }
+
+  // ─── KEYBOARD & SCROLL HANDLERS ───────────────────────────────
+  chatInput.addEventListener("input", function () {
+    updateModeAndTabs();
+    updateCharCounter();
+    updateAutocomplete(chatInput.value);
+  });
+
+  chatInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") {
       e.preventDefault();
       closeInput(true);
     } else if (e.key === "Escape") {
       e.preventDefault();
       closeInput(false);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      if (filteredAc.length > 0 && acSelectedIndex >= 0) {
+        applyAcItem(filteredAc[acSelectedIndex].cmd);
+      }
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (history.length > 0 && historyIndex < history.length - 1) {
+      if (filteredAc.length > 0) {
+        acSelectedIndex = (acSelectedIndex - 1 + filteredAc.length) % filteredAc.length;
+        renderAcSelection();
+      } else if (history.length > 0 && historyIndex < history.length - 1) {
         historyIndex++;
-        input.value = history[historyIndex];
+        chatInput.value = history[historyIndex];
+        updateModeAndTabs();
+        updateCharCounter();
       }
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (historyIndex > 0) {
+      if (filteredAc.length > 0) {
+        acSelectedIndex = (acSelectedIndex + 1) % filteredAc.length;
+        renderAcSelection();
+      } else if (historyIndex > 0) {
         historyIndex--;
-        input.value = history[historyIndex];
+        chatInput.value = history[historyIndex];
+        updateModeAndTabs();
+        updateCharCounter();
       } else if (historyIndex === 0) {
         historyIndex = -1;
-        input.value = "";
+        chatInput.value = "";
+        updateModeAndTabs();
+        updateCharCounter();
       }
+    } else if (e.key === "PageUp") {
+      e.preventDefault();
+      logArea.scrollBy({ top: -120, behavior: 'smooth' });
+    } else if (e.key === "PageDown") {
+      e.preventDefault();
+      logArea.scrollBy({ top: 120, behavior: 'smooth' });
     }
   });
 
+  function renderAcSelection() {
+    const items = acPopup.querySelectorAll('.ac-item');
+    items.forEach((item, idx) => {
+      item.classList.toggle('selected', idx === acSelectedIndex);
+    });
+  }
+
+  // Allow scrolling chat log with mouse wheel even when hovering
+  chatWrapper.addEventListener('wheel', function (e) {
+    logArea.scrollTop += e.deltaY;
+  }, { passive: true });
+
+  // ─── ALT:V CLIENT EVENTS ─────────────────────────────────────
   if (typeof alt !== "undefined") {
-    alt.on("flovmp:chat:msg", function (kind, author, text) { push(kind, author, text); });
-    alt.on("chat:add", function (text) { push("system", "", text); });
-    alt.on("chat:message", function (text) { push("system", "", text); });
-    alt.on("chat:addMessage", function (text) { push("system", "", text); });
-    alt.on("flovmp:chat:openinput", openInput);
+    alt.on("flovmp:chat:msg", function (kind, author, text) {
+      pushMessage(kind, author, text);
+    });
+    alt.on("chat:add", function (text) {
+      pushMessage("system", "", text);
+    });
+    alt.on("chat:message", function (text) {
+      pushMessage("system", "", text);
+    });
+    alt.on("chat:addMessage", function (text) {
+      pushMessage("system", "", text);
+    });
+    alt.on("flovmp:chat:openinput", function (initialValue) {
+      openInput(initialValue);
+    });
     alt.on("flovmp:chat:clear", function () {
-      log.innerHTML = "";
-      lines = [];
+      logArea.innerHTML = "";
+      lines.length = 0;
+    });
+    alt.on("flovmp:settings:accent", function (colorId) {
+      const PRESETS = {
+        gold:   { accent: '#fdd015', dim: '#b3790a', ink: '#1a1206' },
+        pink:   { accent: '#ff3d8a', dim: '#b3316f', ink: '#1a0410' },
+        blue:   { accent: '#38bdf8', dim: '#0284c7', ink: '#031420' },
+        green:  { accent: '#34d399', dim: '#059669', ink: '#031b10' },
+        purple: { accent: '#c084fc', dim: '#7c3aed', ink: '#1a0f26' },
+        red:    { accent: '#f87171', dim: '#dc2626', ink: '#210404' },
+        slate:  { accent: '#e4e4e7', dim: '#71717a', ink: '#09090b' }
+      };
+      const p = PRESETS[colorId] || PRESETS.gold;
+      const s = document.documentElement.style;
+      s.setProperty('--accent', p.accent);
+      s.setProperty('--accent-dim', p.dim);
+      s.setProperty('--accent-ink', p.ink);
     });
   } else {
-    push("system", "", "{34d399}[FloV:MP]{ffffff} Тестовое сообщение с цветами в чате!");
-    push("player", "Тестер", "привет мир /help");
+    // Preview in standalone browser
+    pushMessage("system", "", "{34d399}[FloV:MP]{ffffff} Добро пожаловать на игровой сервер!");
+    pushMessage("player", "[0] Alex_Mercer", "Привет всем! Сервер запущен автономно.");
+    pushMessage("me", "Alex_Mercer", "достал служебное удостоверение из нагрудного кармана.");
+    pushMessage("do", "Alex_Mercer", "Удостоверение открыто на 1-й странице.");
+    pushMessage("ooc", "[1] Roman_V", "кто знает команду для починки авто?");
+    pushMessage("shout", "[0] Alex_Mercer", "Используй /fix или /help!");
+    pushMessage("admin", "[0] Alex_Mercer (Ур.8)", "Тестовое сообщение администратора");
   }
 </script>
 </body>

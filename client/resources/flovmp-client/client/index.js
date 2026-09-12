@@ -355,12 +355,12 @@ function closeChat() {
     chatTyping = false;
 }
 
-function startTyping() {
+function startTyping(initialText = '') {
     if (!chatView || chatTyping || !inGame) return;
     chatTyping = true;
     chatView.focus();
     alt.toggleGameControls(false);
-    chatView.emit('flovmp:chat:openinput');
+    chatView.emit('flovmp:chat:openinput', initialText);
 }
 
 // --- Настройки (акцентный цвет и т.д.) ------------------------------------
@@ -832,6 +832,8 @@ alt.on('keyup', (key) => {
         toggleNoClip();
     } else if (key === 84) { // T
         startTyping();
+    } else if (key === 191) { // / (Slash)
+        startTyping('/');
     } else if (key === 120) { // F9
         if (settingsView) closeSettings();
         else openSettings();

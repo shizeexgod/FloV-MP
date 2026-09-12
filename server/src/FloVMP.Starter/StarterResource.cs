@@ -60,13 +60,15 @@ public class StarterResource : Resource
     public void SendChatMessage(IPlayer player, string message, string kind = "system", string author = "")
     {
         if (player == null || !player.Exists) return;
-        player.Emit("chat:addMessage", message);
+        var fullText = string.IsNullOrEmpty(author) ? message : $"{author}: {message}";
+        player.Emit("chat:addMessage", fullText);
         player.Emit("flovmp:chat:msg", kind, author, message);
     }
 
     public void BroadcastChatMessage(string message, string kind = "system", string author = "")
     {
-        Alt.EmitAllClients("chat:addMessage", message);
+        var fullText = string.IsNullOrEmpty(author) ? message : $"{author}: {message}";
+        Alt.EmitAllClients("chat:addMessage", fullText);
         Alt.EmitAllClients("flovmp:chat:msg", kind, author, message);
     }
 
@@ -138,8 +140,7 @@ public class StarterResource : Resource
             return;
         }
 
-        var formatted = $"[{player.Id}] {player.Name}: {message}";
-        BroadcastChatMessage(formatted, "player", player.Name);
+        BroadcastChatMessage(message, "player", $"[{player.Id}] {player.Name}");
     }
 
     private void HandleCommand(IPlayer player, string commandLine)
@@ -151,13 +152,99 @@ public class StarterResource : Resource
         switch (cmd)
         {
             case "help":
+                SendChatMessage(player, "{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───");
+                SendChatMessage(player, "{e4e4e7}Чат и отыгровки: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear");
+                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /adminauth <пароль>");
                 if (IsAdmin(player, 1))
                 {
-                    SendChatMessage(player, "{38bdf8}Админ-команды: /pos, /tpm, /tp <x y z>, /goto <id>, /gethere <id>, /car [модель], /fix, /noclip, /heal, /armor [число], /god, /kill, /weather [тип], /time [час] [мин], /speed [1.0-1.49], /dim [номер], /skin [модель], /kick <id> [причина], /clear, /setadmin <id> <lvl>");
+                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm, /tp <x y z>, /goto <id>, /gethere <id>, /car [модель], /fix, /noclip (F4), /heal, /armor, /god, /kill, /weather, /time, /speed, /dim, /skin, /kick, /a (админ-чат)");
                 }
-                else
+                if (IsAdmin(player, 8))
                 {
-                    SendChatMessage(player, "{38bdf8}Команды: /pos (координаты для багрепорта), /adminauth <пароль>");
+                    SendChatMessage(player, "{fde047}Главный Администратор: {a1a1aa}/setadmin <id> <lvl 0-8>");
+                }
+                break;
+
+            case "me":
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /me <действие персонажа>");
+                    return;
+                }
+                var meAction = string.Join(' ', parts.Skip(1));
+                BroadcastChatMessage(meAction, "me", player.Name);
+                break;
+
+            case "do":
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /do <описание ситуации/окружения>");
+                    return;
+                }
+                var doAction = string.Join(' ', parts.Skip(1));
+                BroadcastChatMessage(doAction, "do", player.Name);
+                break;
+
+            case "b":
+            case "ooc":
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /b <OOC сообщение>");
+                    return;
+                }
+                var oocText = string.Join(' ', parts.Skip(1));
+                BroadcastChatMessage(oocText, "ooc", $"[{player.Id}] {player.Name}");
+                break;
+
+            case "s":
+            case "shout":
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /s <крик>");
+                    return;
+                }
+                var shoutText = string.Join(' ', parts.Skip(1));
+                BroadcastChatMessage(shoutText, "shout", $"[{player.Id}] {player.Name}");
+                break;
+
+            case "w":
+            case "whisper":
+                if (parts.Length < 3 || !uint.TryParse(parts[1], out var wId))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /w <ID игрока> <сообщение>");
+                    return;
+                }
+                var wTarget = Alt.GetPlayerById(wId);
+                if (wTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                var wMsg = string.Join(' ', parts.Skip(2));
+                SendChatMessage(wTarget, wMsg, "whisper", $"[{player.Id}] {player.Name}");
+                SendChatMessage(player, $"[для [{wTarget.Id}] {wTarget.Name}]: {wMsg}", "whisper", "Вы");
+                break;
+
+            case "a":
+            case "admin":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для использования админ-чата.");
+                    return;
+                }
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /a <сообщение для администрации>");
+                    return;
+                }
+                var aMsg = string.Join(' ', parts.Skip(1));
+                var adminLvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 1;
+                foreach (var p in Alt.GetAllPlayers())
+                {
+                    if (IsAdmin(p, 1))
+                    {
+                        SendChatMessage(p, aMsg, "admin", $"[{player.Id}] {player.Name} (Ур.{adminLvl})");
+                    }
                 }
                 break;
 
