@@ -1,7 +1,7 @@
 namespace FloVMP.Core.Housing;
 
 /// <summary>
-/// Тип объекта недвижимости в «Держава Онлайн».
+/// Тип объекта недвижимости в FloV:MP.
 /// </summary>
 public enum PropertyType
 {

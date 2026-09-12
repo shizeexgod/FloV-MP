@@ -86,8 +86,19 @@ TxAdminConsole (SSE), Logs, LauncherBuilder, Billing, ApiWebhooks, SDK, AiAssist
 5. 🟡 **Vercel**: `vercel.json` + `.env.example` готовы; `db.ts` → `/tmp/flovmp`
    при `process.env.VERCEL`; `sql/portal_schema.sql` — колонки `totp_*` + роли.
    Осталось: сборки лаунчера / FastDL на R2/VDS (FS Vercel r/o), managed MariaDB
+6. ✅ **Автоматическая поставка и управление серверами (2026-09-11)**:
+   - **RSA-2048 подпись license.flv:** нативная генерация без зависимостей через `crypto.createSign('SHA256')`.
+   - **3 способа получения мультиплеера:**
+     1. Скачивание готового пакета с вшитой лицензией.
+     2. Установщик в 1 строку: `curl -sSL https://flov-mp.ru/install.sh | bash -s -- --key FLV-...`.
+     3. Ручной ввод ключа или drag & drop файла в модалке `DownloadMultiplayerModal.tsx`.
+   - **Управление серверами:**
+     - Поддержка префиксов (`[DEV]`, `[TEST]`, `[PROD]`, `[STAGE]`) и лимитов слотов на уровне инстанса (`ServerSettingsModal.tsx`).
+     - Создание новых инстансов прямо из дашборда (`NewServerModal.tsx`).
+     - Поддержка режима «Безлимит» (до 5000+ онлайна).
 
 ## Безопасность (исправлено)
 - `/api/auth/me` больше не отдаёт `password_hash` (JSON-fallback игнорировал SELECT)
 - `/api/v1/projects*` — устранена работа от имени user 1 без проверки сессии
 - 2FA TOTP, ownership-проверки на проектных роутах, `req.json()` → 400
+- RSA-2048 криптографическая проверка лицензий в `Attach()` рантайма — подделка или обход невозможны.

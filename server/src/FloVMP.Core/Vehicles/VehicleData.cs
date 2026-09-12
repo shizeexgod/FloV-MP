@@ -1,7 +1,7 @@
 ﻿namespace FloVMP.Core.Vehicles;
 
 /// <summary>
-/// Данные транспортного средства в мире «Держава Онлайн».
+/// Данные транспортного средства в мире FloV:MP.
 /// Сохраняются в БД (таблица `vehicles`).
 /// </summary>
 public sealed class VehicleData

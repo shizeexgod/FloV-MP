@@ -97,7 +97,7 @@ if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
 
     if (!isListening)
     {
-        Console.WriteLine($"[connect] Сервер не отвечает на порту {portTarget}. Запускаю сервер Держава Онлайн...");
+        Console.WriteLine($"[connect] Сервер не отвечает на порту {portTarget}. Запускаю локальный сервер FloV:MP...");
         var serverCandidates = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "server", "src", "FloVMP.ServerLauncher", "bin", "Release", "net8.0", "FloVMP.ServerLauncher.exe"),
@@ -255,7 +255,7 @@ try
     var gtaSeen = false;
     var waitStopwatch = Stopwatch.StartNew();
     var lastRglCheck = Stopwatch.StartNew();
-    const string windowTitle = "Держава Онлайн (FloV:MP)";
+    const string windowTitle = "FloV:MP Standalone Client";
     while (true)
     {
         var altvUp = IsUp("altv.exe") || IsUp("flovmp.exe");

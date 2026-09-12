@@ -1,7 +1,7 @@
-﻿namespace FloVMP.Core.Database;
+namespace FloVMP.Core.Database;
 
 /// <summary>
-/// Настройки подключения к MariaDB / MySQL серверу «Держава Онлайн».
+/// Настройки подключения к MariaDB / MySQL серверу FloV:MP.
 /// </summary>
 public sealed class DatabaseConfig
 {
@@ -12,7 +12,7 @@ public sealed class DatabaseConfig
     // AccountStoreFactory прозрачно уйдёт на локальный JsonAccountStore.
     public string Host { get; set; } = Env("FLOVMP_DB_HOST", "127.0.0.1");
     public int Port { get; set; } = int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_DB_PORT"), out var p) ? p : 3306;
-    public string Database { get; set; } = Env("FLOVMP_DB_NAME", "derzhava_rp");
+    public string Database { get; set; } = Env("FLOVMP_DB_NAME", "flovmp_server");
     public string User { get; set; } = Env("FLOVMP_DB_USER", "flovmp");
     public string Password { get; set; } = Env("FLOVMP_DB_PASSWORD", "");
     public int ConnectionTimeoutSeconds { get; set; } = 5;

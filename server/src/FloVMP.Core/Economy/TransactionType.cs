@@ -1,7 +1,7 @@
 ﻿namespace FloVMP.Core.Economy;
 
 /// <summary>
-/// Тип экономической транзакции в «Держава Онлайн».
+/// Тип экономической транзакции в FloV:MP.
 /// </summary>
 public enum TransactionType
 {

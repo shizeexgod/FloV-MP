@@ -62,10 +62,12 @@ export interface ProjectRecord {
 export interface ServerRecord {
   id: number;
   project_id: number;
-  environment: 'production' | 'development' | 'test';
+  environment: 'production' | 'development' | 'test' | 'staging';
   name: string;
+  label?: string | null;
   ip: string;
   port: number;
+  slot_limit?: number | null;
   agent_token: string;
   status: 'online' | 'offline' | 'restarting';
   players_count: number;
@@ -74,6 +76,7 @@ export interface ServerRecord {
   memory_mb: number;
   cpu_percent: number;
   last_heartbeat?: string;
+  notes?: string | null;
   created_at: string;
 }
 
@@ -164,12 +167,12 @@ function getStore(): MockStore {
           {
             id: 1,
             user_id: 1,
-            name: 'Держава Онлайн',
-            slug: 'derzhava-rp',
-            license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
+            name: 'FloV:MP Master Project',
+            slug: 'flovmp-master',
+            license_key: 'FLV-ENTERPRISE-2026-MASTER',
             plan: 'enterprise',
             max_players: 1500,
-            api_key: 'flv_live_derzhava_7a8f19c2',
+            api_key: 'flv_live_master_7a8f19c2',
             is_active: 1,
             expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
             created_at: new Date().toISOString(),
@@ -252,8 +255,8 @@ function getStore(): MockStore {
       {
         id: 1,
         user_id: 1,
-        license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
-        server_name: 'Держава Онлайн | Тестовый Сервер #1',
+        license_key: 'FLV-ENTERPRISE-2026-MASTER',
+        server_name: 'FloV:MP Server #1',
         bound_ip: '188.127.229.224',
         plan: 'enterprise',
         max_players: 1500,
@@ -271,7 +274,7 @@ function getStore(): MockStore {
         amount_rub: 49000,
         plan: 'enterprise',
         payment_method: 'card',
-        payment_id: 'pay_init_derzhava_2026',
+        payment_id: 'pay_init_master_2026',
         status: 'paid',
         created_at: new Date().toISOString(),
         paid_at: new Date().toISOString(),
@@ -281,17 +284,17 @@ function getStore(): MockStore {
       {
         id: 1,
         license_id: 1,
-        project_name: 'Держава Онлайн',
+        project_name: 'FloV:MP Roleplay',
         primary_color: '#ff3d8a',
         build_status: 'ready',
-        download_url: '/cdn/Derzhava-Launcher-Setup.exe',
+        download_url: '/cdn/FloVMP-Launcher-Setup.exe',
         created_at: new Date().toISOString(),
       },
     ],
     telemetry: [
       {
         id: 1,
-        license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
+        license_key: 'FLV-ENTERPRISE-2026-MASTER',
         players: 1,
         max_players: 1500,
         tick_rate: 60,
@@ -305,12 +308,12 @@ function getStore(): MockStore {
       {
         id: 1,
         user_id: 1,
-        name: 'Держава Онлайн',
-        slug: 'derzhava-rp',
-        license_key: 'FLV-ENTERPRISE-2026-DERZHAVA',
+        name: 'FloV:MP Master Project',
+        slug: 'flovmp-master',
+        license_key: 'FLV-ENTERPRISE-2026-MASTER',
         plan: 'enterprise',
         max_players: 1500,
-        api_key: 'flv_live_derzhava_7a8f19c2',
+        api_key: 'flv_live_master_7a8f19c2',
         is_active: 1,
         expires_at: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
         created_at: new Date().toISOString(),
@@ -397,8 +400,8 @@ function getPool(): Pool {
       host: process.env.DB_HOST || '127.0.0.1',
       port: Number(process.env.DB_PORT) || 3306,
       user: process.env.DB_USER || 'flovmp',
-      password: process.env.DB_PASSWORD || 'DerzhavaFloVMP2026!Secure',
-      database: process.env.DB_NAME || 'derzhava_rp',
+      password: process.env.DB_PASSWORD || 'FloVMP2026!Secure',
+      database: process.env.DB_NAME || 'flovmp_portal',
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -927,16 +930,19 @@ export async function getServerByToken(agentToken: string): Promise<ServerRecord
 
 export async function createServer(
   projectId: number,
-  environment: 'production' | 'development' | 'test',
+  environment: 'production' | 'development' | 'test' | 'staging',
   name: string,
   ip: string = '127.0.0.1',
   port: number = 7788,
-  maxPlayers: number = 1500
+  maxPlayers: number = 1500,
+  label?: string | null,
+  slotLimit?: number | null,
+  notes?: string | null
 ): Promise<ServerRecord> {
   const token = `agnt_${environment}_${Math.random().toString(36).substring(2, 8)}`;
   const res: any = await query(
-    'INSERT INTO portal_servers (project_id, environment, name, ip, port, agent_token, max_players) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [projectId, environment, name, ip, port, token, maxPlayers]
+    'INSERT INTO portal_servers (project_id, environment, name, label, ip, port, slot_limit, agent_token, max_players, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [projectId, environment, name, label || null, ip, port, slotLimit ?? null, token, maxPlayers, notes || null]
   );
 
   return {
@@ -944,8 +950,10 @@ export async function createServer(
     project_id: projectId,
     environment,
     name,
+    label: label || null,
     ip,
     port,
+    slot_limit: slotLimit ?? null,
     agent_token: token,
     status: 'offline',
     players_count: 0,
@@ -953,6 +961,7 @@ export async function createServer(
     tick_rate: 60.0,
     memory_mb: 0,
     cpu_percent: 0.0,
+    notes: notes || null,
     created_at: new Date().toISOString(),
   };
 }
@@ -971,6 +980,50 @@ export async function updateServerTelemetry(
   const res: any = await query(
     'UPDATE portal_servers SET players_count = ?, max_players = ?, tick_rate = ?, memory_mb = ?, cpu_percent = ?, status = ?, last_heartbeat = ? WHERE agent_token = ?',
     [data.players, data.maxPlayers, data.tickRate, data.memoryMb, data.cpuPercent, 'online', now, agentToken]
+  );
+  return res.affectedRows > 0;
+}
+
+/**
+ * Обновить лимит слотов сервера (null = безлимит, берётся из лицензии проекта).
+ */
+export async function updateServerSlotLimit(
+  serverId: number,
+  slotLimit: number | null
+): Promise<boolean> {
+  const res: any = await query(
+    'UPDATE portal_servers SET slot_limit = ? WHERE id = ?',
+    [slotLimit, serverId]
+  );
+  return res.affectedRows > 0;
+}
+
+/**
+ * Обновить метаданные сервера (label, environment, notes).
+ */
+export async function updateServerMeta(
+  serverId: number,
+  data: {
+    label?: string | null;
+    environment?: 'production' | 'development' | 'test' | 'staging';
+    notes?: string | null;
+    name?: string;
+  }
+): Promise<boolean> {
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  if (data.label !== undefined) { fields.push('label = ?'); params.push(data.label); }
+  if (data.environment !== undefined) { fields.push('environment = ?'); params.push(data.environment); }
+  if (data.notes !== undefined) { fields.push('notes = ?'); params.push(data.notes); }
+  if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name); }
+
+  if (fields.length === 0) return false;
+
+  params.push(serverId);
+  const res: any = await query(
+    `UPDATE portal_servers SET ${fields.join(', ')} WHERE id = ?`,
+    params
   );
   return res.affectedRows > 0;
 }

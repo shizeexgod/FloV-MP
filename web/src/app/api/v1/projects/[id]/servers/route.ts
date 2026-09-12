@@ -40,7 +40,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (e instanceof BadJsonError) return badRequest();
       throw e;
     }
-    const { environment = 'production', name, ip = '127.0.0.1', port = 7788, maxPlayers = 1500 } = body;
+    const {
+      environment = 'production',
+      name,
+      label,
+      ip = '127.0.0.1',
+      port = 7788,
+      maxPlayers = 1500,
+      slotLimit = null,
+      notes = null,
+    } = body;
 
     if (!name) {
       return NextResponse.json({ success: false, error: 'Server name is required' }, { status: 400 });
@@ -48,11 +57,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const server = await createServer(
       projectId,
-      environment as 'production' | 'development' | 'test',
+      environment as 'production' | 'development' | 'test' | 'staging',
       String(name).trim(),
       String(ip).trim(),
       Number(port),
-      Number(maxPlayers)
+      Number(maxPlayers),
+      label ? String(label).trim() : null,
+      slotLimit !== null && slotLimit !== undefined ? Number(slotLimit) : null,
+      notes ? String(notes).trim() : null
     );
 
     return NextResponse.json({ success: true, server }, { status: 201 });

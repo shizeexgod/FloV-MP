@@ -1,0 +1,17 @@
+[Unit]
+Description=FloV:MP Game Server
+After=network.target mariadb.service flovmp-voice.service
+Wants=flovmp-voice.service
+
+[Service]
+EnvironmentFile=-/opt/flovmp/flovmp.env
+Type=simple
+WorkingDirectory=/opt/flovmp
+ExecStart=/opt/flovmp/start.sh
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace FloVMP.Core.Documents;
 
 /// <summary>
-/// Представление официального документа гражданина в «Держава Онлайн».
+/// Представление официального документа гражданина в FloV:MP.
 /// </summary>
 public sealed class PlayerDocument
 {

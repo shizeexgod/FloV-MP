@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'flovmp_super_secure_jwt_secret_2026_derzhava_online_key';
+const JWT_SECRET = process.env.JWT_SECRET || 'flovmp_super_secure_jwt_secret_2026_platform_master_key';
 
 export interface TokenPayload {
   userId: number;

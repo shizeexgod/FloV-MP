@@ -1,9 +1,10 @@
-'use client';
-
-import React from 'react';
-import { Box, Check, Copy, Cpu, Play, Plus, Radio, RefreshCw, Server, ShieldCheck, Sliders, Square } from 'lucide-react';
+import React, { useState } from 'react';
+import { Box, Check, Copy, Cpu, Download, Play, Plus, Radio, RefreshCw, Server, Settings2, ShieldCheck, Sliders, Square, Tag } from 'lucide-react';
 import { Spinner, Badge } from '@/components/ui';
 import { useDashboard, planTone } from './_ctx';
+import { ServerSettingsModal } from './ServerSettingsModal';
+import { NewServerModal } from './NewServerModal';
+import { DownloadMultiplayerModal } from './DownloadMultiplayerModal';
 
 export function ProjectsTab() {
   const {
@@ -25,6 +26,35 @@ export function ProjectsTab() {
     copy,
     D,
   } = useDashboard();
+
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [serverToConfigure, setServerToConfigure] = useState<any>(null);
+  const [newServerOpen, setNewServerOpen] = useState(false);
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadingFlv, setDownloadingFlv] = useState(false);
+
+  const handleDownloadFlv = async (proj: any) => {
+    if (!proj) return;
+    try {
+      setDownloadingFlv(true);
+      const res = await fetch(`/api/v1/projects/${proj.id}/license-flv`);
+      if (!res.ok) throw new Error('Ошибка скачивания файла лицензии');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'license.flv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message || 'Ошибка скачивания license.flv');
+    } finally {
+      setDownloadingFlv(false);
+    }
+  };
+
   return (
         <div className="relative space-y-8 animate-fade-in">
           {/* Project Switcher Bar */}
@@ -111,6 +141,25 @@ export function ProjectsTab() {
                     )}
                   </button>
 
+                  <button
+                    onClick={() => handleDownloadFlv(selectedProject)}
+                    disabled={downloadingFlv}
+                    className="btn h-9 border border-cyber/40 bg-cyber/10 px-3 text-xs font-semibold text-cyber transition hover:bg-cyber/20 flex items-center gap-1.5"
+                    title="Скачать криптографически подписанный файл license.flv для сервера"
+                  >
+                    {downloadingFlv ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                    license.flv
+                  </button>
+
+                  <button
+                    onClick={() => setDownloadModalOpen(true)}
+                    className="btn btn-primary h-9 px-3.5 text-xs font-bold flex items-center gap-1.5 shadow-neon-pink"
+                    title="Получить дистрибутив и варианты авто-установки (в 1 команду или готовый архив)"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Файлы мультиплеера
+                  </button>
+
                   <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
                     <span className="text-slate-500 mr-2">Agent API Key:</span>
                     <strong className="text-brand">{selectedProject.api_key.slice(0, 16)}…</strong>
@@ -142,7 +191,7 @@ export function ProjectsTab() {
 
           {/* Environments & Servers Section */}
           <div>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="flex items-center gap-2 text-base font-bold text-white">
                   <Cpu className="h-5 w-5 text-cyber" />
@@ -152,7 +201,18 @@ export function ProjectsTab() {
                   {D.proj.envSub}
                 </p>
               </div>
-              <span className="font-mono text-xs text-slate-500">{D.proj.serversCount}: {servers.length}</span>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-xs text-slate-500">{D.proj.serversCount}: {servers.length}</span>
+                {selectedProject && (
+                  <button
+                    onClick={() => setNewServerOpen(true)}
+                    className="btn btn-primary h-8 px-3 text-xs font-semibold flex items-center gap-1.5 shadow-neon-pink"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Добавить сервер
+                  </button>
+                )}
+              </div>
             </div>
 
             {loadingServers ? (
@@ -180,18 +240,27 @@ export function ProjectsTab() {
                     >
                       <div>
                         <div className="flex items-center justify-between">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
-                              isProd
-                                ? 'border-emeraldx/30 bg-emeraldx/15 text-emeraldx'
-                                : isDev
-                                ? 'border-cyber/30 bg-cyber/15 text-cyber'
-                                : 'border-violetx/30 bg-violetx/15 text-violetx'
-                            }`}
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                            {srv.environment}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {srv.label && (
+                              <span className="inline-flex items-center rounded-md border border-brand/50 bg-brand/15 px-2 py-0.5 font-mono text-[10px] font-bold text-brand uppercase tracking-wider">
+                                [{srv.label}]
+                              </span>
+                            )}
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
+                                isProd
+                                  ? 'border-emeraldx/30 bg-emeraldx/15 text-emeraldx'
+                                  : isDev
+                                  ? 'border-cyber/30 bg-cyber/15 text-cyber'
+                                  : srv.environment === 'test'
+                                  ? 'border-amber-500/30 bg-amber-500/15 text-amber-300'
+                                  : 'border-violetx/30 bg-violetx/15 text-violetx'
+                              }`}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                              {srv.environment}
+                            </span>
+                          </div>
                           <span className="flex items-center gap-1 font-mono text-[10px] text-slate-400">
                             <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
                             {D.proj.agentActive}
@@ -206,7 +275,11 @@ export function ProjectsTab() {
                         <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/5 bg-ink-950/50 p-3 font-mono text-[11px]">
                           <div>
                             <span className="text-slate-500">{D.proj.slotsShort}:</span>{' '}
-                            <strong className="text-white">{srv.max_players}</strong>
+                            {srv.slot_limit ? (
+                              <strong className="text-amber-300" title="Установлен лимит слотов">{srv.slot_limit} (лимит)</strong>
+                            ) : (
+                              <strong className="text-emeraldx" title="Безлимит">{srv.max_players} (безлимит)</strong>
+                            )}
                           </div>
                           <div>
                             <span className="text-slate-500">{D.proj.protocol}:</span>{' '}
@@ -223,8 +296,18 @@ export function ProjectsTab() {
                         </div>
                       </div>
 
-                      {/* Server Controls */}
+                      {/* Server Controls & Configuration */}
                       <div className="mt-5 space-y-2 border-t border-white/[0.08] pt-4">
+                        <button
+                          onClick={() => {
+                            setServerToConfigure(srv);
+                            setServerSettingsOpen(true);
+                          }}
+                          className="btn btn-ghost h-8 w-full border border-white/10 text-[11px] font-semibold text-slate-300 hover:border-brand/40 hover:text-white flex items-center justify-center gap-1.5 transition"
+                        >
+                          <Settings2 className="h-3.5 w-3.5 text-brand" />
+                          Префикс & Лимит слотов
+                        </button>
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             onClick={() => handleDispatchCommand(srv.id, 'restart')}
@@ -367,6 +450,38 @@ export function ProjectsTab() {
               </div>
             )}
           </div>
+
+          {/* Server Configuration & Prefixes Modal */}
+          <ServerSettingsModal
+            open={serverSettingsOpen}
+            onClose={() => {
+              setServerSettingsOpen(false);
+              setServerToConfigure(null);
+            }}
+            server={serverToConfigure}
+            onSaved={() => {
+              if (selectedProject) void handleSelectProject(selectedProject);
+            }}
+          />
+
+          {/* New Server Instance Modal */}
+          {selectedProject && (
+            <NewServerModal
+              open={newServerOpen}
+              onClose={() => setNewServerOpen(false)}
+              projectId={selectedProject.id}
+              onCreated={() => {
+                if (selectedProject) void handleSelectProject(selectedProject);
+              }}
+            />
+          )}
+
+          {/* Download Multiplayer / 3 Distribution Options Modal */}
+          <DownloadMultiplayerModal
+            open={downloadModalOpen}
+            onClose={() => setDownloadModalOpen(false)}
+            project={selectedProject}
+          />
         </div>
   );
 }

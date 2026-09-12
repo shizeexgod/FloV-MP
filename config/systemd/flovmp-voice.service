@@ -1,0 +1,19 @@
+[Unit]
+Description=FloV:MP Voice Server (alt:V external voice 16.4.39)
+After=network.target
+Before=flovmp-game.service
+# PartOf= — при рестарте/стопе game → voice рестартуется автоматически.
+# Голосовой сервер держит одно TCP-соединение с игровым; при перезапуске
+# игрового без PartOf= голос молча отваливается.
+PartOf=flovmp-game.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/flovmp-voice
+ExecStart=/opt/flovmp-voice/altv-voice-server
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

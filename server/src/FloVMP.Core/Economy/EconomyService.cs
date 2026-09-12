@@ -4,7 +4,7 @@ using FloVMP.Core.Logging;
 namespace FloVMP.Core.Economy;
 
 /// <summary>
-/// Сервис финансовых операций (наличные, банк, переводы) в «Держава Онлайн».
+/// Сервис финансовых операций (наличные, банк, переводы) в FloV:MP.
 /// Гарантирует атомарность операций и защиту от отрицательных балансов и race-conditions.
 /// </summary>
 public sealed class EconomyService

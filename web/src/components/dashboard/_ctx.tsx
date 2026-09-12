@@ -50,8 +50,10 @@ export interface ResourceItem {
 export interface ServerInstance {
   id: number;
   project_id: number;
-  environment: 'production' | 'development' | 'test';
+  environment: 'production' | 'development' | 'test' | 'staging';
   name: string;
+  label?: string | null;
+  slot_limit?: number | null;
   ip: string;
   port: number;
   agent_token: string;
@@ -62,6 +64,7 @@ export interface ServerInstance {
   memory_mb: number;
   cpu_percent: number;
   last_heartbeat?: string;
+  notes?: string | null;
   created_at: string;
 }
 

@@ -43,8 +43,8 @@ export const PROJECTS: ConceptProject[] = [
     banner: '/branding/logo-banner-1.png',
   },
   {
-    name: 'Держава Онлайн',
-    tag: 'Карта Москвы',
+    name: 'Capital City RP',
+    tag: 'Custom Map',
     status: 'maintenance',
     online: 610,
     peak: 1500,

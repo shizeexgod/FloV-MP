@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace FloVMP.Core.Admin;
 
 /// <summary>
-/// Реестр административных команд 8-уровневой системы «Держава Онлайн».
+/// Реестр административных команд 8-уровневой системы FloV:MP.
 /// Предоставляет проверку прав, валидацию уровня доступа и автогенерацию справки.
 /// </summary>
 public static class AdminCommandRegistry

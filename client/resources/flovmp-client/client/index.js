@@ -1,6 +1,6 @@
 /**
  * FloV:MP — клиентский движок мультиплеера.
- * Сервер: Держава Онлайн.
+ * Платформа: FloV:MP Standalone Engine.
  */
 
 import * as alt from 'alt-client';
@@ -24,6 +24,22 @@ let hudView = null;
 let inventoryView = null;
 let consoleView = null;
 let consoleStatsInterval = null;
+
+// --- Cursor Nesting Manager (предотвращает залипание и исключения alt.showCursor) ---
+let cursorDepth = 0;
+function pushCursor() {
+    cursorDepth++;
+    if (cursorDepth === 1) {
+        try { alt.showCursor(true); } catch (e) { }
+    }
+}
+
+function popCursor() {
+    cursorDepth = Math.max(0, cursorDepth - 1);
+    if (cursorDepth === 0) {
+        try { alt.showCursor(false); } catch (e) { }
+    }
+}
 
 // --- NoClip (Полет на F4 с невидимостью) ---------------------------------
 let noClip = false;
@@ -215,8 +231,10 @@ function openAuth() {
 
     try {
         authView = new alt.WebView('http://resource/client/html/auth/index.html');
-        authView.focus();
-        alt.showCursor(true);
+        authView.on('load', () => {
+            try { authView.focus(); } catch (e) { }
+        });
+        pushCursor();
         alt.toggleGameControls(false);
 
         authView.on('flovmp:auth:submit', (mode, user, pass) => {
@@ -239,8 +257,8 @@ function closeAuth() {
     if (authView) {
         try { authView.destroy(); } catch (e) { alt.log('[FloV:MP] authView.destroy warning: ' + e); }
         authView = null;
+        popCursor();
     }
-    try { alt.showCursor(false); } catch (e) { }
     try { alt.toggleGameControls(true); } catch (e) { }
 
     try {
@@ -329,8 +347,10 @@ function startTyping() {
 function openSettings() {
     if (settingsView || !inGame || authView) return;
     settingsView = new alt.WebView('http://resource/client/html/settings/index.html');
-    settingsView.focus();
-    alt.showCursor(true);
+    settingsView.on('load', () => {
+        try { settingsView.focus(); } catch (e) { }
+    });
+    pushCursor();
     alt.toggleGameControls(false);
 
     settingsView.on('flovmp:settings:close', closeSettings);
@@ -347,7 +367,7 @@ function closeSettings() {
     if (!settingsView) return;
     settingsView.destroy();
     settingsView = null;
-    try { alt.showCursor(false); } catch (e) { }
+    popCursor();
     alt.toggleGameControls(true);
 }
 
@@ -369,8 +389,10 @@ let cachedInventoryJson = null;
 function openInventory() {
     if (inventoryView || !inGame || authView || chatTyping || consoleView) return;
     inventoryView = new alt.WebView('http://resource/client/html/inventory/index.html');
-    inventoryView.focus();
-    alt.showCursor(true);
+    inventoryView.on('load', () => {
+        try { inventoryView.focus(); } catch (e) { }
+    });
+    pushCursor();
     alt.toggleGameControls(false);
 
     inventoryView.on('flovmp:inv:ready', () => {
@@ -397,7 +419,7 @@ function closeInventory() {
     if (!inventoryView) return;
     inventoryView.destroy();
     inventoryView = null;
-    try { alt.showCursor(false); } catch (e) { }
+    popCursor();
     alt.toggleGameControls(true);
 }
 
@@ -411,8 +433,10 @@ function toggleInventory() {
 function openDevConsole() {
     if (consoleView) return;
     consoleView = new alt.WebView('http://resource/client/html/console/index.html');
-    consoleView.focus();
-    alt.showCursor(true);
+    consoleView.on('load', () => {
+        try { consoleView.focus(); } catch (e) { }
+    });
+    pushCursor();
     alt.toggleGameControls(false);
 
     consoleView.on('flovmp:console:close', closeDevConsole);
@@ -457,7 +481,7 @@ function closeDevConsole() {
     if (!consoleView) return;
     consoleView.destroy();
     consoleView = null;
-    try { alt.showCursor(false); } catch (e) { }
+    popCursor();
     alt.toggleGameControls(true);
 }
 
@@ -713,7 +737,7 @@ alt.on('disconnect', () => {
 });
 
 alt.onServer('flovmp:client:welcome', (name, index) => {
-    alt.log(`[Держава Онлайн] Добро пожаловать на сервер, ${name}!`);
+    alt.log(`[FloV:MP] Добро пожаловать на сервер, ${name}!`);
 });
 
 // Если скрипт загрузился уже после установки соединения — открываем окно авторизации

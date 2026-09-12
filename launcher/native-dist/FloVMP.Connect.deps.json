@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "FloVMP.Connect/1.0.0": {
+        "dependencies": {
+          "FloVMP.Launcher.Core": "1.0.0"
+        },
+        "runtime": {
+          "FloVMP.Connect.dll": {}
+        }
+      },
+      "FloVMP.Launcher.Core/1.0.0": {
+        "runtime": {
+          "FloVMP.Launcher.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "FloVMP.Connect/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FloVMP.Launcher.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

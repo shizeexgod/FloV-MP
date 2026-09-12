@@ -5,7 +5,7 @@ using System.Linq;
 namespace FloVMP.Core.Documents;
 
 /// <summary>
-/// Сервис выпуска, проверки и аннулирования документов граждан («Держава Онлайн»).
+/// Сервис выпуска, проверки и аннулирования документов граждан (FloV:MP).
 /// Чистый .NET 8, без внешних зависимостей, потокобезопасен.
 /// </summary>
 public sealed class DocumentService

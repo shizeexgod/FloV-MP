@@ -4,7 +4,7 @@ using FloVMP.Core.AntiCheat;
 namespace FloVMP.Core.Housing;
 
 /// <summary>
-/// Объект жилой недвижимости или гаража в «Держава Онлайн».
+/// Объект жилой недвижимости или гаража в FloV:MP.
 /// </summary>
 public sealed class Property
 {

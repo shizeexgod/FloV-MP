@@ -100,7 +100,7 @@ export default function RegisterPage() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@derzhava-rp.ru"
+                  placeholder="admin@flov-mp.ru"
                   className="field h-11 pl-10 pr-4"
                 />
               </div>

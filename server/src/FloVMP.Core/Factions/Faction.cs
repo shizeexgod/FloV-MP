@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace FloVMP.Core.Factions;
 
 /// <summary>
-/// Описание фракции (организации) в «Держава Онлайн».
+/// Описание фракции (организации) в FloV:MP.
 /// </summary>
 public sealed class Faction
 {

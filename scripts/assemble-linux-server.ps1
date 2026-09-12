@@ -90,7 +90,7 @@ $startLines = @(
 
 $serviceLines = @(
     "[Unit]",
-    "Description=FloV:MP Server (Derzhava Online)",
+    "Description=FloV:MP Game Server",
     "After=network.target",
     "",
     "[Service]",

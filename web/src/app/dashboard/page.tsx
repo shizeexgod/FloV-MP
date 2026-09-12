@@ -82,7 +82,7 @@ export default function DashboardPage() {
     { id: 1, time: '19:42:01', tag: 'Core', text: 'FloV:MP Server Runtime v1.0.4 started (Build b3307 unhooked)', tone: 'info' },
     { id: 2, time: '19:42:02', tag: 'Network', text: 'UDP 7788 listening on 0.0.0.0:7788 (1500 max players)', tone: 'info' },
     { id: 3, time: '19:42:03', tag: 'AntiCheat', text: 'FloV:Shield security invariants active (Speed, Teleport, Weapon whitelists)', tone: 'info' },
-    { id: 4, time: '19:42:04', tag: 'Database', text: 'MariaDB pool connected (derzhava_rp @ 188.127.229.224)', tone: 'info' },
+    { id: 4, time: '19:42:04', tag: 'Database', text: 'MariaDB pool connected (flovmp_db @ localhost:3306)', tone: 'info' },
     { id: 5, time: '19:42:05', tag: 'Agent', text: 'RemoteServerAgent connected to Cloud Control Plane (Token: agnt_live_prod_99f48a)', tone: 'info' },
     { id: 6, time: '19:42:15', tag: 'Telemetry', text: 'Heartbeat tick sent -> 60.0 Hz tickrate, 60.0 FPS, 384 MB CoreCLR', tone: 'info' },
   ]);

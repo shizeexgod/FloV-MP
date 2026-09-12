@@ -23,7 +23,7 @@ public static class Totp
     }
 
     /// <summary>otpauth://-ссылка для QR-кода в приложении.</summary>
-    public static string BuildUri(string secretBase32, string account, string issuer = "Derzhava RP")
+    public static string BuildUri(string secretBase32, string account, string issuer = "FloV:MP")
     {
         var label = Uri.EscapeDataString($"{issuer}:{account}");
         var iss = Uri.EscapeDataString(issuer);

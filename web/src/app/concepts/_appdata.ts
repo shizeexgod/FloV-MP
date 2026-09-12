@@ -59,18 +59,18 @@ export const APP_PROJECTS: AppProject[] = [
     ],
   },
   {
-    id: 'derzhava',
-    name: 'Держава Онлайн',
-    slug: 'derzhava',
-    tag: 'Карта Москвы',
+    id: 'capital-rp',
+    name: 'Capital City RP',
+    slug: 'capital-rp',
+    tag: 'Custom City Map',
     accent: '#a855f7',
     banner: '/branding/logo-banner-2.png',
     online: 610,
     peak: 1500,
     servers: 3,
     createdAt: '2026-06-20',
-    discord: 'discord.gg/derzhava',
-    website: 'derzhava.online',
+    discord: 'discord.gg/capitalrp',
+    website: 'capitalrp.ru',
     members: [
       { name: 'Owner', role: 'Owner', initials: 'OW' },
       { name: 'Roman T.', role: 'Administrator', initials: 'RT' },
@@ -122,7 +122,7 @@ export const API_KEYS = [
 
 export const WEBHOOKS = [
   { id: 'w1', url: 'https://discord.com/api/webhooks/•••/•••', events: ['server.status', 'deploy.finished'], status: 'active' },
-  { id: 'w2', url: 'https://derzhava.online/api/flov-hook', events: ['player.peak', 'alert.raised'], status: 'active' },
+  { id: 'w2', url: 'https://api.myproject.com/flov-hook', events: ['player.peak', 'alert.raised'], status: 'active' },
   { id: 'w3', url: 'https://hooks.slack.com/services/•••', events: ['alert.raised'], status: 'paused' },
 ];
 
@@ -230,11 +230,11 @@ export interface AppResource {
 
 export const APP_RESOURCES: AppResource[] = [
   { id: 'r1', name: 'flovmp-core', type: 'script', status: 'running', version: '1.0.0', dependencies: [], memoryMb: 124 },
-  { id: 'r2', name: 'derzhava-auth-nui', type: 'ui', status: 'running', version: '0.9.4', dependencies: ['flovmp-core'], memoryMb: 18 },
-  { id: 'r3', name: 'derzhava-moscow-map', type: 'map', status: 'running', version: '2026.8', dependencies: [], memoryMb: 412 },
-  { id: 'r4', name: 'derzhava-vehicles-pack', type: 'vehicle', status: 'running', version: '2.4.1', dependencies: [], memoryMb: 350 },
-  { id: 'r5', name: 'derzhava-inventory', type: 'ui', status: 'running', version: '1.2.0', dependencies: ['flovmp-core'], memoryMb: 24 },
-  { id: 'r6', name: 'derzhava-economy', type: 'script', status: 'running', version: '1.1.5', dependencies: ['flovmp-core'], memoryMb: 45 },
+  { id: 'r2', name: 'flovmp-auth-nui', type: 'ui', status: 'running', version: '0.9.4', dependencies: ['flovmp-core'], memoryMb: 18 },
+  { id: 'r3', name: 'custom-city-map', type: 'map', status: 'running', version: '2026.8', dependencies: [], memoryMb: 412 },
+  { id: 'r4', name: 'flovmp-vehicles-pack', type: 'vehicle', status: 'running', version: '2.4.1', dependencies: [], memoryMb: 350 },
+  { id: 'r5', name: 'flovmp-inventory', type: 'ui', status: 'running', version: '1.2.0', dependencies: ['flovmp-core'], memoryMb: 24 },
+  { id: 'r6', name: 'flovmp-economy', type: 'script', status: 'running', version: '1.1.5', dependencies: ['flovmp-core'], memoryMb: 45 },
   { id: 'r7', name: 'casino-event-zone', type: 'script', status: 'stopped', version: '0.5.0', dependencies: ['flovmp-core'], memoryMb: 0 },
 ];
 
@@ -264,7 +264,7 @@ export const APP_CRASHES: AppCrashIncident[] = [
     time: '2026-09-05 19:40:02',
     type: 'CoreCLR Fatal Exception',
     reason: 'System.NullReferenceException: Object reference not set',
-    stackPreview: 'at Derzhava.CustomPeds.OnSpawnPed(IPlayer player) in CustomPeds.cs:line 44',
+    stackPreview: 'at FloVMP.Gamemode.CustomPeds.OnSpawnPed(IPlayer player) in CustomPeds.cs:line 44',
     autoRestarted: true,
   },
 ];

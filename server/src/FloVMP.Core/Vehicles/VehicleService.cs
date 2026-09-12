@@ -1,7 +1,7 @@
 namespace FloVMP.Core.Vehicles;
 
 /// <summary>
-/// Сервис управления активным автопарком сервера «Держава Онлайн».
+/// Сервис управления активным автопарком сервера FloV:MP.
 /// </summary>
 public sealed class VehicleService
 {
