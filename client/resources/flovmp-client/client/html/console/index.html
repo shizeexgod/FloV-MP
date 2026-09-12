@@ -368,6 +368,40 @@
       align-items: flex-start;
       margin-bottom: 2px;
       word-break: break-word;
+      transition: background 0.15s ease;
+    }
+    .log-row-new {
+      animation: logRowAppear 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes logRowAppear {
+      from {
+        opacity: 0;
+        transform: translateY(3px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .log-row-cmd {
+      background: rgba(255, 255, 255, 0.035);
+      border-left: 2px solid rgba(255, 255, 255, 0.35);
+      padding: 1px 0 1px 6px;
+      border-radius: 2px;
+      margin: 3px 0;
+      animation: cmdAppear 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes cmdAppear {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+        background: rgba(255, 255, 255, 0.035);
+      }
     }
     .log-time {
       color: #52525b;
@@ -478,18 +512,30 @@
       bottom: 48px;
       left: 12px;
       right: 12px;
-      background: #111115;
+      background: rgba(15, 15, 18, 0.96);
+      backdrop-filter: blur(14px);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 6px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.2);
       display: none;
       flex-direction: column;
-      max-height: 150px;
+      max-height: 160px;
       overflow-y: auto;
       z-index: 50;
+      animation: acSlideUp 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes acSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.99);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
     .ac-item {
-      padding: 5px 10px;
+      padding: 6px 12px;
       font-size: 11.5px;
       display: flex;
       justify-content: space-between;
@@ -497,10 +543,12 @@
       cursor: pointer;
       color: #a1a1aa;
       border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      transition: background 0.12s ease, padding-left 0.14s ease, color 0.12s ease;
     }
     .ac-item:hover, .ac-item.selected {
       background: rgba(255, 255, 255, 0.08);
       color: #ffffff;
+      padding-left: 16px;
     }
     .ac-item strong {
       color: #ffffff;
@@ -602,6 +650,12 @@
     #input-bar:focus-within {
       border-top-color: rgba(255, 255, 255, 0.22) !important;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    #input-bar.input-send-flash {
+      border-top-color: rgba(255, 255, 255, 0.45) !important;
+      background: rgba(255, 255, 255, 0.045);
+      box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.08);
+      transition: all 0.1s ease-out;
     }
 
     /* ─── RBAC: Скрытие админ-элементов для обычных игроков ─── */
@@ -879,8 +933,30 @@
 
     function addLog(tag, text, time = null) {
       const now = time || new Date().toTimeString().split(' ')[0];
-      logs.push({ time: now, tag, text });
-      if (currentTab === 'logs') renderLogs();
+      const item = { time: now, tag, text };
+      logs.push(item);
+
+      if (currentTab === 'logs') {
+        const matchesFilter = currentFilter === 'ALL' || item.tag === currentFilter;
+        const matchesSearch = !searchQuery || item.text.toLowerCase().includes(searchQuery) || item.tag.toLowerCase().includes(searchQuery);
+
+        if (matchesFilter && matchesSearch) {
+          const isNearBottom = (logsArea.scrollHeight - logsArea.scrollTop - logsArea.clientHeight) < 70;
+          const row = document.createElement('div');
+          const isCmd = tag === 'CMD';
+          row.className = `log-row ${isCmd ? 'log-row-cmd' : 'log-row-new'}`;
+          row.innerHTML = `
+            <span class="log-time">[${item.time}]</span>
+            <span class="log-tag log-tag-${item.tag}">[${item.tag}]</span>
+            <span class="log-msg">${escapeHtml(item.text)}</span>
+          `;
+          logsArea.appendChild(row);
+
+          if (isNearBottom || logsArea.scrollTop === 0) {
+            logsArea.scrollTo({ top: logsArea.scrollHeight, behavior: 'smooth' });
+          }
+        }
+      }
     }
 
     function escapeHtml(str) {
@@ -1133,6 +1209,14 @@
     function executeCommand(raw) {
       const text = (raw || '').trim();
       if (!text) return;
+
+      const inputBar = document.getElementById('input-bar');
+      if (inputBar) {
+        inputBar.classList.remove('input-send-flash');
+        void inputBar.offsetWidth;
+        inputBar.classList.add('input-send-flash');
+        setTimeout(() => inputBar.classList.remove('input-send-flash'), 220);
+      }
 
       history.push(text);
       historyIndex = -1;
