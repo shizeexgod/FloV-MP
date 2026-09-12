@@ -130,6 +130,12 @@ public class StarterResource : Resource
     {
         if (string.IsNullOrWhiteSpace(message)) return;
 
+        // Ограничение длины сообщения и удаление управляющих символов
+        if (message.Length > 256)
+            message = message[..256];
+        message = message.Trim();
+        if (message.Length == 0) return;
+
         if (message.StartsWith("/"))
         {
             HandleCommand(player, message[1..]);
@@ -287,6 +293,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
                     return;
                 }
+                targetLvl = Math.Clamp(targetLvl, 0, 8);
                 _adminLevels[target.Id] = targetLvl;
                 target.Emit("flovmp:console:setAdmin", targetLvl);
                 SendChatMessage(target, $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
@@ -313,6 +320,13 @@ public class StarterResource : Resource
                     || !float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpz))
                 {
                     SendChatMessage(player, "{fde047}Использование: /tp <X> <Y> <Z>");
+                    return;
+                }
+                if (float.IsNaN(tpx) || float.IsNaN(tpy) || float.IsNaN(tpz) ||
+                    float.IsInfinity(tpx) || float.IsInfinity(tpy) || float.IsInfinity(tpz) ||
+                    Math.Abs(tpx) > 25000f || Math.Abs(tpy) > 25000f || Math.Abs(tpz) > 5000f)
+                {
+                    SendChatMessage(player, "{ef4444}Недопустимые координаты.");
                     return;
                 }
                 player.Position = new Position(tpx, tpy, tpz + 0.5f);
@@ -612,6 +626,14 @@ public class StarterResource : Resource
         {
             Alt.LogWarning($"[Security Violation] Неавторизованный запрос teleportWaypoint от {player.Name} (ID: {player.Id})");
             SendChatMessage(player, "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
+            return;
+        }
+
+        if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(z) ||
+            float.IsInfinity(x) || float.IsInfinity(y) || float.IsInfinity(z) ||
+            Math.Abs(x) > 25000f || Math.Abs(y) > 25000f || Math.Abs(z) > 5000f)
+        {
+            SendChatMessage(player, "{ef4444}[FloV:MP Security] Недопустимые координаты телепортации.");
             return;
         }
 
