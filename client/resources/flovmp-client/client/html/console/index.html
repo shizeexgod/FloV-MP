@@ -216,26 +216,30 @@
     .tab-btn {
       background: transparent;
       border: 1px solid transparent;
-      color: #8e8e93;
+      color: #71717a;
       font-size: 11.5px;
       font-weight: 500;
-      padding: 4px 9px;
+      padding: 4px 10px;
       border-radius: 6px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      transition: all 0.1s ease;
+      transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
     }
     .tab-btn:hover {
-      color: #f4f4f5;
-      background: rgba(255, 255, 255, 0.05);
+      color: #e4e4e7;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .tab-btn:active {
+      transform: scale(0.97);
     }
     .tab-btn.active {
       color: #ffffff;
-      background: rgba(255, 255, 255, 0.10);
+      background: rgba(255, 255, 255, 0.08);
       border-color: rgba(255, 255, 255, 0.12);
       font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
 
     /* Metric Pills */
@@ -257,9 +261,9 @@
 
     /* Header Action Buttons */
     .hdr-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      color: #d4d4d8;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: #a1a1aa;
       font-size: 11px;
       padding: 4px 8px;
       border-radius: 5px;
@@ -267,12 +271,15 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      transition: all 0.1s ease;
+      transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
     }
     .hdr-btn:hover {
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.08);
       color: #ffffff;
-      border-color: rgba(255, 255, 255, 0.18);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+    .hdr-btn:active {
+      transform: scale(0.96);
     }
     .hdr-btn-close {
       background: transparent;
@@ -285,11 +292,14 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: all 0.1s ease;
+      transition: color 0.12s ease, background 0.12s ease, transform 0.08s ease;
     }
     .hdr-btn-close:hover {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.08);
       color: #ffffff;
+    }
+    .hdr-btn-close:active {
+      transform: scale(0.94);
     }
 
     /* ─── SUB-BAR: FILTERS & SEARCH ───────────────────────────── */
@@ -574,6 +584,21 @@
     #input-bar {
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
+
+    /* Minimal View Fade-In */
+    .view-content {
+      animation: tabFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes tabFadeIn {
+      from {
+        opacity: 0.8;
+        transform: translateY(2px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
     #input-bar:focus-within {
       border-top-color: rgba(255, 255, 255, 0.22) !important;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -727,39 +752,17 @@
       win.style.setProperty('--mouse-y', `${y}px`);
     });
 
-    // React Bits: Decrypted Text (Cyber Scramble) Animation
-    function scrambleText(element, finalText, duration = 320) {
-      if (!element || !finalText) return;
-      const chars = '01#$*+~XYZFLOVMP_<>[]{}';
-      const len = finalText.length;
-      const startTime = performance.now();
-      function frame(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(1, elapsed / duration);
-        const revealed = Math.floor(progress * len);
-        let out = '';
-        for (let i = 0; i < len; i++) {
-          if (i < revealed) out += finalText[i];
-          else out += chars[Math.floor(Math.random() * chars.length)];
-        }
-        element.textContent = out;
-        if (progress < 1) requestAnimationFrame(frame);
-        else element.textContent = finalText;
-      }
-      requestAnimationFrame(frame);
-    }
-
     function applyPermissions(level) {
       adminLevel = Number(level) || 0;
       if (adminLevel >= 1) {
         win.classList.add('is-admin');
         roleBadge.classList.add('role-admin');
-        scrambleText(roleText, `ADMIN LVL ${adminLevel}`);
+        roleText.innerText = `ADMIN LVL ${adminLevel}`;
         addLog('DEV', `Права администратора подтверждены: Уровень ${adminLevel}`);
       } else {
         win.classList.remove('is-admin');
         roleBadge.classList.remove('role-admin');
-        scrambleText(roleText, 'ИГРОК');
+        roleText.innerText = 'ИГРОК';
         if (currentTab === 'devtools') {
           switchTab('logs');
         }
@@ -1080,20 +1083,16 @@
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       if (btn) {
         btn.classList.add('active');
-        const textNode = Array.from(btn.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0);
-        if (textNode) {
-          const original = textNode.textContent.trim();
-          scrambleText({
-            set textContent(val) { textNode.textContent = ' ' + val; },
-            get textContent() { return textNode.textContent.trim(); }
-          }, original, 200);
-        }
       } else {
         const defaultBtn = document.querySelector(`.tab-btn[onclick*="${tab}"]`);
         if (defaultBtn) defaultBtn.classList.add('active');
       }
 
       const filterBar = document.getElementById('filter-bar');
+      logsArea.classList.remove('view-content');
+      void logsArea.offsetWidth;
+      logsArea.classList.add('view-content');
+
       if (tab === 'logs') {
         if (filterBar) filterBar.style.display = 'flex';
         renderLogs();
