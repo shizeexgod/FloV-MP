@@ -216,6 +216,18 @@ public class AntiCheatService
         return true;
     }
 
+    /// <summary>
+    /// Фиксация попытки несанкционированного вызова административных команд/событий игроком без прав
+    /// </summary>
+    public void RecordUnauthorizedAdminAttempt(int accountId, string actionName)
+    {
+        if (!_players.TryGetValue(accountId, out var state))
+            return;
+
+        var reason = $"Попытка несанкционированного вызова админ-функции/события: {actionName}";
+        HandleViolation(state, reason, AntiCheatAction.Warning, AntiCheatSeverity.High, "UnauthorizedAdminAttempt");
+    }
+
     private void HandleViolation(
         PlayerTrackingState state,
         string reason,

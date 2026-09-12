@@ -390,5 +390,23 @@ public class AntiCheatTests
         Assert.Equal("GodMode", captured.DetectionType);
         Assert.Equal(AntiCheatSeverity.Critical, captured.Severity);
     }
+
+    [Fact]
+    public void Unauthorized_Admin_Attempt_Triggers_High_Severity_Detection()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(99, "SneakyPlayer", Vector3D.Zero);
+
+        AntiCheatDetectionEvent? captured = null;
+        ac.OnDetection += evt => captured = evt;
+
+        ac.RecordUnauthorizedAdminAttempt(99, "starter:teleportWaypoint");
+
+        Assert.NotNull(captured);
+        Assert.Equal("UnauthorizedAdminAttempt", captured.DetectionType);
+        Assert.Equal(AntiCheatSeverity.High, captured.Severity);
+        Assert.Equal(99, captured.AccountId);
+        Assert.Contains("starter:teleportWaypoint", captured.Details);
+    }
 }
 
