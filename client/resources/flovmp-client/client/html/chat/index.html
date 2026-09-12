@@ -169,6 +169,12 @@
       }
     }
 
+    /* Standalone Browser Preview Background */
+    body.standalone-preview {
+      background: #09090b radial-gradient(circle at 40% 30%, #15151c 0%, #09090b 100%);
+      background-attachment: fixed;
+    }
+
     .msg-time {
       color: var(--text-dark);
       font-size: 10px;
@@ -177,46 +183,176 @@
       min-width: 52px;
       flex-shrink: 0;
       letter-spacing: 0;
-      line-height: 18px;
+      line-height: 20px;
     }
 
+    /* ─── ПРЕФИКСЫ / БЕЙДЖИ КАТЕГОРИЙ (СТИЛЬ OBSIDIAN) ────────── */
     .msg-badge {
-      font-size: 9px;
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+      font-size: 9.5px;
       font-weight: 700;
-      width: 54px;
-      min-width: 54px;
-      height: 18px;
-      border-radius: 4px;
-      letter-spacing: 0.4px;
+      width: 70px;
+      min-width: 70px;
+      height: 20px;
+      border-radius: 5px;
+      letter-spacing: 0.5px;
       text-transform: uppercase;
       flex-shrink: 0;
       line-height: 1;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 5px;
       text-align: center;
       box-sizing: border-box;
-      padding: 0;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text-muted);
+      padding: 0 5px;
+      background: rgba(16, 16, 20, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: all 0.15s ease;
+    }
+
+    .badge-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+
+    /* Цвета и свечения индикаторов */
+    .badge-ic {
+      color: #f4f4f5;
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+    .badge-ic .badge-dot {
+      background: #ffffff;
+      box-shadow: 0 0 5px rgba(255, 255, 255, 0.9);
+    }
+
+    .badge-ooc {
+      color: #cbd5e1;
+      border-color: rgba(148, 163, 184, 0.22);
+    }
+    .badge-ooc .badge-dot {
+      background: #94a3b8;
+      box-shadow: 0 0 5px rgba(148, 163, 184, 0.9);
+    }
+
+    .badge-me {
+      color: #e9d5ff;
+      border-color: rgba(192, 132, 252, 0.28);
+    }
+    .badge-me .badge-dot {
+      background: #c084fc;
+      box-shadow: 0 0 6px #c084fc;
+    }
+
+    .badge-do {
+      color: #bae6fd;
+      border-color: rgba(56, 189, 248, 0.28);
+    }
+    .badge-do .badge-dot {
+      background: #38bdf8;
+      box-shadow: 0 0 6px #38bdf8;
+    }
+
+    .badge-shout {
+      color: #fef08a;
+      border-color: rgba(251, 191, 36, 0.28);
+    }
+    .badge-shout .badge-dot {
+      background: #fbbf24;
+      box-shadow: 0 0 6px #fbbf24;
+    }
+
+    .badge-whisper {
+      color: #a5f3fc;
+      border-color: rgba(34, 211, 238, 0.28);
+    }
+    .badge-whisper .badge-dot {
+      background: #22d3ee;
+      box-shadow: 0 0 6px #22d3ee;
+    }
+
+    .badge-sys {
+      color: #a7f3d0;
+      border-color: rgba(52, 211, 153, 0.28);
+    }
+    .badge-sys .badge-dot {
+      background: #34d399;
+      box-shadow: 0 0 6px #34d399;
+    }
+
+    .badge-admin {
+      color: #fecdd3;
+      background: rgba(32, 12, 16, 0.95);
+      border-color: rgba(244, 63, 94, 0.38);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.7), 0 0 10px rgba(244, 63, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .badge-admin .badge-dot {
+      background: #f43f5e;
+      box-shadow: 0 0 7px #f43f5e;
+    }
+
+    .badge-try {
+      color: #fbcfe8;
+      border-color: rgba(244, 114, 182, 0.28);
+    }
+    .badge-try .badge-dot {
+      background: #f472b6;
+      box-shadow: 0 0 6px #f472b6;
+    }
+
+    /* ─── ВАРИАНТ 2: СКОБКИ (BRACKETS) ────────────────────────── */
+    #chat-wrapper.badge-style-brackets .msg-badge {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      justify-content: flex-start !important;
+      letter-spacing: 0.8px;
+    }
+    #chat-wrapper.badge-style-brackets .badge-dot {
+      display: none !important;
+    }
+    #chat-wrapper.badge-style-brackets .badge-label::before {
+      content: '[';
+      opacity: 0.6;
+      margin-right: 1px;
+    }
+    #chat-wrapper.badge-style-brackets .badge-label::after {
+      content: ']';
+      opacity: 0.6;
+      margin-left: 1px;
+    }
+
+    /* ─── ВАРИАНТ 3: ЦВЕТНЫЕ ПЛАШКИ (PILLS) ───────────────────── */
+    #chat-wrapper.badge-style-pills .badge-dot {
+      display: none !important;
+    }
+    #chat-wrapper.badge-style-pills .badge-ic       { background: rgba(255, 255, 255, 0.08); }
+    #chat-wrapper.badge-style-pills .badge-ooc      { background: rgba(148, 163, 184, 0.12); }
+    #chat-wrapper.badge-style-pills .badge-me       { background: rgba(192, 132, 252, 0.14); }
+    #chat-wrapper.badge-style-pills .badge-do       { background: rgba(56, 189, 248, 0.14); }
+    #chat-wrapper.badge-style-pills .badge-shout    { background: rgba(251, 191, 36, 0.14); }
+    #chat-wrapper.badge-style-pills .badge-whisper  { background: rgba(34, 211, 238, 0.14); }
+    #chat-wrapper.badge-style-pills .badge-sys      { background: rgba(52, 211, 153, 0.14); }
+    #chat-wrapper.badge-style-pills .badge-admin    { background: rgba(244, 63, 94, 0.16); }
+    #chat-wrapper.badge-style-pills .badge-try      { background: rgba(244, 114, 182, 0.14); }
+
+    /* ─── ВАРИАНТ 4: ЧИСТЫЙ RP (СКРЫТЬ [IC]) ──────────────────── */
+    #chat-wrapper.badge-style-cleanrp .msg-row.kind-player .msg-badge {
+      display: none !important;
     }
 
     .msg-text-wrap {
       flex: 1;
       word-break: break-word;
-      line-height: 18px;
+      line-height: 20px;
     }
-
-    .badge-ic       { color: #ffffff; background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.18); }
-    .badge-ooc      { color: #94a3b8; background: rgba(148, 163, 184, 0.08); border-color: rgba(148, 163, 184, 0.18); }
-    .badge-me       { color: #d8b4fe; background: rgba(192, 132, 252, 0.08); border-color: rgba(192, 132, 252, 0.20); }
-    .badge-do       { color: #7dd3fc; background: rgba(56, 189, 248, 0.08);  border-color: rgba(56, 189, 248, 0.20); }
-    .badge-shout    { color: #fbbf24; background: rgba(251, 191, 36, 0.08);  border-color: rgba(251, 191, 36, 0.20); }
-    .badge-whisper  { color: #67e8f9; background: rgba(103, 232, 249, 0.08); border-color: rgba(103, 232, 249, 0.20); }
-    .badge-sys      { color: #fef08a; background: rgba(253, 208, 21, 0.09);  border-color: rgba(253, 208, 21, 0.24); }
-    .badge-admin    { color: #fca5a5; background: rgba(244, 63, 94, 0.12);   border-color: rgba(244, 63, 94, 0.26); }
-    .badge-try      { color: #f472b6; background: rgba(244, 114, 182, 0.08); border-color: rgba(244, 114, 182, 0.20); }
 
     .msg-content {
       color: var(--text-main);
@@ -509,9 +645,115 @@
       font-size: 9.5px;
       color: #71717a;
     }
+
+    /* ─── STANDALONE PREVIEW TOOLBAR (ТОЛЬКО В БРАУЗЕРЕ) ───────── */
+    #preview-toolbar {
+      position: fixed;
+      top: 20px;
+      right: 24px;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: rgba(14, 14, 18, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 6px 12px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      z-index: 9999;
+      animation: pvIn 0.2s ease-out;
+    }
+
+    body.standalone-preview #preview-toolbar {
+      display: flex;
+    }
+
+    @keyframes pvIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .pv-brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffffff;
+      padding-right: 10px;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .pv-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 8px #34d399;
+    }
+
+    .pv-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pv-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #d4d4d8;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.12s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .pv-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+    .pv-btn:active {
+      transform: scale(0.96);
+    }
+    .pv-btn strong, .pv-btn span {
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
+<!-- Standalone Browser Preview Toolbar -->
+<div id="preview-toolbar" class="font-mono">
+  <div class="pv-brand">
+    <span class="pv-dot"></span>
+    <span>FloV:MP Chat Preview</span>
+  </div>
+  <div class="pv-actions">
+    <button class="pv-btn" onclick="toggleInputPreview()" title="Показать / скрыть поле ввода (клавиша T)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"></path></svg>
+      Поле ввода (T)
+    </button>
+    <button class="pv-btn" onclick="cycleBadgeStyle()" title="Переключить стиль оформления префиксов">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 9.17 4.24-4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="m9.17 14.83-4.24 4.24"></path></svg>
+      Префиксы: <strong id="badge-style-name">Точки ●</strong>
+    </button>
+    <button class="pv-btn" onclick="seedSampleMessages()" title="Сбросить и добавить тестовые сообщения">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      Тест
+    </button>
+    <button class="pv-btn" onclick="clearLogs()" title="Очистить лог чата">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+      Очистить
+    </button>
+  </div>
+</div>
+
 <div id="chat-wrapper" class="dimmed">
   <div id="log-container">
     <div id="log-area"></div>
@@ -659,50 +901,50 @@
 
     switch (kind) {
       case 'player':
-        badgeHtml = `<span class="msg-badge badge-ic">IC</span>`;
+        badgeHtml = `<span class="msg-badge badge-ic"><span class="badge-dot"></span><span class="badge-label">IC</span></span>`;
         bodyHtml = `<span class="author-name accent-color">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`;
         break;
       case 'ooc':
-        badgeHtml = `<span class="msg-badge badge-ooc">OOC</span>`;
+        badgeHtml = `<span class="msg-badge badge-ooc"><span class="badge-dot"></span><span class="badge-label">OOC</span></span>`;
         bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">(( ${formatColors(text)} ))</span>`;
         break;
       case 'me':
-        badgeHtml = `<span class="msg-badge badge-me">ME</span>`;
+        badgeHtml = `<span class="msg-badge badge-me"><span class="badge-dot"></span><span class="badge-label">ME</span></span>`;
         bodyHtml = `<span class="msg-content">* ${esc(author)} ${formatColors(text)}</span>`;
         break;
       case 'do':
-        badgeHtml = `<span class="msg-badge badge-do">DO</span>`;
+        badgeHtml = `<span class="msg-badge badge-do"><span class="badge-dot"></span><span class="badge-label">DO</span></span>`;
         bodyHtml = `<span class="msg-content">* ${formatColors(text)} (( ${esc(author)} ))</span>`;
         break;
       case 'shout':
-        badgeHtml = `<span class="msg-badge badge-shout">КРИК</span>`;
+        badgeHtml = `<span class="msg-badge badge-shout"><span class="badge-dot"></span><span class="badge-label">КРИК</span></span>`;
         bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}!</span>`;
         break;
       case 'whisper':
-        badgeHtml = `<span class="msg-badge badge-whisper">ШЕПОТ</span>`;
+        badgeHtml = `<span class="msg-badge badge-whisper"><span class="badge-dot"></span><span class="badge-label">ШЕПОТ</span></span>`;
         bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">(шепотом) ${formatColors(text)}</span>`;
         break;
       case 'admin':
-        badgeHtml = `<span class="msg-badge badge-admin">АДМИН</span>`;
+        badgeHtml = `<span class="msg-badge badge-admin"><span class="badge-dot"></span><span class="badge-label">АДМИН</span></span>`;
         bodyHtml = `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`;
         break;
       case 'try':
-        badgeHtml = `<span class="msg-badge badge-try">УДАЧА</span>`;
+        badgeHtml = `<span class="msg-badge badge-try"><span class="badge-dot"></span><span class="badge-label">УДАЧА</span></span>`;
         bodyHtml = `<span class="msg-content">* ${esc(author)} ${formatColors(text)}</span>`;
         break;
       case 'todo':
-        badgeHtml = `<span class="msg-badge badge-me">ФРАЗА</span>`;
+        badgeHtml = `<span class="msg-badge badge-me"><span class="badge-dot"></span><span class="badge-label">ФРАЗА</span></span>`;
         bodyHtml = `<span class="msg-content">${formatColors(text)}</span>`;
         break;
       case 'cmd':
-        badgeHtml = `<span class="msg-badge badge-ic">ИНФО</span>`;
+        badgeHtml = `<span class="msg-badge badge-ic"><span class="badge-dot"></span><span class="badge-label">ИНФО</span></span>`;
         bodyHtml = author
           ? `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`
           : `<span class="msg-content">${formatColors(text)}</span>`;
         break;
       case 'system':
       default:
-        badgeHtml = `<span class="msg-badge badge-sys">СИСТЕМА</span>`;
+        badgeHtml = `<span class="msg-badge badge-sys"><span class="badge-dot"></span><span class="badge-label">СИСТЕМА</span></span>`;
         bodyHtml = author
           ? `<span class="author-name">${esc(author)}:</span> <span class="msg-content">${formatColors(text)}</span>`
           : `<span class="msg-content">${formatColors(text)}</span>`;
@@ -983,6 +1225,60 @@
     logArea.scrollTop += e.deltaY;
   }, { passive: true });
 
+  // ─── BADGE STYLES MANAGER ─────────────────────────────────────
+  const BADGE_STYLES = [
+    { id: 'badge-style-dots', name: 'Точки ●' },
+    { id: 'badge-style-brackets', name: 'Скобки [ ]' },
+    { id: 'badge-style-pills', name: 'Плашки' },
+    { id: 'badge-style-cleanrp', name: 'Чистый RP' }
+  ];
+  let curBadgeStyleIdx = 0;
+
+  function initBadgeStyle() {
+    let saved = 'badge-style-dots';
+    try { saved = localStorage.getItem('flovmp:badge_style') || 'badge-style-dots'; } catch(e) {}
+    const idx = BADGE_STYLES.findIndex(s => s.id === saved);
+    curBadgeStyleIdx = idx >= 0 ? idx : 0;
+    chatWrapper.classList.add(BADGE_STYLES[curBadgeStyleIdx].id);
+    const label = document.getElementById('badge-style-name');
+    if (label) label.textContent = BADGE_STYLES[curBadgeStyleIdx].name;
+  }
+
+  function cycleBadgeStyle() {
+    chatWrapper.classList.remove(BADGE_STYLES[curBadgeStyleIdx].id);
+    curBadgeStyleIdx = (curBadgeStyleIdx + 1) % BADGE_STYLES.length;
+    chatWrapper.classList.add(BADGE_STYLES[curBadgeStyleIdx].id);
+    const label = document.getElementById('badge-style-name');
+    if (label) label.textContent = BADGE_STYLES[curBadgeStyleIdx].name;
+    try { localStorage.setItem('flovmp:badge_style', BADGE_STYLES[curBadgeStyleIdx].id); } catch(e) {}
+  }
+
+  function toggleInputPreview() {
+    if (isInputOpen) {
+      closeInput(false);
+    } else {
+      openInput();
+    }
+  }
+
+  function clearLogs() {
+    logArea.innerHTML = "";
+    lines.length = 0;
+  }
+
+  function seedSampleMessages() {
+    clearLogs();
+    pushMessage("system", "", "{34d399}[FloV:MP]{ffffff} Добро пожаловать на игровой сервер!");
+    pushMessage("player", "[0] Alex_Mercer", "Привет всем! Сервер запущен автономно.");
+    pushMessage("me", "Alex_Mercer", "достал служебное удостоверение из нагрудного кармана.");
+    pushMessage("do", "Alex_Mercer", "Удостоверение открыто на 1-й странице.");
+    pushMessage("ooc", "[1] Roman_V", "кто знает команду для починки авто?");
+    pushMessage("shout", "[0] Alex_Mercer", "Используй /fix или /help!");
+    pushMessage("admin", "[0] Alex_Mercer (Ур.8)", "Тестовое сообщение администратора");
+  }
+
+  initBadgeStyle();
+
   // ─── ALT:V CLIENT EVENTS ─────────────────────────────────────
   if (typeof alt !== "undefined") {
     alt.on("flovmp:chat:msg", function (kind, author, text) {
@@ -992,8 +1288,7 @@
       openInput(initialValue);
     });
     alt.on("flovmp:chat:clear", function () {
-      logArea.innerHTML = "";
-      lines.length = 0;
+      clearLogs();
     });
     alt.on("flovmp:settings:accent", function (colorId) {
       const PRESETS = {
@@ -1013,14 +1308,62 @@
       s.setProperty('--accent-ink', p.ink);
     });
   } else {
-    // Preview in standalone browser
-    pushMessage("system", "", "{34d399}[FloV:MP]{ffffff} Добро пожаловать на игровой сервер!");
-    pushMessage("player", "[0] Alex_Mercer", "Привет всем! Сервер запущен автономно.");
-    pushMessage("me", "Alex_Mercer", "достал служебное удостоверение из нагрудного кармана.");
-    pushMessage("do", "Alex_Mercer", "Удостоверение открыто на 1-й странице.");
-    pushMessage("ooc", "[1] Roman_V", "кто знает команду для починки авто?");
-    pushMessage("shout", "[0] Alex_Mercer", "Используй /fix или /help!");
-    pushMessage("admin", "[0] Alex_Mercer (Ур.8)", "Тестовое сообщение администратора");
+    // ─── Standalone Browser Preview Mode ────────────────────────
+    document.body.classList.add("standalone-preview");
+
+    // Hotkey T and / in standalone browser
+    window.addEventListener("keydown", function (e) {
+      if (e.target === chatInput) return;
+      if (e.key === "t" || e.key === "T" || e.key === "е" || e.key === "Е") {
+        e.preventDefault();
+        openInput();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        openInput('/');
+      }
+    });
+
+    // In standalone browser preview, send message to chat log directly on Enter
+    const origCloseInput = closeInput;
+    closeInput = function (send) {
+      const raw = chatInput.value.trim();
+      origCloseInput(send);
+      if (send && raw.length > 0) {
+        if (raw.startsWith('/b ') || raw.startsWith('/ooc ')) {
+          pushMessage('ooc', '[0] Alex_Mercer', raw.replace(/^\/(b|ooc)\s+/, ''));
+        } else if (raw.startsWith('/me ')) {
+          pushMessage('me', 'Alex_Mercer', raw.replace(/^\/me\s+/, ''));
+        } else if (raw.startsWith('/do ')) {
+          pushMessage('do', 'Alex_Mercer', raw.replace(/^\/do\s+/, ''));
+        } else if (raw.startsWith('/s ') || raw.startsWith('/shout ')) {
+          pushMessage('shout', '[0] Alex_Mercer', raw.replace(/^\/(s|shout)\s+/, ''));
+        } else if (raw.startsWith('/w ') || raw.startsWith('/whisper ')) {
+          pushMessage('whisper', '[0] Alex_Mercer', raw.replace(/^\/(w|whisper)\s+/, ''));
+        } else if (raw.startsWith('/a ')) {
+          pushMessage('admin', '[0] Alex_Mercer (Ур.8)', raw.replace(/^\/a\s+/, ''));
+        } else if (raw.startsWith('/')) {
+          const cmd = raw.slice(1).split(' ')[0].toLowerCase();
+          if (cmd === 'clear') {
+            clearLogs();
+          } else if (cmd === 'help') {
+            pushMessage('system', '', '{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───');
+            pushMessage('system', '', '{e4e4e7}Чат: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear');
+            pushMessage('system', '', '{34d399}Админ: {a1a1aa}/tpm, /tp, /goto, /gethere, /car, /fix, /noclip, /heal, /god');
+          } else {
+            pushMessage('cmd', '', `{38bdf8}[Команда] Выполнена: ${raw}`);
+          }
+        } else {
+          pushMessage('player', '[0] Alex_Mercer', raw);
+        }
+      }
+    };
+
+    seedSampleMessages();
+
+    // Auto-open input immediately in browser so the user sees the field, tabs, counter & hints!
+    setTimeout(() => {
+      openInput();
+    }, 40);
   }
 </script>
 </body>
