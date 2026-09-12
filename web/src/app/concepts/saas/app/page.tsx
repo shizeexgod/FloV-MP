@@ -125,7 +125,7 @@ export default function SaaSApp() {
       <aside className="sticky top-0 hidden h-screen w-60 flex-none flex-col border-r border-white/[0.07] bg-[#0a0a0c] p-3 lg:flex">
         <a href="/concepts/saas" className="flex items-center gap-2.5 px-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/branding/logo.jpg" alt="" className="h-6 w-6 rounded-md" />
+          <img src="/branding/logo.png" alt="" className="h-6 w-6 rounded-md" />
           <span className="text-[14px] font-semibold tracking-tight">FloV:MP</span>
           <span className="ml-auto rounded border border-white/10 px-1.5 py-0.5 font-mono text-[9px] text-white/40">app</span>
         </a>

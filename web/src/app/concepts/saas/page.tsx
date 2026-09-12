@@ -58,7 +58,7 @@ export default function SaaSConcept() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
           <div className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.jpg" alt="" className="h-6 w-6 rounded-md" />
+            <img src="/branding/logo.png" alt="" className="h-6 w-6 rounded-md" />
             <span className="text-[15px] font-semibold tracking-tight">FloV:MP</span>
           </div>
           <nav className="hidden items-center gap-6 md:flex">
@@ -423,7 +423,7 @@ export default function SaaSConcept() {
                 <aside className="hidden w-52 flex-none border-r border-white/[0.07] p-3 lg:block">
                   <div className="flex items-center gap-2 px-2 py-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/branding/logo.jpg" alt="" className="h-5 w-5 rounded" />
+                    <img src="/branding/logo.png" alt="" className="h-5 w-5 rounded" />
                     <span className="text-[13px] font-semibold">FloV:MP</span>
                   </div>
                   <div className="mt-3 space-y-0.5">

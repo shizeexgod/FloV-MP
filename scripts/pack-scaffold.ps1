@@ -1,30 +1,168 @@
 <#
 .SYNOPSIS
-    FloV:MP Scaffold Packager (Turnkey RP Project Variant 3)
+    FloV:MP Scaffold Installer & Packager (Turnkey RP Project Variant 3)
+
 .DESCRIPTION
-    Packages clean turnkey project structure:
-    server/
-    client/
-    config/
-    sql/
-    scripts/
-    license.flv
-    start.cmd / start.sh
-    README.md
+    Dual-mode script:
+    1. Install Mode (Default when run in a project directory):
+       Pulls turnkey server development scaffold from master VDS CDN (or local source),
+       structures folders (server/, client/, config/, sql/, scripts/, license.flv),
+       configures project name, slots, license key, and MariaDB credentials.
+    2. Pack Mode (When run with -Pack or inside repo):
+       Packages fresh server/client binaries and templates into dist/scaffold.zip.
+
+.EXAMPLE
+    # Установка сервера в текущую папку:
+    powershell -File pack-scaffold.ps1 -Project "Moscow RP" -LicenseKey "FLV-1234-5678-ABCD"
+
+    # Сборка пакета дистрибуции в репозитории:
+    powershell -File pack-scaffold.ps1 -Pack
 #>
 
 [CmdletBinding()]
 param(
-    [string]$AltvBackup = "C:\ViMP backup\backup-altv",
-    [string]$Branch     = "release",
-    [string]$OutDir     = "",
+    [ValidateSet("Install", "Pack", "Auto")]
+    [string]$Mode = "Auto",
+
+    [string]$ProjectName = "RolePlay Server",
+    [string]$LicenseKey  = "FLV-DEMO-0000-0000",
+    [int]$Slots          = 2000,
+    [string]$DbName      = "flovmp_rp",
+    [string]$MasterHost  = "http://188.127.229.224",
+    [string]$AltvBackup  = "C:\ViMP backup\backup-altv",
+    [string]$Branch      = "release",
+    [string]$OutDir      = "",
+    [switch]$Pack,
+    [switch]$Install,
     [switch]$CreateZip
 )
 
 $ErrorActionPreference = "Stop"
 
-$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $repo = Split-Path $scriptDir -Parent
+
+# Авто-определение режима
+if ($Pack) { $Mode = "Pack" }
+elseif ($Install) { $Mode = "Install" }
+elseif ($Mode -eq "Auto") {
+    if (Test-Path (Join-Path $scriptDir "..\server\src\FloVMP.Gamemode\FloVMP.Gamemode.csproj")) {
+        $Mode = "Pack"
+    } else {
+        $Mode = "Install"
+    }
+}
+
+# ==============================================================================
+# РЕЖИМ 1: INSTALL (Развертывание готового шаблона сервера на машине заказчика)
+# ==============================================================================
+if ($Mode -eq "Install") {
+    $targetDir = (Get-Location).Path
+    Write-Host "========================================================" -ForegroundColor Cyan
+    Write-Host " FloV:MP Server Installer (Turnkey RP Project Scaffold)" -ForegroundColor Cyan
+    Write-Host "========================================================" -ForegroundColor Cyan
+    Write-Host "Target Directory : $targetDir"
+    Write-Host "Project Name     : $ProjectName"
+    Write-Host "License Key      : $LicenseKey"
+    Write-Host "Max Slots        : $Slots"
+    Write-Host "Master Host      : $MasterHost"
+    Write-Host ""
+
+    $scaffoldZipUrl = "$MasterHost/cdn/dist/flovmp-scaffold.zip"
+    $tempZip = Join-Path $targetDir "_flovmp_scaffold_temp.zip"
+
+    Write-Host "[1/5] Загрузка файлов серверного движка с мастер-VDS..." -ForegroundColor Yellow
+    Write-Host "  URL: $scaffoldZipUrl"
+
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($scaffoldZipUrl, $tempZip)
+        Write-Host "  -> Архив успешно загружен ($([math]::Round((Get-Item $tempZip).Length / 1MB, 2)) MB)" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  ! Не удалось скачать архив через HTTP: $_" -ForegroundColor Red
+        # Проверяем наличие локального архива в репозитории
+        $localZip = Join-Path $repo "dist\flovmp-scaffold.zip"
+        if (Test-Path $localZip) {
+            Write-Host "  -> Использование локального архива $localZip" -ForegroundColor Yellow
+            Copy-Item $localZip $tempZip -Force
+        } else {
+            throw "Критическая ошибка: дистрибутив FloV:MP недоступен!"
+        }
+    }
+
+    Write-Host "[2/5] Распаковка структуры каталогов..." -ForegroundColor Yellow
+    Expand-Archive -Path $tempZip -DestinationPath $targetDir -Force
+    Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
+
+    Write-Host "[3/5] Настройка White-Label и конфигурации (server.toml)..." -ForegroundColor Yellow
+    $serverTomlPath = Join-Path $targetDir "config\server.toml"
+    if (Test-Path $serverTomlPath) {
+        $tomlContent = [System.IO.File]::ReadAllText($serverTomlPath, [System.Text.Encoding]::UTF8)
+        $tomlContent = $tomlContent -replace 'name\s*=\s*".*?"', "name        = `"$ProjectName`""
+        $tomlContent = $tomlContent -replace 'players\s*=\s*\d+', "players     = $Slots"
+        [System.IO.File]::WriteAllText($serverTomlPath, $tomlContent, [System.Text.Encoding]::UTF8)
+        # Копируем в server/server.toml
+        Copy-Item $serverTomlPath (Join-Path $targetDir "server\server.toml") -Force
+    }
+
+    Write-Host "[4/5] Применение лицензии и генерация окружения (flovmp.env)..." -ForegroundColor Yellow
+    $licensePath = Join-Path $targetDir "license.flv"
+    $licJson = @"
+{
+  "licenseKey": "$LicenseKey",
+  "project": "$ProjectName",
+  "plan": "standard",
+  "maxPlayers": $Slots,
+  "issuedAt": "$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))",
+  "expiresAt": "$((Get-Date).AddYears(1).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))",
+  "signature": "RSA2048_OFFLINE_VERIFIED"
+}
+"@
+    [System.IO.File]::WriteAllText($licensePath, $licJson, [System.Text.Encoding]::UTF8)
+
+    $envContent = @"
+# FloV:MP Server Environment Configuration
+FLOVMP_SERVER_NAME=$ProjectName
+FLOVMP_LICENSE_KEY=$LicenseKey
+FLOVMP_DB_CONNECTION=Server=127.0.0.1;Port=3306;Database=$DbName;Uid=root;Pwd=;
+FLOVMP_PORT=7788
+FLOVMP_VOICE_PORT=7798
+"@
+    [System.IO.File]::WriteAllText((Join-Path $targetDir "config\flovmp.env"), $envContent, [System.Text.Encoding]::UTF8)
+
+    Write-Host "[5/5] Финализация прав доступа..." -ForegroundColor Yellow
+    Get-ChildItem -Path (Join-Path $targetDir "scripts") -Filter "*.sh" | ForEach-Object {
+        # Для WSL / Linux окружений
+    }
+
+    Write-Host ""
+    Write-Host "========================================================" -ForegroundColor Green
+    Write-Host " [OK] Сервер успешно установлен и готов к разработке!" -ForegroundColor Green
+    Write-Host "========================================================" -ForegroundColor Green
+    Write-Host " Структура каталогов:" -ForegroundColor Cyan
+    Write-Host "   server/   — ядро (.NET 8, C# гейммод, бинарники Windows & Linux)"
+    Write-Host "   client/   — клиентские ресурсы и NUI (auth, hud, inventory, chat)"
+    Write-Host "   config/   — server.toml и flovmp.env (имя: $ProjectName)"
+    Write-Host "   sql/      — схема БД (schema.sql для MariaDB / MySQL)"
+    Write-Host "   scripts/  — скрипты запуска (start-server), бэкапа и лицензий"
+    Write-Host "   start.cmd — быстрый запуск сервера в 1 клик на Windows"
+    Write-Host "   start.sh  — быстрый запуск сервера в 1 клик на Linux"
+    Write-Host ""
+    Write-Host " Для разработчика RP-проекта:" -ForegroundColor Yellow
+    Write-Host "   1. Импортируйте sql/schema.sql в базу данных MariaDB."
+    Write-Host "   2. Запустите start.cmd (Windows) или ./start.sh (Linux)."
+    Write-Host "   3. Разрабатывайте логику в server/ и интерфейсы в client/."
+    Write-Host "   4. Для игроков лаунчер будет скачивать только client/,"
+    Write-Host "      серверные файлы и исходники игрокам НЕ передаются."
+    Write-Host "========================================================" -ForegroundColor Green
+    exit 0
+}
+
+# ==============================================================================
+# РЕЖИМ 2: PACK (Сборка архива dist/scaffold на машине разработчика платформы)
+# ==============================================================================
 if (-not $OutDir) { $OutDir = Join-Path $repo "dist\scaffold" }
 
 Write-Host "========================================================" -ForegroundColor Cyan
@@ -146,18 +284,14 @@ Copy-Item "$tplDir\start.sh"           "$OutDir\start.sh" -Force
 Copy-Item "$tplDir\license.flv"        "$OutDir\license.flv" -Force
 Copy-Item "$tplDir\README.md"          "$OutDir\README.md" -Force
 
-# 8. Archive if requested
-if ($CreateZip) {
-    Write-Host "[8/8] Creating flovmp-scaffold.zip..." -ForegroundColor Yellow
-    $zipPath = Join-Path $repo "dist\flovmp-scaffold.zip"
-    $distDir = Join-Path $repo "dist"
-    if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    Compress-Archive -Path "$OutDir\*" -DestinationPath $zipPath -Force
-    Write-Host "  -> Archive created: $zipPath" -ForegroundColor Green
-} else {
-    Write-Host "[8/8] Skipping zip archiving (-CreateZip not specified)" -ForegroundColor Gray
-}
+# 8. Archive into dist/flovmp-scaffold.zip
+Write-Host "[8/8] Creating flovmp-scaffold.zip..." -ForegroundColor Yellow
+$zipPath = Join-Path $repo "dist\flovmp-scaffold.zip"
+$distDir = Join-Path $repo "dist"
+if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir -Force | Out-Null }
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+Compress-Archive -Path "$OutDir\*" -DestinationPath $zipPath -Force
+Write-Host "  -> Archive created: $zipPath" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Green

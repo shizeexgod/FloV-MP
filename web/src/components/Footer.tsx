@@ -33,7 +33,7 @@ export default function Footer() {
             <div className="flex items-center gap-2.5">
               <span className="block h-9 w-9 overflow-hidden rounded-[10px] border border-white/10 bg-ink-800">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/branding/logo.jpg" alt="FloV:MP" className="h-full w-full object-cover" />
+                <img src="/branding/logo.png" alt="FloV:MP" className="h-full w-full object-cover" />
               </span>
               <span className="text-[16px] font-extrabold text-white">
                 FloV<span className="text-brand">:MP</span>

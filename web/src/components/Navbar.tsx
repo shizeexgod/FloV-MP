@@ -75,7 +75,7 @@ export default function Navbar() {
         <Link href="/" className="group flex items-center gap-2.5">
           <span className="block h-8 w-8 overflow-hidden rounded-[10px] border border-white/10 bg-ink-800 transition-transform duration-300 group-hover:scale-105">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.jpg" alt="FloV:MP" className="h-full w-full object-cover" />
+            <img src="/branding/logo.png" alt="FloV:MP" className="h-full w-full object-cover" />
           </span>
           <span className="text-[16px] font-extrabold tracking-tight text-white">
             FloV<span className="text-brand">:MP</span>

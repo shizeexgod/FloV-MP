@@ -129,7 +129,7 @@ export default function HybridApp() {
       <aside className="sticky top-0 hidden h-screen w-56 flex-none flex-col border-r border-white/[0.07] bg-[#08080a] p-3 lg:flex">
         <div className="flex items-center gap-2 px-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/branding/logo.jpg" alt="" className="h-5 w-5 rounded" />
+          <img src="/branding/logo.png" alt="" className="h-5 w-5 rounded" />
           <span className="text-[13px] font-semibold tracking-tight text-white">FloV:MP</span>
         </div>
 

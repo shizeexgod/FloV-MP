@@ -845,7 +845,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3.5">
           <span className="block h-11 w-11 overflow-hidden rounded-xl border border-white/10 bg-ink-800">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.jpg" alt="" className="h-full w-full object-cover" />
+            <img src="/branding/logo.png" alt="" className="h-full w-full object-cover" />
           </span>
           <div>
             <div className="flex items-center gap-2">

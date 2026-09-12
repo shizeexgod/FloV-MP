@@ -64,7 +64,7 @@ export default function HybridConcept() {
         <div className="mx-auto flex max-w-6xl items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 backdrop-blur-xl">
           <div className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.jpg" alt="" className="h-7 w-7 rounded-lg" />
+            <img src="/branding/logo.png" alt="" className="h-7 w-7 rounded-lg" />
             <span className="text-[15px] font-semibold tracking-tight">FloV:MP</span>
           </div>
           <nav className="hidden items-center gap-6 md:flex">
@@ -333,7 +333,7 @@ export default function HybridConcept() {
               <aside className="hidden w-52 flex-none border-r border-white/[0.08] p-3 lg:block">
                 <div className="flex items-center gap-2 px-2 py-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/branding/logo.jpg" alt="" className="h-5 w-5 rounded" />
+                  <img src="/branding/logo.png" alt="" className="h-5 w-5 rounded" />
                   <span className="text-[13px] font-semibold">FloV:MP</span>
                 </div>
                 <div className="mt-3 space-y-0.5">

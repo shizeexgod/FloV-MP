@@ -44,6 +44,8 @@ let splashWindow = null;
 // (плюс небольшой минимум, чтобы не мигало на быстрых машинах), а не
 // искусственная задержка.
 const SPLASH_MIN_MS = process.env.FLOVMP_SPLASH_MIN ? parseInt(process.env.FLOVMP_SPLASH_MIN, 10) : 700;
+const APP_ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
+
 function createSplash() {
   splashWindow = new BrowserWindow({
     width: 380,
@@ -54,6 +56,7 @@ function createSplash() {
     center: true,
     show: true,
     skipTaskbar: true,
+    icon: APP_ICON_PATH,
     webPreferences: { sandbox: true },
   });
   splashWindow.removeMenu();
@@ -70,6 +73,7 @@ function createWindow() {
     center: true,
     frame: false,
     backgroundColor: '#0c0c0c',
+    icon: APP_ICON_PATH,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

@@ -73,6 +73,20 @@ function toggleNoClip() {
     try { alt.emitServer('flovmp:admin:noclip', noClip); } catch (e) { }
 }
 
+// Периодическое отключение стандартных служб GTA (не в каждом кадре, а каждые 5 сек)
+function disableAmbientDispatch() {
+    try {
+        for (let i = 1; i <= 15; i++) {
+            native.enableDispatchService(i, false);
+        }
+        native.setCreateRandomCops(false);
+        native.setCreateRandomCopsNotOnScenarios(false);
+        native.setCreateRandomCopsOnScenarios(false);
+    } catch (e) { }
+}
+disableAmbientDispatch();
+alt.setInterval(disableAmbientDispatch, 5000);
+
 // --- Постоянный игровой цикл (Каждый тик) --------------------------------
 alt.everyTick(() => {
     // 1) Полное отключение стандартного трафика и NPC
@@ -81,14 +95,6 @@ alt.everyTick(() => {
     native.setVehicleDensityMultiplierThisFrame(0.0);
     native.setRandomVehicleDensityMultiplierThisFrame(0.0);
     native.setParkedVehicleDensityMultiplierThisFrame(0.0);
-
-    // 2) Отключение служб полиции / скорой / спавна копов
-    for (let i = 1; i <= 15; i++) {
-        native.enableDispatchService(i, false);
-    }
-    native.setCreateRandomCops(false);
-    native.setCreateRandomCopsNotOnScenarios(false);
-    native.setCreateRandomCopsOnScenarios(false);
 
     const player = alt.Player.local;
     if (player && player.valid) {
@@ -454,7 +460,9 @@ function openDevConsole() {
         if (consoleView) consoleView.emit('flovmp:console:log', 'HOTRELOAD', 'All active WebViews reloaded from disk.');
     });
     consoleView.on('flovmp:console:quit', () => {
-        native.restartGame();
+        try {
+            if (typeof alt.disconnect === 'function') alt.disconnect();
+        } catch (e) { }
     });
 
     if (consoleStatsInterval) alt.clearInterval(consoleStatsInterval);
@@ -472,6 +480,38 @@ function openDevConsole() {
             if (typeof alt.getPing === 'function') ping = alt.getPing();
         } catch (e) { }
         consoleView.emit('flovmp:console:stats', fps, ping, 60);
+
+        try {
+            const local = alt.Player.local;
+            if (local && local.valid) {
+                const pos = local.pos;
+                const entities = [];
+                for (const p of alt.Player.all) {
+                    if (p && p.valid) {
+                        const isLoc = p === local;
+                        entities.push({
+                            cell: `Cell [${Math.floor(p.pos.x / 64)}, ${Math.floor(p.pos.y / 64)}]`,
+                            type: 'Player',
+                            id: '#' + p.id + (isLoc ? ' (Local)' : ''),
+                            dist: isLoc ? '0.0 m' : `${Math.round(p.pos.distanceTo(pos))} m`,
+                            status: 'Visible'
+                        });
+                    }
+                }
+                for (const v of alt.Vehicle.all) {
+                    if (v && v.valid) {
+                        entities.push({
+                            cell: `Cell [${Math.floor(v.pos.x / 64)}, ${Math.floor(v.pos.y / 64)}]`,
+                            type: 'Vehicle',
+                            id: '#' + v.id,
+                            dist: `${Math.round(v.pos.distanceTo(pos))} m`,
+                            status: 'Visible'
+                        });
+                    }
+                }
+                consoleView.emit('flovmp:console:entities_data', entities);
+            }
+        } catch (e) { }
     }, 500);
 }
 

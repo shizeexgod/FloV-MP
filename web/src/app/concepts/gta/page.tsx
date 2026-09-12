@@ -42,7 +42,7 @@ export default function GtaConcept() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.jpg" alt="" className="h-7 w-7 rounded-md" />
+            <img src="/branding/logo.png" alt="" className="h-7 w-7 rounded-md" />
             <span className="font-mono text-[15px] font-bold tracking-tight">
               FloV<span style={{ color: PINK }}>:MP</span>
             </span>

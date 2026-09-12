@@ -589,12 +589,34 @@
       `;
     }
 
+    let latestEntities = [];
+
     function renderEntitiesView() {
+      const rows = latestEntities && latestEntities.length > 0
+        ? latestEntities.map(e => `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+              <td style="padding: 6px; color: #38bdf8;">${e.cell}</td>
+              <td style="padding: 6px;">${e.type}</td>
+              <td style="padding: 6px;">${e.id}</td>
+              <td style="padding: 6px;">${e.dist}</td>
+              <td style="padding: 6px; color: ${e.status === 'Visible' ? '#34d399' : '#f59e0b'};">${e.status}</td>
+            </tr>
+          `).join('')
+        : `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+              <td style="padding: 6px; color: #38bdf8;">Cell [0, 0]</td>
+              <td style="padding: 6px;">Player</td>
+              <td style="padding: 6px;">#0 (Local)</td>
+              <td style="padding: 6px;">0.0 m</td>
+              <td style="padding: 6px; color: #34d399;">Visible</td>
+            </tr>
+          `;
+
       logsArea.innerHTML = `
         <div style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="color: #f43f5e; font-weight: 700; font-size: 12px;">SPATIAL HASH GRID (CELL 64M)</span>
-            <span style="font-size: 11px; color: #94a3b8;">Радиус стриминга: 250m · Миграция: 120m</span>
+            <span style="font-size: 11px; color: #94a3b8;">Сущностей в радиусе: ${latestEntities ? latestEntities.length : 1} · Стриминг: 250m</span>
           </div>
 
           <table style="width: 100%; border-collapse: collapse; font-size: 11px; color: #e2e8f0;">
@@ -608,34 +630,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-                <td style="padding: 6px; color: #38bdf8;">Cell [-4, -15]</td>
-                <td style="padding: 6px;">Player</td>
-                <td style="padding: 6px;">#0 (Local)</td>
-                <td style="padding: 6px;">0.0 m</td>
-                <td style="padding: 6px; color: #34d399;">Visible</td>
-              </tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-                <td style="padding: 6px; color: #38bdf8;">Cell [-4, -15]</td>
-                <td style="padding: 6px;">Vehicle</td>
-                <td style="padding: 6px;">#102 (Dominator)</td>
-                <td style="padding: 6px;">8.4 m</td>
-                <td style="padding: 6px; color: #34d399;">Visible</td>
-              </tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-                <td style="padding: 6px; color: #38bdf8;">Cell [-3, -15]</td>
-                <td style="padding: 6px;">Ped</td>
-                <td style="padding: 6px;">#405</td>
-                <td style="padding: 6px;">42.1 m</td>
-                <td style="padding: 6px; color: #34d399;">Visible</td>
-              </tr>
-              <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
-                <td style="padding: 6px; color: #64748b;">Cell [-1, -12]</td>
-                <td style="padding: 6px; color: #64748b;">Vehicle</td>
-                <td style="padding: 6px; color: #64748b;">#88</td>
-                <td style="padding: 6px; color: #64748b;">188.0 m</td>
-                <td style="padding: 6px; color: #f59e0b;">Occluded (Interior PVS)</td>
-              </tr>
+              ${rows}
             </tbody>
           </table>
         </div>
@@ -908,6 +903,10 @@
         if (fpsEl) fpsEl.innerText = fps;
         if (pingEl) pingEl.innerText = ping + ' ms';
         if (tickEl) tickEl.innerText = tick + ' Hz';
+      });
+      alt.on('flovmp:console:entities_data', (data) => {
+        latestEntities = data || [];
+        if (currentTab === 'entities') renderEntitiesView();
       });
     }
 
