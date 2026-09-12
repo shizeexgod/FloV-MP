@@ -11,6 +11,9 @@ public class PlayerTrackingState
     public bool IsInVehicle { get; set; }
     public int ConsecutiveSpeedViolations { get; set; }
     public int ConsecutiveTeleportViolations { get; set; }
+    public int ConsecutiveClimbViolations { get; set; }
+    public int EventCountInCurrentWindow { get; set; }
+    public long CurrentWindowSecond { get; set; }
     public uint EquippedWeaponHash { get; set; }
     public bool IsAdminExempt { get; set; }
     public DateTime LastSpawnOrTeleportTime { get; set; } = DateTime.UtcNow;
@@ -19,5 +22,6 @@ public class PlayerTrackingState
     {
         ConsecutiveSpeedViolations = 0;
         ConsecutiveTeleportViolations = 0;
+        ConsecutiveClimbViolations = 0;
     }
 }

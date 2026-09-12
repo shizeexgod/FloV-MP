@@ -370,6 +370,82 @@
       padding: 2px 7px;
       border-radius: 4px;
     }
+
+    /* DevTools View Styles */
+    .devtools-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      padding: 14px;
+    }
+    .devtools-card {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .devtools-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #a1a1aa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 6px;
+    }
+    .devtools-btn {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f4f4f5;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .devtools-btn:hover {
+      background: rgba(255, 61, 138, 0.22);
+      border-color: rgba(255, 61, 138, 0.45);
+      color: #ffffff;
+    }
+    .devtools-btn-accent {
+      background: rgba(255, 61, 138, 0.15);
+      border-color: rgba(255, 61, 138, 0.35);
+      color: #ff3d8a;
+    }
+    .devtools-btn-accent:hover {
+      background: #ff3d8a;
+      color: #000;
+    }
+    .devtools-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .devtools-input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 11px;
+      color: #ffffff;
+      outline: none;
+    }
+    .devtools-input:focus {
+      border-color: #ff3d8a;
+    }
   </style>
 </head>
 <body>
@@ -390,10 +466,15 @@
           <button class="tab-btn" onclick="switchTab('net', this)">Сеть &amp; FPS</button>
           <button class="tab-btn" onclick="switchTab('entities', this)">Сущности</button>
           <button class="tab-btn" onclick="switchTab('hotreload', this)">Hot-Reload</button>
+          <button class="tab-btn" onclick="switchTab('devtools', this)" style="color: #ff3d8a; font-weight: 600;">Дев-тулс</button>
         </div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button class="hdr-action-btn font-mono" onclick="execCmd('tpm')" title="Телепорт к фиолетовой метке (waypoint)" style="color: #ff3d8a; border-color: rgba(255, 61, 138, 0.35);">TPM</button>
+        <button class="hdr-action-btn font-mono" onclick="execCmd('noclip')" title="Свободный полет камеры (F4)" style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.35);">F4 FLY</button>
+        <button class="hdr-action-btn font-mono" onclick="execCmd('pos')" title="Скопировать текущие координаты в буфер" style="color: #34d399; border-color: rgba(52, 211, 153, 0.35);">POS</button>
+
         <div class="metric-pill font-mono">
           <span>TICK:</span>
           <strong id="val-tick" style="color: #34d399;">60.0 Hz</strong>
@@ -465,10 +546,18 @@
       { cmd: 'help', desc: 'Справка по всем доступным командам консоли' },
       { cmd: 'clear', desc: 'Очистить экран и лог консоли (алиас: cls)' },
       { cmd: 'cls', desc: 'Очистить экран и лог консоли' },
-      { cmd: 'netgraph', desc: 'Показать подробную статистику сетевого трафика и RTT' },
+      { cmd: 'tpm', desc: 'Телепорт к фиолетовой метке (waypoint) на карте' },
+      { cmd: 'noclip', desc: 'Свободный полет камеры администратора (F4 NoClip)' },
+      { cmd: 'pos', desc: 'Вывести и скопировать координаты X, Y, Z и Yaw в буфер' },
+      { cmd: 'coords', desc: 'Вывести и скопировать координаты в буфер обмена' },
+      { cmd: 'car [model]', desc: 'Заспавнить автомобиль (напр. car adder, car sultanrs)' },
+      { cmd: 'heal', desc: 'Восстановить здоровье (200 HP) и броню до 100%' },
+      { cmd: 'god', desc: 'Включить/выключить режим бессмертия' },
+      { cmd: 'weather [type]', desc: 'Погода: EXTRASUNNY, CLEAR, CLOUDS, RAIN, THUNDER, FOGGY' },
+      { cmd: 'time [h] [m]', desc: 'Установить игровое время суток (напр. time 12 0)' },
+      { cmd: 'netgraph', desc: 'Показать статистику сетевого трафика и RTT' },
       { cmd: 'entities', desc: 'Инспектор сущностей SpatialHashGrid в радиусе стриминга' },
       { cmd: 'hotreload', desc: 'Мгновенная перезагрузка NUI-интерфейсов без рестарта' },
-      { cmd: 'pos', desc: 'Вывести текущие координаты X, Y, Z и Heading игрока' },
       { cmd: 'quit', desc: 'Закрыть клиент игры и выгрузить процесс' },
       { cmd: 'reconnect', desc: 'Переподключиться к серверу' }
     ];
@@ -667,6 +756,69 @@
       `;
     }
 
+    function renderDevToolsView() {
+      logsArea.innerHTML = `
+        <div class="devtools-grid font-mono">
+          <!-- Карточка 1: Перемещение и полет -->
+          <div class="devtools-card">
+            <div class="devtools-card-title">🛸 Полет и Телепортация</div>
+            <div class="devtools-row">
+              <button class="devtools-btn devtools-btn-accent" style="flex: 1;" onclick="execCmd('noclip')">NoClip (F4 Fly)</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('tpm')">ТП по метке (TPM)</button>
+            </div>
+            <div class="devtools-row">
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('pos')">📋 Скопировать POS</button>
+            </div>
+          </div>
+
+          <!-- Карточка 2: Спавн транспорта -->
+          <div class="devtools-card">
+            <div class="devtools-card-title">🚗 Транспорт</div>
+            <div class="devtools-row">
+              <input type="text" id="dev-veh-model" class="devtools-input" value="adder" placeholder="Модель авто...">
+              <button class="devtools-btn devtools-btn-accent" onclick="execCmd('car ' + document.getElementById('dev-veh-model').value)">Спавн</button>
+            </div>
+            <div class="devtools-row">
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('car sultanrs')">Sultan RS</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('car t20')">T20</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('car buzzard')">Buzzard</button>
+            </div>
+          </div>
+
+          <!-- Карточка 3: Персонаж и здоровье -->
+          <div class="devtools-card">
+            <div class="devtools-card-title">👤 Персонаж</div>
+            <div class="devtools-row">
+              <button class="devtools-btn devtools-btn-accent" style="flex: 1;" onclick="execCmd('heal')">💚 Лечение (100% HP+Armor)</button>
+            </div>
+            <div class="devtools-row">
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('god')">🛡️ GodMode (Бессмертие)</button>
+            </div>
+          </div>
+
+          <!-- Карточка 4: Погода и время -->
+          <div class="devtools-card">
+            <div class="devtools-card-title">🌤️ Окружение (Мир)</div>
+            <div class="devtools-row">
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('weather EXTRASUNNY')">Солнце</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('weather RAIN')">Дождь</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('weather THUNDER')">Гроза</button>
+            </div>
+            <div class="devtools-row">
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('time 9 0')">09:00</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('time 14 0')">14:00</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('time 21 0')">21:00</button>
+              <button class="devtools-btn" style="flex: 1;" onclick="execCmd('time 1 0')">01:00</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function execCmd(cmd) {
+      executeCommand(cmd);
+    }
+
     function switchTab(tab, btn) {
       currentTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -686,6 +838,7 @@
         if (tab === 'net') renderNetGraph();
         else if (tab === 'entities') renderEntitiesView();
         else if (tab === 'hotreload') renderHotReloadView();
+        else if (tab === 'devtools') renderDevToolsView();
       }
     }
 

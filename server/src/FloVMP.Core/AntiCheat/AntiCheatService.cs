@@ -13,6 +13,8 @@ public class AntiCheatService
     private readonly ConcurrentDictionary<int, PlayerTrackingState> _players = new();
 
     public event Action<int, string, AntiCheatAction>? OnViolationDetected;
+    public event Action<AntiCheatDetectionEvent>? OnDetection;
+    public Func<AntiCheatDetectionEvent, AntiCheatAction>? CustomActionResolver;
 
     public AntiCheatService(AntiCheatConfig? config = null)
     {
@@ -95,19 +97,45 @@ public class AntiCheatService
         // Check Teleport
         if (!_teleportDetector.ValidateTeleport(state, currentPos, now, inVehicle, false, out var dist, out var teleReason))
         {
-            HandleViolation(state, teleReason, AntiCheatAction.TeleportBack);
+            HandleViolation(state, teleReason, AntiCheatAction.TeleportBack, AntiCheatSeverity.High, "Teleport", currentPos);
             return false;
         }
 
         // Check Speed
         if (!_speedDetector.ValidateSpeed(state, currentPos, now, inVehicle, out var speed, out var speedReason))
         {
-            var action = state.ConsecutiveSpeedViolations >= _config.MaxConsecutiveViolations
-                ? _config.DefaultViolationAction
-                : AntiCheatAction.Warning;
+            var isPersistent = state.ConsecutiveSpeedViolations >= _config.MaxConsecutiveViolations;
+            var severity = isPersistent ? AntiCheatSeverity.High : AntiCheatSeverity.Medium;
+            var action = isPersistent ? _config.DefaultViolationAction : AntiCheatAction.Warning;
 
-            HandleViolation(state, speedReason, action);
+            HandleViolation(state, speedReason, action, severity, "SpeedHack", currentPos);
             return false;
+        }
+
+        // Check NoClip (вертикальный набор высоты пешком без парашюта/вертолета)
+        if (!inVehicle)
+        {
+            var dt = (float)(now - state.LastTrackedTime).TotalSeconds;
+            if (dt > 0.05f && dt < 2.0f)
+            {
+                var deltaZ = currentPos.Z - state.LastValidPosition.Z;
+                var verticalSpeed = deltaZ / dt;
+
+                if (verticalSpeed > _config.MaxVerticalClimbSpeedMps)
+                {
+                    state.ConsecutiveClimbViolations++;
+                    if (state.ConsecutiveClimbViolations >= _config.MaxConsecutiveClimbViolations)
+                    {
+                        var reason = $"Аномальный вертикальный подъем (NoClip/FlyHack): {verticalSpeed:F1} м/с (лимит {_config.MaxVerticalClimbSpeedMps:F1} м/с)";
+                        HandleViolation(state, reason, AntiCheatAction.TeleportBack, AntiCheatSeverity.High, "NoClip", currentPos);
+                        return false;
+                    }
+                }
+                else
+                {
+                    state.ConsecutiveClimbViolations = 0;
+                }
+            }
         }
 
         // Both checks passed
@@ -122,9 +150,12 @@ public class AntiCheatService
         if (!_players.TryGetValue(accountId, out var state))
             return true;
 
+        if (state.IsAdminExempt || !_config.Enabled)
+            return true;
+
         if (!_weaponSecurity.ValidateWeaponEquipped(state, weaponHash, authorizedWeapons, out var reason))
         {
-            HandleViolation(state, reason, AntiCheatAction.Disarm);
+            HandleViolation(state, reason, AntiCheatAction.Disarm, AntiCheatSeverity.High, "BlacklistedWeapon");
             return false;
         }
 
@@ -132,8 +163,94 @@ public class AntiCheatService
         return true;
     }
 
-    private void HandleViolation(PlayerTrackingState state, string reason, AntiCheatAction action)
+    /// <summary>
+    /// Проверка частоты клиентских сетевых событий (защита от краш-спама и инъекций мод-меню)
+    /// </summary>
+    public bool CheckEventRateLimit(int accountId, string eventName, DateTime? timestamp = null)
     {
+        if (!_players.TryGetValue(accountId, out var state))
+            return true;
+
+        if (state.IsAdminExempt || !_config.Enabled)
+            return true;
+
+        var now = timestamp ?? DateTime.UtcNow;
+        var currentSecond = new DateTimeOffset(now).ToUnixTimeSeconds();
+
+        if (state.CurrentWindowSecond != currentSecond)
+        {
+            state.CurrentWindowSecond = currentSecond;
+            state.EventCountInCurrentWindow = 0;
+        }
+
+        state.EventCountInCurrentWindow++;
+
+        if (state.EventCountInCurrentWindow > _config.MaxEventsPerSecond)
+        {
+            var reason = $"Флуд сетевыми событиями ({eventName}): {state.EventCountInCurrentWindow} пакетов/сек (лимит {_config.MaxEventsPerSecond}/сек)";
+            HandleViolation(state, reason, AntiCheatAction.Kick, AntiCheatSeverity.Critical, "EventSpam");
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Проверка на неуязвимость (GodMode): подтвержденный входящий урон без изменения здоровья
+    /// </summary>
+    public bool CheckGodMode(int accountId, int incomingDamage, int actualHealthReduction)
+    {
+        if (!_players.TryGetValue(accountId, out var state))
+            return true;
+
+        if (state.IsAdminExempt || !_config.Enabled)
+            return true;
+
+        if (incomingDamage >= 25 && actualHealthReduction <= 0)
+        {
+            var reason = $"Игрок игнорирует подтвержденный урон {incomingDamage} HP (GodMode)";
+            HandleViolation(state, reason, AntiCheatAction.Kick, AntiCheatSeverity.Critical, "GodMode");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void HandleViolation(
+        PlayerTrackingState state,
+        string reason,
+        AntiCheatAction defaultAction,
+        AntiCheatSeverity severity = AntiCheatSeverity.Medium,
+        string detectionType = "Unknown",
+        Vector3D? location = null)
+    {
+        var action = defaultAction;
+        if (_config.SeverityActionMap.TryGetValue(severity, out var mappedAction))
+        {
+            if (mappedAction >= AntiCheatAction.Kick || action == AntiCheatAction.Warning || action == AntiCheatAction.LogOnly)
+            {
+                action = mappedAction;
+            }
+        }
+
+        var detectionEvent = new AntiCheatDetectionEvent
+        {
+            AccountId = state.AccountId,
+            Username = state.Username,
+            DetectionType = detectionType,
+            Severity = severity,
+            Details = reason,
+            Location = location ?? state.LastValidPosition,
+            Timestamp = DateTime.UtcNow,
+            SuggestedAction = action
+        };
+
+        if (CustomActionResolver != null)
+        {
+            action = CustomActionResolver.Invoke(detectionEvent);
+        }
+
+        OnDetection?.Invoke(detectionEvent);
         OnViolationDetected?.Invoke(state.AccountId, reason, action);
     }
 }

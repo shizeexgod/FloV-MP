@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     FloV:MP Scaffold Installer & Packager (Turnkey RP Project Variant 3)
 
@@ -186,8 +186,10 @@ if (Test-Path $OutDir) {
 $dirs = @(
     "$OutDir\server\modules\js-module",
     "$OutDir\server\data",
+    "$OutDir\server\resources\flovmp-starter",
     "$OutDir\server\resources\flovmp-core",
     "$OutDir\server\resources\flovmp-client",
+    "$OutDir\server\resources\sample-js-resource",
     "$OutDir\client\resources\flovmp-client",
     "$OutDir\config",
     "$OutDir\sql",
@@ -198,13 +200,25 @@ foreach ($d in $dirs) {
     New-Item -ItemType Directory -Path $d -Force | Out-Null
 }
 
-# 2. Build & publish C# gamemode
-Write-Host "[2/8] Publishing C# gamemode (FloVMP.Gamemode)..." -ForegroundColor Yellow
+# 2. Build & publish C# Starter & Gamemode
+Write-Host "[2/8] Publishing C# Starter (FloVMP.Starter)..." -ForegroundColor Yellow
+$starterProj = Join-Path $repo "server\src\FloVMP.Starter\FloVMP.Starter.csproj"
+& dotnet publish $starterProj -c Release -o "$OutDir\server\resources\flovmp-starter" --nologo
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish FloVMP.Starter failed: $LASTEXITCODE" }
+Copy-Item "$repo\server\resources\flovmp-starter\resource.toml" "$OutDir\server\resources\flovmp-starter\resource.toml" -Force
+Remove-Item "$OutDir\server\resources\flovmp-starter\*.pdb" -Force -ErrorAction SilentlyContinue
+
+Write-Host "  -> Publishing C# Gamemode (FloVMP.Gamemode)..." -ForegroundColor Yellow
 $gamemodeProj = Join-Path $repo "server\src\FloVMP.Gamemode\FloVMP.Gamemode.csproj"
 & dotnet publish $gamemodeProj -c Release -o "$OutDir\server\resources\flovmp-core" --nologo
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish FloVMP.Gamemode failed: $LASTEXITCODE" }
 Copy-Item "$repo\server\resources\flovmp-core\resource.toml" "$OutDir\server\resources\flovmp-core\resource.toml" -Force
 Remove-Item "$OutDir\server\resources\flovmp-core\*.pdb" -Force -ErrorAction SilentlyContinue
+
+# Copy sample-js-resource (Node.js support)
+if (Test-Path "$repo\server\resources\sample-js-resource") {
+    Copy-Item "$repo\server\resources\sample-js-resource\*" "$OutDir\server\resources\sample-js-resource\" -Recurse -Force
+}
 
 # 3. Copy engine binaries & neutralize Sentry
 Write-Host "[3/8] Copying engine binaries..." -ForegroundColor Yellow

@@ -447,9 +447,44 @@ function openDevConsole() {
     pushCursor();
     alt.toggleGameControls(false);
 
-    consoleView.on('flovmp:console:close', closeDevConsole);
     consoleView.on('flovmp:console:cmd', (cmd) => {
+        if (!cmd) return;
+        const parts = cmd.trim().split(' ');
+        const name = parts[0].toLowerCase();
+
+        if (name === 'tpm') {
+            const blip = native.getFirstBlipInfoId(8);
+            if (native.doesBlipExist(blip)) {
+                const coords = native.getBlipInfoIdCoord(blip);
+                const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
+                const z = found ? groundZ + 1.0 : coords.z + 1.0;
+                alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
+                if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `Телепорт по метке: ${coords.x.toFixed(1)}, ${coords.y.toFixed(1)}, ${z.toFixed(1)}`);
+            } else {
+                if (consoleView) consoleView.emit('flovmp:console:log', 'WARN', 'Метка на карте (waypoint) не найдена! Поставьте фиолетовую метку на карте');
+            }
+            return;
+        }
+
+        if (name === 'pos' || name === 'coords') {
+            const p = alt.Player.local;
+            if (p && p.valid) {
+                const text = `${p.pos.x.toFixed(2)}, ${p.pos.y.toFixed(2)}, ${p.pos.z.toFixed(2)}, ${p.rot.z.toFixed(2)}`;
+                try { alt.copyToClipboard(text); } catch (e) { }
+                if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `Координаты скопированы в буфер: ${text}`);
+            }
+            return;
+        }
+
+        if (name === 'noclip') {
+            toggleNoClip();
+            if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `NoClip: ${noClip ? 'ВКЛЮЧЕН (инвиз)' : 'ВЫКЛЮЧЕН'}`);
+            return;
+        }
+
+        // Отправка на сервер (поддерживает и FloVMP.Gamemode и FloVMP.Starter)
         alt.emitServer('flovmp:chat:say', '/' + cmd);
+        alt.emitServer('chat:message', '/' + cmd);
     });
     consoleView.on('flovmp:console:hotreload', () => {
         alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
@@ -796,6 +831,78 @@ alt.onServer('flovmp:client:welcome', (name, index) => {
     alt.log(`[${currentServerName}] Добро пожаловать на сервер, ${name}!`);
 });
 
+// --- Оптимизация скоплений игроков (50+ на спавне, защита FPS) ---
+alt.setInterval(() => {
+    const local = alt.Player.local;
+    if (!local || !local.valid || !inGame) return;
+
+    const nearbyPlayers = alt.Player.streamedIn;
+    const count = nearbyPlayers.length;
+
+    // При плотном скоплении (> 15 игроков в радиусе стриминга):
+    if (count > 15) {
+        native.setPedCanRagdoll(local.scriptID, false);
+        for (let i = 0; i < nearbyPlayers.length; i++) {
+            const remote = nearbyPlayers[i];
+            if (remote && remote.valid && remote.scriptID) {
+                native.setEntityNoCollisionEntity(local.scriptID, remote.scriptID, true);
+            }
+        }
+    } else {
+        native.setPedCanRagdoll(local.scriptID, true);
+    }
+}, 500);
+
+// --- FloV:MP Starter Client Handlers (Ванильный режим) ---
+alt.onServer('starter:initClient', () => {
+    alt.log('[FloV:MP] Режим ванильного стартера активирован');
+    closeAuth();
+    inGame = true;
+    native.displayRadar(true);
+    native.displayHud(true);
+    openChat();
+});
+
+alt.onServer('starter:requestWaypointTp', () => {
+    const blip = native.getFirstBlipInfoId(8);
+    if (!native.doesBlipExist(blip)) {
+        if (chatView) {
+            chatView.emit('chat:add', '{f87171}[FloV:MP] Поставьте метку (waypoint) на карте перед использованием /tpm!');
+        }
+        return;
+    }
+    const coords = native.getBlipInfoIdCoord(blip);
+    const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
+    const z = found ? groundZ + 1.0 : coords.z + 1.0;
+    alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
+});
+
+alt.onServer('starter:copyCoords', (x, y, z, yaw) => {
+    try {
+        const text = `${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}, ${yaw.toFixed(2)}`;
+        alt.copyToClipboard(text);
+        if (chatView) {
+            chatView.emit('chat:add', `{34d399}[FloV:MP] Координаты скопированы в буфер: ${text}`);
+        }
+    } catch (e) { }
+});
+
+alt.onServer('starter:setWeather', (weatherType) => {
+    try {
+        native.setWeatherTypeOverTimePersist(weatherType, 1.5);
+    } catch (e) { }
+});
+
+alt.onServer('starter:setTime', (hour, minute) => {
+    try {
+        native.setClockTime(hour, minute, 0);
+    } catch (e) { }
+});
+
+alt.onServer('starter:toggleNoClip', () => {
+    toggleNoClip();
+});
+
 // Если скрипт загрузился уже после установки соединения — открываем окно авторизации
 alt.setTimeout(() => {
     if (!inGame && !authView) {
@@ -803,3 +910,4 @@ alt.setTimeout(() => {
         openAuth();
     }
 }, 500);
+

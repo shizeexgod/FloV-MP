@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FloVMP.Starter</AssemblyName>
+    <RootNamespace>FloVMP.Starter</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AltV.Net" Version="16.4.21" />
+  </ItemGroup>
+
+</Project>

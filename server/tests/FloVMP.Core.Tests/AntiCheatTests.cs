@@ -300,5 +300,95 @@ public class AntiCheatTests
         Assert.Equal(5.0f, v1.Length, precision: 4); // 3-4-5 triangle
         Assert.Equal(10.0f, v3.Length, precision: 4);
     }
+
+    [Fact]
+    public void Structured_OnDetection_Event_Fires_With_Severity()
+    {
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(42, "Speedy", new Vector3D(0, 0, 0), t0);
+
+        AntiCheatDetectionEvent? captured = null;
+        ac.OnDetection += evt => captured = evt;
+
+        // On foot 80 meters in 1 second
+        var t1 = t0.AddSeconds(1.0);
+        ac.CheckMovement(42, new Vector3D(80, 0, 0), inVehicle: false, timestamp: t1);
+
+        Assert.NotNull(captured);
+        Assert.Equal(42, captured.AccountId);
+        Assert.Equal("Speedy", captured.Username);
+        Assert.Equal("SpeedHack", captured.DetectionType);
+        Assert.Equal(AntiCheatSeverity.Medium, captured.Severity);
+    }
+
+    [Fact]
+    public void CustomActionResolver_Overrides_Action_For_RP_Projects()
+    {
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(99, "BadActor", new Vector3D(0, 0, 0), t0);
+
+        // RP Project overrides action: Ban on any High severity!
+        ac.CustomActionResolver = evt =>
+        {
+            if (evt.Severity >= AntiCheatSeverity.High)
+                return AntiCheatAction.Ban;
+            return evt.SuggestedAction;
+        };
+
+        AntiCheatAction finalAction = AntiCheatAction.LogOnly;
+        ac.OnViolationDetected += (_, _, act) => finalAction = act;
+
+        // Teleport 500 meters instantly
+        var t1 = t0.AddSeconds(0.2);
+        ac.CheckMovement(99, new Vector3D(500, 0, 0), inVehicle: false, timestamp: t1);
+
+        Assert.Equal(AntiCheatAction.Ban, finalAction);
+    }
+
+    [Fact]
+    public void Event_Spam_Detection_Triggers_Critical_Severity()
+    {
+        var config = new AntiCheatConfig { MaxEventsPerSecond = 5 };
+        var ac = new AntiCheatService(config);
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(77, "ModMenuSpammer", Vector3D.Zero, t0);
+
+        AntiCheatDetectionEvent? captured = null;
+        ac.OnDetection += evt => captured = evt;
+
+        // Send 6 events within the same second
+        bool result = true;
+        for (int i = 0; i < 6; i++)
+        {
+            result = ac.CheckEventRateLimit(77, "net:buyWeapon", t0);
+        }
+
+        Assert.False(result);
+        Assert.NotNull(captured);
+        Assert.Equal("EventSpam", captured.DetectionType);
+        Assert.Equal(AntiCheatSeverity.Critical, captured.Severity);
+        Assert.Equal(AntiCheatAction.Kick, captured.SuggestedAction);
+    }
+
+    [Fact]
+    public void GodMode_Detection_Triggers_Critical_Severity()
+    {
+        var ac = new AntiCheatService();
+        var t0 = new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc);
+        ac.GetOrCreateState(88, "Immortal", Vector3D.Zero, t0);
+
+        AntiCheatDetectionEvent? captured = null;
+        ac.OnDetection += evt => captured = evt;
+
+        // Player took 50 damage, but health reduction was 0
+        bool passed = ac.CheckGodMode(88, incomingDamage: 50, actualHealthReduction: 0);
+
+        Assert.False(passed);
+        Assert.NotNull(captured);
+        Assert.Equal("GodMode", captured.DetectionType);
+        Assert.Equal(AntiCheatSeverity.Critical, captured.Severity);
+    }
 }
 

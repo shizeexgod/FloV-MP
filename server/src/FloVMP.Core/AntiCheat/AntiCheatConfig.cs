@@ -12,6 +12,14 @@ public enum AntiCheatAction
     Ban = 5
 }
 
+public enum AntiCheatSeverity
+{
+    Low = 0,      // Подозрение (лаг, единичный скачок, рассинхрон)
+    Medium = 1,   // Предупреждение (повторный оверспид, аномальный вектор)
+    High = 2,     // Грубое нарушение (NoClip, запрещенное оружие, резкий телепорт)
+    Critical = 3  // Критично (подтвержденный GodMode, спам пакетов, попытка инъекции)
+}
+
 public class AntiCheatConfig
 {
     public float MaxOnFootSpeedMps { get; set; } = 12.5f; // ~45 km/h (горизонталь)
@@ -20,13 +28,26 @@ public class AntiCheatConfig
     // скайдайв/парашют ещё быстрее. Лимит с запасом, чтобы легитимное падение
     // НЕ считалось спидхаком (иначе прыжок с высоты = ложный кик).
     public float MaxFallSpeedMps { get; set; } = 90.0f;
+    public float MaxVerticalClimbSpeedMps { get; set; } = 8.5f; // Вертикальный подъем без парашюта/вертолета (NoClip)
     public float MaxTeleportThresholdMeters { get; set; } = 100.0f;
     public int MaxConsecutiveViolations { get; set; } = 3;
-    // Анти-чит НЕ кикает и не наказывает игроков — это инструмент РАПОРТА:
-    // сработки/варнинги уходят администрации + в лог. Владелец/админы вообще
-    // освобождены от проверок. Поэтому дефолт — Warning (рапорт), не Kick.
+    public int MaxConsecutiveClimbViolations { get; set; } = 3;
+    public int MaxEventsPerSecond { get; set; } = 60; // Порог спама клиентскими событиями
+    
     public AntiCheatAction DefaultViolationAction { get; set; } = AntiCheatAction.Warning;
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Сопоставление степени серьезности с действием по умолчанию.
+    /// RP-проекты могут переопределить это под свои правила.
+    /// </summary>
+    public Dictionary<AntiCheatSeverity, AntiCheatAction> SeverityActionMap { get; set; } = new()
+    {
+        { AntiCheatSeverity.Low, AntiCheatAction.LogOnly },
+        { AntiCheatSeverity.Medium, AntiCheatAction.Warning },
+        { AntiCheatSeverity.High, AntiCheatAction.TeleportBack },
+        { AntiCheatSeverity.Critical, AntiCheatAction.Kick }
+    };
 
     // Prohibited high-damage explosive / destructive weapons in standard RP
     public HashSet<uint> BlacklistedWeapons { get; set; } = new()
