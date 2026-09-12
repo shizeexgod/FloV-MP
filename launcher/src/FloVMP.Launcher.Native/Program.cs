@@ -18,6 +18,15 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        // Именованный мьютекс для предотвращения повторного параллельного запуска моста
+        // одним пользователем. Windows освобождает мьютекс автоматически при завершении процесса.
+        using var singleInstanceMutex = new Mutex(initiallyOwned: true, "Local\\FloVMP_Launcher_Native_Bridge", out bool isNewInstance);
+        if (!isNewInstance)
+        {
+            Console.Error.WriteLine("[FloVMP.Launcher.Native] Another native bridge instance is already running.");
+            return;
+        }
+
         // NDJSON-протокол с Electron — строго UTF-8 в обе стороны. Без этого на
         // русской Windows stdin/stdout берут OEM-кодировку (CP866) и любой
         // кириллический ник/путь превращается в мусор при первом же round-trip

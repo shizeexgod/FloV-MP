@@ -20,6 +20,23 @@ public static class DeviceInfoService
 {
     public static object Collect()
     {
+        bool isElevated = false;
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            isElevated = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch { }
+
+        double ramGb = 0.0;
+        try
+        {
+            var memInfo = GC.GetGCMemoryInfo();
+            ramGb = Math.Round(memInfo.TotalAvailableMemoryBytes / (1024.0 * 1024.0 * 1024.0), 1);
+        }
+        catch { }
+
         return new
         {
             deviceId = StableDeviceId(),
@@ -27,6 +44,9 @@ public static class DeviceInfoService
             userName = Environment.UserName,
             os = RuntimeInformation.OSDescription,
             osArch = RuntimeInformation.OSArchitecture.ToString(),
+            cpuCores = Environment.ProcessorCount,
+            ramTotalGb = ramGb,
+            isElevated = isElevated,
             localIp = LocalIpv4() ?? "недоступен",
             bootTimeUtc = BootTimeUtc()?.ToString("o"),
             nowUtc = DateTime.UtcNow.ToString("o"),

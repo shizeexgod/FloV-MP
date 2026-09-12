@@ -28,6 +28,7 @@ let consoleStatsInterval = null;
 
 // --- Cursor Nesting Manager (предотвращает залипание и исключения alt.showCursor) ---
 let cursorDepth = 0;
+let currentAdminLevel = 0;
 function pushCursor() {
     cursorDepth++;
     if (cursorDepth === 1) {
@@ -48,6 +49,10 @@ let noClipPos = null;
 
 function toggleNoClip() {
     if (!inGame || authView || chatTyping) return;
+    if (currentAdminLevel < 1) {
+        alt.log('[FloV:MP] Попытка вызова NoClip отклонена (нет прав администратора)');
+        return;
+    }
     const player = alt.Player.local;
     if (!player || !player.valid) return;
     if (player.vehicle) return; // BUG-10: NoClip в транспорте вызывает рассинхрон
@@ -442,7 +447,10 @@ function openDevConsole() {
     if (consoleView) return;
     consoleView = new alt.WebView('http://resource/client/html/console/index.html');
     consoleView.on('load', () => {
-        try { consoleView.focus(); } catch (e) { }
+        try { 
+            consoleView.focus(); 
+            consoleView.emit('flovmp:console:permissions', currentAdminLevel);
+        } catch (e) { }
     });
     pushCursor();
     alt.toggleGameControls(false);
@@ -451,6 +459,14 @@ function openDevConsole() {
         if (!cmd) return;
         const parts = cmd.trim().split(' ');
         const name = parts[0].toLowerCase();
+
+        // Проверка прав для команд разработчика
+        if (name === 'tpm' || name === 'noclip') {
+            if (currentAdminLevel < 1) {
+                if (consoleView) consoleView.emit('flovmp:console:log', 'ERR', 'Доступ запрещен: требуются права администратора.');
+                return;
+            }
+        }
 
         if (name === 'tpm') {
             const blip = native.getFirstBlipInfoId(8);
@@ -861,6 +877,14 @@ alt.onServer('starter:initClient', () => {
     native.displayRadar(true);
     native.displayHud(true);
     openChat();
+});
+
+alt.onServer('flovmp:console:setAdmin', (lvl) => {
+    currentAdminLevel = Number(lvl) || 0;
+    alt.log(`[FloV:MP] Уровень прав администратора: ${currentAdminLevel}`);
+    if (consoleView) {
+        try { consoleView.emit('flovmp:console:permissions', currentAdminLevel); } catch (e) { }
+    }
 });
 
 alt.onServer('starter:requestWaypointTp', () => {
