@@ -305,7 +305,7 @@
     /* ─── SUB-BAR: FILTERS & SEARCH ───────────────────────────── */
     #filter-bar {
       height: 34px;
-      padding: 0 12px;
+      padding: 0 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -364,11 +364,14 @@
     }
     .log-row {
       display: flex;
-      gap: 7px;
-      align-items: flex-start;
+      gap: 8px;
+      align-items: center;
+      padding: 2px 8px;
+      border-left: 2px solid transparent;
+      border-radius: 3px;
       margin-bottom: 2px;
       word-break: break-word;
-      transition: background 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease;
     }
     .log-row-new {
       animation: logRowAppear 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -384,34 +387,42 @@
       }
     }
     .log-row-cmd {
-      background: rgba(255, 255, 255, 0.035);
-      border-left: 2px solid rgba(255, 255, 255, 0.35);
-      padding: 1px 0 1px 6px;
-      border-radius: 2px;
-      margin: 3px 0;
+      background: rgba(255, 255, 255, 0.045);
+      border-left-color: rgba(255, 255, 255, 0.45);
+    }
+    .log-row-cmd .log-msg {
+      color: #ffffff;
+      font-weight: 500;
+    }
+    .log-row-cmd.log-row-new {
       animation: cmdAppear 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     @keyframes cmdAppear {
       from {
         opacity: 0;
-        transform: translateY(4px);
-        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(3px);
+        background: rgba(255, 255, 255, 0.09);
       }
       to {
         opacity: 1;
         transform: translateY(0);
-        background: rgba(255, 255, 255, 0.035);
+        background: rgba(255, 255, 255, 0.045);
       }
     }
     .log-time {
       color: #52525b;
       font-size: 10.5px;
+      width: 66px;
+      min-width: 66px;
       flex-shrink: 0;
+      letter-spacing: 0;
     }
     .log-tag {
       font-size: 9.5px;
       font-weight: 700;
-      padding: 1px 4px;
+      width: 56px;
+      min-width: 56px;
+      height: 18px;
       border-radius: 3px;
       flex-shrink: 0;
       text-transform: uppercase;
@@ -419,6 +430,12 @@
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.08);
       color: #a1a1aa;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      box-sizing: border-box;
+      padding: 0;
     }
     .log-tag-CORE      { color: #d4d4d8; }
     .log-tag-NET       { color: #94a3b8; }
@@ -427,6 +444,7 @@
     .log-tag-HOTRELOAD { color: #f4f4f5; }
     .log-tag-DEV       { color: #e4e4e7; }
     .log-tag-CMD       { color: #ffffff; }
+    .log-tag-CHAT      { color: #38bdf8; }
     .log-tag-WARN      { color: #fef08a; background: rgba(254, 240, 138, 0.08); border-color: rgba(254, 240, 138, 0.2); }
     .log-tag-ERR       { color: #fca5a5; background: rgba(252, 165, 165, 0.08); border-color: rgba(252, 165, 165, 0.2); }
 
@@ -560,7 +578,7 @@
 
     #input-bar {
       height: 44px;
-      padding: 0 12px;
+      padding: 0 14px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -917,7 +935,9 @@
 
       let html = '';
       filtered.forEach(item => {
-        html += `<div class="log-row">
+        const isCmd = item.tag === 'CMD';
+        const cls = isCmd ? 'log-row log-row-cmd' : 'log-row';
+        html += `<div class="${cls}">
           <span class="log-time">[${item.time}]</span>
           <span class="log-tag log-tag-${item.tag}">[${item.tag}]</span>
           <span class="log-msg">${escapeHtml(item.text)}</span>
@@ -944,7 +964,7 @@
           const isNearBottom = (logsArea.scrollHeight - logsArea.scrollTop - logsArea.clientHeight) < 70;
           const row = document.createElement('div');
           const isCmd = tag === 'CMD';
-          row.className = `log-row ${isCmd ? 'log-row-cmd' : 'log-row-new'}`;
+          row.className = isCmd ? 'log-row log-row-cmd log-row-new' : 'log-row log-row-new';
           row.innerHTML = `
             <span class="log-time">[${item.time}]</span>
             <span class="log-tag log-tag-${item.tag}">[${item.tag}]</span>

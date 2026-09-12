@@ -515,7 +515,7 @@ function openDevConsole() {
         if (hudView) hudView.reload(true);
         if (inventoryView) inventoryView.reload(true);
         if (settingsView) settingsView.reload(true);
-        if (consoleView) consoleView.emit('flovmp:console:log', 'HOTRELOAD', 'All active WebViews reloaded from disk.');
+        if (consoleView) consoleView.emit('flovmp:console:log', 'RELOAD', 'All active WebViews reloaded from disk.');
     });
     consoleView.on('flovmp:console:quit', () => {
         try {
