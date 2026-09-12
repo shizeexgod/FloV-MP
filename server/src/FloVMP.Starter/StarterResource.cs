@@ -41,8 +41,10 @@ public class StarterResource : Resource
         Alt.OnPlayerConnect += OnPlayerConnect;
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnClient<IPlayer, string>("chat:message", OnChatMessage);
+        Alt.OnClient<IPlayer, string>("flovmp:chat:say", OnChatMessage);
         Alt.OnClient<IPlayer, float, float, float>("starter:teleportWaypoint", OnTeleportWaypoint);
         Alt.OnClient<IPlayer, bool>("starter:toggleNoClip", OnToggleNoClip);
+        Alt.OnClient<IPlayer, bool>("flovmp:admin:noclip", OnToggleNoClip);
     }
 
     public override void OnStop()
@@ -53,6 +55,19 @@ public class StarterResource : Resource
     public bool IsAdmin(IPlayer player, int minLevel = 1)
     {
         return _adminLevels.TryGetValue(player.Id, out var level) && level >= minLevel;
+    }
+
+    public void SendChatMessage(IPlayer player, string message, string kind = "system", string author = "")
+    {
+        if (player == null || !player.Exists) return;
+        player.Emit("chat:addMessage", message);
+        player.Emit("flovmp:chat:msg", kind, author, message);
+    }
+
+    public void BroadcastChatMessage(string message, string kind = "system", string author = "")
+    {
+        Alt.EmitAllClients("chat:addMessage", message);
+        Alt.EmitAllClients("flovmp:chat:msg", kind, author, message);
     }
 
     private void OnPlayerConnect(IPlayer player, string reason)
@@ -81,15 +96,15 @@ public class StarterResource : Resource
         {
         }
 
-        player.Emit("chat:addMessage", "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
+        SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
 
         if (level > 0)
         {
-            player.Emit("chat:addMessage", "{34d399}[Admin]{ffffff} Права администратора активированы (Уровень " + level + "). Доступны: /tpm, /pos, /car, /noclip, /heal, /weather, /time.");
+            SendChatMessage(player, "{34d399}[Admin]{ffffff} Права администратора активированы (Уровень " + level + "). Доступны: /tpm, /pos, /car, /noclip, /heal, /armor, /god, /weather, /time, /fix, /tp, /goto, /gethere.");
         }
         else
         {
-            player.Emit("chat:addMessage", "{a1a1aa}Доступна команда /pos для координат. Авторизация администратора: /adminauth <пароль>");
+            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат. Авторизация администратора: /adminauth <пароль>");
         }
 
         player.Emit("starter:initClient");
@@ -100,6 +115,7 @@ public class StarterResource : Resource
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         _adminLevels.TryRemove(player.Id, out _);
+        _godModes.TryRemove(player.Id, out _);
 
         try
         {
@@ -109,6 +125,8 @@ public class StarterResource : Resource
         {
         }
     }
+
+    private readonly ConcurrentDictionary<uint, bool> _godModes = new();
 
     private void OnChatMessage(IPlayer player, string message)
     {
@@ -121,7 +139,7 @@ public class StarterResource : Resource
         }
 
         var formatted = $"[{player.Id}] {player.Name}: {message}";
-        Alt.EmitAllClients("chat:addMessage", formatted);
+        BroadcastChatMessage(formatted, "player", player.Name);
     }
 
     private void HandleCommand(IPlayer player, string commandLine)
@@ -135,36 +153,36 @@ public class StarterResource : Resource
             case "help":
                 if (IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{38bdf8}Админ-команды: /pos, /tpm, /car [модель], /noclip, /heal, /weather [тип], /time [час] [мин], /setadmin <id> <lvl>");
+                    SendChatMessage(player, "{38bdf8}Админ-команды: /pos, /tpm, /tp <x y z>, /goto <id>, /gethere <id>, /car [модель], /fix, /noclip, /heal, /armor [число], /god, /kill, /weather [тип], /time [час] [мин], /speed [1.0-1.49], /dim [номер], /skin [модель], /kick <id> [причина], /clear, /setadmin <id> <lvl>");
                 }
                 else
                 {
-                    player.Emit("chat:addMessage", "{38bdf8}Команды: /pos (координаты для багрепорта), /adminauth <пароль>");
+                    SendChatMessage(player, "{38bdf8}Команды: /pos (координаты для багрепорта), /adminauth <пароль>");
                 }
                 break;
 
             case "pos":
             case "coords":
-                player.Emit("chat:addMessage", $"{{38bdf8}}Координаты: X: {player.Position.X:F2}, Y: {player.Position.Y:F2}, Z: {player.Position.Z:F2}, Yaw: {player.Rotation.Yaw:F2}");
+                SendChatMessage(player, $"{{38bdf8}}Координаты: X: {player.Position.X:F2}, Y: {player.Position.Y:F2}, Z: {player.Position.Z:F2}, Yaw: {player.Rotation.Yaw:F2}");
                 player.Emit("starter:copyCoords", player.Position.X, player.Position.Y, player.Position.Z, player.Rotation.Yaw);
                 break;
 
             case "adminauth":
                 if (parts.Length < 2)
                 {
-                    player.Emit("chat:addMessage", "{fde047}Использование: /adminauth <пароль>");
+                    SendChatMessage(player, "{fde047}Использование: /adminauth <пароль>");
                     return;
                 }
                 if (parts[1] == AdminPassword)
                 {
                     _adminLevels[player.Id] = 8;
                     player.Emit("flovmp:console:setAdmin", 8);
-                    player.Emit("chat:addMessage", "{34d399}[FloV:MP Security] Авторизация успешна! Вам присвоен уровень Главного Администратора (8). Панель Дев-тулс в F8 разблокирована.");
+                    SendChatMessage(player, "{34d399}[FloV:MP Security] Авторизация успешна! Вам присвоен уровень Главного Администратора (8). Админ-команды в чате и F8 разблокированы.");
                     Alt.Log($"[Security] Игрок {player.Name} (ID: {player.Id}) успешно авторизовался как администратор.");
                 }
                 else
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
                     Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /adminauth от {player.Name} (ID: {player.Id})");
                 }
                 break;
@@ -172,40 +190,124 @@ public class StarterResource : Resource
             case "setadmin":
                 if (!IsAdmin(player, 8))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 8).");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 8).");
                     return;
                 }
                 if (parts.Length < 3 || !uint.TryParse(parts[1], out var targetId) || !int.TryParse(parts[2], out var targetLvl))
                 {
-                    player.Emit("chat:addMessage", "{fde047}Использование: /setadmin <ID> <Уровень 0-8>");
+                    SendChatMessage(player, "{fde047}Использование: /setadmin <ID> <Уровень 0-8>");
                     return;
                 }
                 var target = Alt.GetPlayerById(targetId);
                 if (target == null)
                 {
-                    player.Emit("chat:addMessage", "{ef4444}Игрок с таким ID не найден.");
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
                     return;
                 }
                 _adminLevels[target.Id] = targetLvl;
                 target.Emit("flovmp:console:setAdmin", targetLvl);
-                target.Emit("chat:addMessage", $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
-                player.Emit("chat:addMessage", $"{{34d399}}Установлен уровень {targetLvl} для {target.Name}.");
+                SendChatMessage(target, $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
+                SendChatMessage(player, $"{{34d399}}Установлен уровень {targetLvl} для {target.Name}.");
                 break;
 
             case "tpm":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для телепортации.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для телепортации.");
                     return;
                 }
                 player.Emit("starter:requestWaypointTp");
+                break;
+
+            case "tp":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для телепортации.");
+                    return;
+                }
+                if (parts.Length < 4 || !float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpx)
+                    || !float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpy)
+                    || !float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpz))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /tp <X> <Y> <Z>");
+                    return;
+                }
+                player.Position = new Position(tpx, tpy, tpz + 0.5f);
+                SendChatMessage(player, $"{{34d399}}Телепортирован на координаты: {tpx:F1}, {tpy:F1}, {tpz:F1}");
+                break;
+
+            case "goto":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var gotoId))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /goto <ID игрока>");
+                    return;
+                }
+                var gotoTarget = Alt.GetPlayerById(gotoId);
+                if (gotoTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                player.Position = new Position(gotoTarget.Position.X, gotoTarget.Position.Y + 1.0f, gotoTarget.Position.Z);
+                SendChatMessage(player, $"{{34d399}}Вы телепортировались к {gotoTarget.Name} (ID: {gotoTarget.Id})");
+                break;
+
+            case "gethere":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var gethereId))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /gethere <ID игрока>");
+                    return;
+                }
+                var gethereTarget = Alt.GetPlayerById(gethereId);
+                if (gethereTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                gethereTarget.Position = new Position(player.Position.X + 1.0f, player.Position.Y, player.Position.Z);
+                SendChatMessage(player, $"{{34d399}}Игрок {gethereTarget.Name} телепортирован к вам.");
+                SendChatMessage(gethereTarget, $"{{34d399}}Администратор {player.Name} телепортировал вас к себе.");
+                break;
+
+            case "freeze":
+            case "unfreeze":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var frzId))
+                {
+                    SendChatMessage(player, $"{{fde047}}Использование: /{cmd} <ID игрока>");
+                    return;
+                }
+                var frzTarget = Alt.GetPlayerById(frzId);
+                if (frzTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок не найден.");
+                    return;
+                }
+                var isFreeze = cmd == "freeze";
+                frzTarget.Emit("starter:setFrozen", isFreeze);
+                SendChatMessage(player, isFreeze ? $"{{34d399}}Игрок {frzTarget.Name} заморожен." : $"{{34d399}}Игрок {frzTarget.Name} разморожен.");
+                SendChatMessage(frzTarget, isFreeze ? "{ef4444}Вы были заморожены администратором." : "{34d399}Вы были разморожены администратором.");
                 break;
 
             case "car":
             case "veh":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для спавна транспорта.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для спавна транспорта.");
                     return;
                 }
                 var modelName = parts.Length > 1 ? parts[1] : "adder";
@@ -213,11 +315,29 @@ public class StarterResource : Resource
                 {
                     var spawnPos = new Position(player.Position.X + 2f, player.Position.Y + 2f, player.Position.Z);
                     var veh = Alt.CreateVehicle(Alt.Hash(modelName), spawnPos, player.Rotation);
-                    player.Emit("chat:addMessage", $"{{34d399}}Создан транспорт: {modelName}");
+                    SendChatMessage(player, $"{{34d399}}Создан транспорт: {modelName}");
                 }
                 catch (Exception ex)
                 {
-                    player.Emit("chat:addMessage", $"{{ef4444}}Ошибка спавна транспорта: {ex.Message}");
+                    SendChatMessage(player, $"{{ef4444}}Ошибка спавна транспорта: {ex.Message}");
+                }
+                break;
+
+            case "fix":
+            case "repair":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (player.Vehicle != null)
+                {
+                    player.Vehicle.Repair();
+                    SendChatMessage(player, "{34d399}Транспорт отремонтирован.");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}Вы должны находиться в транспорте для починки.");
                 }
                 break;
 
@@ -225,7 +345,7 @@ public class StarterResource : Resource
             case "fly":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для включения NoClip.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для включения NoClip.");
                     return;
                 }
                 player.Emit("starter:toggleNoClip");
@@ -234,44 +354,171 @@ public class StarterResource : Resource
             case "heal":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для лечения.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для лечения.");
                     return;
                 }
                 player.Health = 200;
                 player.Armor = 100;
-                player.Emit("chat:addMessage", "{34d399}Здоровье и броня восстановлены до 100%.");
+                SendChatMessage(player, "{34d399}Здоровье и броня восстановлены до 100%.");
+                break;
+
+            case "armor":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                var armorVal = parts.Length > 1 && ushort.TryParse(parts[1], out var arm) ? arm : (ushort)100;
+                player.Armor = armorVal;
+                SendChatMessage(player, $"{{34d399}}Броня установлена на {armorVal}.");
+                break;
+
+            case "god":
+            case "godmode":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                var currentGod = _godModes.GetOrAdd(player.Id, false);
+                var newGod = !currentGod;
+                _godModes[player.Id] = newGod;
+                player.Emit("starter:setGodMode", newGod);
+                SendChatMessage(player, newGod ? "{34d399}Режим бога (GodMode) ВКЛЮЧЕН." : "{fde047}Режим бога (GodMode) ВЫКЛЮЧЕН.");
+                break;
+
+            case "kill":
+            case "suicide":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                player.Health = 0;
+                SendChatMessage(player, "{ef4444}Вы погибли.");
+                break;
+
+            case "speed":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                var speedMult = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sm) ? sm : 1.0f;
+                player.Emit("starter:setSpeed", speedMult);
+                SendChatMessage(player, $"{{38bdf8}}Множитель скорости бега: {speedMult:F2}");
                 break;
 
             case "weather":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для смены погоды.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для смены погоды.");
                     return;
                 }
                 if (parts.Length > 1)
                 {
                     var weatherType = parts[1].ToUpperInvariant();
                     Alt.EmitAllClients("starter:setWeather", weatherType);
-                    player.Emit("chat:addMessage", $"{{38bdf8}}Погода изменена на: {weatherType}");
+                    BroadcastChatMessage($"{{38bdf8}}[Погода] Администратор установил погоду: {weatherType}");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}Использование: /weather <CLEAR|EXTRASUNNY|CLOUDS|RAIN|THUNDER|SNOW|XMAS>");
                 }
                 break;
 
             case "time":
                 if (!IsAdmin(player, 1))
                 {
-                    player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] У вас нет прав для смены времени.");
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для смены времени.");
                     return;
                 }
                 if (parts.Length > 1 && int.TryParse(parts[1], out var hour))
                 {
                     var minute = parts.Length > 2 && int.TryParse(parts[2], out var m) ? m : 0;
                     Alt.EmitAllClients("starter:setTime", hour, minute);
-                    player.Emit("chat:addMessage", $"{{38bdf8}}Время установлено на {hour:D2}:{minute:D2}");
+                    BroadcastChatMessage($"{{38bdf8}}[Время] Администратор установил время: {hour:D2}:{minute:D2}");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}Использование: /time <час 0-23> [минута 0-59]");
                 }
                 break;
 
+            case "dim":
+            case "dimension":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (parts.Length > 1 && int.TryParse(parts[1], out var dim))
+                {
+                    player.Dimension = dim;
+                    SendChatMessage(player, $"{{38bdf8}}Измерение изменено на: {dim}");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}Использование: /dim <номер измерения>");
+                }
+                break;
+
+            case "skin":
+            case "ped":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                if (parts.Length > 1)
+                {
+                    var skinModel = parts[1];
+                    try
+                    {
+                        player.Model = Alt.Hash(skinModel);
+                        SendChatMessage(player, $"{{34d399}}Скин изменен на: {skinModel}");
+                    }
+                    catch (Exception ex)
+                    {
+                        SendChatMessage(player, $"{{ef4444}}Ошибка смены скина: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}Использование: /skin <модель, напр. mp_m_freemode_01>");
+                }
+                break;
+
+            case "kick":
+                if (!IsAdmin(player, 2))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
+                    return;
+                }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var kickId))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /kick <ID> [причина]");
+                    return;
+                }
+                var kickTarget = Alt.GetPlayerById(kickId);
+                if (kickTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                var reason = parts.Length > 2 ? string.Join(' ', parts[2..]) : "Исключен администратором";
+                BroadcastChatMessage($"{{ef4444}}[Kick] {kickTarget.Name} был исключен администратором {player.Name}. Причина: {reason}");
+                kickTarget.Kick(reason);
+                break;
+
+            case "clear":
+            case "cls":
+                player.Emit("flovmp:chat:clear");
+                SendChatMessage(player, "{a1a1aa}Чат очищен.");
+                break;
+
             default:
-                player.Emit("chat:addMessage", $"{{a1a1aa}}Неизвестная команда: /{cmd}. Введите /help для списка доступных команд.");
+                SendChatMessage(player, $"{{a1a1aa}}Неизвестная команда: /{cmd}. Введите /help для списка доступных команд.");
                 break;
         }
     }
@@ -281,12 +528,12 @@ public class StarterResource : Resource
         if (!IsAdmin(player, 1))
         {
             Alt.LogWarning($"[Security Violation] Неавторизованный запрос teleportWaypoint от {player.Name} (ID: {player.Id})");
-            player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
+            SendChatMessage(player, "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
             return;
         }
 
         player.Position = new Position(x, y, z + 1.0f);
-        player.Emit("chat:addMessage", $"{{34d399}}Телепортация по метке: {x:F1}, {y:F1}, {z:F1}");
+        SendChatMessage(player, $"{{34d399}}Телепортация по метке: {x:F1}, {y:F1}, {z:F1}");
     }
 
     private void OnToggleNoClip(IPlayer player, bool enabled)
@@ -294,10 +541,10 @@ public class StarterResource : Resource
         if (!IsAdmin(player, 1))
         {
             Alt.LogWarning($"[Security Violation] Неавторизованная попытка toggleNoClip от {player.Name} (ID: {player.Id})");
-            player.Emit("chat:addMessage", "{ef4444}[FloV:MP Security] Полет NoClip отклонен сервером (недостаточно прав).");
+            SendChatMessage(player, "{ef4444}[FloV:MP Security] Полет NoClip отклонен сервером (недостаточно прав).");
             return;
         }
 
-        player.Emit("chat:addMessage", enabled ? "{34d399}Админ-полет (NoClip) ВКЛЮЧЕН" : "{fde047}Админ-полет (NoClip) ВЫКЛЮЧЕН");
+        SendChatMessage(player, enabled ? "{34d399}Админ-полет (NoClip) ВКЛЮЧЕН" : "{fde047}Админ-полет (NoClip) ВЫКЛЮЧЕН");
     }
 }

@@ -75,7 +75,10 @@ function toggleNoClip() {
         native.resetEntityAlpha(player.scriptID);
         alt.log('[FloV:MP] NoClip выключен (видимый)');
     }
-    try { alt.emitServer('flovmp:admin:noclip', noClip); } catch (e) { }
+    try {
+        alt.emitServer('starter:toggleNoClip', noClip);
+        alt.emitServer('flovmp:admin:noclip', noClip);
+    } catch (e) { }
 }
 
 // Периодическое отключение стандартных служб GTA (не в каждом кадре, а каждые 5 сек)
@@ -333,7 +336,11 @@ function enterWorld() {
 function openChat() {
     if (chatView) return;
     chatView = new alt.WebView('http://resource/client/html/chat/index.html');
-    chatView.on('flovmp:chat:say', (text) => alt.emitServer('flovmp:chat:say', String(text)));
+    chatView.on('flovmp:chat:say', (text) => {
+        const s = String(text);
+        alt.emitServer('flovmp:chat:say', s);
+        alt.emitServer('chat:message', s);
+    });
     chatView.on('flovmp:chat:done', () => {
         chatTyping = false;
         try { chatView.unfocus(); } catch (e) { }
@@ -670,6 +677,19 @@ alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
 });
 
+alt.onServer('chat:addMessage', (text) => {
+    if (chatView) {
+        chatView.emit('chat:addMessage', String(text));
+        chatView.emit('flovmp:chat:msg', 'system', '', String(text));
+    }
+    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', String(text));
+});
+
+alt.onServer('chat:message', (author, text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', 'player', author, text);
+    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', `[${author}] ${text}`);
+});
+
 alt.onServer('flovmp:chat:clear', () => {
     if (chatView) chatView.emit('flovmp:chat:clear');
 });
@@ -925,6 +945,35 @@ alt.onServer('starter:setTime', (hour, minute) => {
 
 alt.onServer('starter:toggleNoClip', () => {
     toggleNoClip();
+});
+
+alt.onServer('starter:setGodMode', (enabled) => {
+    const local = alt.Player.local;
+    if (local && local.valid) {
+        try {
+            native.setEntityInvincible(local.scriptID, !!enabled);
+            native.setPlayerInvincible(local.scriptID, !!enabled);
+        } catch (e) { }
+    }
+});
+
+alt.onServer('starter:setSpeed', (multiplier) => {
+    const local = alt.Player.local;
+    if (local && local.valid) {
+        try {
+            const mult = Math.max(1.0, Math.min(1.49, Number(multiplier) || 1.0));
+            native.setRunSprintMultiplierForPlayer(local.scriptID, mult);
+        } catch (e) { }
+    }
+});
+
+alt.onServer('starter:setFrozen', (frozen) => {
+    const local = alt.Player.local;
+    if (local && local.valid) {
+        try {
+            native.freezeEntityPosition(local.scriptID, !!frozen);
+        } catch (e) { }
+    }
 });
 
 // Если скрипт загрузился уже после установки соединения — открываем окно авторизации
