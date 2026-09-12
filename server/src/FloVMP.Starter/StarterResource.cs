@@ -60,15 +60,11 @@ public class StarterResource : Resource
     public void SendChatMessage(IPlayer player, string message, string kind = "system", string author = "")
     {
         if (player == null || !player.Exists) return;
-        var fullText = string.IsNullOrEmpty(author) ? message : $"{author}: {message}";
-        player.Emit("chat:addMessage", fullText);
         player.Emit("flovmp:chat:msg", kind, author, message);
     }
 
     public void BroadcastChatMessage(string message, string kind = "system", string author = "")
     {
-        var fullText = string.IsNullOrEmpty(author) ? message : $"{author}: {message}";
-        Alt.EmitAllClients("chat:addMessage", fullText);
         Alt.EmitAllClients("flovmp:chat:msg", kind, author, message);
     }
 

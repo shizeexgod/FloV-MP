@@ -675,13 +675,14 @@ alt.on('syncedMetaChange', (entity, key, value) => {
 
 alt.onServer('flovmp:chat:msg', (kind, author, text) => {
     if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
+    if (consoleView) {
+        const prefix = author ? `[${author}] ` : '';
+        consoleView.emit('flovmp:console:log', 'CHAT', `${prefix}${text}`);
+    }
 });
 
 alt.onServer('chat:addMessage', (text) => {
-    if (chatView) {
-        chatView.emit('chat:addMessage', String(text));
-        chatView.emit('flovmp:chat:msg', 'system', '', String(text));
-    }
+    if (chatView) chatView.emit('flovmp:chat:msg', 'system', '', String(text));
     if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', String(text));
 });
 
