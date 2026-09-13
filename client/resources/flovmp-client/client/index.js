@@ -12,6 +12,7 @@ alt.log('[FloV:MP] Клиентский модуль чистого мульти
 // КОНФИГУРАЦИЯ БИНДОВ И УПРАВЛЕНИЯ (Полная свобода настройки для владельцев)
 // =============================================================================
 export const KEYBINDS = {
+    help: 112,       // F1 — Меню помощи / консоль и быстрый выход
     chat: 84,        // T — Открытие чата
     chatSlash: 191,  // / — Открытие чата с командой
     console: 119,    // F8 — Консоль разработчика / DevTools
@@ -34,6 +35,7 @@ let currentServerName = 'RolePlay Server';
 let chatView = null;
 let chatTyping = false;
 let consoleView = null;
+let consoleOpen = false;
 let consoleStatsInterval = null;
 let currentAdminLevel = 0;
 let godMode = false;
@@ -583,6 +585,9 @@ export function openChat() {
         alt.emitServer('flovmp:chat:say', s);
         alt.emitServer('chat:message', s);
     });
+    chatView.on('flovmp:chat:quit', () => {
+        quitGame();
+    });
     chatView.on('flovmp:chat:done', () => {
         chatTyping = false;
         try { chatView.unfocus(); } catch (e) { }
@@ -598,7 +603,7 @@ export function closeChat() {
 }
 
 export function startTyping(initialText = '') {
-    if (!chatView || chatTyping || !inGame) return;
+    if (!chatView || chatTyping || !inGame || consoleOpen) return;
     chatTyping = true;
     chatView.focus();
     alt.toggleGameControls(false);
@@ -606,76 +611,94 @@ export function startTyping(initialText = '') {
 }
 
 // =============================================================================
-// 3. КОНСОЛЬ РАЗРАБОТЧИКА (F8 / F11)
+// 3. ВЫХОД ИЗ ИГРЫ И КОНСОЛЬ РАЗРАБОТЧИКА (F1 / F8 / F11)
 // =============================================================================
-export function openDevConsole() {
-    if (consoleView) return;
-    consoleView = new alt.WebView('http://resource/client/html/console/index.html');
-    consoleView.on('load', () => {
-        try {
-            consoleView.focus();
-            consoleView.emit('flovmp:console:permissions', currentAdminLevel);
-        } catch (e) { }
-    });
-    pushCursor();
-    alt.toggleGameControls(false);
+export function quitGame() {
+    alt.log('[FloV:MP] Завершение игрового процесса...');
+    try {
+        if (typeof alt.emit === 'function') alt.emit('exit');
+        if (typeof alt.disconnect === 'function') alt.disconnect();
+    } catch (e) { }
+    try {
+        native.restartGame();
+    } catch (e) { }
+}
 
-    consoleView.on('flovmp:console:cmd', (cmd) => {
-        if (!cmd) return;
-        const parts = cmd.trim().split(' ');
-        const name = parts[0].toLowerCase();
+export function getOrCreateDevConsole() {
+    if (!consoleView) {
+        consoleView = new alt.WebView('http://resource/client/html/console/index.html');
+        consoleView.on('load', () => {
+            try {
+                consoleView.emit('flovmp:console:permissions', currentAdminLevel);
+            } catch (e) { }
+        });
 
-        if (name === 'tpm') {
-            triggerWaypointTeleport();
-            return;
-        }
+        consoleView.on('flovmp:console:cmd', (cmd) => {
+            if (!cmd) return;
+            const parts = cmd.trim().split(' ');
+            const name = parts[0].toLowerCase();
 
-        if (name === 'pos' || name === 'coords') {
-            const p = alt.Player.local;
-            if (p && p.valid) {
-                const text = `${p.pos.x.toFixed(2)}, ${p.pos.y.toFixed(2)}, ${p.pos.z.toFixed(2)}, ${p.rot.z.toFixed(2)}`;
-                try { alt.copyToClipboard(text); } catch (e) { }
-                if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `Координаты скопированы в буфер: ${text}`);
+            if (name === 'tpm') {
+                triggerWaypointTeleport();
+                return;
             }
-            return;
-        }
 
-        if (name === 'noclip') {
-            toggleNoClip();
-            if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `NoClip: ${noClip ? 'ВКЛЮЧЕН (инвиз)' : 'ВЫКЛЮЧЕН'}`);
-            return;
-        }
+            if (name === 'pos' || name === 'coords') {
+                const p = alt.Player.local;
+                if (p && p.valid) {
+                    const text = `${p.pos.x.toFixed(2)}, ${p.pos.y.toFixed(2)}, ${p.pos.z.toFixed(2)}, ${p.rot.z.toFixed(2)}`;
+                    try { alt.copyToClipboard(text); } catch (e) { }
+                    if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `Координаты скопированы в буфер: ${text}`);
+                }
+                return;
+            }
 
-        if (name === 'esp') {
-            const mode = parts.length > 1 ? parseInt(parts[1], 10) : null;
-            toggleEsp(mode);
-            return;
-        }
+            if (name === 'noclip') {
+                toggleNoClip();
+                if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `NoClip: ${noClip ? 'ВКЛЮЧЕН (инвиз)' : 'ВЫКЛЮЧЕН'}`);
+                return;
+            }
 
-        // Отправка команды на сервер
-        alt.emitServer('flovmp:chat:say', '/' + cmd);
-        alt.emitServer('chat:message', '/' + cmd);
-    });
+            if (name === 'esp') {
+                const mode = parts.length > 1 ? parseInt(parts[1], 10) : null;
+                toggleEsp(mode);
+                return;
+            }
 
-    consoleView.on('flovmp:console:hotreload', () => {
-        alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
-        if (chatView) chatView.reload(true);
-        if (consoleView) consoleView.emit('flovmp:console:log', 'RELOAD', 'Все активные WebViews перезагружены.');
-    });
+            if (name === 'quit' || name === 'exit' || name === 'q') {
+                quitGame();
+                return;
+            }
 
-    consoleView.on('flovmp:console:quit', () => {
-        try {
-            if (typeof alt.disconnect === 'function') alt.disconnect();
-        } catch (e) { }
-    });
+            // Отправка команды на сервер
+            alt.emitServer('flovmp:chat:say', '/' + cmd);
+            alt.emitServer('chat:message', '/' + cmd);
+        });
 
-    consoleView.on('flovmp:console:close', () => {
-        closeDevConsole();
-    });
+        consoleView.on('flovmp:console:hotreload', () => {
+            alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
+            if (chatView) chatView.reload(true);
+            if (consoleView) {
+                consoleView.reload(true);
+                consoleView.emit('flovmp:console:log', 'RELOAD', 'Все активные WebViews перезагружены.');
+            }
+        });
 
+        consoleView.on('flovmp:console:quit', () => {
+            quitGame();
+        });
+
+        consoleView.on('flovmp:console:close', () => {
+            closeDevConsole();
+        });
+    }
+    return consoleView;
+}
+
+function startConsoleStats() {
     if (consoleStatsInterval) alt.clearInterval(consoleStatsInterval);
     consoleStatsInterval = alt.setInterval(() => {
-        if (!consoleView) return;
+        if (!consoleView || !consoleOpen) return;
         let fps = 60;
         try {
             const ft = native.getFrameTime();
@@ -723,21 +746,44 @@ export function openDevConsole() {
     }, 500);
 }
 
+export function openDevConsole() {
+    if (consoleOpen) return;
+    const cv = getOrCreateDevConsole();
+    consoleOpen = true;
+    cv.emit('flovmp:console:open');
+    cv.emit('flovmp:console:permissions', currentAdminLevel);
+    cv.focus();
+    pushCursor();
+    alt.toggleGameControls(false);
+    startConsoleStats();
+}
+
 export function closeDevConsole() {
+    if (!consoleOpen) return;
+    consoleOpen = false;
     if (consoleStatsInterval) {
         alt.clearInterval(consoleStatsInterval);
         consoleStatsInterval = null;
     }
-    if (!consoleView) return;
-    consoleView.destroy();
-    consoleView = null;
+    if (consoleView) {
+        consoleView.emit('flovmp:console:close');
+        try { consoleView.unfocus(); } catch (e) { }
+    }
     popCursor();
     alt.toggleGameControls(true);
 }
 
 export function toggleDevConsole() {
-    if (consoleView) closeDevConsole();
+    if (consoleOpen) closeDevConsole();
     else openDevConsole();
+}
+
+export function destroyDevConsole() {
+    closeDevConsole();
+    if (consoleView) {
+        consoleView.destroy();
+        consoleView = null;
+    }
 }
 
 // =============================================================================
@@ -852,19 +898,25 @@ alt.on('keydown', (key) => {
         const player = alt.Player.local;
         const inVehicle = player && player.valid && player.vehicle;
         // Если не в чате и не за рулём (где B = ремень)
-        if (!chatTyping && !consoleView && !inVehicle) {
+        if (!chatTyping && !consoleOpen && !inVehicle) {
             handleVoiceKeyDown();
         }
     }
 });
 
 alt.on('keyup', (key) => {
-    // F8 / F11 — Консоль
-    if (key === KEYBINDS.console || key === KEYBINDS.consoleAlt) {
+    // F1 / F8 / F11 — Консоль / Меню управления и выхода
+    if (key === KEYBINDS.help || key === KEYBINDS.console || key === KEYBINDS.consoleAlt) {
         toggleDevConsole();
         return;
     }
-    if (consoleView) return;
+    if (key === 27) { // Escape
+        if (consoleOpen) {
+            closeDevConsole();
+            return;
+        }
+    }
+    if (consoleOpen) return;
 
     // F4 — NoClip
     if (key === KEYBINDS.noclip) {
@@ -947,6 +999,7 @@ alt.on('connectionComplete', () => {
     native.displayRadar(true);
     native.displayHud(true);
     openChat();
+    getOrCreateDevConsole(); // Прогрев WebView консоли для мгновенного отклика (0мс)
     alt.emitServer('flovmp:client:ready');
 
     const player = alt.Player.local;
@@ -959,7 +1012,7 @@ alt.on('disconnect', () => {
     if (noClip) toggleNoClip();
     espMode = 0;
     closeChat();
-    closeDevConsole();
+    destroyDevConsole();
     inGame = false;
     alt.log('[FloV:MP] Отключено от сервера');
 });
@@ -971,6 +1024,7 @@ alt.onServer('starter:initClient', () => {
     native.displayRadar(true);
     native.displayHud(true);
     openChat();
+    getOrCreateDevConsole();
 
     const player = alt.Player.local;
     if (player && player.valid) {

@@ -75,7 +75,7 @@
       display: flex;
       flex-direction: column;
       pointer-events: none;
-      transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.12s ease;
     }
 
     #chat-wrapper.interactive {
@@ -133,8 +133,8 @@
       padding: 2px 5px;
       border-radius: 4px;
       word-break: break-word;
-      animation: chatRowIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      transition: background 0.12s ease;
+      animation: chatRowIn 0.08s ease-out forwards;
+      transition: background 0.08s ease;
     }
     .msg-row:hover {
       background: rgba(255, 255, 255, 0.04);
@@ -143,7 +143,7 @@
     @keyframes chatRowIn {
       from {
         opacity: 0;
-        transform: translateY(3px);
+        transform: translateY(2px);
       }
       to {
         opacity: 1;
@@ -179,22 +179,20 @@
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 1px rgba(0, 0, 0, 0.9);
     }
 
-    /* ─── INPUT PANEL (MINIMAL OBSIDIAN WITH SPOTLIGHT) ────────── */
+    /* ─── INPUT PANEL (COMPACT OBSIDIAN FAST) ─────────────────── */
     #input-wrap {
       margin-top: 8px;
       display: none;
       background: #0e0e12;
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
       border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      padding: 10px 14px 8px 14px;
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      padding: 8px 12px;
       flex-direction: column;
-      gap: 8px;
-      animation: inputWrapIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      gap: 6px;
+      animation: inputWrapIn 0.08s ease-out forwards;
       position: relative;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      transition: border-color 0.1s ease, box-shadow 0.1s ease;
       overflow: visible;
     }
 
@@ -202,39 +200,19 @@
       display: flex;
     }
 
-    /* React Bits: Spotlight Glow on hover */
-    #input-wrap::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-      background: radial-gradient(
-        350px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-        rgba(255, 255, 255, 0.06),
-        transparent 75%
-      );
-      opacity: 0;
-      transition: opacity 0.25s ease;
-      z-index: 1;
-    }
-    #input-wrap:hover::before {
-      opacity: 1;
-    }
-
     #input-wrap:focus-within {
       border-color: var(--border-focus);
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 16px rgba(255, 255, 255, 0.04);
+      box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     }
 
     @keyframes inputWrapIn {
       from {
         opacity: 0;
-        transform: translateY(4px) scale(0.99);
+        transform: translateY(2px);
       }
       to {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
       }
     }
 
@@ -666,6 +644,15 @@
     wake();
 
     if (send && raw.length > 0) {
+      // Прямой выход из игры по командам
+      var low = raw.toLowerCase();
+      if (low === '/quit' || low === '/exit' || low === '/q') {
+        if (typeof alt !== "undefined") {
+          alt.emit("flovmp:chat:quit");
+        }
+        return;
+      }
+
       // Tactile flash on submit
       inputWrap.classList.remove('input-send-flash');
       void inputWrap.offsetWidth;
@@ -795,12 +782,7 @@
     });
   }
 
-  // Spotlight Follow on Input Wrap (React Bits)
-  inputWrap.addEventListener('mousemove', function (e) {
-    const rect = inputWrap.getBoundingClientRect();
-    inputWrap.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
-    inputWrap.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
-  });
+
 
   // Allow scrolling chat log with mouse wheel even when hovering
   chatWrapper.addEventListener('wheel', function (e) {

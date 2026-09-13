@@ -1,6 +1,12 @@
 {
-  "founders": [],
-  "admins": {},
+  "founders": [
+    "509264618",
+    "shize5"
+  ],
+  "admins": {
+    "509264618": 8,
+    "shize5": 8
+  },
   "autoClaimFirstPlayer": true,
   "setupToken": ""
 }

@@ -45,48 +45,29 @@
     /* ─── BASE WINDOW ────────────────────────────────────────── */
     #console-window {
       position: absolute;
-      top: 40px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 930px;
-      height: 590px;
-      min-width: 620px;
-      min-height: 400px;
+      top: 16px;
+      right: 16px;
+      left: auto;
+      transform: none;
+      width: 480px;
+      height: 380px;
       max-width: calc(100vw - 32px);
-      max-height: calc(100vh - 48px);
-      border-radius: 12px;
+      max-height: calc(100vh - 32px);
+      border-radius: 8px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-      animation: modalFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
-      --mouse-x: 50%;
-      --mouse-y: 50%;
+      transition: opacity 0.1s ease, transform 0.1s ease;
+      animation: modalFadeIn 0.1s ease-out;
     }
 
-    /* React Bits: Spotlight Glow follow */
-    #console-window::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-      background: radial-gradient(
-        520px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-        rgba(255, 255, 255, 0.065),
-        transparent 75%
-      );
-      opacity: 0;
-      transition: opacity 0.25s ease;
-      z-index: 10;
-    }
-    #console-window:hover::before {
-      opacity: 1;
+    #console-window.hidden {
+      display: none !important;
     }
 
     @keyframes modalFadeIn {
-      from { opacity: 0; transform: translate(-50%, -6px) scale(0.99); }
-      to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* ─── ТЕМА 1: OBSIDIAN MINIMALIST (LINEAR / VERCEL) ───────── */
@@ -727,7 +708,7 @@
         </div>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="display: flex; align-items: center; gap: 5px;">
         <!-- Быстрые действия (только для админов) -->
         <button class="hdr-btn admin-only font-mono" onclick="execCmd('tpm')" title="Телепорт к метке на карте">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
@@ -735,7 +716,7 @@
         </button>
         <button class="hdr-btn admin-only font-mono" onclick="execCmd('noclip')" title="Свободный полет камеры (F4)">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-          F4 FLY
+          F4
         </button>
         <button class="hdr-btn admin-only font-mono" onclick="execCmd('pos')" title="Скопировать координаты">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
@@ -744,31 +725,26 @@
 
         <!-- Метрики -->
         <div class="metric-pill font-mono">
-          <span>FPS:</span>
-          <strong id="val-fps">60</strong>
+          <span id="val-fps">60</span>
+          <span style="color:#71717a; font-size: 9px;">FPS</span>
         </div>
         <div class="metric-pill font-mono">
-          <span>PING:</span>
-          <strong id="val-ping">14 ms</strong>
+          <span id="val-ping">14 ms</span>
         </div>
 
-        <!-- Переключатель 3 вариантов тем -->
-        <button class="hdr-btn font-mono" onclick="cycleTheme()" title="Переключить тему оформления (Obsidian / Slate / Glass)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"></circle><circle cx="17.5" cy="10.5" r=".5"></circle><circle cx="8.5" cy="7.5" r=".5"></circle><circle cx="6.5" cy="12.5" r=".5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>
-          <span id="theme-name">Obsidian</span>
+        <!-- Очистить -->
+        <button class="hdr-btn font-mono" onclick="clearLogs()" title="Очистить лог">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
 
-        <!-- Копировать и Очистить -->
-        <button class="hdr-btn font-mono" onclick="copyLogs()" title="Копировать логи">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-        </button>
-        <button class="hdr-btn font-mono" onclick="clearLogs()" title="Очистить лог">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        <!-- Выход из игры -->
+        <button class="hdr-btn-close" style="color: #f87171; border-color: rgba(248, 113, 113, 0.25);" onclick="quitGame()" title="Выйти из игры">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
         </button>
 
         <!-- Закрыть -->
         <button class="hdr-btn-close" onclick="closeConsole()" title="Закрыть (F8 / Esc)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
     </div>
@@ -815,21 +791,32 @@
     const roleBadge = document.getElementById('user-role-badge');
     const roleText = document.getElementById('user-role-text');
 
-    // React Bits: Spotlight Cursor Tracking
-    win.addEventListener('pointermove', (e) => {
-      const rect = win.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      win.style.setProperty('--mouse-x', `${x}px`);
-      win.style.setProperty('--mouse-y', `${y}px`);
-    });
+    function openConsole() {
+      win.classList.remove('hidden');
+      setTimeout(() => {
+        try { cmdInput.focus(); } catch (e) { }
+      }, 10);
+    }
+
+    function closeConsole() {
+      win.classList.add('hidden');
+      if ('alt' in window) {
+        alt.emit('flovmp:console:close');
+      }
+    }
+
+    function quitGame() {
+      if ('alt' in window) {
+        alt.emit('flovmp:console:quit');
+      }
+    }
 
     function applyPermissions(level) {
       adminLevel = Number(level) || 0;
       if (adminLevel >= 1) {
         win.classList.add('is-admin');
         roleBadge.classList.add('role-admin');
-        roleText.innerText = `ADMIN LVL ${adminLevel}`;
+        roleText.innerText = adminLevel >= 8 ? 'FOUNDER' : `ADMIN LVL ${adminLevel}`;
         addLog('DEV', `Права администратора подтверждены: Уровень ${adminLevel}`);
       } else {
         win.classList.remove('is-admin');
@@ -841,8 +828,14 @@
       }
     }
 
-    // Слушатель прав от alt-client
+    // Слушатель прав и событий от alt-client
     if ('alt' in window) {
+      alt.on('flovmp:console:open', () => {
+        openConsole();
+      });
+      alt.on('flovmp:console:close', () => {
+        win.classList.add('hidden');
+      });
       alt.on('flovmp:console:permissions', (lvl) => {
         applyPermissions(lvl);
       });
@@ -850,8 +843,10 @@
         addLog(tag, msg);
       });
       alt.on('flovmp:console:stats', (fps, ping, tick) => {
-        document.getElementById('val-fps').innerText = fps;
-        document.getElementById('val-ping').innerText = `${ping} ms`;
+        const fpsEl = document.getElementById('val-fps');
+        if (fpsEl) fpsEl.innerText = fps;
+        const pingEl = document.getElementById('val-ping');
+        if (pingEl) pingEl.innerText = `${ping} ms`;
       });
       alt.on('flovmp:console:entities_data', (data) => {
         latestEntities = data;
@@ -1382,6 +1377,7 @@
     // Инициализация при старте
     renderLogs();
     applyPermissions(0); // Стартуем как обычный игрок
+    win.classList.add('hidden'); // По умолчанию скрыта, открывается мгновенно по F8
   </script>
 </body>
 </html>
