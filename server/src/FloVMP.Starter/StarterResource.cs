@@ -21,8 +21,32 @@ public class StarterResource : Resource
 
     private static readonly string AdminPassword = Environment.GetEnvironmentVariable("FLOVMP_ADMIN_PASSWORD") ?? "flovmp2026";
     private readonly ConcurrentDictionary<uint, int> _adminLevels = new();
+    private readonly ConcurrentDictionary<ulong, int> _assignedAdminRanks = new();
+    private readonly ConcurrentDictionary<string, int> _assignedAdminNames = new(StringComparer.OrdinalIgnoreCase);
 
     private IVoiceChannel? _spatialVoiceChannel;
+
+    public int GetAssignedAdminRank(IPlayer player)
+    {
+        var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
+        if (isAdminHost) return 8;
+
+        if (_assignedAdminRanks.TryGetValue(player.SocialClubId, out var rank) && rank > 0)
+            return rank;
+
+        if (_assignedAdminNames.TryGetValue(player.Name, out var nameRank) && nameRank > 0)
+            return nameRank;
+
+        return 0;
+    }
+
+    public void SetAssignedAdminRank(IPlayer player, int rank)
+    {
+        rank = Math.Clamp(rank, 0, 8);
+        if (player.SocialClubId > 0)
+            _assignedAdminRanks[player.SocialClubId] = rank;
+        _assignedAdminNames[player.Name] = rank;
+    }
 
     public override void OnStart()
     {
@@ -80,10 +104,15 @@ public class StarterResource : Resource
         player.MaxHealth = 200;
         player.Armor = 100;
 
-        // Локальный хост (127.0.0.1) автоматически получает максимальный уровень прав разработчика (8)
+        // Локальный хост (127.0.0.1) регистрируется как разработчик (8)
         var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
-        var level = isAdminHost ? 8 : 0;
-        _adminLevels[player.Id] = level;
+        if (isAdminHost)
+        {
+            SetAssignedAdminRank(player, 8);
+        }
+
+        // По умолчанию дежурство выключено до ввода /alogin
+        _adminLevels[player.Id] = 0;
 
         // Активация 3D войс-канала
         try
@@ -96,17 +125,18 @@ public class StarterResource : Resource
 
         SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
 
-        if (level > 0)
+        var assigned = GetAssignedAdminRank(player);
+        if (assigned > 0)
         {
-            SendChatMessage(player, "{34d399}[Admin]{ffffff} Права администратора активированы (Уровень " + level + "). Доступны: /tpm, /pos, /car, /noclip, /heal, /armor, /god, /weather, /time, /fix, /tp, /goto, /gethere.");
+            SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
         }
         else
         {
-            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат. Авторизация администратора: /adminauth <пароль>");
+            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
         }
 
         player.Emit("starter:initClient");
-        player.Emit("flovmp:console:setAdmin", level);
+        player.Emit("flovmp:console:setAdmin", 0);
     }
 
     private void OnPlayerDisconnect(IPlayer player, string reason)
@@ -156,10 +186,10 @@ public class StarterResource : Resource
             case "help":
                 SendChatMessage(player, "{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───");
                 SendChatMessage(player, "{e4e4e7}Чат и отыгровки: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear");
-                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /adminauth <пароль>");
+                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>");
                 if (IsAdmin(player, 1))
                 {
-                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm, /tp <x y z>, /goto <id>, /gethere <id>, /car [модель], /fix, /noclip (F4), /heal, /armor, /god, /kill, /weather, /time, /speed, /dim, /skin, /kick, /a (админ-чат)");
+                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /tp <x y z>, /goto <id>, /gethere <id>, /revive [id], /car [модель], /fix, /noclip (F4), /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
                 }
                 if (IsAdmin(player, 8))
                 {
@@ -256,23 +286,30 @@ public class StarterResource : Resource
                 player.Emit("starter:copyCoords", player.Position.X, player.Position.Y, player.Position.Z, player.Rotation.Yaw);
                 break;
 
+            case "alogin":
             case "adminauth":
                 if (parts.Length < 2)
                 {
-                    SendChatMessage(player, "{fde047}Использование: /adminauth <пароль>");
+                    SendChatMessage(player, "{fde047}Использование: /alogin <пароль>");
+                    return;
+                }
+                var assignedRank = GetAssignedAdminRank(player);
+                if (assignedRank <= 0)
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора на этом сервере.");
                     return;
                 }
                 if (parts[1] == AdminPassword)
                 {
-                    _adminLevels[player.Id] = 8;
-                    player.Emit("flovmp:console:setAdmin", 8);
-                    SendChatMessage(player, "{34d399}[FloV:MP Security] Авторизация успешна! Вам присвоен уровень Главного Администратора (8). Админ-команды в чате и F8 разблокированы.");
-                    Alt.Log($"[Security] Игрок {player.Name} (ID: {player.Id}) успешно авторизовался как администратор.");
+                    _adminLevels[player.Id] = assignedRank;
+                    player.Emit("flovmp:console:setAdmin", assignedRank);
+                    SendChatMessage(player, $"{{34d399}}[FloV:MP Security] Авторизация успешна! Вход на дежурство выполнен (Уровень {assignedRank}). Админ-функции и F8 разблокированы.");
+                    Alt.Log($"[Security] Администратор {player.Name} (ID: {player.Id}, Уровень: {assignedRank}) заступил на дежурство.");
                 }
                 else
                 {
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
-                    Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /adminauth от {player.Name} (ID: {player.Id})");
+                    Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /alogin от {player.Name} (ID: {player.Id})");
                 }
                 break;
 
@@ -294,6 +331,7 @@ public class StarterResource : Resource
                     return;
                 }
                 targetLvl = Math.Clamp(targetLvl, 0, 8);
+                SetAssignedAdminRank(target, targetLvl);
                 _adminLevels[target.Id] = targetLvl;
                 target.Emit("flovmp:console:setAdmin", targetLvl);
                 SendChatMessage(target, $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
@@ -459,6 +497,33 @@ public class StarterResource : Resource
                 SendChatMessage(player, "{34d399}Здоровье и броня восстановлены до 100%.");
                 break;
 
+            case "revive":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для реанимации.");
+                    return;
+                }
+                IPlayer targetRevive = player;
+                if (parts.Length > 1 && uint.TryParse(parts[1], out var revId))
+                {
+                    var foundTarget = Alt.GetPlayerById(revId);
+                    if (foundTarget == null)
+                    {
+                        SendChatMessage(player, "{ef4444}Игрок с указанным ID не найден.");
+                        return;
+                    }
+                    targetRevive = foundTarget;
+                }
+                targetRevive.Health = 200;
+                targetRevive.Armor = 100;
+                targetRevive.Emit("starter:revive");
+                SendChatMessage(player, $"{{34d399}}Игрок {targetRevive.Name} успешно реанимирован.");
+                if (targetRevive != player)
+                {
+                    SendChatMessage(targetRevive, $"{{34d399}}Администратор {player.Name} реанимировал вас.");
+                }
+                break;
+
             case "armor":
                 if (!IsAdmin(player, 1))
                 {
@@ -542,6 +607,7 @@ public class StarterResource : Resource
                 }
                 break;
 
+            case "setdim":
             case "dim":
             case "dimension":
                 if (!IsAdmin(player, 1))
@@ -556,7 +622,7 @@ public class StarterResource : Resource
                 }
                 else
                 {
-                    SendChatMessage(player, "{fde047}Использование: /dim <номер измерения>");
+                    SendChatMessage(player, "{fde047}Использование: /setdim <номер измерения>");
                 }
                 break;
 

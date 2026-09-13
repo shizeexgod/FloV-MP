@@ -1,34 +1,50 @@
 /**
- * FloV:MP — клиентский движок мультиплеера.
- * Платформа: FloV:MP Standalone Engine.
+ * FloV:MP — Клиентский движок мультиплеера (Clean Standalone Engine).
+ * Платформа: FloV:MP Core Engine.
  */
 
 import * as alt from 'alt-client';
 import * as native from 'natives';
 
-alt.log('[FloV:MP] Клиентский модуль FloV:MP загружен');
+alt.log('[FloV:MP] Клиентский модуль чистого мультиплеера загружен');
 
-let authView = null;
-let authCamera = null;
+// =============================================================================
+// КОНФИГУРАЦИЯ БИНДОВ И УПРАВЛЕНИЯ (Полная свобода настройки для владельцев)
+// =============================================================================
+export const KEYBINDS = {
+    chat: 84,        // T — Открытие чата
+    chatSlash: 191,  // / — Открытие чата с командой
+    console: 119,    // F8 — Консоль разработчика / DevTools
+    consoleAlt: 122, // F11 — Альтернативная клавиша консоли
+    noclip: 115,     // F4 — Режим свободного админ-полёта (NoClip)
+    tpm: 116,        // F5 — Быстрый телепорт по фиолетовой метке (WayPoint)
+    voice: 66,       // B — Голосовой чат (Push-to-Talk)
+    voiceTailMs: 400,// Задержка отпускания микрофона (мс), чтобы не обрывать слова
+    engine: 50,      // 2 — Завести / заглушить двигатель транспорта
+    lock: 76,        // L — Закрыть / открыть двери транспорта
+    seatbelt: 66     // B в транспорте — Пристегнуть / отстегнуть ремень
+};
+
+// =============================================================================
+// СОСТОЯНИЕ КЛИЕНТА
+// =============================================================================
 let inGame = false;
 let currentServerName = 'RolePlay Server';
-
-// Зеркало SpawnPoints.DefaultSpawn (сервер) — для предзагрузки зоны спавна
-// во время авторизации. Если сервер сменит точку спавна, обновить и здесь;
-// худший случай при рассинхроне — обычная (не ускоренная) загрузка на входе,
-// без поломки.
-const SPAWN_PREFETCH = { x: -262.0, y: -955.0, z: 31.5 };
 let chatView = null;
 let chatTyping = false;
-let settingsView = null;
-let hudView = null;
-let inventoryView = null;
 let consoleView = null;
 let consoleStatsInterval = null;
-
-// --- Cursor Nesting Manager (предотвращает залипание и исключения alt.showCursor) ---
-let cursorDepth = 0;
 let currentAdminLevel = 0;
+let cursorDepth = 0;
+
+// Голосовой чат
+let isVoiceTalking = false;
+let voiceReleaseTimeout = null;
+
+// Состояние транспорта
+let seatbeltOn = false;
+
+// --- Менеджер вложенности курсора (Cursor Nesting Manager) ---
 function pushCursor() {
     cursorDepth++;
     if (cursorDepth === 1) {
@@ -43,19 +59,21 @@ function popCursor() {
     }
 }
 
-// --- NoClip (Полет на F4 с невидимостью) ---------------------------------
+// =============================================================================
+// 1. СИСТЕМА СВОБОДНОГО ПОЛЁТА (NoClip)
+// =============================================================================
 let noClip = false;
 let noClipPos = null;
 
-function toggleNoClip() {
-    if (!inGame || authView || chatTyping) return;
+export function toggleNoClip() {
+    if (!inGame || chatTyping) return;
     if (currentAdminLevel < 1) {
         alt.log('[FloV:MP] Попытка вызова NoClip отклонена (нет прав администратора)');
         return;
     }
     const player = alt.Player.local;
     if (!player || !player.valid) return;
-    if (player.vehicle) return; // BUG-10: NoClip в транспорте вызывает рассинхрон
+    if (player.vehicle) return; // Защита от рассинхрона в транспорте
 
     noClip = !noClip;
 
@@ -66,14 +84,14 @@ function toggleNoClip() {
         native.setEntityInvincible(player.scriptID, true);
         native.setEntityVisible(player.scriptID, false, 0);
         native.setEntityAlpha(player.scriptID, 0, false);
-        alt.log('[FloV:MP] NoClip включен (инвиз)');
+        alt.log('[FloV:MP] NoClip активирован (режим невидимости)');
     } else {
         native.freezeEntityPosition(player.scriptID, false);
         native.setEntityCollision(player.scriptID, true, true);
         native.setEntityInvincible(player.scriptID, false);
         native.setEntityVisible(player.scriptID, true, 0);
         native.resetEntityAlpha(player.scriptID);
-        alt.log('[FloV:MP] NoClip выключен (видимый)');
+        alt.log('[FloV:MP] NoClip деактивирован (видимый)');
     }
     try {
         alt.emitServer('starter:toggleNoClip', noClip);
@@ -81,7 +99,7 @@ function toggleNoClip() {
     } catch (e) { }
 }
 
-// Периодическое отключение стандартных служб GTA (не в каждом кадре, а каждые 5 сек)
+// Периодическое отключение стандартных полицейских служб GTA V
 function disableAmbientDispatch() {
     try {
         for (let i = 1; i <= 15; i++) {
@@ -95,9 +113,9 @@ function disableAmbientDispatch() {
 disableAmbientDispatch();
 alt.setInterval(disableAmbientDispatch, 5000);
 
-// --- Постоянный игровой цикл (Каждый тик) --------------------------------
+// Постоянный цикл рендера и управления (Every Tick)
 alt.everyTick(() => {
-    // 1) Полное отключение стандартного трафика и NPC
+    // Отключение трафика и случайных педов
     native.setPedDensityMultiplierThisFrame(0.0);
     native.setScenarioPedDensityMultiplierThisFrame(0.0, 0.0);
     native.setVehicleDensityMultiplierThisFrame(0.0);
@@ -110,19 +128,11 @@ alt.everyTick(() => {
         native.setPlayerWantedLevelNow(player.scriptID, false);
     }
 
-    // 3) Блокировка колеса выбора оружия на Tab
-    native.disableControlAction(0, 37, true); // INPUT_SELECT_WEAPON (TAB)
-    native.disableControlAction(0, 157, true); // 1
-    native.disableControlAction(0, 158, true); // 2
-    native.disableControlAction(0, 159, true); // 3
-    native.disableControlAction(0, 160, true); // 4
-    native.disableControlAction(0, 161, true); // 5
-    native.disableControlAction(0, 162, true); // 6
-    native.disableControlAction(0, 163, true); // 7
-    native.disableControlAction(0, 164, true); // 8
-    native.disableControlAction(0, 165, true); // 9
+    // Блокировка колеса оружия
+    native.disableControlAction(0, 37, true);
+    for (let c = 157; c <= 165; c++) native.disableControlAction(0, c, true);
 
-    // 4) Скрытие стандартных элементов интерфейса GTA
+    // Скрытие стандартных элементов GTA V HUD
     native.hideHudComponentThisFrame(6);  // Vehicle Name
     native.hideHudComponentThisFrame(7);  // Area Name
     native.hideHudComponentThisFrame(8);  // Vehicle Class
@@ -131,27 +141,22 @@ alt.everyTick(() => {
     native.hideHudComponentThisFrame(20); // Weapon Wheel Stats
     native.hideHudComponentThisFrame(22); // Weapons HUD
 
-    // 5) Блокировка вызова Social Club оверлея на клавишу HOME
-    native.disableControlAction(0, 212, true); // INPUT_FRONTEND_SOCIAL_CLUB_HOME
-    native.disableControlAction(0, 213, true); // INPUT_FRONTEND_SOCIAL_CLUB_SECONDARY
-
-    // 5.1) Блокировка Escape → меню паузы, пока открыто любое NUI-окно
-    // BUG-12: без этого Escape из чата/инвентаря/настроек открывал GTA Map.
-    if (chatTyping || inventoryView || settingsView || consoleView || authView) {
+    // Блокировка Escape в меню паузы при открытом вводе или консоли
+    if (chatTyping || consoleView) {
         native.disableControlAction(0, 199, true); // INPUT_FRONTEND_PAUSE
         native.disableControlAction(0, 200, true); // INPUT_FRONTEND_PAUSE_ALTERNATE
     }
 
-    // 6) Логика NoClip
+    // Перемещение NoClip
     if (noClip && player && player.valid) {
-        native.disableControlAction(0, 30, true); // A-D
-        native.disableControlAction(0, 31, true); // W-S
-        native.disableControlAction(0, 21, true); // Shift
-        native.disableControlAction(0, 22, true); // Space
-        native.disableControlAction(0, 36, true); // Ctrl
-        native.disableControlAction(0, 44, true); // Q
-        native.disableControlAction(0, 24, true); // Attack
-        native.disableControlAction(0, 25, true); // Aim
+        native.disableControlAction(0, 30, true);
+        native.disableControlAction(0, 31, true);
+        native.disableControlAction(0, 21, true);
+        native.disableControlAction(0, 22, true);
+        native.disableControlAction(0, 36, true);
+        native.disableControlAction(0, 44, true);
+        native.disableControlAction(0, 24, true);
+        native.disableControlAction(0, 25, true);
 
         const camRot = native.getGameplayCamRot(2);
         const radZ = camRot.z * (Math.PI / 180.0);
@@ -173,8 +178,10 @@ alt.everyTick(() => {
         let speed = 0.9;
         if (native.isDisabledControlPressed(0, 21) || native.isControlPressed(0, 21)) {
             speed = 3.8; // Shift (Fast)
-        } else if (native.isControlPressed(0, 19)) {
-            speed = 0.15; // Alt (Slow)
+        } else if (native.isControlPressed(0, 19) || native.isControlPressed(0, 25)) {
+            speed = 0.18; // Alt / RMB (Slow / Precise)
+        } else if (native.isControlPressed(0, 24)) {
+            speed = 8.5; // LMB (Turbo)
         }
 
         // W / S
@@ -199,7 +206,7 @@ alt.everyTick(() => {
             noClipPos.y += right.y * speed;
         }
 
-        // Space / Ctrl
+        // Space / Ctrl (Вертикальный подъём / спуск)
         if (native.isDisabledControlPressed(0, 22) || native.isControlPressed(0, 22)) {
             noClipPos.z += speed;
         }
@@ -212,128 +219,10 @@ alt.everyTick(() => {
     }
 });
 
-// --- Авторизация ---------------------------------------------------------
-function openAuth() {
-    if (authView) return;
-    alt.log('[FloV:MP] openAuth: отображаем окно авторизации');
-    try {
-        // Закрываем оверлей Social Club или меню паузы, если они были открыты при старте
-        native.setFrontendActive(false);
-    } catch (e) { }
-    try {
-        alt.emit('ui:toggle', false);
-        alt.emit('ui:open', false);
-    } catch (e) { }
-    try {
-        // Камера с видом на центральную площадь
-        authCamera = native.createCamWithParams(
-            'DEFAULT_SCRIPTED_CAMERA',
-            -220.0, -1080.0, 65.0, -15.0, 0.0, 340.0, 60.0, false, 2);
-        native.setCamActive(authCamera, true);
-        native.renderScriptCams(true, false, 0, true, false, 0);
-    } catch (err) {
-        alt.log('[FloV:MP] Камера авторизации: ' + err);
-    }
-
-    // Предзагрузка зоны спавна, пока игрок вводит логин: к моменту спавна
-    // земля/коллизия уже прогружены -> появление в мире почти мгновенное
-    // ('в лёт', как на RageMP). Координаты зеркалят SpawnPoints.DefaultSpawn
-    // на сервере. Фокус снимается в loadCollisionAndUnfreeze.
-    try {
-        native.setFocusPosAndVel(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z, 0, 0, 0);
-        native.requestCollisionAtCoord(SPAWN_PREFETCH.x, SPAWN_PREFETCH.y, SPAWN_PREFETCH.z);
-    } catch (e) { }
-
-    try {
-        authView = new alt.WebView('http://resource/client/html/auth/index.html');
-        authView.on('load', () => {
-            try { authView.focus(); } catch (e) { }
-            try { authView.emit('flovmp:auth:init', currentServerName, 'Авторизация в игровом мире'); } catch (e) { }
-        });
-        pushCursor();
-        alt.toggleGameControls(false);
-
-        authView.on('flovmp:auth:submit', (mode, user, pass) => {
-            const evt = mode === 'reg' ? 'flovmp:auth:register' : 'flovmp:auth:login';
-            alt.log(`[FloV:MP] auth: отправка ${evt} для пользователя ${user}`);
-            alt.emitServer(evt, String(user), String(pass));
-        });
-        authView.on('flovmp:auth:close', () => {
-            alt.log('[FloV:MP] authView запросил закрытие по событию flovmp:auth:close');
-            enterWorld();
-        });
-        alt.log('[FloV:MP] authView успешно создан');
-    } catch (err) {
-        alt.log('[FloV:MP] Ошибка создания authView: ' + err);
-    }
-}
-
-function closeAuth() {
-    alt.log('[FloV:MP] closeAuth вызвана');
-    if (authView) {
-        try { authView.destroy(); } catch (e) { alt.log('[FloV:MP] authView.destroy warning: ' + e); }
-        authView = null;
-        popCursor();
-    }
-    try { alt.toggleGameControls(true); } catch (e) { }
-
-    try {
-        native.renderScriptCams(false, false, 0, true, false, 0);
-        if (authCamera) {
-            native.destroyCam(authCamera, false);
-            authCamera = null;
-        }
-    } catch (err) {
-        alt.log('[FloV:MP] Сброс камеры: ' + err);
-    }
-}
-
-// --- Единый вход в мир после авторизации ---------------------------------
-// RageMP-стиль: затемняем экран, закрываем авторизацию, спавн уже сделан
-// сервером — грузим коллизию местности и плавно показываем прогруженный мир.
-// Раньше вход шёл из 4 мест, и коллизию грузил только путь auth:hide — с
-// фолбэков (auth:result/syncedMeta/ручное закрытие) игрок мог провалиться
-// сквозь ещё не подгруженную землю или увидеть чёрный экран. Теперь все пути
-// зовут одну идемпотентную точку.
-let entering = false;
-function enterWorld() {
-    if (inGame && !authView) {
-        // Уже в мире — просто гарантируем, что экран не остался чёрным.
-        try { native.doScreenFadeIn(300); } catch (e) { }
-        return;
-    }
-    if (entering) return;
-    entering = true;
-
-    // Затемняем сразу: прячем переключение камеры авторизации на игрока и
-    // подгрузку текстур/коллизии (иначе виден «прыжок» и низко-детальный мир).
-    try { native.doScreenFadeOut(300); } catch (e) { }
-
-    alt.setTimeout(() => {
-        closeAuth();
-        openChat();
-        openHud();
-        inGame = true;
-
-        const player = alt.Player.local;
-        if (player && player.valid) {
-            loadCollisionAndUnfreeze(player.pos);
-        } else {
-            try { native.doScreenFadeIn(500); } catch (e) { }
-            entering = false;
-        }
-
-        // Жёсткая страховка: экран НИКОГДА не должен остаться чёрным, даже
-        // если загрузка коллизии зависла (иначе игрок видит «краш»/чёрный).
-        alt.setTimeout(() => {
-            try { if (native.isScreenFadedOut()) native.doScreenFadeIn(600); } catch (e) { }
-            entering = false;
-        }, 7000);
-    }, 320);
-}
-
-// --- Чат -----------------------------------------------------------------
-function openChat() {
+// =============================================================================
+// 2. ИГРОВОЙ ЧАТ (Obsidian Minimalist)
+// =============================================================================
+export function openChat() {
     if (chatView) return;
     chatView = new alt.WebView('http://resource/client/html/chat/index.html');
     chatView.on('flovmp:chat:say', (text) => {
@@ -348,14 +237,14 @@ function openChat() {
     });
 }
 
-function closeChat() {
+export function closeChat() {
     if (!chatView) return;
     chatView.destroy();
     chatView = null;
     chatTyping = false;
 }
 
-function startTyping(initialText = '') {
+export function startTyping(initialText = '') {
     if (!chatView || chatTyping || !inGame) return;
     chatTyping = true;
     chatView.focus();
@@ -363,99 +252,15 @@ function startTyping(initialText = '') {
     chatView.emit('flovmp:chat:openinput', initialText);
 }
 
-// --- Настройки (акцентный цвет и т.д.) ------------------------------------
-function openSettings() {
-    if (settingsView || !inGame || authView) return;
-    settingsView = new alt.WebView('http://resource/client/html/settings/index.html');
-    settingsView.on('load', () => {
-        try { settingsView.focus(); } catch (e) { }
-    });
-    pushCursor();
-    alt.toggleGameControls(false);
-
-    settingsView.on('flovmp:settings:close', closeSettings);
-    settingsView.on('flovmp:settings:accent', (colorId) => {
-        alt.log(`[FloV:MP] Акцентный цвет изменён на: ${colorId}`);
-        if (hudView) hudView.emit('flovmp:settings:accent', colorId);
-        if (chatView) chatView.emit('flovmp:settings:accent', colorId);
-        if (inventoryView) inventoryView.emit('flovmp:settings:accent', colorId);
-        if (consoleView) consoleView.emit('flovmp:settings:accent', colorId);
-    });
-}
-
-function closeSettings() {
-    if (!settingsView) return;
-    settingsView.destroy();
-    settingsView = null;
-    popCursor();
-    alt.toggleGameControls(true);
-}
-
-// --- Игровой HUD (Здоровье, Броня, Деньги, Онлайн) -----------------------
-function openHud() {
-    if (hudView) return;
-    hudView = new alt.WebView('http://resource/client/html/hud/index.html');
-}
-
-function closeHud() {
-    if (!hudView) return;
-    hudView.destroy();
-    hudView = null;
-}
-
-// --- Инвентарь (Клавиша I) -----------------------------------------------
-let cachedInventoryJson = null;
-
-function openInventory() {
-    if (inventoryView || !inGame || authView || chatTyping || consoleView) return;
-    inventoryView = new alt.WebView('http://resource/client/html/inventory/index.html');
-    inventoryView.on('load', () => {
-        try { inventoryView.focus(); } catch (e) { }
-    });
-    pushCursor();
-    alt.toggleGameControls(false);
-
-    inventoryView.on('flovmp:inv:ready', () => {
-        if (cachedInventoryJson && inventoryView) {
-            inventoryView.emit('flovmp:inv:sync', cachedInventoryJson);
-        }
-    });
-
-    inventoryView.on('flovmp:inv:close', closeInventory);
-    inventoryView.on('flovmp:inv:use', (slot) => alt.emitServer('flovmp:inv:use', slot));
-    inventoryView.on('flovmp:inv:drop', (slot, qty) => alt.emitServer('flovmp:inv:drop', slot, qty));
-    inventoryView.on('flovmp:inv:move', (from, to) => alt.emitServer('flovmp:inv:move', from, to));
-
-    if (cachedInventoryJson) {
-        alt.setTimeout(() => {
-            if (inventoryView && cachedInventoryJson) {
-                inventoryView.emit('flovmp:inv:sync', cachedInventoryJson);
-            }
-        }, 100);
-    }
-}
-
-function closeInventory() {
-    if (!inventoryView) return;
-    inventoryView.destroy();
-    inventoryView = null;
-    popCursor();
-    alt.toggleGameControls(true);
-}
-
-function toggleInventory() {
-    if (inventoryView) closeInventory();
-    else openInventory();
-}
-
-// --- Внутриигровая консоль разработчика (F8 / F11) ------------------------
-
-function openDevConsole() {
+// =============================================================================
+// 3. КОНСОЛЬ РАЗРАБОТЧИКА (F8 / F11)
+// =============================================================================
+export function openDevConsole() {
     if (consoleView) return;
     consoleView = new alt.WebView('http://resource/client/html/console/index.html');
     consoleView.on('load', () => {
-        try { 
-            consoleView.focus(); 
+        try {
+            consoleView.focus();
             consoleView.emit('flovmp:console:permissions', currentAdminLevel);
         } catch (e) { }
     });
@@ -467,25 +272,8 @@ function openDevConsole() {
         const parts = cmd.trim().split(' ');
         const name = parts[0].toLowerCase();
 
-        // Проверка прав для команд разработчика
-        if (name === 'tpm' || name === 'noclip') {
-            if (currentAdminLevel < 1) {
-                if (consoleView) consoleView.emit('flovmp:console:log', 'ERR', 'Доступ запрещен: требуются права администратора.');
-                return;
-            }
-        }
-
         if (name === 'tpm') {
-            const blip = native.getFirstBlipInfoId(8);
-            if (native.doesBlipExist(blip)) {
-                const coords = native.getBlipInfoIdCoord(blip);
-                const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
-                const z = found ? groundZ + 1.0 : coords.z + 1.0;
-                alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
-                if (consoleView) consoleView.emit('flovmp:console:log', 'DEV', `Телепорт по метке: ${coords.x.toFixed(1)}, ${coords.y.toFixed(1)}, ${z.toFixed(1)}`);
-            } else {
-                if (consoleView) consoleView.emit('flovmp:console:log', 'WARN', 'Метка на карте (waypoint) не найдена! Поставьте фиолетовую метку на карте');
-            }
+            triggerWaypointTeleport();
             return;
         }
 
@@ -505,23 +293,23 @@ function openDevConsole() {
             return;
         }
 
-        // Отправка на сервер (поддерживает и FloVMP.Gamemode и FloVMP.Starter)
+        // Отправка команды на сервер
         alt.emitServer('flovmp:chat:say', '/' + cmd);
         alt.emitServer('chat:message', '/' + cmd);
     });
+
     consoleView.on('flovmp:console:hotreload', () => {
         alt.log('[FloV:MP] NUI Hot-Reload requested via F8 console');
         if (chatView) chatView.reload(true);
-        if (hudView) hudView.reload(true);
-        if (inventoryView) inventoryView.reload(true);
-        if (settingsView) settingsView.reload(true);
-        if (consoleView) consoleView.emit('flovmp:console:log', 'RELOAD', 'All active WebViews reloaded from disk.');
+        if (consoleView) consoleView.emit('flovmp:console:log', 'RELOAD', 'Все активные WebViews перезагружены.');
     });
+
     consoleView.on('flovmp:console:quit', () => {
         try {
             if (typeof alt.disconnect === 'function') alt.disconnect();
         } catch (e) { }
     });
+
     consoleView.on('flovmp:console:close', () => {
         closeDevConsole();
     });
@@ -576,7 +364,7 @@ function openDevConsole() {
     }, 500);
 }
 
-function closeDevConsole() {
+export function closeDevConsole() {
     if (consoleStatsInterval) {
         alt.clearInterval(consoleStatsInterval);
         consoleStatsInterval = null;
@@ -588,11 +376,41 @@ function closeDevConsole() {
     alt.toggleGameControls(true);
 }
 
-function toggleDevConsole() {
+export function toggleDevConsole() {
     if (consoleView) closeDevConsole();
     else openDevConsole();
 }
 
+// =============================================================================
+// 4. ТЕЛЕПОРТАЦИЯ НА МЕТКУ (TPM / F5)
+// =============================================================================
+export function triggerWaypointTeleport() {
+    if (currentAdminLevel < 1) {
+        if (chatView) chatView.emit('flovmp:chat:msg', 'system', '', '{ef4444}[FloV:MP Security] Доступ запрещен (требуются права администратора).');
+        return;
+    }
+    const blip = native.getFirstBlipInfoId(8);
+    if (!native.doesBlipExist(blip)) {
+        if (chatView) {
+            chatView.emit('flovmp:chat:msg', 'system', '', '{f87171}[FloV:MP] Поставьте фиолетовую метку (waypoint) на карте перед использованием TPM!');
+        }
+        if (consoleView) {
+            consoleView.emit('flovmp:console:log', 'WARN', 'Метка на карте (waypoint) не найдена.');
+        }
+        return;
+    }
+    const coords = native.getBlipInfoIdCoord(blip);
+    const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
+    const z = found ? groundZ + 1.0 : coords.z + 1.0;
+    alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
+    if (consoleView) {
+        consoleView.emit('flovmp:console:log', 'DEV', `Телепорт по метке: ${coords.x.toFixed(1)}, ${coords.y.toFixed(1)}, ${z.toFixed(1)}`);
+    }
+}
+
+// =============================================================================
+// 5. ПЛАВНАЯ ПРОГРУЗКА КОЛЛИЗИЙ И СПАВН (Защита от Shift+W багов)
+// =============================================================================
 function loadCollisionAndUnfreeze(targetPos) {
     const player = alt.Player.local;
     if (!player || !player.valid) return;
@@ -608,7 +426,6 @@ function loadCollisionAndUnfreeze(targetPos) {
             alt.clearInterval(interval);
             native.clearFocus();
             try { native.doScreenFadeIn(500); } catch (e) { }
-            entering = false;
             return;
         }
 
@@ -620,196 +437,111 @@ function loadCollisionAndUnfreeze(targetPos) {
             alt.clearInterval(interval);
             native.clearFocus();
             if (hasGround && Math.abs(groundZ - targetPos.z) < 25.0) {
-                // Ставим координаты ровно на уровень земли без искусственного приподнимания
                 native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ, false, false, false, true);
             }
-            // Сброс физической скорости и буферизованных задач перед разморозкой,
-            // предотвращающий паразитный рывок/проскальзывание при старте бега (Shift+W)
             native.setEntityVelocity(player.scriptID, 0, 0, 0);
             native.clearPedTasksImmediately(player.scriptID);
             native.setRunSprintMultiplierForPlayer(player.scriptID, 1.0);
             native.setPedCanRagdoll(player.scriptID, true);
             native.freezeEntityPosition(player.scriptID, false);
-            // Дополнительный сброс остаточного вектора движения на следующем кадре
             alt.nextTick(() => {
                 if (player && player.valid) {
                     native.setEntityVelocity(player.scriptID, 0, 0, 0);
                 }
             });
-            // Мир прогружен — плавно показываем его (снимаем затемнение входа).
             try { native.doScreenFadeIn(700); } catch (e) { }
-            entering = false;
-            alt.log(`[FloV:MP] Коллизия местности загружена (попыток: ${attempts}, groundZ: ${hasGround ? groundZ.toFixed(2) : 'n/a'})`);
+            alt.log(`[FloV:MP] Спавн завершен. Коллизия загружена (попыток: ${attempts}, groundZ: ${hasGround ? groundZ.toFixed(2) : 'n/a'})`);
         }
     }, 100);
 }
 
-// --- Обработчики событий -------------------------------------------------
-alt.onServer('flovmp:auth:show', (serverName) => {
-    if (serverName) currentServerName = serverName;
-    alt.log(`[FloV:MP] flovmp:auth:show получен от сервера (${currentServerName})`);
-    openAuth();
-});
-
-alt.onServer('flovmp:auth:hide', () => {
-    alt.log('[FloV:MP] flovmp:auth:hide получен от сервера');
-    enterWorld();
-});
-
-alt.onServer('flovmp:auth:result', (ok, message) => {
-    alt.log(`[FloV:MP] flovmp:auth:result получен: ok=${ok}, message=${message}`);
-    if (authView) authView.emit('flovmp:auth:result', ok, message);
-    if (ok) {
-        alt.setTimeout(() => {
-            if (authView) {
-                alt.log('[FloV:MP] Автозакрытие authView по успешному auth:result');
-                enterWorld();
-            }
-        }, 350);
+// =============================================================================
+// 6. ГОЛОСОВОЙ ЧАТ PUSH-TO-TALK (B с задержкой отпускания 400 мс)
+// =============================================================================
+function handleVoiceKeyDown() {
+    if (voiceReleaseTimeout) {
+        alt.clearTimeout(voiceReleaseTimeout);
+        voiceReleaseTimeout = null;
     }
-});
-
-alt.on('syncedMetaChange', (entity, key, value) => {
-    if (entity === alt.Player.local && key === 'authed' && value === true) {
-        alt.log('[FloV:MP] syncedMeta authed=true -> вход в мир');
-        enterWorld();
-    }
-});
-
-alt.onServer('flovmp:chat:msg', (kind, author, text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
-    if (consoleView) {
-        const prefix = author ? `[${author}] ` : '';
-        consoleView.emit('flovmp:console:log', 'CHAT', `${prefix}${text}`);
-    }
-});
-
-alt.onServer('chat:addMessage', (text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', 'system', '', String(text));
-    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', String(text));
-});
-
-alt.onServer('chat:message', (author, text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', 'player', author, text);
-    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', `[${author}] ${text}`);
-});
-
-alt.onServer('flovmp:chat:clear', () => {
-    if (chatView) chatView.emit('flovmp:chat:clear');
-});
-
-alt.onServer('flovmp:hud:init', (serverName) => {
-    openHud();
-    if (hudView) hudView.emit('flovmp:hud:init', serverName);
-});
-
-alt.onServer('flovmp:hud:tick', (hp, armor, cash, online, hour, minute) => {
-    if (!hudView && inGame) openHud();
-    if (hudView) hudView.emit('flovmp:hud:tick', hp, armor, cash, online, hour, minute);
-});
-
-alt.onServer('flovmp:inv:sync', (json) => {
-    cachedInventoryJson = json;
-    if (inventoryView) inventoryView.emit('flovmp:inv:sync', json);
-});
-
-alt.onServer('flovmp:inv:notice', (text) => {
-    if (inventoryView) inventoryView.emit('flovmp:inv:notice', text);
-    if (chatView) chatView.emit('flovmp:chat:msg', 'system', 'Инвентарь', text);
-});
-
-// --- Состояние транспорта и спидометр ----------------------------------
-let seatbeltOn = false;
-let inVehiclePrev = false;
-
-alt.setInterval(() => {
-    if (!inGame || !hudView) return;
-    const player = alt.Player.local;
-    if (!player || !player.valid) return;
-
-    const veh = player.vehicle;
-    if (veh && veh.valid) {
-        inVehiclePrev = true;
-        let speed = 0;
+    if (!isVoiceTalking) {
+        isVoiceTalking = true;
         try {
-            speed = Math.round(native.getEntitySpeed(veh.scriptID) * 3.6);
-        } catch (e) {
-            speed = 0;
+            if (typeof alt.setMicGain === 'function') alt.setMicGain(1.0);
+            alt.emit('flovmp:voice:active', true);
+        } catch (e) { }
+    }
+}
+
+function handleVoiceKeyUp() {
+    if (!isVoiceTalking) return;
+    // Задержка отпускания (hangover tail) предотвращает обрезание окончаний слов
+    voiceReleaseTimeout = alt.setTimeout(() => {
+        isVoiceTalking = false;
+        voiceReleaseTimeout = null;
+        try {
+            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
+            alt.emit('flovmp:voice:active', false);
+        } catch (e) { }
+    }, KEYBINDS.voiceTailMs);
+}
+
+// =============================================================================
+// 7. ОБРАБОТЧИКИ КЛАВИАТУРЫ
+// =============================================================================
+alt.on('keydown', (key) => {
+    if (key === KEYBINDS.voice) {
+        const player = alt.Player.local;
+        const inVehicle = player && player.valid && player.vehicle;
+        // Если не в чате и не за рулём (где B = ремень)
+        if (!chatTyping && !consoleView && !inVehicle) {
+            handleVoiceKeyDown();
         }
-
-        let fuel = 100.0;
-        try {
-            if (veh.hasStreamSyncedMetaData('fuel')) {
-                fuel = veh.getStreamSyncedMetaData('fuel');
-            }
-        } catch (e) { }
-
-        let gear = 1;
-        try {
-            gear = veh.gear;
-        } catch (e) { }
-
-        let engine = false;
-        try {
-            engine = native.getIsVehicleEngineRunning(veh.scriptID);
-        } catch (e) { }
-
-        let locked = false;
-        try {
-            locked = veh.lockState === 2;
-        } catch (e) { }
-
-        let lights = false;
-        try {
-            const [hasLights, lightsOn, highbeamsOn] = native.getVehicleLightsState(veh.scriptID);
-            lights = lightsOn || highbeamsOn;
-        } catch (e) { }
-
-        hudView.emit('flovmp:hud:speedo', true, speed, fuel, gear, engine, locked, seatbeltOn, lights);
-    } else if (inVehiclePrev) {
-        inVehiclePrev = false;
-        seatbeltOn = false;
-        try {
-            native.setPedConfigFlag(player.scriptID, 32, true);
-        } catch (e) { }
-        hudView.emit('flovmp:hud:speedo', false, 0, 0, 0, false, false, false, false);
     }
-}, 50);
+});
 
-// Клавиши: F4 — NoClip, T — Чат, I — Инвентарь, F8/F11 — Консоль разработчика, F9 — Настройки, B — Ремень, 2 — Двигатель, L — Двери
 alt.on('keyup', (key) => {
-    if (key === 119 || key === 122) { // F8 (119) or F11 (122)
+    // F8 / F11 — Консоль
+    if (key === KEYBINDS.console || key === KEYBINDS.consoleAlt) {
         toggleDevConsole();
         return;
     }
     if (consoleView) return;
 
-    if (key === 73) { // I (73) — Инвентарь
-        if (inGame && !chatTyping && !authView && !settingsView && !consoleView) {
-            toggleInventory();
+    // F4 — NoClip
+    if (key === KEYBINDS.noclip) {
+        toggleNoClip();
+        return;
+    }
+
+    // F5 — TPM (Быстрый телепорт на waypoint)
+    if (key === KEYBINDS.tpm) {
+        triggerWaypointTeleport();
+        return;
+    }
+
+    // B — Микрофон (отпускание) или Ремень в авто
+    if (key === KEYBINDS.voice) {
+        const player = alt.Player.local;
+        if (player && player.valid && player.vehicle) {
+            // В авто: переключение ремня безопасности
+            seatbeltOn = !seatbeltOn;
+            try {
+                native.setPedConfigFlag(player.scriptID, 32, !seatbeltOn);
+            } catch (e) { }
+            if (chatView) {
+                const status = seatbeltOn ? 'пристёгнут' : 'отстёгнут';
+                chatView.emit('flovmp:chat:msg', 'system', 'Транспорт', `Ремень безопасности ${status}.`);
+            }
+            return;
+        } else {
+            handleVoiceKeyUp();
             return;
         }
     }
 
-    if (key === 66) { // B (66) — Ремень безопасности
-        if (inGame && !chatTyping && !authView) {
-            const player = alt.Player.local;
-            if (player && player.valid && player.vehicle) {
-                seatbeltOn = !seatbeltOn;
-                try {
-                    native.setPedConfigFlag(player.scriptID, 32, !seatbeltOn);
-                } catch (e) { }
-                if (chatView) {
-                    const status = seatbeltOn ? 'пристёгнут' : 'отстёгнут';
-                    chatView.emit('flovmp:chat:msg', 'system', 'Транспорт', `Ремень безопасности ${status}.`);
-                }
-                return;
-            }
-        }
-    }
-
-    if (key === 50) { // 2 (50) — Двигатель авто
-        if (inGame && !chatTyping && !authView) {
+    // 2 — Двигатель транспорта
+    if (key === KEYBINDS.engine) {
+        if (inGame && !chatTyping) {
             const player = alt.Player.local;
             if (player && player.valid && player.vehicle) {
                 alt.emitServer('flovmp:chat:say', '/engine');
@@ -818,8 +550,9 @@ alt.on('keyup', (key) => {
         }
     }
 
-    if (key === 76) { // L (76) — Замок дверей авто
-        if (inGame && !chatTyping && !authView) {
+    // L — Замок дверей транспорта
+    if (key === KEYBINDS.lock) {
+        if (inGame && !chatTyping) {
             const player = alt.Player.local;
             if (player && player.valid) {
                 alt.emitServer('flovmp:chat:say', '/lock');
@@ -828,81 +561,55 @@ alt.on('keyup', (key) => {
         }
     }
 
-    if (chatTyping || inventoryView) return;
+    if (chatTyping) return;
 
-    if (key === 113) { // F2 — Окно авторизации (если не в игре)
-        if (!inGame) openAuth();
-    } else if (key === 115) { // F4
-        toggleNoClip();
-    } else if (key === 84) { // T
+    // T — Открыть чат
+    if (key === KEYBINDS.chat) {
         startTyping();
-    } else if (key === 191) { // / (Slash)
+    }
+    // / — Открыть чат со слэшем
+    else if (key === KEYBINDS.chatSlash) {
         startTyping('/');
-    } else if (key === 120) { // F9
-        if (settingsView) closeSettings();
-        else openSettings();
     }
 });
 
+// =============================================================================
+// 8. СЕРВЕРНЫЕ СОБЫТИЯ И ЖИЗНЕННЫЙ ЦИКЛ
+// =============================================================================
 alt.on('connectionComplete', () => {
-    alt.log('[FloV:MP] Успешное подключение к серверу');
+    alt.log('[FloV:MP] Успешное прямое подключение к серверу');
+    inGame = true;
+    native.displayRadar(true);
+    native.displayHud(true);
+    openChat();
     alt.emitServer('flovmp:client:ready');
-    openAuth();
-    alt.setTimeout(() => {
-        if (!inGame && !authView) {
-            alt.log('[FloV:MP] Повторный запрос готовности клиента');
-            alt.emitServer('flovmp:client:ready');
-            openAuth();
-        }
-    }, 1500);
+
+    const player = alt.Player.local;
+    if (player && player.valid) {
+        loadCollisionAndUnfreeze(player.pos);
+    }
 });
 
 alt.on('disconnect', () => {
     if (noClip) toggleNoClip();
-    closeAuth();
     closeChat();
-    closeHud();
-    closeInventory();
-    closeSettings();
     closeDevConsole();
     inGame = false;
     alt.log('[FloV:MP] Отключено от сервера');
 });
 
-alt.onServer('flovmp:client:welcome', (name, index) => {
-    alt.log(`[${currentServerName}] Добро пожаловать на сервер, ${name}!`);
-});
-
-// --- Оптимизация скоплений игроков (50+ на спавне, защита FPS) ---
-alt.setInterval(() => {
-    const local = alt.Player.local;
-    if (!local || !local.valid || !inGame) return;
-
-    const nearbyPlayers = alt.Player.streamedIn;
-    const count = nearbyPlayers.length;
-
-    // При плотном скоплении (> 15 игроков в радиусе стриминга):
-    if (count > 15) {
-        native.setPedCanRagdoll(local.scriptID, false);
-        for (let i = 0; i < nearbyPlayers.length; i++) {
-            const remote = nearbyPlayers[i];
-            if (remote && remote.valid && remote.scriptID) {
-                native.setEntityNoCollisionEntity(local.scriptID, remote.scriptID, true);
-            }
-        }
-    } else {
-        native.setPedCanRagdoll(local.scriptID, true);
-    }
-}, 500);
-
-// --- FloV:MP Starter Client Handlers (Ванильный режим) ---
+// Инициализация чистого стартера
 alt.onServer('starter:initClient', () => {
-    alt.log('[FloV:MP] Режим ванильного стартера активирован');
-    closeAuth();
+    alt.log('[FloV:MP] Игровой клиент FloV:MP активирован');
     inGame = true;
     native.displayRadar(true);
     native.displayHud(true);
     openChat();
+
+    const player = alt.Player.local;
+    if (player && player.valid) {
+        loadCollisionAndUnfreeze(player.pos);
+    }
 });
 
 alt.onServer('flovmp:console:setAdmin', (lvl) => {
@@ -913,18 +620,22 @@ alt.onServer('flovmp:console:setAdmin', (lvl) => {
     }
 });
 
-alt.onServer('starter:requestWaypointTp', () => {
-    const blip = native.getFirstBlipInfoId(8);
-    if (!native.doesBlipExist(blip)) {
-        if (chatView) {
-            chatView.emit('flovmp:chat:msg', 'system', '', '{f87171}[FloV:MP] Поставьте метку (waypoint) на карте перед использованием /tpm!');
-        }
-        return;
+// Реанимация (/revive)
+alt.onServer('starter:revive', () => {
+    const local = alt.Player.local;
+    if (local && local.valid) {
+        try {
+            native.resurrectPed(local.scriptID);
+            native.clearPedTasksImmediately(local.scriptID);
+            native.setPedCanRagdoll(local.scriptID, true);
+            native.freezeEntityPosition(local.scriptID, false);
+            native.doScreenFadeIn(300);
+        } catch (e) { }
     }
-    const coords = native.getBlipInfoIdCoord(blip);
-    const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
-    const z = found ? groundZ + 1.0 : coords.z + 1.0;
-    alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
+});
+
+alt.onServer('starter:requestWaypointTp', () => {
+    triggerWaypointTeleport();
 });
 
 alt.onServer('starter:copyCoords', (x, y, z, yaw) => {
@@ -982,11 +693,44 @@ alt.onServer('starter:setFrozen', (frozen) => {
     }
 });
 
-// Если скрипт загрузился уже после установки соединения — открываем окно авторизации
-alt.setTimeout(() => {
-    if (!inGame && !authView) {
-        alt.log('[FloV:MP] Автозапуск openAuth по таймеру готовности');
-        openAuth();
+// Сообщения чата
+alt.onServer('flovmp:chat:msg', (kind, author, text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
+    if (consoleView) {
+        const prefix = author ? `[${author}] ` : '';
+        consoleView.emit('flovmp:console:log', 'CHAT', `${prefix}${text}`);
+    }
+});
+
+alt.onServer('chat:addMessage', (text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', 'system', '', String(text));
+    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', String(text));
+});
+
+alt.onServer('chat:message', (author, text) => {
+    if (chatView) chatView.emit('flovmp:chat:msg', 'player', author, text);
+    if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', `[${author}] ${text}`);
+});
+
+alt.onServer('flovmp:chat:clear', () => {
+    if (chatView) chatView.emit('flovmp:chat:clear');
+});
+
+// Защита FPS при массовых скоплениях на спавне (> 15 игроков в стриминге)
+alt.setInterval(() => {
+    const local = alt.Player.local;
+    if (!local || !local.valid || !inGame) return;
+
+    const nearbyPlayers = alt.Player.streamedIn;
+    if (nearbyPlayers.length > 15) {
+        native.setPedCanRagdoll(local.scriptID, false);
+        for (let i = 0; i < nearbyPlayers.length; i++) {
+            const remote = nearbyPlayers[i];
+            if (remote && remote.valid && remote.scriptID) {
+                native.setEntityNoCollisionEntity(local.scriptID, remote.scriptID, true);
+            }
+        }
+    } else {
+        native.setPedCanRagdoll(local.scriptID, true);
     }
 }, 500);
-

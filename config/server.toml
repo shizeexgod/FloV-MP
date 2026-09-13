@@ -61,7 +61,7 @@ modules = [
 
 # --- Наши ресурсы (порядок = порядок загрузки) ---------------------
 resources = [
-    "flovmp-core",
+    "flovmp-starter",
     "flovmp-client",
 ]
 
