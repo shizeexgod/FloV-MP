@@ -56,13 +56,16 @@ public sealed class InventorySystem
     {
         var inv = _store.Load(account.Id);
 
-        if (inv.Slots.All(s => s is null))
+        lock (inv)
         {
-            inv.Add("phone", 1);
-            inv.Add("water", 2);
-            inv.Add("bread", 2);
-            inv.Add("bandage", 3);
-            _store.Save(account.Id, inv);
+            if (inv.Slots.All(s => s is null))
+            {
+                inv.Add("phone", 1);
+                inv.Add("water", 2);
+                inv.Add("bread", 2);
+                inv.Add("bandage", 3);
+                _store.Save(account.Id, inv);
+            }
         }
 
         _live[player.Id] = (inv, account.Id);
@@ -83,7 +86,11 @@ public sealed class InventorySystem
         if (!_live.TryGetValue(player.Id, out var e)) return false;
         if (!ItemCatalog.Exists(itemId)) return false;
 
-        var res = e.inv.Add(itemId, quantity);
+        InvResult res;
+        lock (e.inv)
+        {
+            res = e.inv.Add(itemId, quantity);
+        }
         if (res.Ok)
         {
             _store.Save(e.accountId, e.inv);
@@ -106,7 +113,11 @@ public sealed class InventorySystem
     {
         if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
-        var res = e.inv.Move(from, to);
+        InvResult res;
+        lock (e.inv)
+        {
+            res = e.inv.Move(from, to);
+        }
         if (!res.Ok) return;               // ничего не поменялось — не пишем на диск
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
@@ -117,8 +128,12 @@ public sealed class InventorySystem
         if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         if (slot < 0 || slot >= e.inv.SlotCount) return;
-        var s = e.inv.Slots[slot];
-        if (s is null) return;
+        ItemStack? s;
+        lock (e.inv)
+        {
+            s = e.inv.Slots[slot];
+            if (s is null) return;
+        }
 
         var take = Math.Clamp(qty, 1, s.Quantity);
         var itemId = s.ItemId;
@@ -141,7 +156,7 @@ public sealed class InventorySystem
         if (string.IsNullOrEmpty(dropId) || dropId.Length > 64) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
-        if (_atomicTransactions.TryPickupGroundItem(player.Id, dropId, e.inv, pPos, 4.0f, out var picked) && picked != null)
+        if (_atomicTransactions.TryPickupGroundItem(player.Id, dropId, e.inv, pPos, 4.0f, out var picked, player.Dimension) && picked != null)
         {
             _store.Save(e.accountId, e.inv);
             Sync(player, e.inv);
@@ -160,8 +175,12 @@ public sealed class InventorySystem
         if (!_gate.Allow(player.Id)) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
         if (slot < 0 || slot >= e.inv.SlotCount) return;
-        var s = e.inv.Slots[slot];
-        if (s is null) return;
+        ItemStack? s;
+        lock (e.inv)
+        {
+            s = e.inv.Slots[slot];
+            if (s is null) return;
+        }
 
         var itemId = s.ItemId;
         switch (itemId)

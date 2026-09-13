@@ -181,4 +181,103 @@ public sealed class AtomicInventoryTransactionServiceTests
         Assert.Equal(0, invB.CountOf("bread"));
         Assert.Equal(5, invB.CountOf("water"));
     }
+
+    [Fact]
+    public void ExecuteAtomicTrade_WhenTargetInventorySlotsFull_RollsBackCleanlyWithoutLoss()
+    {
+        var service = new AtomicInventoryTransactionService();
+        // Инвентарь A имеет телефон и хлеб
+        var invA = new Inventory(slotCount: 5, maxWeight: 50);
+        invA.Add("phone", 1);
+        invA.Add("bread", 2);
+
+        // Инвентарь B имеет 2 слота и оба уже заняты водой и бинтом
+        var invB = new Inventory(slotCount: 2, maxWeight: 50);
+        invB.Add("water", 1);
+        invB.Add("bandage", 1);
+
+        // A предлагает phone и bread, B предлагает water
+        // У B освободится 1 слот (от water), но A передаёт 2 разных предмета (нужно 2 слота) -> второй предмет не влезет!
+        var offerA = new List<ItemStack>
+        {
+            new ItemStack { ItemId = "phone", Quantity = 1 },
+            new ItemStack { ItemId = "bread", Quantity = 1 }
+        };
+        var offerB = new List<ItemStack>
+        {
+            new ItemStack { ItemId = "water", Quantity = 1 }
+        };
+
+        var ok = service.ExecuteAtomicTrade(101, invA, offerA, 102, invB, offerB);
+
+        // Транзакция должна откатиться полностью
+        Assert.False(ok);
+        Assert.Equal(1, invA.CountOf("phone"));
+        Assert.Equal(2, invA.CountOf("bread"));
+        Assert.Equal(0, invA.CountOf("water"));
+
+        Assert.Equal(1, invB.CountOf("water"));
+        Assert.Equal(1, invB.CountOf("bandage"));
+        Assert.Equal(0, invB.CountOf("phone"));
+        Assert.Equal(0, invB.CountOf("bread"));
+    }
+
+    [Fact]
+    public void ExecuteAtomicTrade_WhenSamePlayerOrSameInventory_BlocksTrade()
+    {
+        var service = new AtomicInventoryTransactionService();
+        var invA = new Inventory(slotCount: 5, maxWeight: 50);
+        invA.Add("bread", 2);
+
+        var offerA = new List<ItemStack> { new ItemStack { ItemId = "bread", Quantity = 1 } };
+        var offerB = new List<ItemStack> { new ItemStack { ItemId = "bread", Quantity = 1 } };
+
+        // Трейд с самим собой
+        Assert.False(service.ExecuteAtomicTrade(101, invA, offerA, 101, invA, offerB));
+    }
+
+    [Fact]
+    public void TryPickupGroundItem_DimensionCheck_FailsWhenDifferentDimension()
+    {
+        var service = new AtomicInventoryTransactionService();
+        var spawnerInv = new Inventory(slotCount: 10, maxWeight: 100);
+        spawnerInv.Add("phone", 1);
+
+        // Предмет выброшен в виртуальном измерении 5 (например, интерьер)
+        var drop = service.DropItem(spawnerInv, "phone", 1, new Vector3D(10f, 10f, 1f), dimension: 5, playerId: 101);
+        Assert.NotNull(drop);
+
+        // Игрок находится на тех же координатах, но в измерении 0 (улица)
+        var pickerInv = new Inventory(slotCount: 10, maxWeight: 100);
+        var success = service.TryPickupGroundItem(
+            playerId: 102,
+            dropId: drop.DropId,
+            playerInv: pickerInv,
+            playerPos: new Vector3D(10f, 10f, 1f),
+            maxDistance: 2.0f,
+            out var picked,
+            playerDimension: 0 // Другое измерение!
+        );
+
+        Assert.False(success);
+        Assert.Null(picked);
+        Assert.Equal(0, pickerInv.CountOf("phone"));
+        Assert.Equal(1, service.ActiveDropsCount);
+
+        // Игрок в том же измерении 5 — подбор должен быть успешен
+        var sameDimSuccess = service.TryPickupGroundItem(
+            playerId: 103,
+            dropId: drop.DropId,
+            playerInv: pickerInv,
+            playerPos: new Vector3D(10f, 10f, 1f),
+            maxDistance: 2.0f,
+            out var pickedSameDim,
+            playerDimension: 5
+        );
+
+        Assert.True(sameDimSuccess);
+        Assert.NotNull(pickedSameDim);
+        Assert.Equal(1, pickerInv.CountOf("phone"));
+        Assert.Equal(0, service.ActiveDropsCount);
+    }
 }

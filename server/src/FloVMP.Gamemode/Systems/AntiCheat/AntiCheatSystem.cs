@@ -20,6 +20,7 @@ public class AntiCheatSystem
     private readonly VehiclePhysicsGuardian _vehicleGuardian;
     private readonly CombatValidationService _combatValidation;
     private long _lastTickMs;
+    private long _lastVehiclePruneMs;
 
     public AntiCheatService Service => _service;
     public VehiclePhysicsGuardian VehicleGuardian => _vehicleGuardian;
@@ -236,6 +237,18 @@ public class AntiCheatSystem
                 var allowed = _inventoryWeaponsOf(player);
                 _service.CheckWeapon(acc.Id, player.CurrentWeapon, allowed ?? new HashSet<uint> { player.CurrentWeapon });
             }
+        }
+
+        // Очистка состояний уничтоженных авто каждые 5 секунд
+        if (nowMs - _lastVehiclePruneMs >= 5000)
+        {
+            _lastVehiclePruneMs = nowMs;
+            var activeVehicles = new HashSet<int>();
+            foreach (var v in Alt.GetAllVehicles())
+            {
+                if (v.Exists) activeVehicles.Add((int)v.Id);
+            }
+            _vehicleGuardian.PruneInactiveVehicles(activeVehicles);
         }
     }
 

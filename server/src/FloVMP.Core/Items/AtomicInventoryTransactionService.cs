@@ -94,15 +94,22 @@ public sealed class AtomicInventoryTransactionService
     }
 
     /// <summary>
-    /// Атомарный подбор предмета с пола с защитой от одновременного клика (Race-Condition Dupe Prevention).
+    /// Атомарный подбор предмета с пола с защитой от одновременного клика (Race-Condition Dupe Prevention)
+    /// и проверкой виртуального измерения.
     /// </summary>
-    public bool TryPickupGroundItem(ulong playerId, string dropId, Inventory playerInv, Vector3D playerPos, float maxDistance, out ItemStack? pickedItem)
+    public bool TryPickupGroundItem(ulong playerId, string dropId, Inventory playerInv, Vector3D playerPos, float maxDistance, out ItemStack? pickedItem, int playerDimension = 0)
     {
         pickedItem = null;
 
         if (!_groundDrops.TryGetValue(dropId, out var drop))
         {
             return false; // Предмета уже не существует
+        }
+
+        // Проверка виртуального измерения (защита от подбора сквозь интерьеры/измерения)
+        if (drop.Dimension != playerDimension)
+        {
+            return false;
         }
 
         // Проверка дистанции
@@ -137,8 +144,8 @@ public sealed class AtomicInventoryTransactionService
     }
 
     /// <summary>
-    /// Двухфазный атомарный обмен между двумя игроками (Two-Phase Commit Trade).
-    /// Исключает рассинхрон или дюп при отмене трейда во время подтверждения.
+    /// Двухфазный атомарный обмен между двумя игроками (Two-Phase Commit Trade with Automatic Rollback).
+    /// Исключает рассинхрон или дюп при отмене трейда во время подтверждения или нехватке слотов.
     /// </summary>
     public bool ExecuteAtomicTrade(
         ulong playerAId,
@@ -148,6 +155,22 @@ public sealed class AtomicInventoryTransactionService
         Inventory invB,
         IReadOnlyList<ItemStack> offerB)
     {
+        if (playerAId == playerBId || invA == null || invB == null || invA == invB)
+            return false;
+
+        if (offerA == null || offerB == null)
+            return false;
+
+        // Валидация положительных количеств
+        foreach (var item in offerA)
+        {
+            if (item == null || string.IsNullOrEmpty(item.ItemId) || item.Quantity <= 0) return false;
+        }
+        foreach (var item in offerB)
+        {
+            if (item == null || string.IsNullOrEmpty(item.ItemId) || item.Quantity <= 0) return false;
+        }
+
         // Упорядочивание блокировок по ID игроков для исключения Deadlock
         object firstLock = playerAId < playerBId ? invA : invB;
         object secondLock = playerAId < playerBId ? invB : invA;
@@ -167,7 +190,7 @@ public sealed class AtomicInventoryTransactionService
                     if (invB.CountOf(item.ItemId) < item.Quantity) return false;
                 }
 
-                // Фаза 2: Проверка веса и вместимости принимающей стороны
+                // Фаза 2: Проверка веса принимающей стороны
                 double weightDeltaA = 0;
                 foreach (var item in offerB)
                 {
@@ -196,20 +219,38 @@ public sealed class AtomicInventoryTransactionService
 
                 if (invB.TotalWeight() + weightDeltaB > invB.MaxWeight + 1e-9) return false;
 
-                // Фаза 3: Атомарный перенос (Commit)
-                foreach (var item in offerA)
-                {
-                    invA.Remove(item.ItemId, item.Quantity);
-                    invB.Add(item.ItemId, item.Quantity);
-                }
+                // Снимаем снимки состояния перед транзакцией для гарантированного отката (Rollback)
+                var snapshotA = invA.Snapshot();
+                var snapshotB = invB.Snapshot();
 
-                foreach (var item in offerB)
+                try
                 {
-                    invB.Remove(item.ItemId, item.Quantity);
-                    invA.Add(item.ItemId, item.Quantity);
-                }
+                    // Фаза 3: Атомарный перенос (Commit)
+                    foreach (var item in offerA)
+                    {
+                        var rem = invA.Remove(item.ItemId, item.Quantity);
+                        if (!rem.Ok) throw new InvalidOperationException("Failed to remove item from A during commit");
+                        var add = invB.Add(item.ItemId, item.Quantity);
+                        if (!add.Ok) throw new InvalidOperationException("Failed to add item to B during commit (inventory full)");
+                    }
 
-                return true;
+                    foreach (var item in offerB)
+                    {
+                        var rem = invB.Remove(item.ItemId, item.Quantity);
+                        if (!rem.Ok) throw new InvalidOperationException("Failed to remove item from B during commit");
+                        var add = invA.Add(item.ItemId, item.Quantity);
+                        if (!add.Ok) throw new InvalidOperationException("Failed to add item to A during commit (inventory full)");
+                    }
+
+                    return true;
+                }
+                catch
+                {
+                    // Откат обеих сторон к исходному состоянию без потерь и дюпов
+                    invA.LoadSnapshot(snapshotA);
+                    invB.LoadSnapshot(snapshotB);
+                    return false;
+                }
             }
         }
     }

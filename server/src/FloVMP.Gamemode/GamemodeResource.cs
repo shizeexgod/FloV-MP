@@ -298,6 +298,26 @@ public class GamemodeResource : Resource
                     }
                 }
             }
+
+            // Проверка истечения срока деморгана (Admin Jail) для онлайн-игроков
+            var nowUtc = DateTime.UtcNow;
+            foreach (var p in Alt.GetAllPlayers())
+            {
+                if (!p.Exists) continue;
+                var acc = _auth?.AccountOf(p);
+                if (acc != null && !string.IsNullOrEmpty(acc.JailUntilUtc) && !acc.IsJailed(nowUtc))
+                {
+                    acc.JailUntilUtc = "";
+                    _auth?.SaveAccount(acc);
+                    if (p.Dimension == FloVMP.Core.World.DimensionManager.AdminJailDimension)
+                    {
+                        p.Dimension = 0;
+                        p.Position = SpawnPoints.MoscowRedSquare;
+                        _antiCheat?.NotifyAdminTeleport(p, p.Position);
+                        ChatSystem.SendSystem(p, "[Деморган] Срок вашего административного наказания истёк. Вы возвращены на свободу.");
+                    }
+                }
+            }
         }
 
         // Расход топлива транспорта и контроль двигателей каждые 2 сек
@@ -343,7 +363,14 @@ public class GamemodeResource : Resource
     private void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("core.OnPlayerAuthed", () =>
     {
         _antiCheat?.OnAuthed(player, account);
-        _playerLifecycle?.SpawnAuthed(player, account.Id);
+        int? arrestSec = null;
+        string? arrestReason = null;
+        if (_factions != null && _factions.IsArrested(account.Id, out var rem, out var rsn))
+        {
+            arrestSec = rem;
+            arrestReason = rsn;
+        }
+        _playerLifecycle?.SpawnAuthed(player, account.Id, account, arrestSec, arrestReason);
         _hud?.OnAuthed(player, account);
         _inv?.OnAuthed(player, account);
         _chat?.OnPlayerAuthed(player, account);
@@ -354,6 +381,19 @@ public class GamemodeResource : Resource
         _tickManager?.UnregisterEntity(player.Id);
         _antiCheat?.OnDisconnect(player);
         _hud?.OnDisconnect(player);
+        var acc = _auth?.AccountOf(player);
+        if (acc != null && _factions != null)
+        {
+            if (_factions.IsCuffed(acc.Id))
+            {
+                // Защита от Off-from-Arrest / Quit-in-Cuffs:
+                // Если игрок намеренно вышел из игры в наручниках, сажаем в КПЗ на 30 минут
+                _factions.TryArrest(0, acc.Id, 1800, "Выход из игры при аресте (/q от ареста)", out _);
+                acc.JailUntilUtc = DateTime.UtcNow.AddMinutes(30).ToString("O");
+                _auth?.SaveAccount(acc);
+                Alt.Log($"[FloV:MP RP] Игрок {acc.Username} (acc:{acc.Id}) вышел из игры в наручниках! Автоматически посажен в КПЗ на 30 мин.");
+            }
+        }
     });
 
     private static void OnServerStarted() => Safe.Run("core.OnServerStarted", () =>

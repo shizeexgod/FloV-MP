@@ -143,4 +143,53 @@ public class CombatValidationTests
         var res = combat.ValidateHit(10, new Vector3D(0, 0, 0), 0, 2, new Vector3D(50, 0, 0), 0, 100f, 0f, sniperHash, HitboxZone.Torso, now.AddMilliseconds(50));
         Assert.True(res.IsValid);
     }
+
+    [Fact]
+    public void Shotgun_MultiplePelletsInSameShot_AreAllowed()
+    {
+        var combat = new CombatValidationService();
+        uint pumpShotgunHash = 0x1D073A89;
+        var now = DateTime.UtcNow;
+
+        // Имитируем попадание 6 дробинок из одного залпа дробовика (с интервалами 2-5мс)
+        for (int i = 0; i < 6; i++)
+        {
+            var res = combat.ValidateHit(
+                attackerId: 1,
+                attackerPos: new Vector3D(0, 0, 0),
+                attackerDim: 0,
+                victimId: 2,
+                victimPos: new Vector3D(8, 0, 0),
+                victimDim: 0,
+                currentVictimHealth: 100f,
+                currentVictimArmour: 50f,
+                weaponHash: pumpShotgunHash,
+                zone: HitboxZone.Torso,
+                shotTimeUtc: now.AddMilliseconds(i * 3)
+            );
+
+            Assert.True(res.IsValid, $"Pellet #{i + 1} should be valid");
+            Assert.Equal(CombatViolationType.None, res.Violation);
+        }
+    }
+
+    [Fact]
+    public void Shotgun_ExceedingMaxPellets_TriggersRapidFire()
+    {
+        var combat = new CombatValidationService();
+        uint pumpShotgunHash = 0x1D073A89; // Max 8 pellets
+        var now = DateTime.UtcNow;
+
+        // 8 дробинок проходят
+        for (int i = 0; i < 8; i++)
+        {
+            var r = combat.ValidateHit(1, new Vector3D(0, 0, 0), 0, 2, new Vector3D(8, 0, 0), 0, 100f, 0f, pumpShotgunHash, HitboxZone.Torso, now.AddMilliseconds(i * 2));
+            Assert.True(r.IsValid);
+        }
+
+        // 9-я дробинка в том же окне (< 80мс) превышает лимит залпа и триггерит RapidFire
+        var res9 = combat.ValidateHit(1, new Vector3D(0, 0, 0), 0, 2, new Vector3D(8, 0, 0), 0, 100f, 0f, pumpShotgunHash, HitboxZone.Torso, now.AddMilliseconds(20));
+        Assert.False(res9.IsValid);
+        Assert.Equal(CombatViolationType.RapidFire, res9.Violation);
+    }
 }

@@ -31,6 +31,8 @@ public sealed class WeaponBallisticProfile
     public float MinShotIntervalSeconds { get; set; } = 0.15f; // ~400 RPM
     public float HeadshotMultiplier { get; set; } = 2.0f;
     public float LimbMultiplier { get; set; } = 0.65f;
+    public bool IsShotgun { get; set; } = false;
+    public int MaxPelletsPerShot { get; set; } = 8;
 }
 
 public sealed class HitValidationResult
@@ -53,7 +55,7 @@ public sealed class CombatValidationService
 {
     private readonly object _lock = new();
     private readonly Dictionary<uint, WeaponBallisticProfile> _profiles = new();
-    private readonly Dictionary<int, (uint Weapon, DateTime LastShotUtc)> _lastShots = new();
+    private readonly Dictionary<int, (uint Weapon, DateTime LastShotUtc, int PelletCount)> _lastShots = new();
     private readonly Dictionary<int, int> _unprocessedDamageStrikes = new();
 
     public event Action<int, CombatViolationType, string>? OnCombatViolation;
@@ -126,6 +128,18 @@ public sealed class CombatValidationService
                 if (lastShot.Weapon == weaponHash)
                 {
                     float interval = (float)(shotTimeUtc - lastShot.LastShotUtc).TotalSeconds;
+
+                    // Для дробовиков: несколько дробинок одного выстрела прилетают практически одновременно (< 80мс)
+                    if (profile.IsShotgun && interval >= 0 && interval < 0.08f)
+                    {
+                        if (lastShot.PelletCount < profile.MaxPelletsPerShot)
+                        {
+                            // Разрешаем попадание дробинки из текущего залпа
+                            _lastShots[attackerId] = (weaponHash, lastShot.LastShotUtc, lastShot.PelletCount + 1);
+                            goto ProcessDamage;
+                        }
+                    }
+
                     if (interval >= 0 && interval < profile.MinShotIntervalSeconds * 0.55f) // Буфер 45% на сетевой джиттер
                     {
                         OnCombatViolation?.Invoke(attackerId, CombatViolationType.RapidFire,
@@ -139,8 +153,9 @@ public sealed class CombatValidationService
                     }
                 }
             }
-            _lastShots[attackerId] = (weaponHash, shotTimeUtc);
+            _lastShots[attackerId] = (weaponHash, shotTimeUtc, 1);
 
+        ProcessDamage:
             // 4. Проверка дистанции поражения
             float distance = attackerPos.DistanceTo(victimPos);
             if (distance > profile.MaxRangeMeters)
@@ -216,8 +231,13 @@ public sealed class CombatValidationService
     {
         // Пистолеты
         _profiles[0x1B06D571] = new WeaponBallisticProfile { Name = "Pistol", BaseDamage = 26f, MaxRangeMeters = 55f, MinShotIntervalSeconds = 0.2f };
+        _profiles[0xB4225010] = new WeaponBallisticProfile { Name = "Pistol Mk II", BaseDamage = 28f, MaxRangeMeters = 60f, MinShotIntervalSeconds = 0.19f };
         _profiles[0x5EF9FEC4] = new WeaponBallisticProfile { Name = "Combat Pistol", BaseDamage = 28f, MaxRangeMeters = 60f, MinShotIntervalSeconds = 0.18f };
         _profiles[0x99AEEB3B] = new WeaponBallisticProfile { Name = "Heavy Pistol", BaseDamage = 40f, MaxRangeMeters = 65f, MinShotIntervalSeconds = 0.25f };
+        _profiles[0x22D8FE39] = new WeaponBallisticProfile { Name = "AP Pistol", BaseDamage = 21f, MaxRangeMeters = 55f, MinShotIntervalSeconds = 0.08f };
+        _profiles[0x97E34A26] = new WeaponBallisticProfile { Name = "Vintage Pistol", BaseDamage = 34f, MaxRangeMeters = 50f, MinShotIntervalSeconds = 0.22f };
+        _profiles[0x9D07F764] = new WeaponBallisticProfile { Name = "SNS Pistol", BaseDamage = 24f, MaxRangeMeters = 45f, MinShotIntervalSeconds = 0.22f };
+        _profiles[0xC1B3C3D1] = new WeaponBallisticProfile { Name = "Heavy Revolver", BaseDamage = 85f, MaxRangeMeters = 80f, MinShotIntervalSeconds = 0.7f, HeadshotMultiplier = 2.2f };
 
         // ПП / SMG
         _profiles[0x2BE6766B] = new WeaponBallisticProfile { Name = "SMG", BaseDamage = 22f, MaxRangeMeters = 85f, MinShotIntervalSeconds = 0.08f };
@@ -228,8 +248,16 @@ public sealed class CombatValidationService
         _profiles[0xBFEFFF6D] = new WeaponBallisticProfile { Name = "Assault Rifle", BaseDamage = 30f, MaxRangeMeters = 145f, MinShotIntervalSeconds = 0.1f };
         _profiles[0xAF112F55] = new WeaponBallisticProfile { Name = "Special Carbine", BaseDamage = 34f, MaxRangeMeters = 155f, MinShotIntervalSeconds = 0.09f };
 
-        // Дробовики
-        _profiles[0x1D073A89] = new WeaponBallisticProfile { Name = "Pump Shotgun", BaseDamage = 65f, MaxRangeMeters = 35f, MinShotIntervalSeconds = 0.8f };
+        // Дробовики (BaseDamage на 1 дробинку; при попадании снопа из 8 дробинок суммарный урон ~112)
+        _profiles[0x1D073A89] = new WeaponBallisticProfile { Name = "Pump Shotgun", BaseDamage = 14f, MaxRangeMeters = 35f, MinShotIntervalSeconds = 0.85f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0x555423FF] = new WeaponBallisticProfile { Name = "Pump Shotgun Mk II", BaseDamage = 16f, MaxRangeMeters = 38f, MinShotIntervalSeconds = 0.85f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0x7846A318] = new WeaponBallisticProfile { Name = "Sawed-Off Shotgun", BaseDamage = 13f, MaxRangeMeters = 30f, MinShotIntervalSeconds = 0.7f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0x9D61E50F] = new WeaponBallisticProfile { Name = "Bullpup Shotgun", BaseDamage = 14f, MaxRangeMeters = 35f, MinShotIntervalSeconds = 0.5f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0xE284C533] = new WeaponBallisticProfile { Name = "Assault Shotgun", BaseDamage = 12f, MaxRangeMeters = 40f, MinShotIntervalSeconds = 0.25f, IsShotgun = true, MaxPelletsPerShot = 6 };
+        _profiles[0xEF951FBB] = new WeaponBallisticProfile { Name = "Double Barrel Shotgun", BaseDamage = 16f, MaxRangeMeters = 30f, MinShotIntervalSeconds = 0.25f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0x12E3420B] = new WeaponBallisticProfile { Name = "Sweeper Shotgun", BaseDamage = 11f, MaxRangeMeters = 32f, MinShotIntervalSeconds = 0.3f, IsShotgun = true, MaxPelletsPerShot = 6 };
+        _profiles[0x05A96BA4] = new WeaponBallisticProfile { Name = "Combat Shotgun", BaseDamage = 14f, MaxRangeMeters = 36f, MinShotIntervalSeconds = 0.45f, IsShotgun = true, MaxPelletsPerShot = 8 };
+        _profiles[0x3AABBBA3] = new WeaponBallisticProfile { Name = "Heavy Shotgun", BaseDamage = 45f, MaxRangeMeters = 50f, MinShotIntervalSeconds = 0.35f, IsShotgun = false };
 
         // Снайперские винтовки
         _profiles[0x05FC3C11] = new WeaponBallisticProfile { Name = "Sniper Rifle", BaseDamage = 95f, MaxRangeMeters = 350f, MinShotIntervalSeconds = 1.2f, HeadshotMultiplier = 2.5f };

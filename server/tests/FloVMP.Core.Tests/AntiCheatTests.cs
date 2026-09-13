@@ -139,6 +139,25 @@ public class AntiCheatTests
     }
 
     [Fact]
+    public void VehiclePhysicsGuardian_PruneInactiveVehicles_RemovesDeadVehicles()
+    {
+        var g = new VehiclePhysicsGuardian();
+        var t0 = DateTime.UtcNow;
+
+        g.RegisterVehicle(1, new Vector3D(10, 0, 0), 1000f);
+        g.RegisterVehicle(2, new Vector3D(20, 0, 0), 1000f);
+        g.RegisterVehicle(3, new Vector3D(30, 0, 0), 1000f);
+
+        // Авто 2 уничтожено, активны только 1 и 3
+        g.PruneInactiveVehicles(new HashSet<int> { 1, 3 });
+
+        // Авто 2 регистрируется с чистого листа без сохранения старых счетчиков нарушений
+        var res = g.ValidateTick(2, 5, new Vector3D(500, 500, 0), new Vector3D(0, 0, 0), 1000f, false, t0);
+        Assert.Equal(VehicleViolationType.None, res); // Первый тик нового авто не должен триггерить телепорт
+    }
+
+
+    [Fact]
     public void Vehicle_Fly_SpeedHack_Is_Detected()
     {
         var ac = new AntiCheatService();

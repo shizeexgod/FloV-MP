@@ -2,6 +2,7 @@ using System.Threading;
 using AltV.Net;
 using AltV.Net.Elements.Entities;
 using AltV.Net.Enums;
+using FloVMP.Core.Auth;
 
 namespace FloVMP.Gamemode;
 
@@ -34,22 +35,55 @@ public sealed class PlayerLifecycle
     }
 
     /// <summary>Заспавнить уже авторизованного игрока.</summary>
-    public void SpawnAuthed(IPlayer player, int accountId)
+    public void SpawnAuthed(IPlayer player, int accountId, Account? account = null, int? arrestRemainingSeconds = null, string? arrestReason = null)
     {
         if (!player.Exists) return;
 
         var index = Interlocked.Increment(ref _spawnCounter);
-        var position = SpawnPoints.Scattered(SpawnPoints.DefaultSpawn, index);
+        AltV.Net.Data.Position position;
+        int dimension = 0;
+        bool stripWeapons = false;
+        string? statusMessage = null;
+
+        var now = DateTime.UtcNow;
+        if (account != null && account.IsJailed(now))
+        {
+            dimension = FloVMP.Core.World.DimensionManager.AdminJailDimension;
+            position = new AltV.Net.Data.Position(1651.2f, 2570.3f, 45.5f);
+            stripWeapons = true;
+            statusMessage = $"[Деморган] Вы отбываете административное наказание до {account.JailUntilUtc}.";
+        }
+        else if (arrestRemainingSeconds.HasValue && arrestRemainingSeconds.Value > 0)
+        {
+            dimension = 0;
+            position = new AltV.Net.Data.Position(459.4f, -997.8f, 24.9f);
+            stripWeapons = true;
+            statusMessage = $"[ГУ МВД] Вы находитесь в камере КПЗ. Осталось: {arrestRemainingSeconds.Value} сек. Причина: {arrestReason}";
+        }
+        else
+        {
+            position = SpawnPoints.Scattered(SpawnPoints.DefaultSpawn, index);
+        }
 
         player.Model = (uint)PedModel.FreemodeMale01;
-        player.Dimension = 0;
+        player.Dimension = dimension;
         player.Spawn(position, 0);
+
+        if (stripWeapons)
+        {
+            player.RemoveAllWeapons(true);
+        }
 
         _notifyTeleport?.Invoke(player, position);
 
         player.Emit("flovmp:client:welcome", player.Name, index, position.X, position.Y, position.Z);
 
-        Alt.Log($"[FloV:MP] spawn: {player.Name} (acc {accountId}) -> #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
+        if (statusMessage != null)
+        {
+            ChatSystem.SendSystem(player, statusMessage);
+        }
+
+        Alt.Log($"[FloV:MP] spawn: {player.Name} (acc {accountId}, dim {dimension}) -> #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
 
         // Страховочная отправка событий через 300мс после инициализации сетевого педа движком alt:V
         var p = player;

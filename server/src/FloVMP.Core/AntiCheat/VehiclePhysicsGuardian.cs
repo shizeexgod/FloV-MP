@@ -70,6 +70,28 @@ public sealed class VehiclePhysicsGuardian
     }
 
     /// <summary>
+    /// Удаляет состояния несуществующих или уничтоженных авто, предотвращая утечки памяти.
+    /// </summary>
+    public void PruneInactiveVehicles(ISet<int> activeVehicleIds)
+    {
+        lock (_lock)
+        {
+            var inactive = new List<int>();
+            foreach (var vid in _vehicleStates.Keys)
+            {
+                if (!activeVehicleIds.Contains(vid))
+                {
+                    inactive.Add(vid);
+                }
+            }
+            foreach (var vid in inactive)
+            {
+                _vehicleStates.Remove(vid);
+            }
+        }
+    }
+
+    /// <summary>
     /// Валидирует входящий пакет синхронизации транспорта от клиента водителя.
     /// </summary>
     public VehicleViolationType ValidateTick(
