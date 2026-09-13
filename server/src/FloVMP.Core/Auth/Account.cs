@@ -39,6 +39,15 @@ public sealed class Account
     public string BanReason { get; set; } = "";
     public string BanUntilUtc { get; set; } = "";
 
+    public bool IsBanActive(DateTime nowUtc)
+    {
+        if (!IsBanned) return false;
+        if (string.IsNullOrEmpty(BanUntilUtc)) return true; // Перманентная блокировка
+        if (DateTime.TryParse(BanUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var until))
+            return nowUtc < until;
+        return true;
+    }
+
     /// <summary>Время окончания блокировки чата (ISO 8601 string, пустая если мута нет).</summary>
     public string MuteUntilUtc { get; set; } = "";
 

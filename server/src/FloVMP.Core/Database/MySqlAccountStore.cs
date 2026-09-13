@@ -33,7 +33,8 @@ public sealed class MySqlAccountStore : IAccountStore
             SELECT id, username, password_hash, cash, bank, admin_level,
                    is_banned, ban_reason, ban_until_utc, mute_until_utc,
                    created_at, last_login_at,
-                   email, totp_secret, two_fa_enabled
+                   email, totp_secret, two_fa_enabled,
+                   bank_account_number, warns, jail_until_utc
             FROM accounts
             WHERE username = @username
             LIMIT 1;";
@@ -60,18 +61,17 @@ public sealed class MySqlAccountStore : IAccountStore
     {
         using var conn = OpenConnection();
         using var cmd = conn.CreateCommand();
-        // salt: соль уже вшита в строку PBKDF2-хеша (pbkdf2$sha256$iters$salt$hash),
-        // отдельная колонка — легаси. Пишем '' явно, чтобы INSERT не падал на
-        // схеме, где salt объявлен NOT NULL без DEFAULT.
+        var bankAccount = $"40817810{Random.Shared.Next(10000000, 99999999)}";
         cmd.CommandText = @"
-            INSERT INTO accounts (username, password_hash, salt, cash, bank, admin_level, is_banned, created_at)
-            VALUES (@username, @password_hash, '', @cash, @bank, @admin_level, 0, NOW());
+            INSERT INTO accounts (username, password_hash, salt, cash, bank, bank_account_number, admin_level, warns, is_banned, created_at)
+            VALUES (@username, @password_hash, '', @cash, @bank, @bank_account, @admin_level, 0, 0, NOW());
             SELECT LAST_INSERT_ID();";
 
         cmd.Parameters.AddWithValue("@username", username);
         cmd.Parameters.AddWithValue("@password_hash", passwordHash);
         cmd.Parameters.AddWithValue("@cash", Account.StartingCash);
         cmd.Parameters.AddWithValue("@bank", Account.StartingBank);
+        cmd.Parameters.AddWithValue("@bank_account", bankAccount);
         cmd.Parameters.AddWithValue("@admin_level", 0);
 
         try
@@ -84,6 +84,7 @@ public sealed class MySqlAccountStore : IAccountStore
                 PasswordHash = passwordHash,
                 Cash = Account.StartingCash,
                 Bank = Account.StartingBank,
+                BankAccountNumber = bankAccount,
                 AdminLevel = 0,
                 CreatedUtc = DateTime.UtcNow.ToString("O")
             };
@@ -103,11 +104,14 @@ public sealed class MySqlAccountStore : IAccountStore
                 SET password_hash = @pw,
                     cash = @cash,
                     bank = @bank,
+                    bank_account_number = @bank_acc,
                     admin_level = @admin_level,
+                    warns = @warns,
                     is_banned = @is_banned,
                     ban_reason = @ban_reason,
                     ban_until_utc = @ban_until,
                     mute_until_utc = @mute_until,
+                    jail_until_utc = @jail_until,
                     last_login_at = @last_login,
                     email = @email,
                     totp_secret = @totp_secret,
@@ -117,11 +121,14 @@ public sealed class MySqlAccountStore : IAccountStore
                 SET password_hash = @pw,
                     cash = @cash,
                     bank = @bank,
+                    bank_account_number = @bank_acc,
                     admin_level = @admin_level,
+                    warns = @warns,
                     is_banned = @is_banned,
                     ban_reason = @ban_reason,
                     ban_until_utc = @ban_until,
                     mute_until_utc = @mute_until,
+                    jail_until_utc = @jail_until,
                     last_login_at = @last_login,
                     email = @email,
                     totp_secret = @totp_secret,
@@ -133,7 +140,9 @@ public sealed class MySqlAccountStore : IAccountStore
         cmd.Parameters.AddWithValue("@pw", account.PasswordHash);
         cmd.Parameters.AddWithValue("@cash", account.Cash);
         cmd.Parameters.AddWithValue("@bank", account.Bank);
+        cmd.Parameters.AddWithValue("@bank_acc", string.IsNullOrEmpty(account.BankAccountNumber) ? (object)DBNull.Value : account.BankAccountNumber);
         cmd.Parameters.AddWithValue("@admin_level", account.AdminLevel);
+        cmd.Parameters.AddWithValue("@warns", account.Warns);
         cmd.Parameters.AddWithValue("@is_banned", account.IsBanned ? 1 : 0);
         cmd.Parameters.AddWithValue("@ban_reason", string.IsNullOrEmpty(account.BanReason) ? (object)DBNull.Value : account.BanReason);
         
@@ -146,6 +155,11 @@ public sealed class MySqlAccountStore : IAccountStore
         if (!string.IsNullOrEmpty(account.MuteUntilUtc) && DateTime.TryParse(account.MuteUntilUtc, out var mdt))
             muteUntilVal = mdt;
         cmd.Parameters.AddWithValue("@mute_until", muteUntilVal);
+
+        object jailUntilVal = DBNull.Value;
+        if (!string.IsNullOrEmpty(account.JailUntilUtc) && DateTime.TryParse(account.JailUntilUtc, out var jdt))
+            jailUntilVal = jdt;
+        cmd.Parameters.AddWithValue("@jail_until", jailUntilVal);
 
         object lastLoginVal = DBNull.Value;
         if (!string.IsNullOrEmpty(account.LastLoginUtc) && DateTime.TryParse(account.LastLoginUtc, out var ldt))
@@ -173,34 +187,56 @@ public sealed class MySqlAccountStore : IAccountStore
             BanReason = r.IsDBNull(r.GetOrdinal("ban_reason")) ? "" : r.GetString(r.GetOrdinal("ban_reason")),
         };
 
-        var banIdx = r.GetOrdinal("ban_until_utc");
-        if (!r.IsDBNull(banIdx))
+        var banIdx = GetOrdinalSafe(r, "ban_until_utc");
+        if (banIdx >= 0 && !r.IsDBNull(banIdx))
             acc.BanUntilUtc = r.GetDateTime(banIdx).ToString("O");
 
-        var muteIdx = r.GetOrdinal("mute_until_utc");
-        if (!r.IsDBNull(muteIdx))
+        var muteIdx = GetOrdinalSafe(r, "mute_until_utc");
+        if (muteIdx >= 0 && !r.IsDBNull(muteIdx))
             acc.MuteUntilUtc = r.GetDateTime(muteIdx).ToString("O");
 
-        var createdIdx = r.GetOrdinal("created_at");
-        if (!r.IsDBNull(createdIdx))
+        var jailIdx = GetOrdinalSafe(r, "jail_until_utc");
+        if (jailIdx >= 0 && !r.IsDBNull(jailIdx))
+            acc.JailUntilUtc = r.GetDateTime(jailIdx).ToString("O");
+
+        var warnsIdx = GetOrdinalSafe(r, "warns");
+        if (warnsIdx >= 0 && !r.IsDBNull(warnsIdx))
+            acc.Warns = Convert.ToInt32(r.GetValue(warnsIdx));
+
+        var bankAccIdx = GetOrdinalSafe(r, "bank_account_number");
+        if (bankAccIdx >= 0 && !r.IsDBNull(bankAccIdx))
+            acc.BankAccountNumber = r.GetString(bankAccIdx);
+
+        var createdIdx = GetOrdinalSafe(r, "created_at");
+        if (createdIdx >= 0 && !r.IsDBNull(createdIdx))
             acc.CreatedUtc = r.GetDateTime(createdIdx).ToString("O");
 
-        var loginIdx = r.GetOrdinal("last_login_at");
-        if (!r.IsDBNull(loginIdx))
+        var loginIdx = GetOrdinalSafe(r, "last_login_at");
+        if (loginIdx >= 0 && !r.IsDBNull(loginIdx))
             acc.LastLoginUtc = r.GetDateTime(loginIdx).ToString("O");
 
-        var emailIdx = r.GetOrdinal("email");
-        if (!r.IsDBNull(emailIdx))
+        var emailIdx = GetOrdinalSafe(r, "email");
+        if (emailIdx >= 0 && !r.IsDBNull(emailIdx))
             acc.Email = r.GetString(emailIdx);
 
-        var totpIdx = r.GetOrdinal("totp_secret");
-        if (!r.IsDBNull(totpIdx))
+        var totpIdx = GetOrdinalSafe(r, "totp_secret");
+        if (totpIdx >= 0 && !r.IsDBNull(totpIdx))
             acc.TotpSecret = r.GetString(totpIdx);
 
-        var twoFaIdx = r.GetOrdinal("two_fa_enabled");
-        if (!r.IsDBNull(twoFaIdx))
+        var twoFaIdx = GetOrdinalSafe(r, "two_fa_enabled");
+        if (twoFaIdx >= 0 && !r.IsDBNull(twoFaIdx))
             acc.TwoFaEnabled = r.GetBoolean(twoFaIdx);
 
         return acc;
+    }
+
+    private static int GetOrdinalSafe(IDataRecord r, string columnName)
+    {
+        for (int i = 0; i < r.FieldCount; i++)
+        {
+            if (string.Equals(r.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
     }
 }

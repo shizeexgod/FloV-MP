@@ -84,8 +84,20 @@ public sealed class AuthService
 
         if (acc.IsBanned)
         {
-            var reason = string.IsNullOrEmpty(acc.BanReason) ? "нарушение правил сервера" : acc.BanReason;
-            return new AuthResult(AuthOutcome.Banned, $"Аккаунт заблокирован: {reason}", acc);
+            if (acc.IsBanActive(_now()))
+            {
+                var reason = string.IsNullOrEmpty(acc.BanReason) ? "нарушение правил сервера" : acc.BanReason;
+                var untilStr = !string.IsNullOrEmpty(acc.BanUntilUtc) ? $" до {acc.BanUntilUtc}" : " (навсегда)";
+                return new AuthResult(AuthOutcome.Banned, $"Аккаунт заблокирован{untilStr}: {reason}", acc);
+            }
+            else
+            {
+                // Срок временного бана истёк — автоматически снимаем блокировку
+                acc.IsBanned = false;
+                acc.BanReason = "";
+                acc.BanUntilUtc = "";
+                _store.Update(acc);
+            }
         }
 
         // Второй фактор: пароль верный, но аккаунт под 2FA — нужен код из

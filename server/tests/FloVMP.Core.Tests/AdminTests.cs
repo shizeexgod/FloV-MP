@@ -41,9 +41,13 @@ public class AdminTests
         Assert.True(AdminCommandRegistry.CanExecute(2, "mute"));
         Assert.True(AdminCommandRegistry.CanExecute(2, "goto"));
         Assert.True(AdminCommandRegistry.CanExecute(2, "gethere"));
+        Assert.True(AdminCommandRegistry.CanExecute(2, "revive"));
+        Assert.True(AdminCommandRegistry.CanExecute(2, "heal"));
+        Assert.True(AdminCommandRegistry.CanExecute(2, "armor"));
 
         Assert.False(AdminCommandRegistry.CanExecute(2, "ban"));
         Assert.False(AdminCommandRegistry.CanExecute(2, "veh"));
+        Assert.False(AdminCommandRegistry.CanExecute(2, "god"));
     }
 
     [Fact]
@@ -61,9 +65,12 @@ public class AdminTests
     public void Admin_Level4_CanSpawnVehiclesAndSetHp()
     {
         Assert.True(AdminCommandRegistry.CanExecute(4, "veh"));
+        Assert.True(AdminCommandRegistry.CanExecute(4, "car"));
         Assert.True(AdminCommandRegistry.CanExecute(4, "dv"));
         Assert.True(AdminCommandRegistry.CanExecute(4, "sethp"));
         Assert.True(AdminCommandRegistry.CanExecute(4, "repair"));
+        Assert.True(AdminCommandRegistry.CanExecute(4, "fix"));
+        Assert.True(AdminCommandRegistry.CanExecute(4, "god"));
 
         Assert.False(AdminCommandRegistry.CanExecute(4, "tp"));
         Assert.False(AdminCommandRegistry.CanExecute(4, "makeadmin"));
@@ -110,6 +117,46 @@ public class AdminTests
         acc.MuteUntilUtc = now.AddMinutes(15).ToString("O");
         Assert.True(acc.IsMuted(now));
         Assert.False(acc.IsMuted(now.AddMinutes(16)));
+    }
+
+    [Fact]
+    public void Account_BanChecks_WorkProperly()
+    {
+        var acc = new Account { Username = "BannedUser" };
+        var now = DateTime.UtcNow;
+
+        // Не забанен
+        Assert.False(acc.IsBanActive(now));
+
+        // Перманентный бан (IsBanned = true, BanUntilUtc пустой)
+        acc.IsBanned = true;
+        acc.BanUntilUtc = "";
+        Assert.True(acc.IsBanActive(now));
+        Assert.True(acc.IsBanActive(now.AddYears(5)));
+
+        // Временный бан на 3 дня
+        acc.BanUntilUtc = now.AddDays(3).ToString("O");
+        Assert.True(acc.IsBanActive(now));
+        Assert.True(acc.IsBanActive(now.AddDays(2)));
+        Assert.False(acc.IsBanActive(now.AddDays(4))); // Истёк
+
+        // Снятие бана
+        acc.IsBanned = false;
+        Assert.False(acc.IsBanActive(now));
+    }
+
+    [Fact]
+    public void Account_JailChecks_WorkProperly()
+    {
+        var acc = new Account { Username = "JailedUser" };
+        var now = DateTime.UtcNow;
+
+        Assert.False(acc.IsJailed(now));
+
+        acc.JailUntilUtc = now.AddMinutes(30).ToString("O");
+        Assert.True(acc.IsJailed(now));
+        Assert.True(acc.IsJailed(now.AddMinutes(15)));
+        Assert.False(acc.IsJailed(now.AddMinutes(35)));
     }
 
     [Fact]

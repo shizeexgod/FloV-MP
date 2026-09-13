@@ -31,10 +31,12 @@ public sealed class InventorySystem
     private readonly Systems.ClientRateGate _gate = new(maxPerWindow: 10, windowMs: 1000);
 
     public AtomicInventoryTransactionService AtomicTransactions => _atomicTransactions;
+    public Func<int, bool>? IsCuffed { get; set; }
 
-    public InventorySystem(string storePath)
+    public InventorySystem(string storePath, Func<int, bool>? isCuffed = null)
     {
         _store = new JsonInventoryStore(storePath);
+        IsCuffed = isCuffed;
     }
 
     public void Attach()
@@ -112,7 +114,14 @@ public sealed class InventorySystem
     private void OnMove(IPlayer player, int from, int to) => Safe.Run("inv.OnMove", () =>
     {
         if (!_gate.Allow(player.Id)) return;
+        if (player.Health <= 0) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
+        if (IsCuffed?.Invoke(e.accountId) == true)
+        {
+            player.Emit("flovmp:inv:notice", "Вы скованы наручниками и не можете перемещать вещи");
+            return;
+        }
+
         InvResult res;
         lock (e.inv)
         {
@@ -126,7 +135,14 @@ public sealed class InventorySystem
     private void OnDrop(IPlayer player, int slot, int qty) => Safe.Run("inv.OnDrop", () =>
     {
         if (!_gate.Allow(player.Id)) return;
+        if (player.Health <= 0) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
+        if (IsCuffed?.Invoke(e.accountId) == true)
+        {
+            player.Emit("flovmp:inv:notice", "Вы скованы наручниками и не можете выбрасывать предметы");
+            return;
+        }
+
         if (slot < 0 || slot >= e.inv.SlotCount) return;
         ItemStack? s;
         lock (e.inv)
@@ -153,8 +169,15 @@ public sealed class InventorySystem
     private void OnPickup(IPlayer player, string dropId) => Safe.Run("inv.OnPickup", () =>
     {
         if (!_gate.Allow(player.Id)) return;
+        if (player.Health <= 0) return;
         if (string.IsNullOrEmpty(dropId) || dropId.Length > 64) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
+        if (IsCuffed?.Invoke(e.accountId) == true)
+        {
+            player.Emit("flovmp:inv:notice", "Вы скованы наручниками и не можете подбирать предметы");
+            return;
+        }
+
         var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
         if (_atomicTransactions.TryPickupGroundItem(player.Id, dropId, e.inv, pPos, 4.0f, out var picked, player.Dimension) && picked != null)
         {
@@ -173,7 +196,14 @@ public sealed class InventorySystem
     private void OnUse(IPlayer player, int slot) => Safe.Run("inv.OnUse", () =>
     {
         if (!_gate.Allow(player.Id)) return;
+        if (player.Health <= 0) return;
         if (!_live.TryGetValue(player.Id, out var e)) return;
+        if (IsCuffed?.Invoke(e.accountId) == true)
+        {
+            player.Emit("flovmp:inv:notice", "Вы скованы наручниками и не можете использовать предметы");
+            return;
+        }
+
         if (slot < 0 || slot >= e.inv.SlotCount) return;
         ItemStack? s;
         lock (e.inv)

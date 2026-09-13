@@ -360,19 +360,19 @@ public sealed class FactionService
     {
         lock (_lock)
         {
-            if (officerAccountId == targetAccountId)
+            if (officerAccountId != 0 && officerAccountId == targetAccountId)
             {
                 error = "Нельзя надеть наручники на самого себя";
                 return false;
             }
 
-            if (_cuffedAccounts.Contains(officerAccountId))
+            if (officerAccountId != 0 && _cuffedAccounts.Contains(officerAccountId))
             {
                 error = "Вы не можете применять наручники, находясь в наручниках";
                 return false;
             }
 
-            if (!HasPermission(officerAccountId, FactionPermissions.Cuffs))
+            if (officerAccountId != 0 && !HasPermission(officerAccountId, FactionPermissions.Cuffs))
             {
                 error = "У вас нет права применять специальные средства (наручники)";
                 return false;
@@ -400,13 +400,13 @@ public sealed class FactionService
     {
         lock (_lock)
         {
-            if (_cuffedAccounts.Contains(officerAccountId))
+            if (officerAccountId != 0 && _cuffedAccounts.Contains(officerAccountId))
             {
                 error = "Вы не можете снимать наручники, находясь в наручниках";
                 return false;
             }
 
-            if (!HasPermission(officerAccountId, FactionPermissions.Cuffs))
+            if (officerAccountId != 0 && !HasPermission(officerAccountId, FactionPermissions.Cuffs))
             {
                 error = "У вас нет права снимать специальные средства (наручники)";
                 return false;
@@ -442,7 +442,7 @@ public sealed class FactionService
 
         lock (_lock)
         {
-            if (!HasPermission(officerAccountId, FactionPermissions.Arrest))
+            if (officerAccountId != 0 && !HasPermission(officerAccountId, FactionPermissions.Arrest))
             {
                 error = "У вас нет полномочий производить арест";
                 return false;
@@ -459,7 +459,7 @@ public sealed class FactionService
     {
         lock (_lock)
         {
-            if (!HasPermission(officerAccountId, FactionPermissions.Arrest))
+            if (officerAccountId != 0 && !HasPermission(officerAccountId, FactionPermissions.Arrest))
             {
                 error = "У вас нет полномочий освобождать заключённых";
                 return false;

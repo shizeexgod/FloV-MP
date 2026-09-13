@@ -1172,8 +1172,8 @@ alt.onServer('flovmp:console:setAdmin', (lvl) => {
     }
 });
 
-// Реанимация (/revive)
-alt.onServer('starter:revive', () => {
+// Реанимация (/revive, больница, госпиталь)
+function handlePlayerRevived() {
     const local = alt.Player.local;
     if (local && local.valid) {
         try {
@@ -1181,9 +1181,20 @@ alt.onServer('starter:revive', () => {
             native.clearPedTasksImmediately(local.scriptID);
             native.setPedCanRagdoll(local.scriptID, true);
             native.freezeEntityPosition(local.scriptID, false);
-            native.doScreenFadeIn(300);
+            native.doScreenFadeIn(500);
         } catch (e) { }
     }
+}
+alt.onServer('starter:revive', handlePlayerRevived);
+alt.onServer('flovmp:hud:respawned', handlePlayerRevived);
+
+alt.onServer('flovmp:hud:dead', (seconds) => {
+    try {
+        native.doScreenFadeOut(1000);
+        if (chatView) {
+            chatView.emit('flovmp:chat:msg', 'system', '', '{ef4444}[Скорая помощь] Вы потеряли сознание. Ожидайте доставки в больницу...');
+        }
+    } catch (e) { }
 });
 
 alt.onServer('starter:requestWaypointTp', () => {

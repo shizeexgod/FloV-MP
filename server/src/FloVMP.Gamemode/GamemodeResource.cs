@@ -106,6 +106,10 @@ public class GamemodeResource : Resource
             _economy = new FloVMP.Core.Economy.EconomyService();
             _factions = new FloVMP.Core.Factions.FactionService();
             Presets.DefaultFactions.RegisterAll(_factions);
+            if (_inv != null)
+            {
+                _inv.IsCuffed = accId => _factions.IsCuffed(accId);
+            }
             _documents = new FloVMP.Core.Documents.DocumentService();
             _housing = new FloVMP.Core.Housing.HousingService();
             Presets.DefaultHousing.RegisterAll(_housing);
@@ -199,6 +203,7 @@ public class GamemodeResource : Resource
         _agent.Start();
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
+        Alt.OnPlayerDead += OnPlayerDead;
         Alt.OnServerStarted += OnServerStarted;
 
         Alt.Log("[FloV:MP] core: systems attached, waiting for players");
@@ -228,6 +233,7 @@ public class GamemodeResource : Resource
 
         Alt.OnServerStarted -= OnServerStarted;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
+        Alt.OnPlayerDead -= OnPlayerDead;
         _console?.Detach();
         _console = null;
         _chat?.Detach();
@@ -394,6 +400,83 @@ public class GamemodeResource : Resource
                 Alt.Log($"[FloV:MP RP] Игрок {acc.Username} (acc:{acc.Id}) вышел из игры в наручниках! Автоматически посажен в КПЗ на 30 мин.");
             }
         }
+    });
+
+    private void OnPlayerDead(IPlayer player, IEntity killer, uint weapon) => Safe.Run("core.OnPlayerDead", () =>
+    {
+        if (player == null || !player.Exists) return;
+
+        var acc = _auth?.AccountOf(player);
+        var victimName = acc?.Username ?? player.Name;
+
+        string killerName = "окружающая среда / суицид";
+        if (killer is IPlayer killerPlayer && killerPlayer.Exists)
+        {
+            var kAcc = _auth?.AccountOf(killerPlayer);
+            killerName = kAcc?.Username ?? killerPlayer.Name;
+            GameLog.System("player_killed", ("victim", victimName), ("killer", killerName), ("weapon", weapon));
+        }
+        else
+        {
+            GameLog.System("player_died", ("victim", victimName), ("weapon", weapon));
+        }
+
+        Alt.Log($"[FloV:MP RP] Игрок {victimName} (ID: {player.Id}) погиб. Убийца: {killerName}, Оружие: 0x{weapon:X}");
+
+        if (acc != null && _factions != null && _factions.IsCuffed(acc.Id))
+        {
+            _factions.TryUncuff(0, acc.Id, out _);
+        }
+
+        player.Emit("flovmp:hud:dead", 5);
+
+        // Запуск таймера доставки в госпиталь (5 секунд реанимации)
+        var p = player;
+        var pAcc = acc;
+        Task.Delay(5000).ContinueWith(_ =>
+        {
+            try
+            {
+                if (!p.Exists) return;
+
+                var now = DateTime.UtcNow;
+                if (pAcc != null && pAcc.IsJailed(now))
+                {
+                    p.Dimension = FloVMP.Core.World.DimensionManager.AdminJailDimension;
+                    var jailPos = new AltV.Net.Data.Position(1651.2f, 2570.3f, 45.5f);
+                    p.Spawn(jailPos, 0);
+                    p.Health = 200;
+                    p.Armor = 0;
+                    _antiCheat?.NotifyAdminTeleport(p, jailPos);
+                    ChatSystem.SendSystem(p, "[Деморган] Вы вернулись в камеру деморгана после оказания медицинской помощи.");
+                }
+                else if (pAcc != null && _factions != null && _factions.IsArrested(pAcc.Id, out var rem, out var unusedRsn))
+                {
+                    p.Dimension = 0;
+                    var arrestPos = new AltV.Net.Data.Position(459.4f, -997.8f, 24.9f);
+                    p.Spawn(arrestPos, 0);
+                    p.Health = 200;
+                    p.Armor = 0;
+                    _antiCheat?.NotifyAdminTeleport(p, arrestPos);
+                    ChatSystem.SendSystem(p, $"[ГУ МВД] Вы возвращены в КПЗ. Осталось времени: {rem} сек.");
+                }
+                else
+                {
+                    p.Dimension = 0;
+                    p.Spawn(SpawnPoints.MoscowHospital, 0);
+                    p.Health = 200;
+                    p.Armor = 0;
+                    _antiCheat?.NotifyAdminTeleport(p, SpawnPoints.MoscowHospital);
+                    ChatSystem.SendSystem(p, "[Скорая помощь] Вас доставили в приёмное отделение Городской больницы.");
+                }
+
+                p.Emit("flovmp:hud:respawned");
+            }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP] hospital respawn error: {ex.Message}");
+            }
+        });
     });
 
     private static void OnServerStarted() => Safe.Run("core.OnServerStarted", () =>

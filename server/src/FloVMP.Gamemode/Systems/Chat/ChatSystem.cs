@@ -38,6 +38,7 @@ public sealed class ChatSystem
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
     private readonly ConcurrentDictionary<uint, (Position originalPos, int originalDim)> _spectatingAdmins = new();
+    private readonly ConcurrentDictionary<uint, bool> _godModeAdmins = new();
 
     public ChatSystem(
         Func<IPlayer, Account?> accountOf,
@@ -128,6 +129,7 @@ public sealed class ChatSystem
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("chat.OnDisconnect", () =>
     {
         _rate.TryRemove(player.Id, out _);
+        _godModeAdmins.TryRemove(player.Id, out _);
         if (_names.TryRemove(player.Id, out var name))
             Broadcast($"{name} вышел с сервера.");
     });
@@ -431,8 +433,14 @@ public sealed class ChatSystem
                 return;
 
             case "engine":
-                if (player.Vehicle != null)
+                if (player.Vehicle != null && player.Vehicle.Exists)
                 {
+                    if (player.Vehicle.Driver != player)
+                    {
+                        SendSystem(player, "Управлять зажиганием может только водитель транспортного средства.");
+                        return;
+                    }
+
                     float fuel = 100.0f;
                     if (player.Vehicle.GetStreamSyncedMetaData("fuel", out float fVal))
                         fuel = fVal;
@@ -1266,6 +1274,53 @@ public sealed class ChatSystem
                 GameLog.Admin("unjail", LogActor.Admin(acc.Id, acc.Username), unjailTarget.Name);
                 break;
 
+            case "revive":
+                var revTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
+                if (revTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                revTarget.Spawn(revTarget.Position, 0);
+                revTarget.Health = 200;
+                revTarget.Armor = 100;
+                var revAcc = _accountOf(revTarget);
+                if (revAcc != null && _factions != null && _factions.IsCuffed(revAcc.Id))
+                {
+                    _factions.TryUncuff(0, revAcc.Id, out _);
+                }
+                revTarget.Emit("flovmp:hud:respawned");
+                SendSystem(player, $"Вы реанимировали {revTarget.Name}.");
+                if (revTarget != player)
+                {
+                    SendSystem(revTarget, $"Администратор {acc.Username} реанимировал вас.");
+                }
+                GameLog.Admin("revive", LogActor.Admin(acc.Id, acc.Username), revTarget.Name);
+                break;
+
+            case "heal":
+                var healTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
+                if (healTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                healTarget.Health = 200;
+                SendSystem(player, $"Вы восстановили здоровье {healTarget.Name} (200 HP).");
+                if (healTarget != player)
+                {
+                    SendSystem(healTarget, $"Администратор {acc.Username} восстановил ваше здоровье.");
+                }
+                GameLog.Admin("heal", LogActor.Admin(acc.Id, acc.Username), healTarget.Name);
+                break;
+
+            case "armor":
+                var armTarget = args.Length > 0 ? FindPlayer(args[0]) : player;
+                if (armTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                ushort armVal = 100;
+                if (args.Length > 1 && ushort.TryParse(args[1], out var parsedArm))
+                    armVal = Math.Min((ushort)100, parsedArm);
+                armTarget.Armor = armVal;
+                SendSystem(player, $"Вы установили {armVal} брони для {armTarget.Name}.");
+                if (armTarget != player)
+                {
+                    SendSystem(armTarget, $"Администратор {acc.Username} выдал вам бронежилет ({armVal}%).");
+                }
+                GameLog.Admin("armor", LogActor.Admin(acc.Id, acc.Username), armTarget.Name, ("armor", armVal));
+                break;
+
             // ── Уровень 3: Старший Модератор ──────────
             case "ban":
                 if (args.Length < 2 || !int.TryParse(args[1], out var banDays) || banDays <= 0)
@@ -1404,6 +1459,7 @@ public sealed class ChatSystem
                 break;
 
             case "veh":
+            case "car":
                 if (args.Length == 0) { SendSystem(player, "Использование: /veh <модель> [цвет1] [цвет2]"); return; }
                 var model = args[0];
                 try
@@ -1457,6 +1513,13 @@ public sealed class ChatSystem
                 SendSystem(player, $"Установлено {hp} HP для {hpTarget.Name}.");
                 break;
 
+            case "heal4":
+                var h4Target = args.Length > 0 ? FindPlayer(args[0]) : player;
+                if (h4Target == null) { SendSystem(player, "Игрок не найден."); return; }
+                h4Target.Health = 200;
+                SendSystem(player, $"Установлено 200 HP для {h4Target.Name}.");
+                break;
+
             case "setarmor":
                 if (args.Length < 2 || !ushort.TryParse(args[1], out var armor))
                 {
@@ -1470,6 +1533,7 @@ public sealed class ChatSystem
                 break;
 
             case "repair":
+            case "fix":
                 IVehicle? repVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
                 if (repVeh != null)
                 {
@@ -1496,6 +1560,21 @@ public sealed class ChatSystem
                 {
                     SendSystem(player, "Вы должны находиться в транспорте или рядом с ним (до 5 метров).");
                 }
+                break;
+
+            case "god":
+            case "godmode":
+                var currentGod = _godModeAdmins.GetOrAdd(player.Id, false);
+                var newGod = !currentGod;
+                _godModeAdmins[player.Id] = newGod;
+                _setAdminExempt?.Invoke(acc.Id, newGod);
+                if (newGod)
+                {
+                    player.Health = 200;
+                    player.Armor = 100;
+                }
+                SendSystem(player, newGod ? "[Админ] Режим бессмертия (GodMode) ВКЛЮЧЁН." : "[Админ] Режим бессмертия (GodMode) ВЫКЛЮЧЕН.");
+                GameLog.Admin("godmode", LogActor.Admin(acc.Id, acc.Username), newGod ? "enabled" : "disabled");
                 break;
 
             // ── Уровень 5: Старший Администратор ──────

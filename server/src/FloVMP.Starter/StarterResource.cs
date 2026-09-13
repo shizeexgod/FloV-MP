@@ -93,6 +93,7 @@ public class StarterResource : Resource
 
         Alt.OnPlayerConnect += OnPlayerConnect;
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
+        Alt.OnPlayerDead += OnPlayerDead;
         Alt.OnConsoleCommand += OnConsoleCommand;
         Alt.OnClient<IPlayer, string>("chat:message", OnChatMessage);
         Alt.OnClient<IPlayer, string>("flovmp:chat:say", OnChatMessage);
@@ -104,6 +105,10 @@ public class StarterResource : Resource
 
     public override void OnStop()
     {
+        Alt.OnPlayerConnect -= OnPlayerConnect;
+        Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
+        Alt.OnPlayerDead -= OnPlayerDead;
+        Alt.OnConsoleCommand -= OnConsoleCommand;
         Alt.Log("[FloV:MP Starter] Остановка ванильного стартера.");
     }
 
@@ -370,6 +375,29 @@ public class StarterResource : Resource
         catch
         {
         }
+    }
+
+    private void OnPlayerDead(IPlayer player, IEntity killer, uint weapon)
+    {
+        if (player == null || !player.Exists) return;
+        Alt.Log($"[FloV:MP Starter] Игрок {player.Name} (ID: {player.Id}) погиб.");
+        var p = player;
+        Task.Delay(3000).ContinueWith(_ =>
+        {
+            try
+            {
+                if (!p.Exists) return;
+                p.Spawn(DefaultSpawnPosition, 0);
+                p.Health = 200;
+                p.Armor = 100;
+                p.Emit("starter:revive");
+                SendChatMessage(p, "{ef4444}Вы погибли и возродились на спавне.");
+            }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP Starter] respawn error: {ex.Message}");
+            }
+        });
     }
 
     private readonly ConcurrentDictionary<uint, bool> _godModes = new();
@@ -834,6 +862,11 @@ public class StarterResource : Resource
             case "engine":
                 if (player.Vehicle != null && player.Vehicle.Exists)
                 {
+                    if (player.Vehicle.Driver != player)
+                    {
+                        SendChatMessage(player, "{fde047}[Транспорт] Управлять зажиганием может только водитель.");
+                        return;
+                    }
                     player.Vehicle.EngineOn = !player.Vehicle.EngineOn;
                     var engStatus = player.Vehicle.EngineOn ? "Двигатель заведён." : "Двигатель заглушен.";
                     SendChatMessage(player, $"{{34d399}}[Транспорт] {engStatus}");

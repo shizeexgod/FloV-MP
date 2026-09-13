@@ -32,6 +32,7 @@ public sealed class PasswordHasherTests
 public sealed class AuthServiceTests : IDisposable
 {
     private readonly string _dir;
+    private readonly JsonAccountStore _store;
     private readonly AuthService _svc;
     private DateTime _now = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -39,8 +40,8 @@ public sealed class AuthServiceTests : IDisposable
     {
         _dir = Path.Combine(Path.GetTempPath(), "flovmp-auth-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_dir);
-        var store = new JsonAccountStore(Path.Combine(_dir, "accounts.json"));
-        _svc = new AuthService(store, () => _now, maxAttempts: 3, window: TimeSpan.FromMinutes(5));
+        _store = new JsonAccountStore(Path.Combine(_dir, "accounts.json"));
+        _svc = new AuthService(_store, () => _now, maxAttempts: 3, window: TimeSpan.FromMinutes(5));
     }
 
     public void Dispose()
@@ -276,6 +277,61 @@ public sealed class AuthServiceTests : IDisposable
 
         var blocked = _svc.Register("ValidUser", "validpassword", "ip:brutereg");
         Assert.Equal(AuthOutcome.RateLimited, blocked.Outcome);
+    }
+
+    [Fact]
+    public void Login_blocked_when_temporary_ban_is_active()
+    {
+        _svc.Register("BannedGuy", "secret6");
+        var acc = _store.FindByUsername("BannedGuy")!;
+        acc.IsBanned = true;
+        acc.BanReason = "Speedhack";
+        acc.BanUntilUtc = _now.AddDays(3).ToString("O");
+        _store.Update(acc);
+
+        var res = _svc.Login("BannedGuy", "secret6", "ip:ban1");
+        Assert.Equal(AuthOutcome.Banned, res.Outcome);
+        Assert.Contains("Speedhack", res.Message);
+    }
+
+    [Fact]
+    public void Login_auto_unbans_when_temporary_ban_expires()
+    {
+        _svc.Register("TempBanned", "secret6");
+        var acc = _store.FindByUsername("TempBanned")!;
+        acc.IsBanned = true;
+        acc.BanReason = "AFK";
+        acc.BanUntilUtc = _now.AddDays(1).ToString("O");
+        _store.Update(acc);
+
+        // Время прошло — 2 дня спустя
+        _now = _now.AddDays(2);
+        var res = _svc.Login("TempBanned", "secret6", "ip:ban2");
+        Assert.True(res.Ok);
+        Assert.False(res.Account!.IsBanned);
+        Assert.Empty(res.Account.BanUntilUtc);
+        Assert.Empty(res.Account.BanReason);
+
+        // Проверяем сохранение в хранилище
+        var updated = _store.FindByUsername("TempBanned")!;
+        Assert.False(updated.IsBanned);
+        Assert.Empty(updated.BanUntilUtc);
+    }
+
+    [Fact]
+    public void Login_permanent_ban_never_expires()
+    {
+        _svc.Register("PermBanned", "secret6");
+        var acc = _store.FindByUsername("PermBanned")!;
+        acc.IsBanned = true;
+        acc.BanReason = "Cheating Hardban";
+        acc.BanUntilUtc = ""; // Перманентный бан
+        _store.Update(acc);
+
+        _now = _now.AddYears(10);
+        var res = _svc.Login("PermBanned", "secret6", "ip:perm");
+        Assert.Equal(AuthOutcome.Banned, res.Outcome);
+        Assert.True(res.Account!.IsBanned);
     }
 }
 

@@ -95,6 +95,11 @@ public class AntiCheatSystem
             return false; // Неавторизованный игрок не наносит урон
         }
 
+        if (victimAcc != null && _service.IsAdminExempt(victimAcc.Id))
+        {
+            return false; // Администратор в режиме GodMode неуязвим к урону
+        }
+
         if (attackerAcc.AdminLevel >= 4 || _service.IsAdminExempt(attackerAcc.Id))
         {
             return true; // Администраторы 4+ ранга освобождены от проверки

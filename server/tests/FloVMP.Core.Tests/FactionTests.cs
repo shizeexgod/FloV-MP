@@ -254,4 +254,32 @@ public class FactionTests
         // Civilian has no salary
         Assert.False(payouts.ContainsKey(civilianId));
     }
+
+    [Fact]
+    public void System_OfficerId0_CanCuffUncuffArrestRelease()
+    {
+        var service = CreateTestFactionService();
+        const int suspectId = 555;
+
+        // Серверный арест при выходе из игры (/q от ареста)
+        Assert.True(service.TryArrest(0, suspectId, 1800, "Выход из игры", out var arrestErr));
+        Assert.Empty(arrestErr);
+        Assert.True(service.IsArrested(suspectId, out var rem, out var rsn));
+        Assert.Equal(1800, rem);
+        Assert.Equal("Выход из игры", rsn);
+
+        // Серверное освобождение
+        Assert.True(service.TryRelease(0, suspectId, out var relErr));
+        Assert.Empty(relErr);
+        Assert.False(service.IsArrested(suspectId, out _, out _));
+
+        // Серверный cuff и uncuff (например, при смерти)
+        Assert.True(service.TryCuff(0, suspectId, out var cuffErr));
+        Assert.Empty(cuffErr);
+        Assert.True(service.IsCuffed(suspectId));
+
+        Assert.True(service.TryUncuff(0, suspectId, out var uncuffErr));
+        Assert.Empty(uncuffErr);
+        Assert.False(service.IsCuffed(suspectId));
+    }
 }
