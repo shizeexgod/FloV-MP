@@ -79,13 +79,47 @@ const FLY_SPEED = {
 
 function setPlayerToGround() {
     const player = alt.Player.local;
-    if (!player || !player.valid) return;
+    if (!player || !player.valid) return false;
+    const pPos = player.pos;
+
+    let highestSurfaceZ = null;
+
+    // 1. Луч вниз (ShapeTest Raycast): проверяет крыши домов, мосты, платформы, дороги, объекты
     try {
-        const [found, groundZ] = native.getGroundZFor3dCoord(player.pos.x, player.pos.y, player.pos.z + 50.0, 0, false);
-        if (found) {
-            native.setEntityCoordsNoOffset(player.scriptID, player.pos.x, player.pos.y, groundZ + 1.0, false, false, false);
+        const probe = native.startExpensiveSynchronousShapeTestLosProbe(
+            pPos.x, pPos.y, pPos.z,
+            pPos.x, pPos.y, pPos.z - 25.0,
+            1 | 2 | 16, // Map, Vehicles, Objects/Buildings
+            player.scriptID,
+            7
+        );
+        const [retval, hit, endCoords, surfaceNormal, entityHit] = native.getShapeTestResult(probe);
+        if (hit && endCoords && Number.isFinite(endCoords.z)) {
+            highestSurfaceZ = endCoords.z;
         }
     } catch (_) { }
+
+    // 2. Высота рельефа земли под игроком (ландшафт, горы, холмы)
+    try {
+        const [found, groundZ] = native.getGroundZFor3dCoord(pPos.x, pPos.y, pPos.z, 0, false);
+        if (found && Number.isFinite(groundZ)) {
+            if (highestSurfaceZ === null || groundZ > highestSurfaceZ) {
+                highestSurfaceZ = groundZ;
+            }
+        }
+    } catch (_) { }
+
+    // 3. Приземление ТОЛЬКО если расстояние до высшей точки поверхности под ногами <= 20 метров
+    if (highestSurfaceZ !== null) {
+        const heightDiff = pPos.z - highestSurfaceZ;
+        if (heightDiff >= -0.5 && heightDiff <= 20.0) {
+            native.setEntityCoordsNoOffset(player.scriptID, pPos.x, pPos.y, highestSurfaceZ + 1.0, false, false, false);
+            return true;
+        }
+    }
+
+    // Если выше 20 метров от любой поверхности — остаёмся на текущей высоте в воздухе
+    return false;
 }
 
 export function toggleNoClip() {
@@ -179,7 +213,8 @@ const WEAPON_NAMES = {
 function getPedWeaponLabel(pedScriptId) {
     try {
         const wh = native.getSelectedPedWeapon(pedScriptId);
-        if (!wh || wh === 0 || (wh | 0) === (0xA2719263 | 0)) return 'Кулаки';
+        // Если кулаки или пусто в руках — возвращаем пустую строку (в ESP ничего не пишется)
+        if (!wh || wh === 0 || (wh | 0) === (0xA2719263 | 0)) return '';
         if (WEAPON_NAMES[wh]) return WEAPON_NAMES[wh];
         const dn = native.getDisplayNameFromWeaponHash(wh);
         if (dn && dn !== 'NULL') {
@@ -188,7 +223,7 @@ function getPedWeaponLabel(pedScriptId) {
             return dn;
         }
     } catch (_) { }
-    return 'Оружие';
+    return '';
 }
 
 function getVehModelLabel(veh) {
@@ -439,25 +474,30 @@ alt.everyTick(() => {
                 } catch (_) { }
                 if (isSelf) pAdmin = currentAdminLevel;
 
-                // Иерархия: младший админ не видит старшего в ESP (кроме ур. 8)
-                if (!isSelf && currentAdminLevel < 8 && pAdmin > currentAdminLevel) continue;
+                // Иерархия: обычный администратор (< 8) не видит Основателя (ур. 8) в ESP
+                if (!isSelf && currentAdminLevel < 8 && pAdmin >= 8) continue;
 
                 let color;
+                let adminBadge = '';
+
                 if (isSelf) {
-                    color = [192, 132, 252, fadeAlpha(240, dist)];
-                } else if (pAdmin >= 7) {
-                    color = [255, 199, 64, fadeAlpha(240, dist)];
+                    color = [192, 132, 252, fadeAlpha(240, dist)]; // Фиолетовый
+                    adminBadge = pAdmin >= 8 ? ' (Вы, Основатель)' : (pAdmin > 0 ? ' (Вы, Админ)' : ' (Вы)');
+                } else if (pAdmin >= 8) {
+                    color = [255, 199, 64, fadeAlpha(240, dist)];  // Золотой (Главный / Основатель)
+                    adminBadge = ' (Основатель)';
                 } else if (pAdmin > 0) {
-                    color = [248, 113, 113, fadeAlpha(240, dist)];
+                    color = [248, 113, 113, fadeAlpha(240, dist)]; // Кораллово-красный (Администрация)
+                    adminBadge = ' (Админ)';
                 } else {
-                    color = [244, 244, 246, fadeAlpha(230, dist)];
+                    color = [244, 244, 246, fadeAlpha(230, dist)]; // Чистый белый (Игроки)
+                    adminBadge = '';
                 }
 
                 const fontScale = Math.max(0.20, Math.min(0.35, 0.35 * (1.0 - dist / 320.0)));
                 const lineGap = 0.020 * (fontScale / 0.30);
 
-                const adminTag = pAdmin > 0 ? ` (A${pAdmin})` : '';
-                const line1 = `[${p.id}] ${p.name}${adminTag}`;
+                const line1 = `[${p.id}] ${p.name}${adminBadge}`;
 
                 let hp = 100;
                 let armor = 0;
@@ -469,11 +509,13 @@ alt.everyTick(() => {
 
                 const distPart = isSelf ? 'SELF' : `${dist}m`;
                 const line2 = `${hp} HP  ${armor} AR  ${distPart}`;
-                const weaponName = getPedWeaponLabel(pedId);
-                const line3 = weaponName ? `[${weaponName}]` : '';
 
                 const lines = [line1, line2];
-                if (line3) lines.push(line3);
+                // Блок оружия: отображается ТОЛЬКО если у игрока в руках реальное оружие (не кулаки)
+                const weaponName = getPedWeaponLabel(pedId);
+                if (weaponName) {
+                    lines.push(`[${weaponName}]`);
+                }
 
                 const blockTop = sy - ((lines.length - 1) * lineGap);
                 for (let li = 0; li < lines.length; li++) {
