@@ -167,7 +167,6 @@ export function toggleNoClip() {
         }
     }
     try {
-        alt.emitServer('starter:toggleNoClip', noClip);
         alt.emitServer('flovmp:admin:noclip', noClip);
     } catch (e) { }
 }
@@ -583,29 +582,51 @@ export function openChat() {
     chatView.on('flovmp:chat:say', (text) => {
         const s = String(text);
         alt.emitServer('flovmp:chat:say', s);
-        alt.emitServer('chat:message', s);
     });
     chatView.on('flovmp:chat:quit', () => {
         quitGame();
     });
     chatView.on('flovmp:chat:done', () => {
-        chatTyping = false;
-        try { chatView.unfocus(); } catch (e) { }
-        alt.toggleGameControls(true);
+        if (chatTyping) {
+            chatTyping = false;
+            popCursor();
+            try { chatView.unfocus(); } catch (e) { }
+            if (!consoleOpen) {
+                alt.toggleGameControls(true);
+            }
+        }
     });
 }
 
 export function closeChat() {
     if (!chatView) return;
+    if (chatTyping) {
+        chatTyping = false;
+        popCursor();
+        if (!consoleOpen) {
+            alt.toggleGameControls(true);
+        }
+    }
     chatView.destroy();
     chatView = null;
-    chatTyping = false;
 }
 
 export function startTyping(initialText = '') {
     if (!chatView || chatTyping || !inGame || consoleOpen) return;
+    if (isVoiceTalking) {
+        isVoiceTalking = false;
+        if (voiceReleaseTimeout) {
+            alt.clearTimeout(voiceReleaseTimeout);
+            voiceReleaseTimeout = null;
+        }
+        try {
+            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
+            alt.emit('flovmp:voice:active', false);
+        } catch (e) { }
+    }
     chatTyping = true;
     chatView.focus();
+    pushCursor();
     alt.toggleGameControls(false);
     chatView.emit('flovmp:chat:openinput', initialText);
 }
@@ -672,7 +693,6 @@ export function getOrCreateDevConsole() {
 
             // Отправка команды на сервер
             alt.emitServer('flovmp:chat:say', '/' + cmd);
-            alt.emitServer('chat:message', '/' + cmd);
         });
 
         consoleView.on('flovmp:console:hotreload', () => {
@@ -748,6 +768,23 @@ function startConsoleStats() {
 
 export function openDevConsole() {
     if (consoleOpen) return;
+    if (isVoiceTalking) {
+        isVoiceTalking = false;
+        if (voiceReleaseTimeout) {
+            alt.clearTimeout(voiceReleaseTimeout);
+            voiceReleaseTimeout = null;
+        }
+        try {
+            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
+            alt.emit('flovmp:voice:active', false);
+        } catch (e) { }
+    }
+    if (chatTyping && chatView) {
+        chatView.emit('flovmp:chat:closeinput');
+        chatTyping = false;
+        popCursor();
+        try { chatView.unfocus(); } catch (e) { }
+    }
     const cv = getOrCreateDevConsole();
     consoleOpen = true;
     cv.emit('flovmp:console:open');
@@ -770,7 +807,9 @@ export function closeDevConsole() {
         try { consoleView.unfocus(); } catch (e) { }
     }
     popCursor();
-    alt.toggleGameControls(true);
+    if (!chatTyping) {
+        alt.toggleGameControls(true);
+    }
 }
 
 export function toggleDevConsole() {
@@ -805,24 +844,19 @@ export function triggerWaypointTeleport() {
         return;
     }
     const coords = native.getBlipInfoIdCoord(blip);
-    const [found, groundZ] = native.getGroundZFor3dCoord(coords.x, coords.y, 800.0, 0, false);
-    const z = found ? groundZ + 1.0 : coords.z + 1.0;
-    alt.emitServer('starter:teleportWaypoint', coords.x, coords.y, z);
-    if (consoleView) {
-        consoleView.emit('flovmp:console:log', 'DEV', `Телепорт по метке: ${coords.x.toFixed(1)}, ${coords.y.toFixed(1)}, ${z.toFixed(1)}`);
-    }
+    loadCollisionAndTeleport(coords.x, coords.y);
 }
 
-// =============================================================================
-// 5. ПЛАВНАЯ ПРОГРУЗКА КОЛЛИЗИЙ И СПАВН (Защита от Shift+W багов)
-// =============================================================================
-function loadCollisionAndUnfreeze(targetPos) {
+function loadCollisionAndTeleport(x, y) {
     const player = alt.Player.local;
     if (!player || !player.valid) return;
 
+    try { native.doScreenFadeOut(100); } catch (e) { }
+
     native.freezeEntityPosition(player.scriptID, true);
-    native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
-    native.setFocusPosAndVel(targetPos.x, targetPos.y, targetPos.z, 0, 0, 0);
+    native.loadScene(x, y, 100.0);
+    native.requestCollisionAtCoord(x, y, 100.0);
+    native.setFocusPosAndVel(x, y, 100.0, 0, 0, 0);
 
     let attempts = 0;
     const interval = alt.setInterval(() => {
@@ -830,20 +864,94 @@ function loadCollisionAndUnfreeze(targetPos) {
         if (!player || !player.valid) {
             alt.clearInterval(interval);
             native.clearFocus();
+            try { native.doScreenFadeIn(300); } catch (e) { }
+            return;
+        }
+
+        native.requestCollisionAtCoord(x, y, 100.0);
+        const [found, groundZ] = native.getGroundZFor3dCoord(x, y, 800.0, 0, false);
+
+        if ((found && Number.isFinite(groundZ)) || attempts >= 25) {
+            alt.clearInterval(interval);
+            native.clearFocus();
+            const finalZ = (found && Number.isFinite(groundZ)) ? groundZ + 1.0 : 50.0;
+            alt.emitServer('starter:teleportWaypoint', x, y, finalZ);
+            native.setEntityCoordsNoOffset(player.scriptID, x, y, finalZ, false, false, false);
+            native.freezeEntityPosition(player.scriptID, false);
+            native.setEntityVelocity(player.scriptID, 0, 0, 0);
+            try { native.doScreenFadeIn(300); } catch (e) { }
+            if (consoleView) {
+                consoleView.emit('flovmp:console:log', 'DEV', `Телепорт по метке: ${x.toFixed(1)}, ${y.toFixed(1)}, ${finalZ.toFixed(1)}`);
+            }
+        }
+    }, 100);
+}
+
+// =============================================================================
+// 5. ПЛАВНАЯ ПРОГРУЗКА КОЛЛИЗИЙ И СПАВН (Защита от Shift+W багов)
+// =============================================================================
+let activeSpawnInterval = null;
+let lastSpawnTime = 0;
+let lastSpawnCoord = null;
+
+function loadCollisionAndUnfreeze(targetPos) {
+    const player = alt.Player.local;
+    if (!player || !player.valid) return;
+
+    const now = Date.now();
+    // Идемпотентность: если за последние 3 секунды спавн уже запущен в этой же точке (<= 5м), игнорируем дубликат
+    if (lastSpawnCoord && (now - lastSpawnTime < 3000)) {
+        const dx = targetPos.x - lastSpawnCoord.x;
+        const dy = targetPos.y - lastSpawnCoord.y;
+        const dz = targetPos.z - lastSpawnCoord.z;
+        if ((dx * dx + dy * dy + dz * dz) < 25.0) {
+            alt.log('[FloV:MP] Пропуск повторного вызова loadCollisionAndUnfreeze (спавн уже выполняется)');
+            return;
+        }
+    }
+
+    lastSpawnTime = now;
+    lastSpawnCoord = { x: targetPos.x, y: targetPos.y, z: targetPos.z };
+
+    if (activeSpawnInterval) {
+        alt.clearInterval(activeSpawnInterval);
+        activeSpawnInterval = null;
+    }
+
+    try { native.doScreenFadeOut(0); } catch (e) { }
+
+    native.freezeEntityPosition(player.scriptID, true);
+    native.loadScene(targetPos.x, targetPos.y, targetPos.z);
+    native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
+    native.setFocusPosAndVel(targetPos.x, targetPos.y, targetPos.z, 0, 0, 0);
+
+    let attempts = 0;
+    activeSpawnInterval = alt.setInterval(() => {
+        attempts++;
+        if (!player || !player.valid) {
+            if (activeSpawnInterval) {
+                alt.clearInterval(activeSpawnInterval);
+                activeSpawnInterval = null;
+            }
+            native.clearFocus();
             try { native.doScreenFadeIn(500); } catch (e) { }
             return;
         }
 
         native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
-        const [hasGround, groundZ] = native.getGroundZFor3dCoord(targetPos.x, targetPos.y, targetPos.z + 10.0, 0, false);
+        const [hasGround, groundZ] = native.getGroundZFor3dCoord(targetPos.x, targetPos.y, targetPos.z + 15.0, 0, false);
         const collisionLoaded = native.hasCollisionLoadedAroundEntity(player.scriptID);
 
-        if ((hasGround && collisionLoaded) || attempts >= 40) {
-            alt.clearInterval(interval);
-            native.clearFocus();
-            if (hasGround && Math.abs(groundZ - targetPos.z) < 25.0) {
-                native.setEntityCoords(player.scriptID, targetPos.x, targetPos.y, groundZ, false, false, false, true);
+        if ((hasGround && collisionLoaded) || attempts >= 35) {
+            if (activeSpawnInterval) {
+                alt.clearInterval(activeSpawnInterval);
+                activeSpawnInterval = null;
             }
+            native.clearFocus();
+            const spawnZ = (hasGround && Number.isFinite(groundZ) && Math.abs(groundZ - targetPos.z) < 30.0)
+                ? groundZ + 1.0
+                : targetPos.z;
+            native.setEntityCoordsNoOffset(player.scriptID, targetPos.x, targetPos.y, spawnZ, false, false, false);
             native.setEntityVelocity(player.scriptID, 0, 0, 0);
             native.clearPedTasksImmediately(player.scriptID);
             native.setRunSprintMultiplierForPlayer(player.scriptID, 1.0);
@@ -854,8 +962,8 @@ function loadCollisionAndUnfreeze(targetPos) {
                     native.setEntityVelocity(player.scriptID, 0, 0, 0);
                 }
             });
-            try { native.doScreenFadeIn(700); } catch (e) { }
-            alt.log(`[FloV:MP] Спавн завершен. Коллизия загружена (попыток: ${attempts}, groundZ: ${hasGround ? groundZ.toFixed(2) : 'n/a'})`);
+            try { native.doScreenFadeIn(600); } catch (e) { }
+            alt.log(`[FloV:MP] Спавн завершен. Коллизия загружена (попыток: ${attempts}, spawnZ: ${spawnZ.toFixed(2)})`);
         }
     }, 100);
 }
@@ -1001,16 +1109,23 @@ alt.on('connectionComplete', () => {
     openChat();
     getOrCreateDevConsole(); // Прогрев WebView консоли для мгновенного отклика (0мс)
     alt.emitServer('flovmp:client:ready');
-
-    const player = alt.Player.local;
-    if (player && player.valid) {
-        loadCollisionAndUnfreeze(player.pos);
-    }
 });
 
 alt.on('disconnect', () => {
+    if (activeSpawnInterval) {
+        alt.clearInterval(activeSpawnInterval);
+        activeSpawnInterval = null;
+    }
+    if (voiceReleaseTimeout) {
+        alt.clearTimeout(voiceReleaseTimeout);
+        voiceReleaseTimeout = null;
+    }
+    isVoiceTalking = false;
     if (noClip) toggleNoClip();
     espMode = 0;
+    cursorDepth = 0;
+    try { alt.showCursor(false); } catch (e) { }
+    try { alt.toggleGameControls(true); } catch (e) { }
     closeChat();
     destroyDevConsole();
     inGame = false;
@@ -1018,7 +1133,7 @@ alt.on('disconnect', () => {
 });
 
 // Инициализация чистого стартера
-alt.onServer('starter:initClient', () => {
+alt.onServer('starter:initClient', (x, y, z) => {
     alt.log('[FloV:MP] Игровой клиент FloV:MP активирован');
     inGame = true;
     native.displayRadar(true);
@@ -1026,9 +1141,26 @@ alt.onServer('starter:initClient', () => {
     openChat();
     getOrCreateDevConsole();
 
-    const player = alt.Player.local;
-    if (player && player.valid) {
-        loadCollisionAndUnfreeze(player.pos);
+    if (x !== undefined && y !== undefined && z !== undefined && Number.isFinite(Number(x))) {
+        loadCollisionAndUnfreeze(new alt.Vector3(Number(x), Number(y), Number(z)));
+    } else {
+        const player = alt.Player.local;
+        if (player && player.valid) {
+            loadCollisionAndUnfreeze(player.pos);
+        }
+    }
+});
+
+alt.onServer('flovmp:client:welcome', (name, index, x, y, z) => {
+    alt.log(`[FloV:MP] Добро пожаловать, ${name}!`);
+    inGame = true;
+    if (x !== undefined && y !== undefined && z !== undefined && Number.isFinite(Number(x))) {
+        loadCollisionAndUnfreeze(new alt.Vector3(Number(x), Number(y), Number(z)));
+    } else {
+        const player = alt.Player.local;
+        if (player && player.valid) {
+            loadCollisionAndUnfreeze(player.pos);
+        }
     }
 });
 

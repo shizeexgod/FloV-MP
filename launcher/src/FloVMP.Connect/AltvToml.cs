@@ -10,6 +10,7 @@ public static class AltvToml
     public static void Write(string clientDir, string gtaPath, bool debug, string? platformOverride = null, string? nickname = null)
     {
         var cache = Path.Combine(clientDir, "cache").Replace('\\', '/');
+        var gtaNorm = gtaPath.TrimEnd('\\', '/').Replace('\\', '/');
         var platform = string.IsNullOrWhiteSpace(platformOverride)
             ? DetectPlatform(gtaPath)
             : platformOverride.Trim().ToLowerInvariant();
@@ -57,7 +58,7 @@ public static class AltvToml
             externalConsoleX = 0
             externalConsoleY = 0
             gtaPlatform = '{platform}'
-            gtapath = '{gtaPath}'
+            gtapath = '{gtaNorm}'
             heapSize = 2048
             lang = 'ru'
             lastip = ''

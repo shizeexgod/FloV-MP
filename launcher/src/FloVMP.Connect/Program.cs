@@ -100,8 +100,14 @@ if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
         Console.WriteLine($"[connect] Сервер не отвечает на порту {portTarget}. Запускаю локальный сервер FloV:MP...");
         var serverCandidates = new[]
         {
+            Path.Combine(AppContext.BaseDirectory, "flovmp-server.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "server", "flovmp-server.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "server", "flovmp-server.exe"),
+            Path.Combine(Environment.CurrentDirectory, "server", "flovmp-server.exe"),
+            Path.Combine(Environment.CurrentDirectory, "flovmp-server.exe"),
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "server", "src", "FloVMP.ServerLauncher", "bin", "Release", "net8.0", "FloVMP.ServerLauncher.exe"),
             Path.Combine(Environment.CurrentDirectory, "server", "src", "FloVMP.ServerLauncher", "bin", "Release", "net8.0", "FloVMP.ServerLauncher.exe"),
+            @"C:\TEST-FLOVMP\server\flovmp-server.exe",
             @"C:\FloV-MP\server\src\FloVMP.ServerLauncher\bin\Release\net8.0\FloVMP.ServerLauncher.exe"
         };
 
@@ -139,7 +145,7 @@ if (connect.StartsWith("127.0.0.1") || connect.StartsWith("localhost"))
 
 // Закрываем зависшие прошлые процессы игры/клиента и служб
 var currentPid = Environment.ProcessId;
-foreach (var stale in new[] { "FloVMP.Connect", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE", "SocialClubHelper", "RockstarErrorHandler" })
+foreach (var stale in new[] { "FloVMP.Connect", "flovmp", "flovmp-webengine", "flovmp-client", "GTA5", "GTA5_Enhanced", "altv", "altv-webengine", "PlayGTAV", "GTA5_BE", "SocialClubHelper", "RockstarErrorHandler" })
 {
     foreach (var pr in Process.GetProcessesByName(stale))
     {
@@ -182,7 +188,10 @@ if (detectedPlatform == "egs")
     EnsureEpicGamesLauncherRunning();
 }
 
-// EnsureRockstarLauncherRunning(); // Отключено: запуск RGL с -silent без токенов Epic Games вызывает ошибку 00000009 (отсутствие entitlement). GTA V сама корректно инициализирует RGL через Epic Games.
+if (detectedPlatform == "rgl")
+{
+    EnsureRockstarLauncherRunning();
+}
 
 // Подготовка параметров запуска через commandline.txt в папке GTA V
 PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
@@ -503,9 +512,23 @@ static string? ResolveClientDir()
 
     var hardcoded = @"C:\FloV-MP\runtime\client";
     if (Directory.Exists(hardcoded) &&
-        (File.Exists(Path.Combine(hardcoded, "altv.exe")) || File.Exists(Path.Combine(hardcoded, "flovmp.exe"))))
+        (File.Exists(Path.Combine(hardcoded, "flovmp.exe")) || File.Exists(Path.Combine(hardcoded, "altv.exe"))))
     {
         return hardcoded;
+    }
+
+    var appDataFlovmp = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "FloVMP", "runtime", "client");
+    if (Directory.Exists(appDataFlovmp)) return appDataFlovmp;
+
+    var appDataFlovmpEngine = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "FloVMP", "engine");
+    if (Directory.Exists(appDataFlovmpEngine) &&
+        (File.Exists(Path.Combine(appDataFlovmpEngine, "flovmp.exe")) || File.Exists(Path.Combine(appDataFlovmpEngine, "altv.exe"))))
+    {
+        return appDataFlovmpEngine;
     }
 
     var appData = Path.Combine(

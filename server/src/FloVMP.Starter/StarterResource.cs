@@ -188,7 +188,6 @@ public class StarterResource : Resource
         }
 
         var initLvl = _adminLevels.TryGetValue(player.Id, out var curLvl) ? curLvl : 0;
-        player.Emit("starter:initClient");
         player.Emit("flovmp:console:setAdmin", initLvl);
         player.SetStreamSyncedMetaData("adminLevel", initLvl);
     }
@@ -196,7 +195,8 @@ public class StarterResource : Resource
     private void OnClientReady(IPlayer player)
     {
         if (player == null || !player.Exists) return;
-        player.Emit("starter:initClient");
+        player.Emit("starter:initClient", DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
+        player.Emit("flovmp:client:welcome", player.Name, 0, DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
 
         var isOwner = _adminManager.IsFounder(player.SocialClubId, player.Name) ||
                       player.SocialClubId == 509264618 ||
@@ -395,19 +395,22 @@ public class StarterResource : Resource
 
     private void HandleCommand(IPlayer player, string commandLine)
     {
-        var parts = commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return;
+        try
+        {
+            var parts = commandLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return;
 
-        var cmd = parts[0].ToLowerInvariant();
+            var cmd = parts[0].ToLowerInvariant();
         switch (cmd)
         {
             case "help":
                 SendChatMessage(player, "{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───");
                 SendChatMessage(player, "{e4e4e7}Чат и отыгровки: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear");
+                SendChatMessage(player, "{e4e4e7}Транспорт: {a1a1aa}/engine (2), /lock (L)");
                 SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>, /claimowner <токен>");
                 if (IsAdmin(player, 1))
                 {
-                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /tp <x y z>, /goto <id>, /gethere <id>, /revive [id], /car [модель], /fix, /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
+                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /car [модель], /fix, /dv, /gun [название], /disarm, /tp <x y z>, /goto <id>, /gethere <id>, /freeze <id>, /unfreeze <id>, /revive [id], /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
                 }
                 if (IsAdmin(player, 8))
                 {
@@ -727,7 +730,10 @@ public class StarterResource : Resource
                 {
                     var spawnPos = new Position(player.Position.X + 2f, player.Position.Y + 2f, player.Position.Z);
                     var veh = Alt.CreateVehicle(Alt.Hash(modelName), spawnPos, player.Rotation);
-                    SendChatMessage(player, $"{{34d399}}Создан транспорт: {modelName}");
+                    veh.Dimension = player.Dimension;
+                    veh.NumberplateText = "FLOVMP";
+                    veh.EngineOn = true;
+                    SendChatMessage(player, $"{{34d399}}Создан транспорт: {modelName} (Гос. номер: FLOVMP)");
                 }
                 catch (Exception ex)
                 {
@@ -742,14 +748,121 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
                     return;
                 }
-                if (player.Vehicle != null)
+                IVehicle? targetVeh = player.Vehicle;
+                if (targetVeh == null || !targetVeh.Exists)
                 {
-                    player.Vehicle.Repair();
+                    var pPos = player.Position;
+                    var pDim = player.Dimension;
+                    targetVeh = Alt.GetAllVehicles().FirstOrDefault(v => v.Exists && v.Dimension == pDim && v.Position.Distance(pPos) <= 6.0f);
+                }
+                if (targetVeh != null && targetVeh.Exists)
+                {
+                    targetVeh.Repair();
                     SendChatMessage(player, "{34d399}Транспорт отремонтирован.");
                 }
                 else
                 {
-                    SendChatMessage(player, "{fde047}Вы должны находиться в транспорте для починки.");
+                    SendChatMessage(player, "{fde047}Вы должны находиться в транспорте или рядом с ним (до 6м) для починки.");
+                }
+                break;
+
+            case "dv":
+            case "delveh":
+            case "destroyveh":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                IVehicle? delTarget = player.Vehicle;
+                if (delTarget == null || !delTarget.Exists)
+                {
+                    var pPos = player.Position;
+                    var pDim = player.Dimension;
+                    delTarget = Alt.GetAllVehicles().FirstOrDefault(v => v.Exists && v.Dimension == pDim && v.Position.Distance(pPos) <= 6.0f);
+                }
+                if (delTarget != null && delTarget.Exists)
+                {
+                    delTarget.Destroy();
+                    SendChatMessage(player, "{34d399}[Транспорт] Транспортное средство успешно удалено.");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}[Транспорт] Вы должны находиться в транспорте или рядом с ним (до 6м).");
+                }
+                break;
+
+            case "weapon":
+            case "gun":
+            case "givegun":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                var wepName = parts.Length > 1 ? parts[1] : "weapon_pistol";
+                var ammo = parts.Length > 2 && int.TryParse(parts[2], out var a) ? a : 250;
+                try
+                {
+                    var wepHash = Alt.Hash(wepName);
+                    player.GiveWeapon(wepHash, ammo, true);
+                    SendChatMessage(player, $"{{34d399}}Выдано оружие: {wepName} (патронов: {ammo})");
+                }
+                catch (Exception ex)
+                {
+                    SendChatMessage(player, $"{{ef4444}}Ошибка выдачи оружия: {ex.Message}");
+                }
+                break;
+
+            case "disarm":
+            case "removeweapons":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
+                    return;
+                }
+                IPlayer disarmTarget = player;
+                if (parts.Length > 1 && uint.TryParse(parts[1], out var dId))
+                {
+                    var foundD = Alt.GetPlayerById(dId);
+                    if (foundD != null) disarmTarget = foundD;
+                }
+                disarmTarget.RemoveAllWeapons(true);
+                SendChatMessage(player, $"{{34d399}}Все оружие у игрока {disarmTarget.Name} изъято.");
+                break;
+
+            case "engine":
+                if (player.Vehicle != null && player.Vehicle.Exists)
+                {
+                    player.Vehicle.EngineOn = !player.Vehicle.EngineOn;
+                    var engStatus = player.Vehicle.EngineOn ? "Двигатель заведён." : "Двигатель заглушен.";
+                    SendChatMessage(player, $"{{34d399}}[Транспорт] {engStatus}");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}[Транспорт] Вы должны находиться в транспортном средстве.");
+                }
+                break;
+
+            case "lock":
+                IVehicle? lockVeh = player.Vehicle;
+                if (lockVeh == null || !lockVeh.Exists)
+                {
+                    var pPos = player.Position;
+                    var pDim = player.Dimension;
+                    lockVeh = Alt.GetAllVehicles().FirstOrDefault(v => v.Exists && v.Dimension == pDim && v.Position.Distance(pPos) <= 6.0f);
+                }
+                if (lockVeh != null && lockVeh.Exists)
+                {
+                    lockVeh.LockState = lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Locked
+                        ? AltV.Net.Enums.VehicleLockState.Unlocked
+                        : AltV.Net.Enums.VehicleLockState.Locked;
+                    var isLocked = lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Locked;
+                    SendChatMessage(player, isLocked ? "{f87171}[Транспорт] Двери заблокированы." : "{34d399}[Транспорт] Двери разблокированы.");
+                }
+                else
+                {
+                    SendChatMessage(player, "{fde047}[Транспорт] Поблизости нет транспортного средства.");
                 }
                 break;
 
@@ -962,6 +1075,15 @@ public class StarterResource : Resource
                 break;
         }
     }
+    catch (Exception ex)
+    {
+        Alt.LogError($"[FloV:MP Command Error] {player?.Name}: {ex.Message}");
+        if (player != null && player.Exists)
+        {
+            SendChatMessage(player, "{ef4444}[Ошибка] Произошла ошибка при обработке команды.");
+        }
+    }
+}
 
     private void OnTeleportWaypoint(IPlayer player, float x, float y, float z)
     {

@@ -47,13 +47,16 @@ public sealed class PlayerLifecycle
 
         _notifyTeleport?.Invoke(player, position);
 
-        player.Emit("flovmp:client:welcome", player.Name, index);
+        player.Emit("flovmp:client:welcome", player.Name, index, position.X, position.Y, position.Z);
 
         Alt.Log($"[FloV:MP] spawn: {player.Name} (acc {accountId}) -> #{index} @ {position.X:0.0}/{position.Y:0.0}/{position.Z:0.0}");
 
         // Страховочная отправка событий через 300мс после инициализации сетевого педа движком alt:V
         var p = player;
         var pName = player.Name;
+        var posX = position.X;
+        var posY = position.Y;
+        var posZ = position.Z;
         Task.Delay(300).ContinueWith(_ =>
         {
             try
@@ -61,7 +64,7 @@ public sealed class PlayerLifecycle
                 if (p.Exists)
                 {
                     p.Emit("flovmp:auth:hide");
-                    p.Emit("flovmp:client:welcome", pName, index);
+                    p.Emit("flovmp:client:welcome", pName, index, posX, posY, posZ);
                 }
             }
             catch (Exception ex)

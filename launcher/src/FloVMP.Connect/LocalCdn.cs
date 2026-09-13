@@ -229,8 +229,9 @@ public sealed class LocalCdn : IDisposable
         if (_uiDir is null) return (200, "text/html", Enc("<!doctype html><title>FloV:MP</title>"));
         var rel = path.Length > 4 ? path[4..] : "index.html";
         if (string.IsNullOrEmpty(rel)) rel = "index.html";
+        var baseUi = Path.GetFullPath(_uiDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var file = Path.GetFullPath(Path.Combine(_uiDir, rel));
-        if (!file.StartsWith(Path.GetFullPath(_uiDir), StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
+        if (!file.StartsWith(baseUi, StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
         {
             return (404, "text/plain", "Not Found"u8.ToArray());
         }
@@ -274,10 +275,14 @@ public sealed class LocalCdn : IDisposable
             catch (Exception ex) { Console.WriteLine($"[cdn] staged altv-client.dll read failed: {ex.Message}"); }
         }
 
+        var baseClient = Path.GetFullPath(_clientDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var file = Path.GetFullPath(Path.Combine(_clientDir, rel));
-        if (!file.StartsWith(Path.GetFullPath(_clientDir), StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
+        if (!file.StartsWith(baseClient, StringComparison.OrdinalIgnoreCase) || !File.Exists(file))
         {
-            var byName = Directory.EnumerateFiles(_clientDir, Path.GetFileName(rel), SearchOption.AllDirectories).FirstOrDefault();
+            var fileName = Path.GetFileName(rel);
+            if (fileName.Contains('*') || fileName.Contains('?'))
+                return (404, "text/plain", "Not Found"u8.ToArray());
+            var byName = Directory.EnumerateFiles(_clientDir, fileName, SearchOption.AllDirectories).FirstOrDefault();
             if (byName is null) return (404, "text/plain", "Not Found"u8.ToArray());
             file = byName;
         }

@@ -182,7 +182,7 @@
     /* ─── INPUT PANEL (COMPACT OBSIDIAN FAST) ─────────────────── */
     #input-wrap {
       margin-top: 8px;
-      display: none;
+      display: flex;
       background: #0e0e12;
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
@@ -190,30 +190,25 @@
       padding: 8px 12px;
       flex-direction: column;
       gap: 6px;
-      animation: inputWrapIn 0.08s ease-out forwards;
       position: relative;
-      transition: border-color 0.1s ease, box-shadow 0.1s ease;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(3px);
+      transition: opacity 0.08s ease-out, transform 0.08s ease-out, border-color 0.1s ease, box-shadow 0.1s ease, visibility 0.08s ease-out;
       overflow: visible;
     }
 
     #input-wrap.active {
-      display: flex;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateY(0);
     }
 
     #input-wrap:focus-within {
       border-color: var(--border-focus);
       box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    }
-
-    @keyframes inputWrapIn {
-      from {
-        opacity: 0;
-        transform: translateY(2px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
     }
 
     /* Tactile Send Flash */
@@ -308,14 +303,13 @@
     }
 
     /* ─── AUTOCOMPLETE POPUP (RAYCAST COMMAND MENU) ───────────── */
+    /* ─── AUTOCOMPLETE POPUP (RAYCAST COMMAND MENU) ───────────── */
     #chat-autocomplete {
       position: absolute;
       bottom: calc(100% + 6px);
       left: 0;
       right: 0;
       background: #111115;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 10px;
       box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 1px rgba(255, 255, 255, 0.2);
@@ -363,9 +357,7 @@
       display: none;
       align-items: center;
       gap: 8px;
-      background: rgba(14, 14, 18, 0.94);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      background: rgba(14, 14, 18, 0.98);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 10px;
       padding: 6px 12px;
@@ -626,12 +618,12 @@
     // Scroll to bottom when opening input
     logArea.scrollTop = logArea.scrollHeight;
 
-    setTimeout(() => {
+    try {
       chatInput.focus();
       if (initialValue) {
         chatInput.setSelectionRange(initialValue.length, initialValue.length);
       }
-    }, 20);
+    } catch (e) {}
   }
 
   function closeInput(send) {
@@ -812,7 +804,7 @@
     pushMessage("system", "", "{38bdf8}[Admin]{ffffff} Администратор Alex_Mercer авторизован.");
   }
 
-  // ─── ALT:V CLIENT EVENTS ─────────────────────────────────────
+  // ─── FLOV:MP CLIENT EVENTS ───────────────────────────────────
   if (typeof alt !== "undefined") {
     alt.on("flovmp:chat:msg", function (kind, author, text) {
       pushMessage(kind, author, text);
@@ -825,6 +817,9 @@
     });
     alt.on("flovmp:chat:openinput", function (initialValue) {
       openInput(initialValue);
+    });
+    alt.on("flovmp:chat:closeinput", function () {
+      closeInput(false);
     });
     alt.on("flovmp:chat:clear", function () {
       clearLogs();

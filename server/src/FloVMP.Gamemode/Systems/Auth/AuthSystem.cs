@@ -105,7 +105,23 @@ public sealed class AuthSystem
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("auth.OnDisconnect", () =>
     {
         if (_authed.TryRemove(player.Id, out var acc))
-            _activeAccounts.TryRemove(new KeyValuePair<int, uint>(acc.Id, player.Id));
+        {
+            if (_activeAccounts.TryGetValue(acc.Id, out var activePid) && activePid == player.Id)
+            {
+                _activeAccounts.TryRemove(acc.Id, out _);
+            }
+        }
+        else
+        {
+            // Страховочная очистка, если игрок отключился во время процесса входа
+            foreach (var kvp in _activeAccounts)
+            {
+                if (kvp.Value == player.Id)
+                {
+                    _activeAccounts.TryRemove(kvp.Key, out _);
+                }
+            }
+        }
     });
 
     private void OnLogin(IPlayer player, string username, string password) => Safe.Run("auth.OnLogin", () =>
@@ -191,9 +207,13 @@ public sealed class AuthSystem
 
         try
         {
+#pragma warning disable CS0612, CS0618
             player.SetSyncedMetaData("authed", true);
             player.SetSyncedMetaData("username", account.Username);
             player.SetSyncedMetaData("admin_level", account.AdminLevel);
+#pragma warning restore CS0612, CS0618
+            player.SetStreamSyncedMetaData("adminLevel", account.AdminLevel);
+            player.Emit("flovmp:console:setAdmin", account.AdminLevel);
         }
         catch (Exception ex)
         {

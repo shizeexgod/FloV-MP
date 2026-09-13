@@ -29,7 +29,7 @@ taskkill /F /IM flovmp.exe >nul 2>&1
 ping -n 2 127.0.0.1 >nul
 
 rem The connector is a WinExe (no console): its output goes to the log file
-rem %LOCALAPPDATA%\FloridaV\connect.log, so this window stays quiet - that is
+rem %LOCALAPPDATA%\FloVMP\connect.log, so this window stays quiet - that is
 rem normal, watch the log for progress. bin\Release is built from current
 rem source (has the CDN de-race fix); native-dist is a fallback.
 set "CONNECT_EXE=launcher\src\FloVMP.Connect\bin\Release\net8.0-windows\FloVMP.Connect.exe"
@@ -47,7 +47,7 @@ if not exist "%CONNECT_EXE%" (
 )
 
 echo [INFO] Connector: %CONNECT_EXE%
-echo [INFO] Log: %LOCALAPPDATA%\FloridaV\connect.log
+echo [INFO] Log: %LOCALAPPDATA%\FloVMP\connect.log
 
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=188.127.229.224:7788"

@@ -184,6 +184,7 @@ $dirs = @(
     "$OutDir\server\config",
     "$OutDir\sql",
     "$OutDir\scripts",
+    "$OutDir\tools\connector",
     "$OutDir\backups"
 )
 foreach ($d in $dirs) {
@@ -204,6 +205,12 @@ $gamemodeProj = Join-Path $repo "server\src\FloVMP.Gamemode\FloVMP.Gamemode.cspr
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish FloVMP.Gamemode failed: $LASTEXITCODE" }
 Copy-Item "$repo\server\resources\flovmp-core\resource.toml" "$OutDir\server\resources\flovmp-core\resource.toml" -Force
 Remove-Item "$OutDir\server\resources\flovmp-core\*.pdb" -Force -ErrorAction SilentlyContinue
+
+Write-Host "  -> Publishing FloV:MP Connector (FloVMP.Connect)..." -ForegroundColor Yellow
+$connectProj = Join-Path $repo "launcher\src\FloVMP.Connect\FloVMP.Connect.csproj"
+& dotnet publish $connectProj -c Release -o "$OutDir\tools\connector" --nologo
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish FloVMP.Connect failed: $LASTEXITCODE" }
+Remove-Item "$OutDir\tools\connector\*.pdb" -Force -ErrorAction SilentlyContinue
 
 # Copy sample-js-resource (Node.js support)
 if (Test-Path "$repo\server\resources\sample-js-resource") {
