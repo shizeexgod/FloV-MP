@@ -34,6 +34,20 @@ debug = false
 # duplicatePlayers: сколько подключений допускать с одного HWID.
 duplicatePlayers = 4
 
+# --- Модули движка --------------------------------------------------
+# csharp-module — серверный геймод на C# (flovmp-starter / flovmp-core)
+# js-module     — клиентские скрипты (flovmp-client)
+modules = [
+    "csharp-module",
+    "js-module",
+]
+
+# --- Наши ресурсы (порядок = порядок загрузки) ---------------------
+resources = [
+    "flovmp-starter",
+    "flovmp-client",
+]
+
 # --- Оптимизация производительности движка (для 2000+ онлайна) ---
 # Ключи верифицированы по бинарнику flovmp-server (alt:V 16.4.39)
 streamingDistance = 250
@@ -50,20 +64,6 @@ streamer    = 2
 migration   = 1
 syncSend    = 1
 syncReceive = 1
-
-# --- Модули движка --------------------------------------------------
-# csharp-module — серверный геймод на C# (flovmp-core)
-# js-module     — клиентские скрипты (flovmp-client)
-modules = [
-    "csharp-module",
-    "js-module",
-]
-
-# --- Наши ресурсы (порядок = порядок загрузки) ---------------------
-resources = [
-    "flovmp-starter",
-    "flovmp-client",
-]
 
 # --- Конфигурация модулей --------------------------------------------
 [csharp-module]

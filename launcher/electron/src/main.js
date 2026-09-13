@@ -44,7 +44,7 @@ let splashWindow = null;
 // (плюс небольшой минимум, чтобы не мигало на быстрых машинах), а не
 // искусственная задержка.
 const SPLASH_MIN_MS = process.env.FLOVMP_SPLASH_MIN ? parseInt(process.env.FLOVMP_SPLASH_MIN, 10) : 700;
-const APP_ICON_PATH = path.join(__dirname, '..', 'build', 'icon.png');
+const APP_ICON_PATH = path.join(__dirname, '..', 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
 function createSplash() {
   splashWindow = new BrowserWindow({
