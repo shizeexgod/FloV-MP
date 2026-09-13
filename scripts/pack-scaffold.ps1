@@ -54,7 +54,7 @@ elseif ($Mode -eq "Auto") {
 }
 
 # ==============================================================================
-# РЕЖИМ 1: INSTALL (Развертывание готового шаблона сервера на машине заказчика)
+# MODE 1: INSTALL
 # ==============================================================================
 if ($Mode -eq "Install") {
     $targetDir = (Get-Location).Path
@@ -142,9 +142,9 @@ FLOVMP_VOICE_PORT=7798
     Write-Host " [OK] Сервер успешно установлен и готов к разработке!" -ForegroundColor Green
     Write-Host "========================================================" -ForegroundColor Green
     Write-Host " Структура каталогов:" -ForegroundColor Cyan
-    Write-Host "   server/   — ядро (.NET 8, C# гейммод, бинарники Windows & Linux)"
-    Write-Host "   client/   — клиентские ресурсы и NUI (auth, hud, inventory, chat)"
-    Write-Host "   config/   — server.toml и flovmp.env (имя: $ProjectName)"
+    Write-Host "   server/   — ядро (.NET 8, C# гейммод, бинарники Windows и Linux)"
+    Write-Host "   client/   — клиентские ресурсы и NUI (чат, F8 консоль, NoClip, ESP)"
+    Write-Host "   config/   — server.toml, admins.json и flovmp.env (имя: $ProjectName)"
     Write-Host "   sql/      — схема БД (schema.sql для MariaDB / MySQL)"
     Write-Host "   scripts/  — скрипты запуска (start-server), бэкапа и лицензий"
     Write-Host "   start.cmd — быстрый запуск сервера в 1 клик на Windows"
@@ -161,7 +161,7 @@ FLOVMP_VOICE_PORT=7798
 }
 
 # ==============================================================================
-# РЕЖИМ 2: PACK (Сборка архива dist/scaffold на машине разработчика платформы)
+# MODE 2: PACK
 # ==============================================================================
 if (-not $OutDir) { $OutDir = Join-Path $repo "dist\scaffold" }
 
@@ -192,6 +192,7 @@ $dirs = @(
     "$OutDir\server\resources\sample-js-resource",
     "$OutDir\client\resources\flovmp-client",
     "$OutDir\config",
+    "$OutDir\server\config",
     "$OutDir\sql",
     "$OutDir\scripts",
     "$OutDir\backups"
@@ -281,6 +282,10 @@ Copy-Item "$repo\client\resources\flovmp-client\*" "$OutDir\server\resources\flo
 Write-Host "[6/8] Copying config & SQL schema..." -ForegroundColor Yellow
 Copy-Item "$repo\config\server.toml" "$OutDir\config\server.toml" -Force
 Copy-Item "$repo\config\server.toml" "$OutDir\server\server.toml" -Force
+if (Test-Path "$repo\config\admins.json") {
+    Copy-Item "$repo\config\admins.json" "$OutDir\config\admins.json" -Force
+    Copy-Item "$repo\config\admins.json" "$OutDir\server\config\admins.json" -Force
+}
 Copy-Item "$repo\sql\schema.sql" "$OutDir\sql\schema.sql" -Force
 
 # 7. Deploy templates

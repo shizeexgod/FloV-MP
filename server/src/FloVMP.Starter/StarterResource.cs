@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using AltV.Net;
 using AltV.Net.Data;
 using AltV.Net.Elements.Entities;
+using FloVMP.Core.Admin;
 
 namespace FloVMP.Starter;
 
@@ -12,6 +14,8 @@ namespace FloVMP.Starter;
 /// - Администраторы: F4 NoClip, /tpm, /car, /heal, /weather, /time, полная панель Дев-тулс в F8.
 /// - 100% серверная валидация: любая попытка несанкционированного вызова админских событий
 ///   (teleportWaypoint, toggleNoClip, команды) строго блокируется на сервере.
+/// - Pre-DB архитектура: автосохранение прав в config/admins.json, команды консоли сервера (setadmin/setfounder),
+///   одноразовый токен первичной настройки (/claimowner).
 /// </summary>
 public class StarterResource : Resource
 {
@@ -25,11 +29,12 @@ public class StarterResource : Resource
     private readonly ConcurrentDictionary<string, int> _assignedAdminNames = new(StringComparer.OrdinalIgnoreCase);
 
     private IVoiceChannel? _spatialVoiceChannel;
+    private AdminBootstrapManager _adminManager = null!;
 
     public int GetAssignedAdminRank(IPlayer player)
     {
-        var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
-        if (isAdminHost) return 8;
+        var fileRank = _adminManager.GetAssignedRank(player.SocialClubId, player.Name, player.Ip);
+        if (fileRank > 0) return fileRank;
 
         if (_assignedAdminRanks.TryGetValue(player.SocialClubId, out var rank) && rank > 0)
             return rank;
@@ -44,14 +49,31 @@ public class StarterResource : Resource
     {
         rank = Math.Clamp(rank, 0, 8);
         if (player.SocialClubId > 0)
+        {
             _assignedAdminRanks[player.SocialClubId] = rank;
+            _adminManager.SetAdmin(player.SocialClubId.ToString(), rank);
+        }
         _assignedAdminNames[player.Name] = rank;
+        _adminManager.SetAdmin(player.Name, rank);
     }
 
     public override void OnStart()
     {
+        _adminManager = new AdminBootstrapManager();
+
         Alt.Log("[FloV:MP Starter] Чистый ванильный сервер успешно запущен!");
         Alt.Log("[FloV:MP Starter] Безопасность: Server-Side RBAC активна. Обычные игроки изолированы от админ-функций.");
+
+        if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
+        {
+            Alt.Log("=================================================================================");
+            Alt.Log("[FloV:MP Setup] СЕРВЕР ЗАПУЩЕН В АВТОНОМНОМ РЕЖИМЕ (STANDALONE PRE-DB).");
+            Alt.Log($"[FloV:MP Setup] Токен первичной настройки: {_adminManager.CurrentSetupToken}");
+            Alt.Log("[FloV:MP Setup] Для получения прав Главного Администратора (Основатель, Ур. 8):");
+            Alt.Log("[FloV:MP Setup]  1. В консоли сервера:  setadmin <ID> 8  (или setfounder <ID>)");
+            Alt.Log($"[FloV:MP Setup]  2. В игре в чате:      /claimowner {_adminManager.CurrentSetupToken}");
+            Alt.Log("=================================================================================");
+        }
 
         try
         {
@@ -64,8 +86,10 @@ public class StarterResource : Resource
 
         Alt.OnPlayerConnect += OnPlayerConnect;
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
+        Alt.OnConsoleCommand += OnConsoleCommand;
         Alt.OnClient<IPlayer, string>("chat:message", OnChatMessage);
         Alt.OnClient<IPlayer, string>("flovmp:chat:say", OnChatMessage);
+        Alt.OnClient<IPlayer>("flovmp:client:ready", OnClientReady);
         Alt.OnClient<IPlayer, float, float, float>("starter:teleportWaypoint", OnTeleportWaypoint);
         Alt.OnClient<IPlayer, bool>("starter:toggleNoClip", OnToggleNoClip);
         Alt.OnClient<IPlayer, bool>("flovmp:admin:noclip", OnToggleNoClip);
@@ -104,11 +128,22 @@ public class StarterResource : Resource
         player.MaxHealth = 200;
         player.Armor = 100;
 
-        // Локальный хост (127.0.0.1) регистрируется как разработчик (8)
-        var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
-        if (isAdminHost)
+        // Автоматическое назначение Основателя (8) первому подключившемуся игроку (Pre-DB режим)
+        if (_adminManager.CanAutoClaim)
         {
-            SetAssignedAdminRank(player, 8);
+            _adminManager.TryClaimOwner("", player.Name, player.SocialClubId, out _);
+            _assignedAdminRanks[player.SocialClubId] = 8;
+            _assignedAdminNames[player.Name] = 8;
+            Alt.Log($"[FloV:MP Admin] Первый игрок {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}) автоматически назначен Основателем (Уровень 8).");
+            SendChatMessage(player, "{34d399}[Admin]{ffffff} Вы являетесь первым подключившимся администратором. Вам присвоен статус {fde047}Основатель (Уровень 8){ffffff}.");
+        }
+        else
+        {
+            var isAdminHost = player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost";
+            if (isAdminHost)
+            {
+                SetAssignedAdminRank(player, 8);
+            }
         }
 
         // По умолчанию дежурство выключено до ввода /alogin
@@ -130,6 +165,10 @@ public class StarterResource : Resource
         {
             SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
         }
+        else if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
+        {
+            SendChatMessage(player, "{38bdf8}[Setup]{ffffff} Доступна команда {fde047}/claimowner <токен>{ffffff} для первичной активации прав.");
+        }
         else
         {
             SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
@@ -138,6 +177,157 @@ public class StarterResource : Resource
         player.Emit("starter:initClient");
         player.Emit("flovmp:console:setAdmin", 0);
         player.SetStreamSyncedMetaData("adminLevel", 0);
+    }
+
+    private void OnClientReady(IPlayer player)
+    {
+        if (player == null || !player.Exists) return;
+        player.Emit("starter:initClient");
+        var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
+        player.Emit("flovmp:console:setAdmin", lvl);
+    }
+
+    private void OnConsoleCommand(string name, string[] args)
+    {
+        var cmd = name.ToLowerInvariant();
+        switch (cmd)
+        {
+            case "setadmin":
+                if (args.Length < 2)
+                {
+                    Alt.Log("[Console] Использование: setadmin <ID|Ник|SocialClub> <Уровень 0-8>");
+                    return;
+                }
+                var targetArg = args[0];
+                if (!int.TryParse(args[1], out var newLvl))
+                {
+                    Alt.Log("[Console] Уровень должен быть числом от 0 до 8.");
+                    return;
+                }
+                newLvl = Math.Clamp(newLvl, 0, 8);
+
+                IPlayer? matchedPlayer = null;
+                if (uint.TryParse(targetArg, out var targetId))
+                {
+                    matchedPlayer = Alt.GetPlayerById(targetId);
+                }
+                if (matchedPlayer == null)
+                {
+                    matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, targetArg, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (matchedPlayer != null)
+                {
+                    SetAssignedAdminRank(matchedPlayer, newLvl);
+                    _adminLevels[matchedPlayer.Id] = newLvl;
+                    matchedPlayer.Emit("flovmp:console:setAdmin", newLvl);
+                    matchedPlayer.SetStreamSyncedMetaData("adminLevel", newLvl);
+                    SendChatMessage(matchedPlayer, $"{{34d399}}[Admin] Консоль сервера назначила вам уровень прав {newLvl}.");
+                    Alt.Log($"[Console] Игроку [{matchedPlayer.Id}] {matchedPlayer.Name} успешно назначен уровень {newLvl}.");
+                }
+                else
+                {
+                    _adminManager.SetAdmin(targetArg, newLvl);
+                    Alt.Log($"[Console] Идентификатор '{targetArg}' сохранен с уровнем {newLvl} в config/admins.json.");
+                }
+                break;
+
+            case "setfounder":
+                if (args.Length < 1)
+                {
+                    Alt.Log("[Console] Использование: setfounder <ID|Ник|SocialClub>");
+                    return;
+                }
+                OnConsoleCommand("setadmin", new[] { args[0], "8" });
+                break;
+
+            case "adminlist":
+                Alt.Log("─── СПИСОК АДМИНИСТРАТОРОВ (config/admins.json) ───");
+                var allAdmins = _adminManager.GetAllAdmins();
+                if (allAdmins.Count == 0)
+                {
+                    Alt.Log("  (нет зарегистрированных администраторов)");
+                }
+                else
+                {
+                    foreach (var kvp in allAdmins)
+                    {
+                        var isFound = _adminManager.IsFounder(0, kvp.Key);
+                        Alt.Log($"  • {kvp.Key} -> Уровень {kvp.Value}{(isFound ? " [ОСНОВАТЕЛЬ]" : "")}");
+                    }
+                }
+                Alt.Log("─── АДМИНИСТРАТОРЫ ОНЛАЙН ───");
+                var onlineCount = 0;
+                foreach (var p in Alt.GetAllPlayers())
+                {
+                    if (IsAdmin(p, 1))
+                    {
+                        onlineCount++;
+                        var lvl = _adminLevels.TryGetValue(p.Id, out var l) ? l : 0;
+                        Alt.Log($"  [{p.Id}] {p.Name} — Ур. {lvl} (На дежурстве)");
+                    }
+                }
+                if (onlineCount == 0) Alt.Log("  (нет активных админов на дежурстве)");
+                break;
+
+            case "reloadadmins":
+                _adminManager.Reload();
+                Alt.Log("[Console] config/admins.json успешно перезагружен.");
+                break;
+
+            case "claimtoken":
+                if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
+                {
+                    Alt.Log($"[Console] Активный токен настройки: {_adminManager.CurrentSetupToken}");
+                    Alt.Log($"[Console] Введите в игре: /claimowner {_adminManager.CurrentSetupToken}");
+                }
+                else
+                {
+                    Alt.Log("[Console] Токен первичной настройки уже активирован или не задан.");
+                }
+                break;
+
+            case "say":
+                if (args.Length == 0)
+                {
+                    Alt.Log("[Console] Использование: say <текст>");
+                    return;
+                }
+                var sayMsg = string.Join(' ', args);
+                BroadcastChatMessage(sayMsg, "system", "СЕРВЕР");
+                Alt.Log($"[Console] say -> {sayMsg}");
+                break;
+
+            case "kick":
+                if (args.Length == 0)
+                {
+                    Alt.Log("[Console] Использование: kick <ID|Ник> [причина]");
+                    return;
+                }
+                IPlayer? kickTarget = null;
+                if (uint.TryParse(args[0], out var kId)) kickTarget = Alt.GetPlayerById(kId);
+                if (kickTarget == null) kickTarget = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
+                if (kickTarget == null)
+                {
+                    Alt.Log($"[Console] Игрок '{args[0]}' не найден.");
+                    return;
+                }
+                var kReason = args.Length > 1 ? string.Join(' ', args.Skip(1)) : "Исключен администратором консоли";
+                BroadcastChatMessage($"{{ef4444}}[Kick] {kickTarget.Name} был исключен сервером. Причина: {kReason}");
+                kickTarget.Kick(kReason);
+                Alt.Log($"[Console] Игрок {kickTarget.Name} кикнут: {kReason}");
+                break;
+
+            case "online":
+                var players = Alt.GetAllPlayers();
+                Alt.Log($"[Console] Онлайн: {players.Count} игроков");
+                foreach (var p in players)
+                {
+                    var isAdm = _adminLevels.TryGetValue(p.Id, out var lv) && lv > 0;
+                    Alt.Log($"  [{p.Id}] {p.Name} (IP: {p.Ip}, SC: {p.SocialClubId}) {(isAdm ? $"[Админ Ур.{lv}]" : "")}");
+                }
+                break;
+        }
     }
 
     private void OnPlayerDisconnect(IPlayer player, string reason)
@@ -187,7 +377,7 @@ public class StarterResource : Resource
             case "help":
                 SendChatMessage(player, "{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───");
                 SendChatMessage(player, "{e4e4e7}Чат и отыгровки: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear");
-                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>");
+                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>, /claimowner <токен>");
                 if (IsAdmin(player, 1))
                 {
                     SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /tp <x y z>, /goto <id>, /gethere <id>, /revive [id], /car [модель], /fix, /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
@@ -285,6 +475,28 @@ public class StarterResource : Resource
             case "coords":
                 SendChatMessage(player, $"{{38bdf8}}Координаты: X: {player.Position.X:F2}, Y: {player.Position.Y:F2}, Z: {player.Position.Z:F2}, Yaw: {player.Rotation.Yaw:F2}");
                 player.Emit("starter:copyCoords", player.Position.X, player.Position.Y, player.Position.Z, player.Rotation.Yaw);
+                break;
+
+            case "claimowner":
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /claimowner <токен>");
+                    return;
+                }
+                var claimToken = parts[1];
+                if (_adminManager.TryClaimOwner(claimToken, player.Name, player.SocialClubId, out var claimMsg))
+                {
+                    SetAssignedAdminRank(player, 8);
+                    _adminLevels[player.Id] = 8;
+                    player.Emit("flovmp:console:setAdmin", 8);
+                    player.SetStreamSyncedMetaData("adminLevel", 8);
+                    SendChatMessage(player, $"{{34d399}}[FloV:MP Security] {claimMsg}");
+                    Alt.Log($"[Security Alert] Игрок {player.Name} (ID: {player.Id}) успешно активировал права Основателя через токен.");
+                }
+                else
+                {
+                    SendChatMessage(player, $"{{ef4444}}[FloV:MP Security] {claimMsg}");
+                }
                 break;
 
             case "alogin":

@@ -876,6 +876,8 @@
     // Обычные команды (доступны игроку)
     const publicCommands = [
       { cmd: 'help', desc: 'Справка по доступным командам' },
+      { cmd: 'alogin <password>', desc: 'Авторизация администратора на дежурство' },
+      { cmd: 'claimowner <token>', desc: 'Первичная активация прав Основателя' },
       { cmd: 'clear', desc: 'Очистить экран консоли' },
       { cmd: 'cls', desc: 'Очистить экран консоли' },
       { cmd: 'netgraph', desc: 'Статистика сети и частоты кадров (FPS)' },
@@ -888,15 +890,18 @@
 
     // Админские команды (только adminLevel >= 1)
     const adminCommands = [
-      { cmd: 'tpm', desc: 'Телепорт к фиолетовой метке (waypoint)' },
+      { cmd: 'tpm', desc: 'Телепорт к фиолетовой метке (F5 Waypoint)' },
       { cmd: 'noclip', desc: 'Свободный полет камеры (F4 NoClip)' },
+      { cmd: 'esp [0-3]', desc: 'Админ-видение ESP Wallhack (F3)' },
+      { cmd: 'revive [id]', desc: 'Реанимировать игрока' },
+      { cmd: 'setdim [dim]', desc: 'Установить виртуальный мир (измерение)' },
       { cmd: 'car [model]', desc: 'Заспавнить автомобиль (напр. car adder)' },
       { cmd: 'heal', desc: 'Восстановить 100% HP и брони' },
       { cmd: 'god', desc: 'Режим бессмертия' },
       { cmd: 'weather [type]', desc: 'Смена погоды (EXTRASUNNY, RAIN, THUNDER)' },
       { cmd: 'time [h] [m]', desc: 'Установить игровое время' },
       { cmd: 'hotreload', desc: 'Перезагрузить NUI-интерфейсы' },
-      { cmd: 'setadmin [id] [lvl]', desc: 'Выдать админ-права игроку' }
+      { cmd: 'setadmin [id] [lvl]', desc: 'Выдать админ-права игроку (Ур. 8)' }
     ];
 
     function getAvailableCommands() {

@@ -528,25 +528,34 @@
   const AUTOCOMPLETE_COMMANDS = [
     { cmd: 'help', desc: 'Список всех команд' },
     { cmd: 'pos', desc: 'Текущие координаты игрока' },
-    { cmd: 'adminauth', desc: 'Авторизация администратора' },
+    { cmd: 'alogin', desc: 'Вход администратора (/alogin <пароль>)' },
+    { cmd: 'claimowner', desc: 'Первичная активация прав (/claimowner <токен>)' },
     { cmd: 'clear', desc: 'Очистить историю чата' },
-    { cmd: 'noclip', desc: 'Полет сквозь стены (F4)' },
-    { cmd: 'car', desc: 'Создать транспорт (/car model)' },
+    { cmd: 'tpm', desc: 'Телепорт на метку карты (F5)' },
+    { cmd: 'noclip', desc: 'Полет сквозь стены (F4 NoClip)' },
+    { cmd: 'esp', desc: 'Админ-видение ESP Wallhack (F3)' },
+    { cmd: 'revive', desc: 'Реанимировать игрока (/revive [id])' },
+    { cmd: 'setadmin', desc: 'Назначить администратора (/setadmin <id> <0-8>)' },
+    { cmd: 'car', desc: 'Создать транспорт (/car [model])' },
     { cmd: 'fix', desc: 'Починить транспорт' },
-    { cmd: 'heal', desc: 'Восстановить здоровье' },
-    { cmd: 'armor', desc: 'Установить броню (/armor 100)' },
-    { cmd: 'god', desc: 'Режим бессмертия' },
-    { cmd: 'tpm', desc: 'Телепорт на метку карты' },
-    { cmd: 'tp', desc: 'Телепорт по координатам' },
-    { cmd: 'goto', desc: 'Телепорт к игроку (/goto id)' },
-    { cmd: 'gethere', desc: 'Телепорт игрока к себе (/gethere id)' },
-    { cmd: 'weather', desc: 'Сменить погоду (/weather type)' },
-    { cmd: 'time', desc: 'Установить время (/time h m)' },
-    { cmd: 'speed', desc: 'Множитель скорости бега' },
-    { cmd: 'dim', desc: 'Сменить виртуальный мир' },
-    { cmd: 'skin', desc: 'Сменить скин игрока' },
-    { cmd: 'kick', desc: 'Исключить игрока с сервера' },
-    { cmd: 'a', desc: 'Чат администрации' }
+    { cmd: 'heal', desc: 'Восстановить 100% HP и брони' },
+    { cmd: 'armor', desc: 'Установить броню (/armor [100])' },
+    { cmd: 'god', desc: 'Режим бессмертия (GodMode)' },
+    { cmd: 'tp', desc: 'Телепорт по координатам (/tp x y z)' },
+    { cmd: 'goto', desc: 'Телепорт к игроку (/goto <id>)' },
+    { cmd: 'gethere', desc: 'Телепорт игрока к себе (/gethere <id>)' },
+    { cmd: 'weather', desc: 'Сменить погоду (/weather <type>)' },
+    { cmd: 'time', desc: 'Установить время (/time <h> [m])' },
+    { cmd: 'speed', desc: 'Множитель скорости бега (/speed <mult>)' },
+    { cmd: 'setdim', desc: 'Сменить виртуальный мир (/setdim <dim>)' },
+    { cmd: 'skin', desc: 'Сменить скин игрока (/skin <model>)' },
+    { cmd: 'kick', desc: 'Исключить игрока с сервера (/kick <id> [причина])' },
+    { cmd: 'a', desc: 'Внутренний чат администрации' },
+    { cmd: 'me', desc: 'Действие персонажа (/me <действие>)' },
+    { cmd: 'do', desc: 'Описание обстановки (/do <окружение>)' },
+    { cmd: 'b', desc: 'Внеигровой OOC чат (/b <текст>)' },
+    { cmd: 's', desc: 'Крикнуть (/s <текст>)' },
+    { cmd: 'w', desc: 'Шепнуть игроку (/w <id> <текст>)' }
   ];
 
   let filteredAc = [];
@@ -883,8 +892,8 @@
             clearLogs();
           } else if (cmd === 'help') {
             pushMessage('system', '', '{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───');
-            pushMessage('system', '', '{e4e4e7}Чат: {a1a1aa}/clear, /pos, /adminauth');
-            pushMessage('system', '', '{34d399}Админ: {a1a1aa}/tpm, /tp, /goto, /gethere, /car, /fix, /noclip, /heal, /god');
+            pushMessage('system', '', '{e4e4e7}Чат: {a1a1aa}/clear, /pos, /alogin, /claimowner');
+            pushMessage('system', '', '{34d399}Админ: {a1a1aa}/tpm (F5), /noclip (F4), /esp (F3), /revive, /car, /fix, /heal, /god, /tp, /setdim');
           } else {
             pushMessage('system', '', `{38bdf8}[Команда]{ffffff} Выполнена: ${raw}`);
           }

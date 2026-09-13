@@ -111,4 +111,103 @@ public class AdminTests
         Assert.True(acc.IsMuted(now));
         Assert.False(acc.IsMuted(now.AddMinutes(16)));
     }
+
+    [Fact]
+    public void AdminBootstrapManager_GeneratesSetupToken_WhenEmpty()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"flovmp_admins_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var mgr = new AdminBootstrapManager(tempFile);
+            Assert.False(string.IsNullOrWhiteSpace(mgr.CurrentSetupToken));
+            Assert.StartsWith("FLV-", mgr.CurrentSetupToken);
+            Assert.True(mgr.CanAutoClaim);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void AdminBootstrapManager_LocalHost_ReturnsLevel8()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"flovmp_admins_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var mgr = new AdminBootstrapManager(tempFile);
+            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "127.0.0.1"));
+            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "::1"));
+            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "localhost"));
+            Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "192.168.1.100"));
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void AdminBootstrapManager_TryClaimOwner_SuccessAndInvalidatesToken()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"flovmp_admins_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var mgr = new AdminBootstrapManager(tempFile);
+            var token = mgr.CurrentSetupToken;
+
+            // Неверный токен отклоняется
+            Assert.False(mgr.TryClaimOwner("INVALID-TOKEN", "OwnerPlayer", 12345678, out var errMsg));
+            Assert.Contains("Неверный токен", errMsg);
+            Assert.Equal(0, mgr.GetAssignedRank(12345678, "OwnerPlayer", "192.168.1.50"));
+
+            // Верный токен одобряется
+            Assert.True(mgr.TryClaimOwner(token, "OwnerPlayer", 12345678, out var okMsg));
+            Assert.Contains("успешно подтверждено", okMsg);
+
+            // Права установлены и токен инвалидирован
+            Assert.Equal(8, mgr.GetAssignedRank(12345678, "OwnerPlayer", "192.168.1.50"));
+            Assert.True(mgr.IsFounder(12345678, "OwnerPlayer"));
+            Assert.Empty(mgr.CurrentSetupToken);
+            Assert.False(mgr.CanAutoClaim);
+
+            // Повторная попытка с тем же токеном отклоняется
+            Assert.False(mgr.TryClaimOwner(token, "Attacker", 99999999, out _));
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void AdminBootstrapManager_SetAdmin_PersistsAndClampsLevel()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"flovmp_admins_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var mgr = new AdminBootstrapManager(tempFile);
+            mgr.SetAdmin("ModeratorUser", 2);
+            mgr.SetAdmin("CuratorUser", 6);
+            mgr.SetAdmin("OverClamped", 15); // Должно обрезаться до 8
+
+            Assert.Equal(2, mgr.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
+            Assert.Equal(6, mgr.GetAssignedRank(0, "CuratorUser", "10.0.0.1"));
+            Assert.Equal(8, mgr.GetAssignedRank(0, "OverClamped", "10.0.0.1"));
+
+            // Проверка снятия прав (уровень 0)
+            mgr.SetAdmin("ModeratorUser", 0);
+            Assert.Equal(0, mgr.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
+
+            // Проверка перезагрузки с диска
+            var mgrReloaded = new AdminBootstrapManager(tempFile);
+            Assert.Equal(6, mgrReloaded.GetAssignedRank(0, "CuratorUser", "10.0.0.1"));
+            Assert.Equal(0, mgrReloaded.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }
+
