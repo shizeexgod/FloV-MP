@@ -265,6 +265,11 @@ function Neutralize-Sentry([string]$FilePath) {
 Neutralize-Sentry "$OutDir\server\flovmp-server.exe"
 Neutralize-Sentry "$OutDir\server\flovmp-server"
 
+# Patch Windows PE executable icons with transparent FloV:MP brand icon
+if (Test-Path "$OutDir\server\flovmp-server.exe") {
+    python "$repo\scripts\patch_exe_icon.py" "$OutDir\server\flovmp-server.exe" "$OutDir\server\flovmp-crash-handler.exe"
+}
+
 # 4. Copy data caches (.bin)
 Write-Host "[4/8] Copying entity caches (.bin)..." -ForegroundColor Yellow
 Get-ChildItem "$AltvBackup\data\$Branch\data\*.bin" | ForEach-Object {

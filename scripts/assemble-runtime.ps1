@@ -116,18 +116,19 @@ New-Item -ItemType Directory -Path $server -Force | Out-Null
 # --- 2. server binaries ---------------------------------------------
 Write-Host "[server binaries]" -ForegroundColor Yellow
 $srvSrc = Join-Path $AltvBackup "server\$Branch\$plat"
-Copy-Required "$srvSrc\altv-server.exe"         "$server\altv-server.exe"
-Copy-Required "$srvSrc\altv-crash-handler.exe"  "$server\altv-crash-handler.exe"
-Copy-Item "$server\altv-server.exe" "$server\flovmp-server.exe" -Force
-Copy-Item "$server\altv-crash-handler.exe" "$server\flovmp-crash-handler.exe" -Force
-Copy-Required "$srvSrc\update.json"             "$server\update.json"
+Copy-Required "$srvSrc\altv-server.exe"         "$server\flovmp-server.exe"
+Copy-Required "$srvSrc\altv-crash-handler.exe"  "$server\flovmp-crash-handler.exe"
+$manifestJson = '{"version":"1.0.0","branch":"release","platform":"FloV:MP"}'
+[System.IO.File]::WriteAllText("$server\update.json", $manifestJson, [System.Text.Encoding]::UTF8)
 
 if ($KeepSentry) {
     Write-Host "  (Sentry telemetry patch skipped: -KeepSentry)" -ForegroundColor Yellow
 }
 else {
-    Disable-SentryTelemetry "$server\altv-server.exe"
+    Disable-SentryTelemetry "$server\flovmp-server.exe"
 }
+
+python "$repo\scripts\patch_exe_icon.py" "$server\flovmp-server.exe" "$server\flovmp-crash-handler.exe"
 
 # --- 3. coreclr-module (C#) ---------------------------------------
 Write-Host "[coreclr-module]" -ForegroundColor Yellow
