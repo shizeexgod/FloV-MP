@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     FloV:MP Scaffold Installer & Packager (Turnkey RP Project Variant 3)
 
@@ -71,43 +71,41 @@ if ($Mode -eq "Install") {
     $scaffoldZipUrl = "$MasterHost/cdn/dist/flovmp-scaffold.zip"
     $tempZip = Join-Path $targetDir "_flovmp_scaffold_temp.zip"
 
-    Write-Host "[1/5] Загрузка файлов серверного движка с мастер-VDS..." -ForegroundColor Yellow
+    Write-Host "[1/5] Downloading server engine package from CDN..." -ForegroundColor Yellow
     Write-Host "  URL: $scaffoldZipUrl"
 
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $webClient = New-Object System.Net.WebClient
         $webClient.DownloadFile($scaffoldZipUrl, $tempZip)
-        Write-Host "  -> Архив успешно загружен ($([math]::Round((Get-Item $tempZip).Length / 1MB, 2)) MB)" -ForegroundColor Green
+        Write-Host "  -> Archive downloaded successfully ($([math]::Round((Get-Item $tempZip).Length / 1MB, 2)) MB)" -ForegroundColor Green
     }
     catch {
-        Write-Host "  ! Не удалось скачать архив через HTTP: $_" -ForegroundColor Red
-        # Проверяем наличие локального архива в репозитории
+        Write-Host "  ! HTTP download failed: $_" -ForegroundColor Red
         $localZip = Join-Path $repo "dist\flovmp-scaffold.zip"
         if (Test-Path $localZip) {
-            Write-Host "  -> Использование локального архива $localZip" -ForegroundColor Yellow
+            Write-Host "  -> Using local package: $localZip" -ForegroundColor Yellow
             Copy-Item $localZip $tempZip -Force
         } else {
-            throw "Критическая ошибка: дистрибутив FloV:MP недоступен!"
+            throw "Critical error: FloV:MP distribution package unavailable!"
         }
     }
 
-    Write-Host "[2/5] Распаковка структуры каталогов..." -ForegroundColor Yellow
+    Write-Host "[2/5] Extracting directory structure..." -ForegroundColor Yellow
     Expand-Archive -Path $tempZip -DestinationPath $targetDir -Force
     Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
 
-    Write-Host "[3/5] Настройка White-Label и конфигурации (server.toml)..." -ForegroundColor Yellow
+    Write-Host "[3/5] Applying server configuration (server.toml)..." -ForegroundColor Yellow
     $serverTomlPath = Join-Path $targetDir "config\server.toml"
     if (Test-Path $serverTomlPath) {
         $tomlContent = [System.IO.File]::ReadAllText($serverTomlPath, [System.Text.Encoding]::UTF8)
         $tomlContent = $tomlContent -replace 'name\s*=\s*".*?"', "name        = `"$ProjectName`""
         $tomlContent = $tomlContent -replace 'players\s*=\s*\d+', "players     = $Slots"
         [System.IO.File]::WriteAllText($serverTomlPath, $tomlContent, [System.Text.Encoding]::UTF8)
-        # Копируем в server/server.toml
         Copy-Item $serverTomlPath (Join-Path $targetDir "server\server.toml") -Force
     }
 
-    Write-Host "[4/5] Применение лицензии и генерация окружения (flovmp.env)..." -ForegroundColor Yellow
+    Write-Host "[4/5] Writing license file and environment (flovmp.env)..." -ForegroundColor Yellow
     $licensePath = Join-Path $targetDir "license.flv"
     $licJson = @"
 {
@@ -132,30 +130,21 @@ FLOVMP_VOICE_PORT=7798
 "@
     [System.IO.File]::WriteAllText((Join-Path $targetDir "config\flovmp.env"), $envContent, [System.Text.Encoding]::UTF8)
 
-    Write-Host "[5/5] Финализация прав доступа..." -ForegroundColor Yellow
-    Get-ChildItem -Path (Join-Path $targetDir "scripts") -Filter "*.sh" | ForEach-Object {
-        # Для WSL / Linux окружений
-    }
+    Write-Host "[5/5] Finalizing permissions..." -ForegroundColor Yellow
 
     Write-Host ""
     Write-Host "========================================================" -ForegroundColor Green
-    Write-Host " [OK] Сервер успешно установлен и готов к разработке!" -ForegroundColor Green
+    Write-Host " [SUCCESS] FloV:MP Server successfully installed!" -ForegroundColor Green
     Write-Host "========================================================" -ForegroundColor Green
-    Write-Host " Структура каталогов:" -ForegroundColor Cyan
-    Write-Host "   server/   — ядро (.NET 8, C# гейммод, бинарники Windows и Linux)"
-    Write-Host "   client/   — клиентские ресурсы и NUI (чат, F8 консоль, NoClip, ESP)"
-    Write-Host "   config/   — server.toml, admins.json и flovmp.env (имя: $ProjectName)"
-    Write-Host "   sql/      — схема БД (schema.sql для MariaDB / MySQL)"
-    Write-Host "   scripts/  — скрипты запуска (start-server), бэкапа и лицензий"
-    Write-Host "   start.cmd — быстрый запуск сервера в 1 клик на Windows"
-    Write-Host "   start.sh  — быстрый запуск сервера в 1 клик на Linux"
-    Write-Host ""
-    Write-Host " Для разработчика RP-проекта:" -ForegroundColor Yellow
-    Write-Host "   1. Импортируйте sql/schema.sql в базу данных MariaDB."
-    Write-Host "   2. Запустите start.cmd (Windows) или ./start.sh (Linux)."
-    Write-Host "   3. Разрабатывайте логику в server/ и интерфейсы в client/."
-    Write-Host "   4. Для игроков лаунчер будет скачивать только client/,"
-    Write-Host "      серверные файлы и исходники игрокам НЕ передаются."
+    Write-Host " Directory Structure:" -ForegroundColor Cyan
+    Write-Host "   server/     - Dedicated engine (.NET 8, FloV.Net.Host, C# gamemode)"
+    Write-Host "   client/     - Client resources and NUI (chat, F8 console, NoClip, ESP)"
+    Write-Host "   config/     - server.toml, admins.json and flovmp.env"
+    Write-Host "   sql/        - MariaDB / MySQL clean schema (schema.sql)"
+    Write-Host "   scripts/    - Server management and backup utilities"
+    Write-Host "   start.cmd   - Quick 1-click server start (Windows)"
+    Write-Host "   connect.cmd - Direct connect shortcut for developers"
+    Write-Host "   start.sh    - Quick 1-click server start (Linux)"
     Write-Host "========================================================" -ForegroundColor Green
     exit 0
 }
@@ -224,26 +213,35 @@ if (Test-Path "$repo\server\resources\sample-js-resource") {
 # 3. Copy engine binaries & neutralize Sentry
 Write-Host "[3/8] Copying engine binaries..." -ForegroundColor Yellow
 
-# Windows binaries
-Copy-Item "$AltvBackup\server\$Branch\x64_win32\altv-server.exe" "$OutDir\server\altv-server.exe" -Force
-Copy-Item "$AltvBackup\server\$Branch\x64_win32\altv-crash-handler.exe" "$OutDir\server\altv-crash-handler.exe" -Force
-Copy-Item "$AltvBackup\server\$Branch\x64_win32\update.json" "$OutDir\server\update.json" -Force
+# Windows binaries (FloV:MP branding)
+Copy-Item "$AltvBackup\server\$Branch\x64_win32\altv-server.exe" "$OutDir\server\flovmp-server.exe" -Force
+Copy-Item "$AltvBackup\server\$Branch\x64_win32\altv-crash-handler.exe" "$OutDir\server\flovmp-crash-handler.exe" -Force
 
-# Windows modules
-Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_win32\AltV.Net.Host.dll" "$OutDir\server\AltV.Net.Host.dll" -Force
-Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_win32\AltV.Net.Host.runtimeconfig.json" "$OutDir\server\AltV.Net.Host.runtimeconfig.json" -Force
+# Windows modules & CoreCLR host
+Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_win32\AltV.Net.Host.dll" "$OutDir\server\FloV.Net.Host.dll" -Force
+Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_win32\AltV.Net.Host.runtimeconfig.json" "$OutDir\server\FloV.Net.Host.runtimeconfig.json" -Force
 Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_win32\modules\csharp-module.dll" "$OutDir\server\modules\csharp-module.dll" -Force
 Copy-Item "$AltvBackup\js-module\$Branch\x64_win32\modules\js-module\js-module.dll" "$OutDir\server\modules\js-module\js-module.dll" -Force
 Copy-Item "$AltvBackup\js-module\$Branch\x64_win32\modules\js-module\libnode.dll" "$OutDir\server\modules\js-module\libnode.dll" -Force
 
-# Linux binaries
+# Linux binaries (FloV:MP branding)
 if (Test-Path "$AltvBackup\server\$Branch\x64_linux\altv-server") {
-    Copy-Item "$AltvBackup\server\$Branch\x64_linux\altv-server" "$OutDir\server\altv-server" -Force
-    Copy-Item "$AltvBackup\server\$Branch\x64_linux\altv-crash-handler" "$OutDir\server\altv-crash-handler" -Force
+    Copy-Item "$AltvBackup\server\$Branch\x64_linux\altv-server" "$OutDir\server\flovmp-server" -Force
+    Copy-Item "$AltvBackup\server\$Branch\x64_linux\altv-crash-handler" "$OutDir\server\flovmp-crash-handler" -Force
     Copy-Item "$AltvBackup\coreclr-module\$Branch\x64_linux\modules\libcsharp-module.so" "$OutDir\server\modules\libcsharp-module.so" -Force
     Copy-Item "$AltvBackup\js-module\$Branch\x64_linux\modules\js-module\libjs-module.so" "$OutDir\server\modules\js-module\libjs-module.so" -Force
     Copy-Item "$AltvBackup\js-module\$Branch\x64_linux\modules\js-module\libnode.so" "$OutDir\server\modules\js-module\libnode.so" -Force
 }
+
+# Auto-patch CoreCLR module for FloV.Net.Host
+python "$repo\scripts\patch_coreclr_host.py" "$OutDir\server\modules\csharp-module.dll"
+if (Test-Path "$OutDir\server\modules\libcsharp-module.so") {
+    python "$repo\scripts\patch_coreclr_host.py" "$OutDir\server\modules\libcsharp-module.so"
+}
+
+# Clean version manifest
+$manifestJson = '{"version":"1.0.0","branch":"release","platform":"FloV:MP"}'
+[System.IO.File]::WriteAllText("$OutDir\server\update.json", $manifestJson, [System.Text.Encoding]::UTF8)
 
 function Neutralize-Sentry([string]$FilePath) {
     if (-not (Test-Path $FilePath)) { return }
@@ -264,8 +262,8 @@ function Neutralize-Sentry([string]$FilePath) {
         Write-Host "  ~ Sentry DSN zeroed in $(Split-Path $FilePath -Leaf)"
     }
 }
-Neutralize-Sentry "$OutDir\server\altv-server.exe"
-Neutralize-Sentry "$OutDir\server\altv-server"
+Neutralize-Sentry "$OutDir\server\flovmp-server.exe"
+Neutralize-Sentry "$OutDir\server\flovmp-server"
 
 # 4. Copy data caches (.bin)
 Write-Host "[4/8] Copying entity caches (.bin)..." -ForegroundColor Yellow
@@ -300,6 +298,7 @@ Copy-Item "$tplDir\update-license.sh"  "$OutDir\scripts\update-license.sh" -Forc
 Copy-Item "$tplDir\flovmp.env.example" "$OutDir\config\flovmp.env.example" -Force
 Copy-Item "$tplDir\start.cmd"          "$OutDir\start.cmd" -Force
 Copy-Item "$tplDir\start.sh"           "$OutDir\start.sh" -Force
+Copy-Item "$tplDir\connect.cmd"        "$OutDir\connect.cmd" -Force
 Copy-Item "$tplDir\license.flv"        "$OutDir\license.flv" -Force
 Copy-Item "$tplDir\README.md"          "$OutDir\README.md" -Force
 

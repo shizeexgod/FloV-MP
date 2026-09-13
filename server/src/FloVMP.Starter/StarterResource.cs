@@ -59,19 +59,26 @@ public class StarterResource : Resource
 
     public override void OnStart()
     {
+        try
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.InputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch { }
+
         _adminManager = new AdminBootstrapManager();
 
-        Alt.Log("[FloV:MP Starter] Чистый ванильный сервер успешно запущен!");
-        Alt.Log("[FloV:MP Starter] Безопасность: Server-Side RBAC активна. Обычные игроки изолированы от админ-функций.");
+        Alt.Log("[FloV:MP Starter] Dedicated server initialized successfully!");
+        Alt.Log("[FloV:MP Starter] Security: Server-Side RBAC active. Regular players isolated from admin actions.");
 
         if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
         {
             Alt.Log("=================================================================================");
-            Alt.Log("[FloV:MP Setup] СЕРВЕР ЗАПУЩЕН В АВТОНОМНОМ РЕЖИМЕ (STANDALONE PRE-DB).");
-            Alt.Log($"[FloV:MP Setup] Токен первичной настройки: {_adminManager.CurrentSetupToken}");
-            Alt.Log("[FloV:MP Setup] Для получения прав Главного Администратора (Основатель, Ур. 8):");
-            Alt.Log("[FloV:MP Setup]  1. В консоли сервера:  setadmin <ID> 8  (или setfounder <ID>)");
-            Alt.Log($"[FloV:MP Setup]  2. В игре в чате:      /claimowner {_adminManager.CurrentSetupToken}");
+            Alt.Log("[FloV:MP Setup] SERVER RUNNING IN STANDALONE PRE-DB MODE.");
+            Alt.Log($"[FloV:MP Setup] Initial setup token: {_adminManager.CurrentSetupToken}");
+            Alt.Log("[FloV:MP Setup] To claim Owner privileges (Level 8 Founder):");
+            Alt.Log("[FloV:MP Setup]  1. In server console: setadmin <ID> 8  (or setfounder <ID>)");
+            Alt.Log($"[FloV:MP Setup]  2. In-game chat:     /claimowner {_adminManager.CurrentSetupToken}");
             Alt.Log("=================================================================================");
         }
 
@@ -81,7 +88,7 @@ public class StarterResource : Resource
         }
         catch (Exception ex)
         {
-            Alt.LogWarning($"[FloV:MP Starter] Войс-канал не активирован (проверьте voice-server): {ex.Message}");
+            Alt.LogWarning($"[FloV:MP Starter] Voice channel not activated (check voice-server): {ex.Message}");
         }
 
         Alt.OnPlayerConnect += OnPlayerConnect;

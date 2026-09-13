@@ -1,33 +1,47 @@
 @echo off
-chcp 65001 >nul
-title RolePlay Server (FloV:MP Runtime)
+setlocal enabledelayedexpansion
+title FloV:MP Dedicated Server (RolePlay Engine)
 cd /d "%~dp0.."
 
-echo ===================================================
-echo  Запуск игрового сервера RolePlay (FloV:MP Runtime)
-echo ===================================================
+echo ========================================================
+echo  FloV:MP Dedicated Server - RolePlay Engine
+echo ========================================================
+echo  Server Root: %CD%
+echo ========================================================
 
-if not exist "server\altv-server.exe" (
-    echo [ОШИБКА] server\altv-server.exe не найден!
+if not exist "server\flovmp-server.exe" (
+    echo [ERROR] server\flovmp-server.exe not found!
+    echo Please make sure the server package is properly installed.
+    echo.
     pause
     exit /b 1
 )
 
 if not exist "license.flv" (
-    echo [ПРЕДУПРЕЖДЕНИЕ] Файл license.flv не найден в корне проекта.
-    echo Сервер запустится в ознакомительном режиме.
+    echo [NOTICE] license.flv not found in project root.
+    echo Starting server in evaluation mode.
+    echo.
 )
 
-REM Загрузка переменных окружения если есть flovmp.env
 if exist "config\flovmp.env" (
+    echo [INFO] Loading environment variables from config\flovmp.env ...
     for /f "usebackq tokens=1* delims==" %%A in ("config\flovmp.env") do (
-        if not "%%A"=="" if not "%%A:~0,1%"=="#" set "%%A=%%B"
+        set "KEY=%%A"
+        set "VAL=%%B"
+        if defined KEY if not "!KEY:~0,1!"=="#" set "!KEY!=!VAL!"
     )
 )
 
+echo [INFO] Starting FloV:MP Server process...
+echo.
 cd /d "%~dp0..\server"
-altv-server.exe
+flovmp-server.exe
+
 if %ERRORLEVEL% NEQ 0 (
-    echo [ВНИМАНИЕ] Сервер завершил работу с кодом: %ERRORLEVEL%
+    echo.
+    echo ========================================================
+    echo [WARNING] Server terminated with exit code: %ERRORLEVEL%
+    echo ========================================================
+    echo.
     pause
 )

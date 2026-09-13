@@ -1,13 +1,17 @@
 @echo off
-chcp 65001 >nul
-title Проверка лицензии FloV:MP
+setlocal
+title FloV:MP License Inspector
 
 if exist "%~dp0..\license.flv" (
-    echo [ИНФО] Файл лицензии license.flv присутствует:
+    echo ========================================================
+    echo  FloV:MP License File (license.flv)
+    echo ========================================================
     type "%~dp0..\license.flv"
+    echo.
+    echo ========================================================
 ) else (
-    echo [ВНИМАНИЕ] Файл license.flv не найден.
-    echo Поместите файл лицензии в корень каталога проекта.
+    echo [WARNING] license.flv not found in project root.
+    echo Place your FloV:MP license key in the root directory.
 )
 echo.
 pause

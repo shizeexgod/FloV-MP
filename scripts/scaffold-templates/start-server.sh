@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 set -e
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+echo "========================================================"
+echo " FloV:MP Dedicated Server - RolePlay Engine (Linux)"
+echo "========================================================"
+echo " Server Root: $ROOT_DIR"
+echo "========================================================"
 
-echo "==================================================="
-echo " Запуск игрового сервера RolePlay (FloV:MP Runtime)"
-echo "==================================================="
-
-if [ ! -f "${ROOT_DIR}/server/altv-server" ]; then
-    echo "[ОШИБКА] ${ROOT_DIR}/server/altv-server не найден!"
+if [ ! -f "server/flovmp-server" ]; then
+    echo "[ERROR] server/flovmp-server executable not found!"
     exit 1
 fi
 
-chmod +x "${ROOT_DIR}/server/altv-server" "${ROOT_DIR}/server/altv-crash-handler" 2>/dev/null || true
+chmod +x server/flovmp-server server/flovmp-crash-handler 2>/dev/null || true
 
-# Загрузка переменных окружения
-if [ -f "${ROOT_DIR}/config/flovmp.env" ]; then
-    export $(grep -v '^#' "${ROOT_DIR}/config/flovmp.env" | xargs)
+if [ -f "config/flovmp.env" ]; then
+    echo "[INFO] Loading config/flovmp.env ..."
+    export $(grep -v '^#' config/flovmp.env | xargs -d '\n')
 fi
 
-cd "${ROOT_DIR}/server"
-export LD_LIBRARY_PATH="modules:modules/js-module:${LD_LIBRARY_PATH}"
-./altv-server
+cd server
+exec ./flovmp-server "$@"
