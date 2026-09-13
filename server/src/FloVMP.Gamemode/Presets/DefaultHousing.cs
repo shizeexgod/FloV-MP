@@ -19,7 +19,7 @@ public static class DefaultHousing
             price: 25_000_000,
             entrance: new Vector3D(-268.3f, -956.8f, 31.2f),
             interior: new Vector3D(-786.8f, 315.7f, 217.6f),
-            dimension: 1001));
+            dimension: FloVMP.Core.World.DimensionManager.HousingMin + 1));
 
         // 2. Квартира в центре
         service.RegisterProperty(new Property(
@@ -29,7 +29,7 @@ public static class DefaultHousing
             price: 8_500_000,
             entrance: new Vector3D(112.5f, -820.4f, 31.1f),
             interior: new Vector3D(340.9f, 437.1f, 149.3f),
-            dimension: 1002));
+            dimension: FloVMP.Core.World.DimensionManager.HousingMin + 2));
 
         // 3. Загородный особняк
         service.RegisterProperty(new Property(
@@ -39,7 +39,7 @@ public static class DefaultHousing
             price: 85_000_000,
             entrance: new Vector3D(-1288.6f, 440.3f, 97.5f),
             interior: new Vector3D(1397.3f, 1141.2f, 114.3f),
-            dimension: 1003));
+            dimension: FloVMP.Core.World.DimensionManager.HousingMin + 3));
 
         // 4. Гаражный бокс
         service.RegisterProperty(new Property(
@@ -49,6 +49,6 @@ public static class DefaultHousing
             price: 1_200_000,
             entrance: new Vector3D(740.1f, -1002.5f, 22.8f),
             interior: new Vector3D(178.6f, -1005.8f, -98.9f),
-            dimension: 1004));
+            dimension: FloVMP.Core.World.DimensionManager.HousingMin + 4));
     }
 }

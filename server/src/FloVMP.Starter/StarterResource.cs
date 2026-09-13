@@ -30,6 +30,8 @@ public class StarterResource : Resource
 
     private IVoiceChannel? _spatialVoiceChannel;
     private AdminBootstrapManager _adminManager = null!;
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+    private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
 
     public int GetAssignedAdminRank(IPlayer player)
     {
@@ -367,6 +369,7 @@ public class StarterResource : Resource
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         _adminLevels.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
+        _pendingRespawns.RemoveAll(r => r.Player == player);
 
         try
         {
@@ -381,23 +384,38 @@ public class StarterResource : Resource
     {
         if (player == null || !player.Exists) return;
         Alt.Log($"[FloV:MP Starter] Игрок {player.Name} (ID: {player.Id}) погиб.");
-        var p = player;
-        Task.Delay(3000).ContinueWith(_ =>
+        _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
+    }
+
+    public override void OnTick()
+    {
+        if (_pendingRespawns.Count > 0)
         {
-            try
+            var now = _clock.ElapsedMilliseconds;
+            for (int i = _pendingRespawns.Count - 1; i >= 0; i--)
             {
-                if (!p.Exists) return;
-                p.Spawn(DefaultSpawnPosition, 0);
-                p.Health = 200;
-                p.Armor = 100;
-                p.Emit("starter:revive");
-                SendChatMessage(p, "{ef4444}Вы погибли и возродились на спавне.");
+                var item = _pendingRespawns[i];
+                if (now >= item.RespawnAtMs)
+                {
+                    _pendingRespawns.RemoveAt(i);
+                    var p = item.Player;
+                    if (p == null || !p.Exists) continue;
+
+                    try
+                    {
+                        p.Spawn(DefaultSpawnPosition, 0);
+                        p.Health = 200;
+                        p.Armor = 100;
+                        p.Emit("starter:revive");
+                        SendChatMessage(p, "{ef4444}Вы погибли и возродились на спавне.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Alt.Log($"[FloV:MP Starter] respawn error: {ex.Message}");
+                    }
+                }
             }
-            catch (Exception ex)
-            {
-                Alt.Log($"[FloV:MP Starter] respawn error: {ex.Message}");
-            }
-        });
+        }
     }
 
     private readonly ConcurrentDictionary<uint, bool> _godModes = new();

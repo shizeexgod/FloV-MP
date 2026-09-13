@@ -9,6 +9,7 @@ namespace FloVMP.Core.Auth;
 public interface IAccountStore
 {
     Account? FindByUsername(string username);
+    Account? FindByBankAccount(string bankAccountNumber);
     bool Exists(string username);
 
     /// <summary>Создаёт учётку. Бросает, если имя занято.</summary>

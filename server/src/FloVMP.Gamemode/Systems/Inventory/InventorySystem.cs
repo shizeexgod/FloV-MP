@@ -290,6 +290,11 @@ public sealed class InventorySystem
                     player.Emit("flovmp:inv:notice", "Рядом нет транспорта для ремонта (до 5м)");
                     return;
                 }
+                if (repVeh.EngineHealth >= 1000 && repVeh.BodyHealth >= 1000)
+                {
+                    player.Emit("flovmp:inv:notice", "Транспорт полностью исправен и не требует ремонта");
+                    return;
+                }
                 repVeh.EngineHealth = 1000;
                 repVeh.BodyHealth = 1000;
                 s.Quantity -= 1;
@@ -305,6 +310,11 @@ public sealed class InventorySystem
                 }
                 float curF = 100.0f;
                 if (fuelVeh.GetStreamSyncedMetaData("fuel", out float fMeta)) curF = fMeta;
+                if (curF >= 99.5f)
+                {
+                    player.Emit("flovmp:inv:notice", "Бак уже полностью заправлен (100%)");
+                    return;
+                }
                 float addedF = Math.Min(100.0f, curF + 35.0f);
                 fuelVeh.SetStreamSyncedMetaData("fuel", addedF);
                 s.Quantity -= 1;
@@ -322,6 +332,11 @@ public sealed class InventorySystem
                 player.Emit("flovmp:inv:notice", "Вы перекусили свежим хлебом");
                 break;
             case "pistol":
+                if (player.Dimension == FloVMP.Core.World.DimensionManager.AdminJailDimension)
+                {
+                    player.Emit("flovmp:inv:notice", "Использование оружия в деморгане строго запрещено");
+                    return;
+                }
                 const uint pistolHash = 0x1B06D571;
                 if (player.CurrentWeapon == pistolHash)
                 {

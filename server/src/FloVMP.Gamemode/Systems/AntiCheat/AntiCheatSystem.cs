@@ -25,6 +25,7 @@ public class AntiCheatSystem
     public AntiCheatService Service => _service;
     public VehiclePhysicsGuardian VehicleGuardian => _vehicleGuardian;
     public CombatValidationService CombatValidation => _combatValidation;
+    public Func<int, bool>? IsCuffed { get; set; }
 
     public AntiCheatSystem(
         Func<IPlayer, Account?> accountOf,
@@ -95,6 +96,21 @@ public class AntiCheatSystem
             return false; // Неавторизованный игрок не наносит урон
         }
 
+        if (player.Health <= 0 || victim.Health <= 0)
+        {
+            return false; // Погибшие игроки не могут наносить или получать урон
+        }
+
+        if (player.Dimension == FloVMP.Core.World.DimensionManager.AdminJailDimension)
+        {
+            return false; // В деморгане стрельба и урон запрещены
+        }
+
+        if (IsCuffed?.Invoke(attackerAcc.Id) == true)
+        {
+            return false; // Игрок в наручниках не может атаковать
+        }
+
         if (victimAcc != null && _service.IsAdminExempt(victimAcc.Id))
         {
             return false; // Администратор в режиме GodMode неуязвим к урону
@@ -103,6 +119,15 @@ public class AntiCheatSystem
         if (attackerAcc.AdminLevel >= 4 || _service.IsAdminExempt(attackerAcc.Id))
         {
             return true; // Администраторы 4+ ранга освобождены от проверки
+        }
+
+        // Проверка легитимности оружия через WeaponSecurity
+        var allowedWeapons = _inventoryWeaponsOf(player);
+        if (allowedWeapons != null && !_service.CheckWeapon(attackerAcc.Id, weapon, allowedWeapons))
+        {
+            player.RemoveWeapon(weapon);
+            player.RemoveAllWeapons(true);
+            return false;
         }
 
         // Трансляция alt:V BodyPart в серверный HitboxZone
@@ -240,7 +265,19 @@ public class AntiCheatSystem
             if (player.CurrentWeapon != 0)
             {
                 var allowed = _inventoryWeaponsOf(player);
-                _service.CheckWeapon(acc.Id, player.CurrentWeapon, allowed ?? new HashSet<uint> { player.CurrentWeapon });
+                if (allowed != null)
+                {
+                    if (!_service.CheckWeapon(acc.Id, player.CurrentWeapon, allowed))
+                    {
+                        player.RemoveWeapon(player.CurrentWeapon);
+                        player.RemoveAllWeapons(true);
+                    }
+                }
+                else
+                {
+                    // В режиме платформы (без инвентаря) проверяем черный список тяжелого оружия
+                    _service.CheckWeapon(acc.Id, player.CurrentWeapon, new HashSet<uint> { player.CurrentWeapon });
+                }
             }
         }
 

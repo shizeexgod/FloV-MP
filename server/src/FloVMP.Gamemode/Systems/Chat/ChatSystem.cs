@@ -74,7 +74,10 @@ public sealed class ChatSystem
     {
         "passport", "lic", "licenses", "pay", "bank", "balance", "deposit", "withdraw",
         "transfer", "factions", "f", "d", "invite", "uninvite", "giverank",
-        "cuff", "uncuff", "arrest", "engine", "lock",
+        "cuff", "uncuff", "arrest", "release", "unarrest", "engine", "lock",
+        "buyhouse", "sellhouse", "buyproperty", "sellproperty", "enter", "exit",
+        "hlock", "house", "hdeposit", "hwithdraw", "haddmate", "hdelmate",
+        "fdeposit", "fwithdraw", "givelic", "takelic", "givemed"
     };
 
     public void Attach()
@@ -271,6 +274,11 @@ public sealed class ChatSystem
                 return;
 
             case "pay":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете передавать деньги, находясь в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length < 2 || !long.TryParse(args[1], out var payAmt) || payAmt <= 0)
                 {
                     SendSystem(player, "Использование: /pay <ID/ник> <сумма>");
@@ -279,6 +287,11 @@ public sealed class ChatSystem
                 var payTarget = FindPlayer(args[0]);
                 if (payTarget == null || !payTarget.Exists) { SendSystem(player, "Игрок не найден."); return; }
                 if (payTarget == player) { SendSystem(player, "Нельзя передать деньги самому себе."); return; }
+                if (payTarget.Health <= 0)
+                {
+                    SendSystem(player, "Гражданин находится без сознания и не может принять деньги.");
+                    return;
+                }
                 var payTargetAcc = _accountOf(payTarget);
                 if (payTargetAcc == null) { SendSystem(player, "Аккаунт получателя не найден."); return; }
                 if (player.Dimension != payTarget.Dimension || player.Position.Distance(payTarget.Position) > 5.0f)
@@ -355,6 +368,11 @@ public sealed class ChatSystem
                 return;
 
             case "transfer":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете совершать банковские переводы в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length < 2 || !long.TryParse(args[1], out var trAmt) || trAmt <= 0)
                 {
                     SendSystem(player, "Использование: /transfer <ID/ник/номер_счёта> <сумма> [назначение]");
@@ -368,7 +386,17 @@ public sealed class ChatSystem
                 }
                 else
                 {
-                    trTargetAcc = _findAccountByName?.Invoke(args[0]);
+                    // Проверяем онлайн-игроков по номеру банковского счёта
+                    var cleanTargetId = args[0].Trim();
+                    trTarget = Alt.GetAllPlayers().FirstOrDefault(p => p.Exists && string.Equals(_accountOf(p)?.BankAccountNumber, cleanTargetId, StringComparison.OrdinalIgnoreCase));
+                    if (trTarget != null && trTarget.Exists)
+                    {
+                        trTargetAcc = _accountOf(trTarget);
+                    }
+                    else
+                    {
+                        trTargetAcc = _findAccountByName?.Invoke(cleanTargetId);
+                    }
                 }
 
                 if (trTargetAcc == null)
@@ -433,11 +461,22 @@ public sealed class ChatSystem
                 return;
 
             case "engine":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете управлять зажиганием в наручниках или без сознания.");
+                    return;
+                }
                 if (player.Vehicle != null && player.Vehicle.Exists)
                 {
                     if (player.Vehicle.Driver != player)
                     {
                         SendSystem(player, "Управлять зажиганием может только водитель транспортного средства.");
+                        return;
+                    }
+
+                    if (player.Vehicle.EngineHealth <= 100)
+                    {
+                        SendSystem(player, "Двигатель сильно повреждён и не заводится! Требуется ремонт (ремкомплект).");
                         return;
                     }
 
@@ -463,6 +502,12 @@ public sealed class ChatSystem
                 return;
 
             case "lock":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете использовать ключ в наручниках или без сознания.");
+                    return;
+                }
+
                 IVehicle? lockVeh = player.Vehicle ?? FindNearestVehicle(player.Position, player.Dimension, 5.0f);
                 if (lockVeh == null)
                 {
@@ -470,16 +515,22 @@ public sealed class ChatSystem
                     return;
                 }
 
-                // Проверка прав на ключ: админ 4+, владелец, либо транспорт без назначенного владельца
+                // Проверка прав на ключ: админ 4+, фракция, владелец, либо незанятый транспорт (только для сидящего водителя)
                 bool canLock = acc.AdminLevel >= 4;
                 if (!canLock)
                 {
-                    if (lockVeh.GetMetaData("ownerAccountId", out int ownerId))
+                    if (lockVeh.GetMetaData("factionId", out int vehFacId))
+                    {
+                        var m = _factions?.GetMember(acc.Id);
+                        canLock = (m != null && m.FactionId == vehFacId);
+                    }
+                    else if (lockVeh.GetMetaData("ownerAccountId", out int ownerId))
                     {
                         canLock = (ownerId == acc.Id);
                     }
-                    else
+                    else if (lockVeh.Driver == player)
                     {
+                        // Только текущий водитель может присвоить ключ от свободного авто
                         lockVeh.SetMetaData("ownerAccountId", acc.Id);
                         canLock = true;
                     }
@@ -789,6 +840,10 @@ public sealed class ChatSystem
 
                     if (_factions.TryArrest(acc.Id, arrAcc.Id, arrestSec, arrReason, out var arrErr))
                     {
+                        // Сохраняем срок ареста в БД для защиты от выхода из игры и рестарта сервера
+                        arrAcc.JailUntilUtc = DateTime.UtcNow.AddMinutes(arrestMinutes).ToString("O");
+                        _saveAccount?.Invoke(arrAcc);
+
                         // Перемещение в ИВС ГУ МВД
                         arrTarget.Dimension = 0;
                         arrTarget.Position = new Position(459.4f, -997.8f, 24.9f);
@@ -802,6 +857,38 @@ public sealed class ChatSystem
                     else
                     {
                         SendSystem(player, arrErr);
+                    }
+                }
+                return;
+
+            case "release":
+            case "unarrest":
+                if (args.Length == 0) { SendSystem(player, "Использование: /release <ID/ник> [причина]"); return; }
+                if (_factions != null)
+                {
+                    var relTarget = FindPlayer(args[0]);
+                    if (relTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var relAcc = _accountOf(relTarget);
+                    if (relAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+                    var relReason = args.Length > 1 ? string.Join(' ', args.Skip(1)) : "Постановление об освобождении / залог";
+
+                    int officerId = acc.AdminLevel >= 2 ? 0 : acc.Id;
+                    if (_factions.TryRelease(officerId, relAcc.Id, out var relErr))
+                    {
+                        relAcc.JailUntilUtc = "";
+                        _saveAccount?.Invoke(relAcc);
+
+                        relTarget.Dimension = 0;
+                        relTarget.Position = new Position(425.1f, -979.5f, 30.7f); // Холл отделения полиции
+                        _notifyTeleport?.Invoke(relTarget, relTarget.Position);
+
+                        SendSystem(player, $"Вы освободили {relAcc.Username} из-под стражи. Причина: {relReason}");
+                        SendSystem(relTarget, $"Вы освобождены из камеры предварительного заключения сотрудником {acc.Username}.");
+                        Broadcast($"[ГУ МВД] {relAcc.Username} был освобождён из-под стражи. Основание: {relReason}");
+                    }
+                    else
+                    {
+                        SendSystem(player, relErr);
                     }
                 }
                 return;
@@ -857,6 +944,16 @@ public sealed class ChatSystem
                 return;
 
             case "enter":
+                if (player.Vehicle != null)
+                {
+                    SendSystem(player, "Вы не можете войти в жилое помещение на транспорте. Припаркуйте автомобиль снаружи.");
+                    return;
+                }
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете открывать двери в наручниках или без сознания.");
+                    return;
+                }
                 if (_housing != null)
                 {
                     var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
@@ -881,6 +978,16 @@ public sealed class ChatSystem
                 return;
 
             case "exit":
+                if (player.Vehicle != null)
+                {
+                    SendSystem(player, "Покиньте транспорт перед выходом на улицу.");
+                    return;
+                }
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете открывать двери в наручниках или без сознания.");
+                    return;
+                }
                 if (_housing != null)
                 {
                     var insideProp = _housing.GetPropertyByDimension(player.Dimension);
@@ -908,6 +1015,11 @@ public sealed class ChatSystem
                 return;
 
             case "hlock":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете открывать двери в наручниках или без сознания.");
+                    return;
+                }
                 if (_housing != null)
                 {
                     var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
@@ -950,6 +1062,11 @@ public sealed class ChatSystem
                 return;
 
             case "hdeposit":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете взаимодействовать с сейфом в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length < 2 || !int.TryParse(args[0], out var depHId) || !long.TryParse(args[1], out var depSafeAmt) || depSafeAmt <= 0)
                 {
                     SendSystem(player, "Использование: /hdeposit <ID_недвижимости> <сумма>");
@@ -957,11 +1074,23 @@ public sealed class ChatSystem
                 }
                 if (_housing != null)
                 {
+                    var prop = _housing.GetProperty(depHId);
+                    if (prop == null)
+                    {
+                        SendSystem(player, "Объект недвижимости не найден.");
+                        return;
+                    }
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    if (player.Dimension != prop.Dimension || prop.InteriorPosition.DistanceTo(pPos) > 15.0f)
+                    {
+                        SendSystem(player, "Вы должны находиться внутри своего дома рядом с сейфом.");
+                        return;
+                    }
+
                     if (_housing.TryDepositSafe(acc, depHId, depSafeAmt, out var sDepErr))
                     {
                         _saveAccount?.Invoke(acc);
-                        var prop = _housing.GetProperty(depHId);
-                        SendSystem(player, $"Вы положили {depSafeAmt:N0} руб. в сейф дома [{depHId}]. В сейфе: {prop?.SafeCash:N0} руб.");
+                        SendSystem(player, $"Вы положили {depSafeAmt:N0} руб. в сейф дома [{depHId}]. В сейфе: {prop.SafeCash:N0} руб.");
                     }
                     else
                     {
@@ -971,6 +1100,11 @@ public sealed class ChatSystem
                 return;
 
             case "hwithdraw":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете взаимодействовать с сейфом в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length < 2 || !int.TryParse(args[0], out var withHId) || !long.TryParse(args[1], out var withSafeAmt) || withSafeAmt <= 0)
                 {
                     SendSystem(player, "Использование: /hwithdraw <ID_недвижимости> <сумма>");
@@ -978,11 +1112,23 @@ public sealed class ChatSystem
                 }
                 if (_housing != null)
                 {
+                    var prop = _housing.GetProperty(withHId);
+                    if (prop == null)
+                    {
+                        SendSystem(player, "Объект недвижимости не найден.");
+                        return;
+                    }
+                    var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+                    if (player.Dimension != prop.Dimension || prop.InteriorPosition.DistanceTo(pPos) > 15.0f)
+                    {
+                        SendSystem(player, "Вы должны находиться внутри своего дома рядом с сейфом.");
+                        return;
+                    }
+
                     if (_housing.TryWithdrawSafe(acc, withHId, withSafeAmt, out var sWithErr))
                     {
                         _saveAccount?.Invoke(acc);
-                        var prop = _housing.GetProperty(withHId);
-                        SendSystem(player, $"Вы взяли {withSafeAmt:N0} руб. из сейфа дома [{withHId}]. В сейфе осталось: {prop?.SafeCash:N0} руб.");
+                        SendSystem(player, $"Вы взяли {withSafeAmt:N0} руб. из сейфа дома [{withHId}]. В сейфе осталось: {prop.SafeCash:N0} руб.");
                     }
                     else
                     {
@@ -1040,6 +1186,196 @@ public sealed class ChatSystem
                     {
                         SendSystem(player, delMateErr);
                     }
+                }
+                return;
+
+            case "fdeposit":
+                if (args.Length == 0 || !long.TryParse(args[0], out var fDepAmt) || fDepAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /fdeposit <сумма>");
+                    return;
+                }
+                if (_factions != null)
+                {
+                    var fMem = _factions.GetMember(acc.Id);
+                    if (fMem == null) { SendSystem(player, "Вы не состоите в организации."); return; }
+                    var faction = _factions.GetFaction(fMem.FactionId);
+                    if (faction == null) { SendSystem(player, "Организация не найдена."); return; }
+
+                    if (acc.Bank < fDepAmt)
+                    {
+                        SendSystem(player, $"Недостаточно средств на банковском счёте. У вас: {acc.Bank:N0} руб.");
+                        return;
+                    }
+
+                    if (_factions.TryDepositTreasury(acc.Id, fDepAmt, out var fDepErr))
+                    {
+                        acc.Bank -= fDepAmt;
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Вы пополнили казну организации {faction.Tag} на +{fDepAmt:N0} руб. В казне: {faction.TreasuryBalance:N0} руб.");
+                        GameLog.Faction("treasury_deposit", LogActor.Player(acc.Id, acc.Username), faction.Tag, ("amount", fDepAmt));
+                    }
+                    else
+                    {
+                        SendSystem(player, fDepErr);
+                    }
+                }
+                return;
+
+            case "fwithdraw":
+                if (args.Length < 2 || !long.TryParse(args[0], out var fWithAmt) || fWithAmt <= 0)
+                {
+                    SendSystem(player, "Использование: /fwithdraw <сумма> <причина>");
+                    return;
+                }
+                if (_factions != null)
+                {
+                    var fMem = _factions.GetMember(acc.Id);
+                    if (fMem == null) { SendSystem(player, "Вы не состоите в организации."); return; }
+                    var faction = _factions.GetFaction(fMem.FactionId);
+                    if (faction == null) { SendSystem(player, "Организация не найдена."); return; }
+                    var fReason = string.Join(' ', args.Skip(1));
+
+                    if (long.MaxValue - acc.Bank < fWithAmt)
+                    {
+                        SendSystem(player, "Превышен максимальный лимит банковского счёта.");
+                        return;
+                    }
+
+                    if (_factions.TryWithdrawTreasury(acc.Id, fWithAmt, fReason, out var fWithErr))
+                    {
+                        acc.Bank += fWithAmt;
+                        _saveAccount?.Invoke(acc);
+                        SendSystem(player, $"Вы сняли из казны {faction.Tag} сумму {fWithAmt:N0} руб. В казне осталось: {faction.TreasuryBalance:N0} руб.");
+                        GameLog.Faction("treasury_withdraw", LogActor.Player(acc.Id, acc.Username), faction.Tag, ("amount", fWithAmt), ("reason", fReason));
+                    }
+                    else
+                    {
+                        SendSystem(player, fWithErr);
+                    }
+                }
+                return;
+
+            case "givelic":
+                if (args.Length < 2)
+                {
+                    SendSystem(player, "Использование: /givelic <ID/ник> <категория (A/B/C/D)>");
+                    return;
+                }
+                if (_documents != null)
+                {
+                    bool isGovOfficer = _factions != null && _factions.HasPermission(acc.Id, FactionPermissions.IssueFine);
+                    if (!isGovOfficer && acc.AdminLevel < 2)
+                    {
+                        SendSystem(player, "У вас нет полномочий для выдачи водительских категорий (требуется сотрудник ГИБДД или модератор).");
+                        return;
+                    }
+
+                    var licTarget = FindPlayer(args[0]);
+                    if (licTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Dimension != licTarget.Dimension || player.Position.Distance(licTarget.Position) > 4.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас (максимум 4м).");
+                        return;
+                    }
+                    var licTargetAcc = _accountOf(licTarget);
+                    if (licTargetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    var cat = args[1].ToUpperInvariant().Trim();
+                    if (_documents.TryAddDriverCategory(licTargetAcc.Id, cat, out var addCatErr))
+                    {
+                        SendSystem(player, $"Вы открыли водительскую категорию [{cat}] гражданину {licTargetAcc.Username}.");
+                        SendSystem(licTarget, $"Инспектор {acc.Username} открыл вам категорию прав [{cat}]!");
+                    }
+                    else
+                    {
+                        SendSystem(player, addCatErr);
+                    }
+                }
+                return;
+
+            case "takelic":
+                if (args.Length < 2)
+                {
+                    SendSystem(player, "Использование: /takelic <ID/ник> <driver/weapon> [причина]");
+                    return;
+                }
+                if (_documents != null)
+                {
+                    bool isGovOfficer = _factions != null && _factions.HasPermission(acc.Id, FactionPermissions.Arrest);
+                    if (!isGovOfficer && acc.AdminLevel < 2)
+                    {
+                        SendSystem(player, "У вас нет полномочий изымать документы (требуется сотрудник полиции или модератор).");
+                        return;
+                    }
+
+                    var takeTarget = FindPlayer(args[0]);
+                    if (takeTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Dimension != takeTarget.Dimension || player.Position.Distance(takeTarget.Position) > 4.0f)
+                    {
+                        SendSystem(player, "Игрок находится слишком далеко от вас (максимум 4м).");
+                        return;
+                    }
+                    var takeTargetAcc = _accountOf(takeTarget);
+                    if (takeTargetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    var docTypeStr = args[1].ToLowerInvariant().Trim();
+                    var revokeReason = args.Length > 2 ? string.Join(' ', args.Skip(2)) : "Нарушение законодательства РФ";
+                    var docType = docTypeStr switch
+                    {
+                        "driver" or "prava" or "driving" => DocumentType.DriverLicense,
+                        "weapon" or "gun" or "wep" => DocumentType.WeaponLicense,
+                        _ => (DocumentType?)null
+                    };
+
+                    if (docType == null)
+                    {
+                        SendSystem(player, "Укажите тип документа: driver (права) или weapon (лицензия на оружие).");
+                        return;
+                    }
+
+                    if (_documents.TryRevokeDocument(takeTargetAcc.Id, docType.Value, revokeReason, out var revErr))
+                    {
+                        var docName = docType == DocumentType.DriverLicense ? "водительское удостоверение" : "лицензию на оружие";
+                        SendSystem(player, $"Вы изъяли {docName} у гражданина {takeTargetAcc.Username}. Причина: {revokeReason}");
+                        SendSystem(takeTarget, $"Сотрудник {acc.Username} аннулировал и изъял ваше {docName}. Причина: {revokeReason}");
+                        Broadcast($"[Правопорядок] {takeTargetAcc.Username} лишён {docName} сотрудником {acc.Username}.");
+                    }
+                    else
+                    {
+                        SendSystem(player, revErr);
+                    }
+                }
+                return;
+
+            case "givemed":
+                if (args.Length == 0)
+                {
+                    SendSystem(player, "Использование: /givemed <ID/ник>");
+                    return;
+                }
+                if (_documents != null)
+                {
+                    bool isMedic = _factions != null && _factions.GetMember(acc.Id) is { } fMem && (_factions.GetFaction(fMem.FactionId)?.Tag == "ЦБ" || _factions.GetFaction(fMem.FactionId)?.Tag == "ЕМС" || _factions.GetFaction(fMem.FactionId)?.Tag == "МЗ");
+                    if (!isMedic && acc.AdminLevel < 2)
+                    {
+                        SendSystem(player, "У вас нет полномочий медицинского работника (требуется сотрудник Минздрава/ЦБ или администратор).");
+                        return;
+                    }
+
+                    var medTarget = FindPlayer(args[0]);
+                    if (medTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    if (player.Dimension != medTarget.Dimension || player.Position.Distance(medTarget.Position) > 4.0f)
+                    {
+                        SendSystem(player, "Пациент находится слишком далеко от вас (максимум 4м).");
+                        return;
+                    }
+                    var medTargetAcc = _accountOf(medTarget);
+                    if (medTargetAcc == null) { SendSystem(player, "Аккаунт не найден."); return; }
+
+                    _documents.IssueMedicalCard(medTargetAcc.Id, medTargetAcc.Username, isPsychHealthy: true, isSubstanceFree: true, validityDays: 30, issuedBy: "Центральная городская больница");
+                    SendSystem(player, $"Вы успешно провели медосмотр и выдали медицинскую карту гражданину {medTargetAcc.Username}.");
+                    SendSystem(medTarget, $"Врач {acc.Username} выдал вам официальную медицинскую карту: Полностью здоров (Approved).");
                 }
                 return;
         }
@@ -1266,6 +1602,7 @@ public sealed class ChatSystem
                 {
                     unjailAcc.JailUntilUtc = "";
                     _saveAccount?.Invoke(unjailAcc);
+                    _factions?.TryRelease(0, unjailAcc.Id, out _);
                 }
                 unjailTarget.Dimension = 0;
                 unjailTarget.Position = SpawnPoints.MoscowRedSquare;

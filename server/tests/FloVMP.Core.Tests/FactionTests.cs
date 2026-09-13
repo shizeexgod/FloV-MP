@@ -282,4 +282,45 @@ public class FactionTests
         Assert.Empty(uncuffErr);
         Assert.False(service.IsCuffed(suspectId));
     }
+
+    [Fact]
+    public void Treasury_DepositAndWithdraw_EnforcesPermissionsAndLimits()
+    {
+        var service = CreateTestFactionService();
+        const int leaderId = 100;
+        const int recruitId = 101;
+        const int civilianId = 102;
+
+        service.TrySetLeader(2, leaderId, out _); // МВД, начальная казна 5_000_000
+        service.TryInvite(leaderId, recruitId, out _); // Рядовой, без прав на снятие
+
+        var faction = service.GetFaction(2)!;
+        Assert.Equal(5_000_000, faction.TreasuryBalance);
+
+        // Пополнение рядовым - разрешено
+        Assert.True(service.TryDepositTreasury(recruitId, 50_000, out var depErr));
+        Assert.Empty(depErr);
+        Assert.Equal(5_050_000, faction.TreasuryBalance);
+
+        // Пополнение гражданским - отклонено
+        Assert.False(service.TryDepositTreasury(civilianId, 10_000, out var depCivErr));
+        Assert.Equal("Вы не состоите в организации", depCivErr);
+
+        // Пополнение отрицательной суммой - отклонено
+        Assert.False(service.TryDepositTreasury(recruitId, -500, out var depNegErr));
+        Assert.Equal("Сумма пополнения должна быть больше нуля", depNegErr);
+
+        // Снятие рядовым без прав - отклонено
+        Assert.False(service.TryWithdrawTreasury(recruitId, 10_000, "Премия", out var withRecErr));
+        Assert.Equal("У вас нет права распоряжаться казной организации", withRecErr);
+
+        // Снятие лидером с правами - разрешено
+        Assert.True(service.TryWithdrawTreasury(leaderId, 1_000_000, "Закупка спецтехники", out var withLeadErr));
+        Assert.Empty(withLeadErr);
+        Assert.Equal(4_050_000, faction.TreasuryBalance);
+
+        // Снятие суммы, превышающей баланс казны - отклонено
+        Assert.False(service.TryWithdrawTreasury(leaderId, 100_000_000, "Перебор", out var withOverErr));
+        Assert.Equal("В казне организации недостаточно средств", withOverErr);
+    }
 }

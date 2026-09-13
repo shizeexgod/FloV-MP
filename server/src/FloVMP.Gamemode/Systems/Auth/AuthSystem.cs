@@ -50,6 +50,9 @@ public sealed class AuthSystem
     public void SaveAccount(Account acc) => _store.Update(acc);
 
     public Account? FindByName(string username) => _store.FindByUsername(username);
+    public Account? FindByBankAccount(string bankAccountNumber) => _store.FindByBankAccount(bankAccountNumber);
+    public Account? FindByIdentifier(string identifier) =>
+        string.IsNullOrWhiteSpace(identifier) ? null : (_store.FindByUsername(identifier.Trim()) ?? _store.FindByBankAccount(identifier.Trim()));
 
     public void Attach()
     {

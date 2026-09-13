@@ -390,3 +390,51 @@ public sealed class SessionHandoffTests : IDisposable
     }
 }
 
+public sealed class BankAccountLookupTests : IDisposable
+{
+    private readonly string _dir;
+    private readonly JsonAccountStore _store;
+
+    public BankAccountLookupTests()
+    {
+        _dir = Path.Combine(Path.GetTempPath(), "flovmp-bank-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_dir);
+        _store = new JsonAccountStore(Path.Combine(_dir, "accounts.json"));
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, true); } catch { }
+    }
+
+    [Fact]
+    public void FindByBankAccount_returns_matching_account()
+    {
+        var acc = _store.Create("Investor_V", "hashed_pwd");
+        acc.BankAccountNumber = "40817810500000000001";
+        acc.Bank = 150_000;
+        _store.Update(acc);
+
+        var found = _store.FindByBankAccount("40817810500000000001");
+        Assert.NotNull(found);
+        Assert.Equal("Investor_V", found!.Username);
+        Assert.Equal(150_000, found.Bank);
+
+        // Whitespace-insensitive lookup
+        var foundWithSpaces = _store.FindByBankAccount(" 40817810500000000001 ");
+        Assert.NotNull(foundWithSpaces);
+        Assert.Equal("Investor_V", foundWithSpaces!.Username);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("40817810999999999999")]
+    [InlineData("invalid_num")]
+    public void FindByBankAccount_returns_null_for_missing_or_empty(string bankNum)
+    {
+        var found = _store.FindByBankAccount(bankNum);
+        Assert.Null(found);
+    }
+}
+

@@ -20,11 +20,12 @@ export const KEYBINDS = {
     noclip: 115,     // F4 — Режим свободного админ-полёта (NoClip)
     tpm: 116,        // F5 — Быстрый телепорт по фиолетовой метке (WayPoint)
     esp: 114,        // F3 — Режим админского видения (ESP Wallhack)
-    voice: 66,       // B — Голосовой чат (Push-to-Talk)
+    voice: 78,       // N — Голосовой чат (Push-to-Talk)
+    voiceAlt: 66,    // B — Альтернативная клавиша Push-to-Talk
     voiceTailMs: 400,// Задержка отпускания микрофона (мс), чтобы не обрывать слова
     engine: 50,      // 2 — Завести / заглушить двигатель транспорта
     lock: 76,        // L — Закрыть / открыть двери транспорта
-    seatbelt: 66     // B в транспорте — Пристегнуть / отстегнуть ремень
+    seatbelt: 75     // K — Пристегнуть / отстегнуть ремень безопасности в авто
 };
 
 // =============================================================================
@@ -1002,11 +1003,8 @@ function handleVoiceKeyUp() {
 // 7. ОБРАБОТЧИКИ КЛАВИАТУРЫ
 // =============================================================================
 alt.on('keydown', (key) => {
-    if (key === KEYBINDS.voice) {
-        const player = alt.Player.local;
-        const inVehicle = player && player.valid && player.vehicle;
-        // Если не в чате и не за рулём (где B = ремень)
-        if (!chatTyping && !consoleOpen && !inVehicle) {
+    if (key === KEYBINDS.voice || key === KEYBINDS.voiceAlt) {
+        if (!chatTyping && !consoleOpen) {
             handleVoiceKeyDown();
         }
     }
@@ -1044,11 +1042,10 @@ alt.on('keyup', (key) => {
         return;
     }
 
-    // B — Микрофон (отпускание) или Ремень в авто
-    if (key === KEYBINDS.voice) {
+    // K — Ремень безопасности в авто
+    if (key === KEYBINDS.seatbelt) {
         const player = alt.Player.local;
         if (player && player.valid && player.vehicle) {
-            // В авто: переключение ремня безопасности
             seatbeltOn = !seatbeltOn;
             try {
                 native.setPedConfigFlag(player.scriptID, 32, !seatbeltOn);
@@ -1058,10 +1055,13 @@ alt.on('keyup', (key) => {
                 chatView.emit('flovmp:chat:msg', 'system', 'Транспорт', `Ремень безопасности ${status}.`);
             }
             return;
-        } else {
-            handleVoiceKeyUp();
-            return;
         }
+    }
+
+    // N / B — Микрофон (отпускание)
+    if (key === KEYBINDS.voice || key === KEYBINDS.voiceAlt) {
+        handleVoiceKeyUp();
+        return;
     }
 
     // 2 — Двигатель транспорта

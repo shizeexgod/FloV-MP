@@ -29,6 +29,17 @@ public sealed class JsonAccountStore : IAccountStore
         }
     }
 
+    public Account? FindByBankAccount(string bankAccountNumber)
+    {
+        if (string.IsNullOrWhiteSpace(bankAccountNumber)) return null;
+        var trimmed = bankAccountNumber.Trim();
+        lock (_lock)
+        {
+            var acc = _byName.Values.FirstOrDefault(a => string.Equals(a.BankAccountNumber, trimmed, StringComparison.OrdinalIgnoreCase));
+            return acc is not null ? Clone(acc) : null;
+        }
+    }
+
     public bool Exists(string username)
     {
         lock (_lock) { return _byName.ContainsKey(username); }

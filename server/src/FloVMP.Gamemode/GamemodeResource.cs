@@ -47,6 +47,8 @@ public class GamemodeResource : Resource
     private long _lastArrestTickMs;
     private long _lastTickScaleMs;
     private long _lastVehTickMs;
+    private int _lastPayDayHour = -1;
+    private readonly List<(IPlayer Player, Account? Account, long RespawnAtMs)> _pendingRespawns = new();
 
     public override void OnStart()
     {
@@ -110,6 +112,10 @@ public class GamemodeResource : Resource
             {
                 _inv.IsCuffed = accId => _factions.IsCuffed(accId);
             }
+            if (_antiCheat != null)
+            {
+                _antiCheat.IsCuffed = accId => _factions.IsCuffed(accId);
+            }
             _documents = new FloVMP.Core.Documents.DocumentService();
             _housing = new FloVMP.Core.Housing.HousingService();
             Presets.DefaultHousing.RegisterAll(_housing);
@@ -121,7 +127,7 @@ public class GamemodeResource : Resource
         _chat = new ChatSystem(
             accountOf: p => _auth.AccountOf(p),
             saveAccount: acc => _auth.SaveAccount(acc),
-            findAccountByName: name => _auth.FindByName(name),
+            findAccountByName: name => _auth.FindByIdentifier(name),
             economy: _economy,
             factions: _factions,
             documents: _documents,
@@ -364,6 +370,121 @@ public class GamemodeResource : Resource
             Safe.Run("core.autosave", () => _inv?.SaveAll());
             Safe.Run("core.autosave.log", () => _ = GameLog.FlushAsync());
         }
+
+        // Ежечасный PayDay (в 00 минут каждого часа)
+        var utcNow = DateTime.UtcNow;
+        if (utcNow.Minute == 0 && _lastPayDayHour != utcNow.Hour)
+        {
+            _lastPayDayHour = utcNow.Hour;
+            TriggerPayDay();
+        }
+
+        // Обработка запланированных возрождений игроков (на главном потоке alt:V)
+        if (_pendingRespawns.Count > 0)
+        {
+            for (int i = _pendingRespawns.Count - 1; i >= 0; i--)
+            {
+                var item = _pendingRespawns[i];
+                if (now >= item.RespawnAtMs)
+                {
+                    _pendingRespawns.RemoveAt(i);
+                    var p = item.Player;
+                    var pAcc = item.Account;
+                    if (p == null || !p.Exists) continue;
+
+                    try
+                    {
+                        var nowUtcRespawn = DateTime.UtcNow;
+                        if (pAcc != null && pAcc.IsJailed(nowUtcRespawn))
+                        {
+                            p.Dimension = FloVMP.Core.World.DimensionManager.AdminJailDimension;
+                            var jailPos = new AltV.Net.Data.Position(1651.2f, 2570.3f, 45.5f);
+                            p.Spawn(jailPos, 0);
+                            p.Health = 200;
+                            p.Armor = 0;
+                            _antiCheat?.NotifyAdminTeleport(p, jailPos);
+                            ChatSystem.SendSystem(p, "[Деморган] Вы вернулись в камеру деморгана после оказания медицинской помощи.");
+                        }
+                        else if (pAcc != null && _factions != null && _factions.IsArrested(pAcc.Id, out var rem, out _))
+                        {
+                            p.Dimension = 0;
+                            var arrestPos = new AltV.Net.Data.Position(459.4f, -997.8f, 24.9f);
+                            p.Spawn(arrestPos, 0);
+                            p.Health = 200;
+                            p.Armor = 0;
+                            _antiCheat?.NotifyAdminTeleport(p, arrestPos);
+                            ChatSystem.SendSystem(p, $"[ГУ МВД] Вы возвращены в КПЗ. Осталось времени: {rem} сек.");
+                        }
+                        else
+                        {
+                            p.Dimension = 0;
+                            p.Spawn(SpawnPoints.MoscowHospital, 0);
+                            p.Health = 200;
+                            p.Armor = 0;
+                            _antiCheat?.NotifyAdminTeleport(p, SpawnPoints.MoscowHospital);
+                            ChatSystem.SendSystem(p, "[Скорая помощь] Вас доставили в приёмное отделение Городской больницы.");
+                        }
+
+                        p.Emit("flovmp:hud:respawned");
+                    }
+                    catch (Exception ex)
+                    {
+                        Alt.Log($"[FloV:MP] hospital respawn error: {ex.Message}");
+                    }
+                }
+            }
+        }
+    }
+
+    private void TriggerPayDay()
+    {
+        Safe.Run("core.payday", () =>
+        {
+            var players = Alt.GetAllPlayers().Where(p => p.Exists && _auth?.AccountOf(p) != null).ToList();
+            if (players.Count == 0) return;
+
+            Alt.Log($"[FloV:MP PayDay] Расчёт государственной зарплаты и пособий для {players.Count} игроков...");
+            _chat?.Broadcast("====== [ ВРЕМЯ РАСЧЁТА: PAYDAY ] ======");
+
+            foreach (var p in players)
+            {
+                var acc = _auth?.AccountOf(p);
+                if (acc == null) continue;
+
+                long totalGain = 0;
+                // 1. Базовое пособие гражданина РФ
+                const long citizenAllowance = 1500;
+                totalGain += citizenAllowance;
+
+                // 2. Фракционная заработная плата
+                string factionSalaryInfo = "";
+                if (_factions != null)
+                {
+                    var mem = _factions.GetMember(acc.Id);
+                    if (mem != null)
+                    {
+                        var fac = _factions.GetFaction(mem.FactionId);
+                        var rank = fac?.GetRank(mem.RankLevel);
+                        if (rank != null && rank.Salary > 0)
+                        {
+                            totalGain += rank.Salary;
+                            factionSalaryInfo = $" | Зарплата ({fac?.Tag}): +{rank.Salary:N0} руб.";
+                        }
+                    }
+                }
+
+                if (long.MaxValue - acc.Bank >= totalGain)
+                {
+                    acc.Bank += totalGain;
+                }
+                _auth?.SaveAccount(acc);
+
+                ChatSystem.SendSystem(p, $"[Банк Держава] Начислено в PayDay: +{totalGain:N0} руб. (Пособие: +{citizenAllowance:N0} руб.{factionSalaryInfo}). Баланс счёта: {acc.Bank:N0} руб.");
+            }
+
+            _chat?.Broadcast("Все выплаты успешно зачислены на банковские счета граждан.");
+            GameLog.System("payday", ("players_paid", players.Count), ("hour", DateTime.UtcNow.Hour));
+        });
     }
 
     private void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("core.OnPlayerAuthed", () =>
@@ -387,6 +508,7 @@ public class GamemodeResource : Resource
         _tickManager?.UnregisterEntity(player.Id);
         _antiCheat?.OnDisconnect(player);
         _hud?.OnDisconnect(player);
+        _pendingRespawns.RemoveAll(r => r.Player == player);
         var acc = _auth?.AccountOf(player);
         if (acc != null && _factions != null)
         {
@@ -430,53 +552,8 @@ public class GamemodeResource : Resource
 
         player.Emit("flovmp:hud:dead", 5);
 
-        // Запуск таймера доставки в госпиталь (5 секунд реанимации)
-        var p = player;
-        var pAcc = acc;
-        Task.Delay(5000).ContinueWith(_ =>
-        {
-            try
-            {
-                if (!p.Exists) return;
-
-                var now = DateTime.UtcNow;
-                if (pAcc != null && pAcc.IsJailed(now))
-                {
-                    p.Dimension = FloVMP.Core.World.DimensionManager.AdminJailDimension;
-                    var jailPos = new AltV.Net.Data.Position(1651.2f, 2570.3f, 45.5f);
-                    p.Spawn(jailPos, 0);
-                    p.Health = 200;
-                    p.Armor = 0;
-                    _antiCheat?.NotifyAdminTeleport(p, jailPos);
-                    ChatSystem.SendSystem(p, "[Деморган] Вы вернулись в камеру деморгана после оказания медицинской помощи.");
-                }
-                else if (pAcc != null && _factions != null && _factions.IsArrested(pAcc.Id, out var rem, out var unusedRsn))
-                {
-                    p.Dimension = 0;
-                    var arrestPos = new AltV.Net.Data.Position(459.4f, -997.8f, 24.9f);
-                    p.Spawn(arrestPos, 0);
-                    p.Health = 200;
-                    p.Armor = 0;
-                    _antiCheat?.NotifyAdminTeleport(p, arrestPos);
-                    ChatSystem.SendSystem(p, $"[ГУ МВД] Вы возвращены в КПЗ. Осталось времени: {rem} сек.");
-                }
-                else
-                {
-                    p.Dimension = 0;
-                    p.Spawn(SpawnPoints.MoscowHospital, 0);
-                    p.Health = 200;
-                    p.Armor = 0;
-                    _antiCheat?.NotifyAdminTeleport(p, SpawnPoints.MoscowHospital);
-                    ChatSystem.SendSystem(p, "[Скорая помощь] Вас доставили в приёмное отделение Городской больницы.");
-                }
-
-                p.Emit("flovmp:hud:respawned");
-            }
-            catch (Exception ex)
-            {
-                Alt.Log($"[FloV:MP] hospital respawn error: {ex.Message}");
-            }
-        });
+        // Регистрация запланированного возрождения на основном потоке сервера (через 5 секунд)
+        _pendingRespawns.Add((player, acc, _clock.ElapsedMilliseconds + 5000));
     });
 
     private static void OnServerStarted() => Safe.Run("core.OnServerStarted", () =>

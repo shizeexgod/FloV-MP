@@ -78,6 +78,12 @@ public static class GameLog
         Write(LogCategory.Kill, "kill", killer, victim,
             D(("weapon", weapon), ("x", x), ("y", y), ("z", z)));
 
+    public static void Org(string action, LogActor actor, string orgId, params (string, object?)[] details) =>
+        Write(LogCategory.Org, action, actor, orgId, D(details));
+
+    public static void Faction(string action, LogActor actor, string factionId, params (string, object?)[] details) =>
+        Write(LogCategory.Org, action, actor, factionId, D(details));
+
     public static void System(string action, params (string, object?)[] details) =>
         Write(LogCategory.System, action, LogActor.SystemActor, "", D(details));
 }

@@ -46,6 +46,28 @@ public sealed class MySqlAccountStore : IAccountStore
         return ReadAccount(reader);
     }
 
+    public Account? FindByBankAccount(string bankAccountNumber)
+    {
+        if (string.IsNullOrWhiteSpace(bankAccountNumber)) return null;
+        using var conn = OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT id, username, password_hash, cash, bank, admin_level,
+                   is_banned, ban_reason, ban_until_utc, mute_until_utc,
+                   created_at, last_login_at,
+                   email, totp_secret, two_fa_enabled,
+                   bank_account_number, warns, jail_until_utc
+            FROM accounts
+            WHERE bank_account_number = @bank_acc
+            LIMIT 1;";
+        cmd.Parameters.AddWithValue("@bank_acc", bankAccountNumber.Trim());
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read()) return null;
+
+        return ReadAccount(reader);
+    }
+
     public bool Exists(string username)
     {
         using var conn = OpenConnection();
@@ -147,23 +169,23 @@ public sealed class MySqlAccountStore : IAccountStore
         cmd.Parameters.AddWithValue("@ban_reason", string.IsNullOrEmpty(account.BanReason) ? (object)DBNull.Value : account.BanReason);
         
         object banUntilVal = DBNull.Value;
-        if (!string.IsNullOrEmpty(account.BanUntilUtc) && DateTime.TryParse(account.BanUntilUtc, out var bdt))
-            banUntilVal = bdt;
+        if (!string.IsNullOrEmpty(account.BanUntilUtc) && DateTime.TryParse(account.BanUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var bdt))
+            banUntilVal = bdt.ToUniversalTime();
         cmd.Parameters.AddWithValue("@ban_until", banUntilVal);
 
         object muteUntilVal = DBNull.Value;
-        if (!string.IsNullOrEmpty(account.MuteUntilUtc) && DateTime.TryParse(account.MuteUntilUtc, out var mdt))
-            muteUntilVal = mdt;
+        if (!string.IsNullOrEmpty(account.MuteUntilUtc) && DateTime.TryParse(account.MuteUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var mdt))
+            muteUntilVal = mdt.ToUniversalTime();
         cmd.Parameters.AddWithValue("@mute_until", muteUntilVal);
 
         object jailUntilVal = DBNull.Value;
-        if (!string.IsNullOrEmpty(account.JailUntilUtc) && DateTime.TryParse(account.JailUntilUtc, out var jdt))
-            jailUntilVal = jdt;
+        if (!string.IsNullOrEmpty(account.JailUntilUtc) && DateTime.TryParse(account.JailUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var jdt))
+            jailUntilVal = jdt.ToUniversalTime();
         cmd.Parameters.AddWithValue("@jail_until", jailUntilVal);
 
         object lastLoginVal = DBNull.Value;
-        if (!string.IsNullOrEmpty(account.LastLoginUtc) && DateTime.TryParse(account.LastLoginUtc, out var ldt))
-            lastLoginVal = ldt;
+        if (!string.IsNullOrEmpty(account.LastLoginUtc) && DateTime.TryParse(account.LastLoginUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var ldt))
+            lastLoginVal = ldt.ToUniversalTime();
         cmd.Parameters.AddWithValue("@last_login", lastLoginVal);
 
         cmd.Parameters.AddWithValue("@email", string.IsNullOrEmpty(account.Email) ? (object)DBNull.Value : account.Email);
@@ -189,15 +211,15 @@ public sealed class MySqlAccountStore : IAccountStore
 
         var banIdx = GetOrdinalSafe(r, "ban_until_utc");
         if (banIdx >= 0 && !r.IsDBNull(banIdx))
-            acc.BanUntilUtc = r.GetDateTime(banIdx).ToString("O");
+            acc.BanUntilUtc = DateTime.SpecifyKind(r.GetDateTime(banIdx), DateTimeKind.Utc).ToString("O");
 
         var muteIdx = GetOrdinalSafe(r, "mute_until_utc");
         if (muteIdx >= 0 && !r.IsDBNull(muteIdx))
-            acc.MuteUntilUtc = r.GetDateTime(muteIdx).ToString("O");
+            acc.MuteUntilUtc = DateTime.SpecifyKind(r.GetDateTime(muteIdx), DateTimeKind.Utc).ToString("O");
 
         var jailIdx = GetOrdinalSafe(r, "jail_until_utc");
         if (jailIdx >= 0 && !r.IsDBNull(jailIdx))
-            acc.JailUntilUtc = r.GetDateTime(jailIdx).ToString("O");
+            acc.JailUntilUtc = DateTime.SpecifyKind(r.GetDateTime(jailIdx), DateTimeKind.Utc).ToString("O");
 
         var warnsIdx = GetOrdinalSafe(r, "warns");
         if (warnsIdx >= 0 && !r.IsDBNull(warnsIdx))
@@ -209,11 +231,11 @@ public sealed class MySqlAccountStore : IAccountStore
 
         var createdIdx = GetOrdinalSafe(r, "created_at");
         if (createdIdx >= 0 && !r.IsDBNull(createdIdx))
-            acc.CreatedUtc = r.GetDateTime(createdIdx).ToString("O");
+            acc.CreatedUtc = DateTime.SpecifyKind(r.GetDateTime(createdIdx), DateTimeKind.Utc).ToString("O");
 
         var loginIdx = GetOrdinalSafe(r, "last_login_at");
         if (loginIdx >= 0 && !r.IsDBNull(loginIdx))
-            acc.LastLoginUtc = r.GetDateTime(loginIdx).ToString("O");
+            acc.LastLoginUtc = DateTime.SpecifyKind(r.GetDateTime(loginIdx), DateTimeKind.Utc).ToString("O");
 
         var emailIdx = GetOrdinalSafe(r, "email");
         if (emailIdx >= 0 && !r.IsDBNull(emailIdx))

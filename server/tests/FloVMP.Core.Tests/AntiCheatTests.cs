@@ -427,5 +427,81 @@ public class AntiCheatTests
         Assert.Equal(99, captured.AccountId);
         Assert.Contains("starter:teleportWaypoint", captured.Details);
     }
+
+    [Fact]
+    public void WeaponSecurity_Permits_Standard_Unarmed_Fists()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(10, "Brawler", Vector3D.Zero);
+
+        // Standard GTA V Unarmed 0xA271924C
+        bool allowed = ac.CheckWeapon(10, 0xA271924C, new HashSet<uint>());
+        Assert.True(allowed);
+
+        // Weapon hash 0 (holstered/none)
+        bool noneAllowed = ac.CheckWeapon(10, 0, new HashSet<uint>());
+        Assert.True(noneAllowed);
+    }
+
+    [Fact]
+    public void WeaponSecurity_Blocks_Weapon_Not_In_Inventory()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(11, "Cheater", Vector3D.Zero);
+
+        const uint pistolHash = 0x1B06D571;
+        var emptyInventory = new HashSet<uint>();
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        bool allowed = ac.CheckWeapon(11, pistolHash, emptyInventory);
+        Assert.False(allowed);
+        Assert.NotNull(violation);
+        Assert.Contains("отсутствующее в инвентаре", violation);
+    }
+
+    [Fact]
+    public void WeaponSecurity_Permits_Weapon_In_Inventory()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(12, "Gunner", Vector3D.Zero);
+
+        const uint pistolHash = 0x1B06D571;
+        var inventory = new HashSet<uint> { pistolHash };
+
+        bool allowed = ac.CheckWeapon(12, pistolHash, inventory);
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public void WeaponSecurity_Blocks_Blacklisted_Minigun_Even_If_In_Inventory()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(13, "HeavyHacker", Vector3D.Zero);
+
+        const uint minigunHash = 0x42BF8A85;
+        var fakeInventory = new HashSet<uint> { minigunHash };
+
+        string? violation = null;
+        ac.OnViolationDetected += (_, reason, _) => violation = reason;
+
+        bool allowed = ac.CheckWeapon(13, minigunHash, fakeInventory);
+        Assert.False(allowed);
+        Assert.NotNull(violation);
+        Assert.Contains("запрещённое тяжелое оружие", violation);
+    }
+
+    [Fact]
+    public void WeaponSecurity_Admin_Is_Exempt()
+    {
+        var ac = new AntiCheatService();
+        ac.GetOrCreateState(14, "AdminUser", Vector3D.Zero);
+        ac.SetAdminExemption(14, true);
+
+        const uint minigunHash = 0x42BF8A85;
+        bool allowed = ac.CheckWeapon(14, minigunHash, new HashSet<uint>());
+        Assert.True(allowed);
+    }
 }
 
