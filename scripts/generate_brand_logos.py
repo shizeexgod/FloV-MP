@@ -1,4 +1,4 @@
-﻿import os
+import os
 import struct
 import io
 import numpy as np
@@ -42,31 +42,73 @@ def generate_brand_logos():
         res.save(path, format="PNG", optimize=True)
         print(f"  [PNG] Saved {path} ({size}x{size})")
         
-    # Helper to create PNG-encoded ICO (100% transparent on Windows 10/11 taskbar)
-    def save_png_ico(path, sizes):
+    # Helper to create canonical Windows ICO (32bpp DIB + 1-bit AND mask for <256, PNG for 256)
+    def save_canonical_ico(path, sizes):
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        images_data = []
+        frames = []
         for s in sizes:
             res = square_im.resize((s, s), Image.Resampling.LANCZOS)
-            buf = io.BytesIO()
-            res.save(buf, format="PNG", optimize=True)
-            images_data.append((s, buf.getvalue()))
+            if s >= 256:
+                buf = io.BytesIO()
+                res.save(buf, format="PNG", optimize=True)
+                data = buf.getvalue()
+                bW = 0
+                bH = 0
+                wPlanes = 1
+                wBitCount = 32
+            else:
+                w = s
+                h = s
+                arr = np.array(res)
+                arr_flip = np.flipud(arr)
+                bgra = np.empty((h, w, 4), dtype=np.uint8)
+                bgra[:, :, 0] = arr_flip[:, :, 2]
+                bgra[:, :, 1] = arr_flip[:, :, 1]
+                bgra[:, :, 2] = arr_flip[:, :, 0]
+                bgra[:, :, 3] = arr_flip[:, :, 3]
+                xor_bytes = bgra.tobytes()
+                
+                row_bytes = (w + 31) // 32 * 4
+                mask_bytes = bytearray(row_bytes * h)
+                for y in range(h):
+                    for x in range(w):
+                        if arr_flip[y, x, 3] < 128:
+                            byte_idx = y * row_bytes + (x // 8)
+                            bit_idx = 7 - (x % 8)
+                            mask_bytes[byte_idx] |= (1 << bit_idx)
+                            
+                header = struct.pack("<IIIHHIIIIII",
+                    40, w, h * 2, 1, 32, 0, len(xor_bytes) + len(mask_bytes), 0, 0, 0, 0)
+                data = header + xor_bytes + bytes(mask_bytes)
+                bW = s
+                bH = s
+                wPlanes = 1
+                wBitCount = 32
+                
+            frames.append({
+                "size": s,
+                "bWidth": bW,
+                "bHeight": bH,
+                "wPlanes": wPlanes,
+                "wBitCount": wBitCount,
+                "data": data
+            })
             
-        ico_bytes = bytearray(struct.pack("<HHH", 0, 1, len(sizes)))
-        offset = 6 + 16 * len(sizes)
-        for s, data in images_data:
-            w_b = s if s < 256 else 0
-            h_b = s if s < 256 else 0
-            entry = struct.pack("<BBBBHHII", w_b, h_b, 0, 0, 1, 32, len(data), offset)
+        ico_bytes = bytearray(struct.pack("<HHH", 0, 1, len(frames)))
+        offset = 6 + 16 * len(frames)
+        for f in frames:
+            entry = struct.pack("<BBBBHHII",
+                f["bWidth"], f["bHeight"], 0, 0,
+                f["wPlanes"], f["wBitCount"], len(f["data"]), offset)
             ico_bytes.extend(entry)
-            offset += len(data)
+            offset += len(f["data"])
             
-        for _, data in images_data:
-            ico_bytes.extend(data)
+        for f in frames:
+            ico_bytes.extend(f["data"])
             
         with open(path, "wb") as f:
             f.write(ico_bytes)
-        print(f"  [ICO] Saved {path} (PNG-frames: {sizes})")
+        print(f"  [ICO] Saved canonical {path} (frames: {sizes})")
 
     png_targets = {
         r"assets\branding\flovmp_logo.png": 1024,
@@ -104,7 +146,7 @@ def generate_brand_logos():
     print("Writing ICO files...")
     ico_sizes = [256, 128, 64, 48, 32, 24, 16]
     for p in ico_targets:
-        save_png_ico(p, ico_sizes)
+        save_canonical_ico(p, ico_sizes)
         
     print("\nAll brand logos updated with 100% transparent PNG/ICO!")
 

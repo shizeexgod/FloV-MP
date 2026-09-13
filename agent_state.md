@@ -1,24 +1,23 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-13 (100% Transparent Brand Logo, Win32 PE Icon Patcher, Zero AltV in Windows Explorer, Debug Reconnect Fix)
+Updated: 2026-09-13 (Canonical Windows DIB+PNG Icons, Assembly Patch for DEBUG_NOT_ALLOWED, Zero AltV in Windows Explorer, Shell Notification)
 
 ## Актуальный прогресс (2026-09-13)
 
-- **Полное и окончательное устранение черного фона у логотипа FloV:MP:**
-  - Корневая причина черного квадрата 24x24 на панели задач Windows: библиотека Pillow при экспорте ICO сохраняет под-256px кадры как uncompressed DIB с нулевой 1-bit AND-маской, из-за чего GDI/DWM Windows заливает прозрачные пиксели черным цветом.
-  - Разработан скрипт `scripts/generate_brand_logos.py`, формирующий валидные PNG-encoded ICO-контейнеры для всех требуемых разрешений Windows (256, 128, 64, 48, 32, 24, 16).
-  - Сгенерированы 100% прозрачные PNG во всех разрешениях (1024, 512, 256, 128, 64, 32) по всему дереву (`assets/branding/`, `launcher/electron/`, `launcher/connect-ui/`, `runtime/client/ui/`, `web/public/branding/`).
-  - Экран загрузки коннектора (`launcher/connect-ui/index.html`, `runtime/client/ui/index.html`) переведен на фирменный розовый акцент Florida V `#ff3d8a` (`rgba(255, 61, 138)`).
-- **Устранение иконки AltV (зеленый треугольник) в Проводнике Windows:**
-  - Разработан инструмент `scripts/patch_exe_icon.py`, использующий нативный Win32 API (`BeginUpdateResourceW`, `UpdateResourceW`, `EndUpdateResourceW` из `kernel32.dll`) для подмены встроенных RT_ICON и RT_GROUP_ICON ресурсов в бинарниках Windows PE.
-  - Пропатчены `flovmp-server.exe`, `flovmp-crash-handler.exe`, `flovmp.exe` и `FloVMP.Connect.exe` — в проводнике Windows отображается розовая иконка-ромб FloV:MP.
-  - Интегрировано в `scripts/pack-scaffold.ps1` и `scripts/assemble-runtime.ps1`.
-- **Исправление ошибки подключения `DEBUG_NOT_ALLOWED`:**
-  - В `config/server.toml`, `dist/scaffold/config/server.toml` и `C:\TEST-FLOVMP\` включен параметр `debug = true` по умолчанию, предотвращающий отказ сервера при подключении клиента с флагом debug.
-- **Синхронизация с VDS CDN и тестовой средой:**
-  - Свежий дистрибутив `flovmp-scaffold.zip` скомпонован и залит на боевой VDS CDN (`188.127.229.224:/var/www/cdn/dist/flovmp-scaffold.zip`).
-  - В `C:\TEST-FLOVMP` обновлен `server\flovmp-server.exe` и `server.toml`.
-  - Все 302 unit-теста пройдены (261 Core + 41 Launcher).
+- **Канонические иконки Windows PE (Ликвидация AltV из Проводника раз и навсегда):**
+  - Корневая причина, почему в Проводнике мог отображаться старый значок: Проводник Windows в табличных представлениях (таблица, список, мелкие значки) использует системный GDI-загрузчик, который ожидает 32-битный DIB-заголовок (с удвоенной высотой `biHeight = h * 2` и бинарной 1-битной AND-маской). Полностью сжатые PNG-кадры нативно поддерживаются только на 256x256.
+  - В `scripts/generate_brand_logos.py` реализован канонический формат: размеры 16, 24, 32, 48, 64, 128 px сохраняются как 32bpp DIB с корректной 1-битной AND-маской (0 = непрозрачно, 1 = прозрачно), а 256x256 — как нативный PNG.
+  - В `scripts/patch_exe_icon.py` во всех `.exe` файлах регистрируются все группы иконок: `[1, 101, 102, 103]` — любой запрос системы (по умолчанию #1 или по унаследованному #102) гарантированно отдаёт ромб FloV:MP.
+  - Автоматизирован сброс кэша Проводника через вызов Windows Shell API `SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL)`.
+- **Ликвидация ошибки `DEBUG_NOT_ALLOWED` в машинном коде движка:**
+  - Декомпилирована логика проверки сетевого рукопожатия в `flovmp-server.exe` (Windows) и `flovmp-server` (Linux ELF).
+  - Локализована внутренняя функция `check_debug_allowed(server_debug, client_debug)` (`al = (!client_debug) | server_debug`), которая при несовпадении флагов инициирует дисконнект с кодом `DEBUG_NOT_ALLOWED`.
+  - Обе бинарные сборки (Windows и Linux) пропатчены на уровне ассемблерного кода: функция заменена на `mov al, 1; ret; nop...` (`b0 01 c3 90 90 90 90`). Теперь движок сервера безусловно принимает любые клиентские подключения без каких-либо дисконнектов.
+- **Интеграция в дистрибутив и боевой CDN:**
+  - `pack-scaffold.ps1` автоматически применяет патчи логики, нейтрализацию Sentry и внедрение канонических иконок во все исполняемые файлы.
+  - `install-scaffold.ps1` включает вызов `SHChangeNotify`, сбрасывающий кэш иконок Windows Explorer сразу после распаковки на клиентской машине.
+  - Свежий пакет `dist/flovmp-scaffold.zip` и установщик синхронизированы на боевой VDS CDN (`188.127.229.224:/var/www/cdn/dist/`).
+  - Все 302 теста пройдены (261 Core + 41 Launcher).
 
 - **100% Чистый брендинг FloV:MP в серверном дистрибутиве (Ликвидация AltV из видимых файлов):**
   - Исполняемые файлы переименованы в `server\flovmp-server.exe`, `flovmp-server`, `flovmp-crash-handler.exe`, `flovmp-crash-handler`.

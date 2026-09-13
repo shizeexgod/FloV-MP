@@ -64,6 +64,13 @@ $licJson = @"
 "@
 [System.IO.File]::WriteAllText((Join-Path $targetDir "license.flv"), $licJson, [System.Text.Encoding]::UTF8)
 
+# Refresh Windows Explorer icon cache so branding displays immediately
+try {
+    $shellCode = '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);'
+    $shellType = Add-Type -MemberDefinition $shellCode -Name "ShellIconNotifier" -Namespace "FloVMP" -PassThru
+    $shellType::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+} catch {}
+
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host " [SUCCESS] FloV:MP Server successfully installed!" -ForegroundColor Green
