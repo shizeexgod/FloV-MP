@@ -137,6 +137,7 @@ public class StarterResource : Resource
 
         player.Emit("starter:initClient");
         player.Emit("flovmp:console:setAdmin", 0);
+        player.SetStreamSyncedMetaData("adminLevel", 0);
     }
 
     private void OnPlayerDisconnect(IPlayer player, string reason)
@@ -189,7 +190,7 @@ public class StarterResource : Resource
                 SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>");
                 if (IsAdmin(player, 1))
                 {
-                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /tp <x y z>, /goto <id>, /gethere <id>, /revive [id], /car [модель], /fix, /noclip (F4), /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
+                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /tp <x y z>, /goto <id>, /gethere <id>, /revive [id], /car [модель], /fix, /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
                 }
                 if (IsAdmin(player, 8))
                 {
@@ -303,6 +304,7 @@ public class StarterResource : Resource
                 {
                     _adminLevels[player.Id] = assignedRank;
                     player.Emit("flovmp:console:setAdmin", assignedRank);
+                    player.SetStreamSyncedMetaData("adminLevel", assignedRank);
                     SendChatMessage(player, $"{{34d399}}[FloV:MP Security] Авторизация успешна! Вход на дежурство выполнен (Уровень {assignedRank}). Админ-функции и F8 разблокированы.");
                     Alt.Log($"[Security] Администратор {player.Name} (ID: {player.Id}, Уровень: {assignedRank}) заступил на дежурство.");
                 }
@@ -334,8 +336,25 @@ public class StarterResource : Resource
                 SetAssignedAdminRank(target, targetLvl);
                 _adminLevels[target.Id] = targetLvl;
                 target.Emit("flovmp:console:setAdmin", targetLvl);
+                target.SetStreamSyncedMetaData("adminLevel", targetLvl);
                 SendChatMessage(target, $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
                 SendChatMessage(player, $"{{34d399}}Установлен уровень {targetLvl} для {target.Name}.");
+                break;
+
+            case "esp":
+                if (!IsAdmin(player, 1))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для включения ESP.");
+                    return;
+                }
+                if (parts.Length > 1 && int.TryParse(parts[1], out var targetMode))
+                {
+                    player.Emit("flovmp:admin:toggleEsp", Math.Clamp(targetMode, 0, 3));
+                }
+                else
+                {
+                    player.Emit("flovmp:admin:toggleEsp");
+                }
                 break;
 
             case "tpm":
