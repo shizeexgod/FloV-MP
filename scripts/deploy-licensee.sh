@@ -147,8 +147,21 @@ chmod 600 "${INSTALL_DIR}/flovmp.env"
 echo -e "${CYAN}[4/5] Настройка локальной базы данных MariaDB (${DB_NAME})...${NC}"
 systemctl enable --now mariadb >/dev/null 2>&1 || true
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
-if [ -f "${INSTALL_DIR}/schema.sql" ]; then
+
+# Схему накатывает сам сервер (FloVMP.Core MigrationRunner) при старте:
+# он читает ${INSTALL_DIR}/sql/migrations, ведёт таблицу schema_migrations и
+# берёт GET_LOCK, чтобы несколько инстансов не мигрировали одновременно.
+# Здесь только проверяем, что файлы миграций доехали — молчаливое их
+# отсутствие означало бы пустую базу и откат сервера на JSON-хранилище.
+if [ -d "${INSTALL_DIR}/sql/migrations" ]; then
+  MIG_COUNT=$(ls -1 "${INSTALL_DIR}/sql/migrations"/*.sql 2>/dev/null | wc -l)
+  echo -e "${GREEN}  Миграций найдено: ${MIG_COUNT} (накат при первом старте сервера)${NC}"
+elif [ -f "${INSTALL_DIR}/schema.sql" ]; then
+  # Совместимость со старыми пакетами без каталога миграций.
+  echo -e "${YELLOW}  Каталог миграций отсутствует — накат legacy schema.sql${NC}"
   mysql -u root "${DB_NAME}" < "${INSTALL_DIR}/schema.sql" 2>/dev/null || true
+else
+  echo -e "${YELLOW}  ВНИМАНИЕ: ни sql/migrations, ни schema.sql не найдены — схема не будет создана${NC}"
 fi
 
 echo -e "${CYAN}[5/5] Регистрация служб systemd (с PartOf= для голоса)...${NC}"

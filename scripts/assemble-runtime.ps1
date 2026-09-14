@@ -183,5 +183,21 @@ Write-Host "[server.toml]" -ForegroundColor Yellow
 Copy-Item (Join-Path $repo "config\server.toml") (Join-Path $server "server.toml") -Force
 Write-Host "  -> server.toml"
 
+# --- 9. sql/migrations ---------------------------------------
+# MigrationRunner ищет sql\migrations относительно рабочей папки сервера.
+# Без этой копии сервер стартует, но схему не накатывает и молча уходит
+# на JSON-хранилище — самый неприятный тип "работает, но не то".
+Write-Host "[sql/migrations]" -ForegroundColor Yellow
+$sqlSrc = Join-Path $repo "sql\migrations"
+$sqlOut = Join-Path $server "sql\migrations"
+if (Test-Path $sqlSrc) {
+    New-Item -ItemType Directory -Path $sqlOut -Force | Out-Null
+    Copy-Item (Join-Path $sqlSrc "*.sql") $sqlOut -Force
+    $n = (Get-ChildItem "$sqlOut\*.sql").Count
+    Write-Host "  -> sql\migrations ($n файлов)"
+} else {
+    Write-Host "  ! sql\migrations не найден — схема не будет накатываться" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "== Done. Run: powershell -File scripts/run-server.ps1 ==" -ForegroundColor Green

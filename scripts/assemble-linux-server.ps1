@@ -79,6 +79,16 @@ Copy-Item "$repo\client\resources\flovmp-client\*" "$OutDir\resources\flovmp-cli
 Write-Host "[7/7] Generating configuration and launcher scripts..." -ForegroundColor Yellow
 Copy-Item "$repo\config\server.toml" "$OutDir\server.toml" -Force
 
+# MigrationRunner ищет sql/migrations относительно рабочей папки (/opt/flovmp).
+# Без этой копии сервер стартует, но схему не накатывает и уходит на JSON.
+if (Test-Path "$repo\sql\migrations") {
+    New-Item -ItemType Directory -Path "$OutDir\sql\migrations" -Force | Out-Null
+    Copy-Item "$repo\sql\migrations\*.sql" "$OutDir\sql\migrations\" -Force
+    Write-Host "  + sql/migrations ($((Get-ChildItem "$OutDir\sql\migrations\*.sql").Count) файлов)"
+} else {
+    Write-Host "  ! sql/migrations not found — schema will not be applied" -ForegroundColor Yellow
+}
+
 $startLines = @(
     "#!/bin/bash",
     "cd ""`$(dirname ""`$0"")""",
