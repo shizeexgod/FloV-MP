@@ -39,6 +39,7 @@ public class GamemodeResource : Resource
     private FloVMP.Core.Characters.FactionUniformService? _uniforms;
     private RemoteServerAgent? _agent;
     private FloVMP.Gamemode.Systems.Api.HttpApiSystem? _httpApi;
+    private FloVMP.Core.Auth.IAccountStore? _accountStore;
     private FloVMP.Core.Spatial.AdaptiveTickManager<uint>? _tickManager;
     private FloVMP.Core.Spatial.OcclusionCullingService? _occlusion;
     
@@ -61,6 +62,7 @@ public class GamemodeResource : Resource
         var dbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
                      new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         var accountStore = FloVMP.Core.Database.AccountStoreFactory.Create(dbConn, Path.Combine(dataDir, "accounts.json"));
+        _accountStore = accountStore; // нужен для гарантированной записи на OnStop
 
         _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName);
         _auth.Attach();
@@ -217,6 +219,11 @@ public class GamemodeResource : Resource
 
     public override void OnStop()
     {
+        // Аккаунты пишутся в фоне с дебаунсом (чтобы не блокировать игровой тик),
+        // поэтому на остановке обязаны принудительно сбросить их на диск.
+        Safe.Run("core.OnStop.accounts", () => (_accountStore as IDisposable)?.Dispose());
+        _accountStore = null;
+
         _httpApi?.Stop();
         _httpApi = null;
 
@@ -368,6 +375,7 @@ public class GamemodeResource : Resource
         {
             _lastAutoSaveMs = now;
             Safe.Run("core.autosave", () => _inv?.SaveAll());
+            Safe.Run("core.drops.cleanup", () => _inv?.AtomicTransactions.CleanupExpiredDrops(TimeSpan.FromMinutes(30)));
             Safe.Run("core.autosave.log", () => _ = GameLog.FlushAsync());
         }
 
@@ -390,7 +398,7 @@ public class GamemodeResource : Resource
                     _pendingRespawns.RemoveAt(i);
                     var p = item.Player;
                     var pAcc = item.Account;
-                    if (p == null || !p.Exists) continue;
+                    if (p == null || !p.Exists || p.Health > 0) continue;
 
                     try
                     {

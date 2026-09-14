@@ -143,6 +143,7 @@ public sealed class AuthServiceTests : IDisposable
         acc.BanReason = "Testing";
         acc.MuteUntilUtc = "2026-12-31T23:59:59.0000000Z";
         store1.Update(acc);
+        store1.Flush(); // Update пишется в фоне (не блокирует тик) — сбрасываем явно
 
         var store2 = new JsonAccountStore(path);
         var loaded = store2.FindByUsername("AdminHero");
@@ -224,9 +225,11 @@ public sealed class AuthServiceTests : IDisposable
         var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
         var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
 
-        var s1 = new AuthService(new JsonAccountStore(path), () => _now);
+        var store1 = new JsonAccountStore(path);
+        var s1 = new AuthService(store1, () => _now);
         s1.Register("Persist2fa", "secret6");
         Assert.True(s1.Enable2fa("Persist2fa", secret, goodCode).Ok);
+        store1.Flush(); // Update пишется в фоне — сбрасываем явно
 
         var s2 = new AuthService(new JsonAccountStore(path), () => _now);
         Assert.Equal(AuthOutcome.TwoFaRequired, s2.Login("Persist2fa", "secret6", "ip:x").Outcome);

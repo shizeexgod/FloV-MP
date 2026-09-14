@@ -6,12 +6,23 @@ namespace FloVMP.Core.Auth;
 /// Потокобезопасное JSON-файловое хранилище учёток. Для скелета Фазы 3.
 /// Запись durable: во временный файл + атомарная замена.
 /// </summary>
-public sealed class JsonAccountStore : IAccountStore
+public sealed class JsonAccountStore : IAccountStore, IDisposable
 {
     private readonly string _path;
     private readonly object _lock = new();
     private readonly Dictionary<string, Account> _byName = new(StringComparer.OrdinalIgnoreCase);
     private int _nextId = 1;
+
+    // ПРОИЗВОДИТЕЛЬНОСТЬ: раньше Save() вызывался синхронно на КАЖДОЕ изменение
+    // и сериализовал ВЕСЬ список аккаунтов + переписывал файл целиком. Это шло
+    // из обработчиков alt:V, т.е. на главном (игровом) потоке: при тысячах
+    // аккаунтов каждая операция = многомегабайтная запись и фриз тика.
+    // Теперь изменение только помечает состояние «грязным», а фактическая
+    // запись идёт в фоне с дебаунсом. Тик не блокируется.
+    private readonly System.Threading.Timer _flushTimer;
+    private volatile bool _dirty;
+    private volatile bool _disposed;
+    private const int FlushIntervalMs = 1000; // маленькое окно потери при аварии
 
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
@@ -19,6 +30,37 @@ public sealed class JsonAccountStore : IAccountStore
     {
         _path = path;
         Load();
+        _flushTimer = new System.Threading.Timer(_ => FlushIfDirty(), null, FlushIntervalMs, FlushIntervalMs);
+    }
+
+    /// <summary>Немедленно записать на диск, если есть несохранённые изменения.</summary>
+    public void Flush() => FlushIfDirty();
+
+    private void FlushIfDirty()
+    {
+        if (!_dirty) return;
+        lock (_lock) { FlushToDiskLocked(); }
+    }
+
+    /// <summary>Записать на диск. Вызывать только под взятым _lock.</summary>
+    private void FlushToDiskLocked()
+    {
+        if (!_dirty) return;
+        _dirty = false;
+        try { SaveToDisk(); }
+        catch (Exception ex)
+        {
+            _dirty = true; // не теряем изменения — повторим на следующем тике
+            Console.Error.WriteLine($"[FloV:MP] accounts.json: ошибка записи: {ex.Message}");
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        try { _flushTimer.Dispose(); } catch { }
+        FlushIfDirty(); // на остановке сервера данные обязаны попасть на диск
     }
 
     public Account? FindByUsername(string username)
@@ -63,7 +105,10 @@ public sealed class JsonAccountStore : IAccountStore
                 BankAccountNumber = $"40817810{_nextId:D8}",
             };
             _byName[username] = acc;
-            Save();
+            // Регистрация — редкая операция, и терять новый аккаунт нельзя:
+            // пишем сразу. Частые Update() остаются в фоне (горячий путь).
+            _dirty = true;
+            FlushToDiskLocked();
             return Clone(acc);
         }
     }
@@ -101,7 +146,10 @@ public sealed class JsonAccountStore : IAccountStore
         }
     }
 
-    private void Save()
+    /// <summary>Пометить, что состояние изменилось. Запись выполнит фоновый флаш.</summary>
+    private void Save() => _dirty = true;
+
+    private void SaveToDisk()
     {
         var dir = Path.GetDirectoryName(_path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
