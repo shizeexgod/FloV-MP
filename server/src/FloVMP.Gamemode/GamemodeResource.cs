@@ -272,6 +272,11 @@ public class GamemodeResource : Resource
 
     public override void OnTick()
     {
+        // Результаты входа/регистрации считаются в фоне (БД + PBKDF2), а
+        // применяются здесь — на главном потоке, где только и можно трогать
+        // сущности alt:V.
+        _auth?.Pump();
+
         _hud?.Tick();
         _antiCheat?.Tick();
 

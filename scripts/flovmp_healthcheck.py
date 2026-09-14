@@ -199,6 +199,19 @@ def check_hot_path(rep):
     rep.add(PASS if has_flush else FAIL, "есть Flush/Dispose (нет потери данных)",
             "" if has_flush else "фоновая запись без гарантии сброса на остановке")
 
+    # Вход/регистрация: чтение БД + PBKDF2 (120k итераций) не должны считаться
+    # на главном потоке - это почти целый тик на каждый вход.
+    auth = ROOT / "server/src/FloVMP.Gamemode/Systems/Auth/AuthSystem.cs"
+    if auth.exists():
+        a = auth.read_text(encoding="utf-8", errors="ignore")
+        offloaded = "Task.Run" in a and "_completed" in a and "public void Pump()" in a
+        rep.add(PASS if offloaded else FAIL, "вход/регистрация не на главном потоке",
+                "" if offloaded else "PBKDF2+БД считаются в обработчике alt:V -> фриз тика на каждый вход")
+        gm = ROOT / "server/src/FloVMP.Gamemode/GamemodeResource.cs"
+        pumped = gm.exists() and "_auth?.Pump()" in gm.read_text(encoding="utf-8", errors="ignore")
+        rep.add(PASS if pumped else FAIL, "Pump() подключён к OnTick",
+                "" if pumped else "результаты входа никогда не применятся - игроки зависнут на авторизации")
+
 
 # --------------------------- 4. Сборка и тесты ---------------------------
 

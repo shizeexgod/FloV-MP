@@ -27,6 +27,17 @@ public sealed class AuthSystem
     private readonly ConcurrentDictionary<uint, Account> _authed = new();
     // accountId → playerId: не пускаем один аккаунт с двух клиентов
     private readonly ConcurrentDictionary<int, uint> _activeAccounts = new();
+
+    // ПРОИЗВОДИТЕЛЬНОСТЬ: вход/регистрация выполняли чтение БД и PBKDF2
+    // (120 000 итераций, ~13 мс на слабом CPU и больше) ПРЯМО на главном потоке
+    // alt:V. Каждый вход съедал почти целый тик, а массовый реконнект после
+    // рестарта складывался в секунды заморозки сервера.
+    // Теперь тяжёлая часть считается в фоне, а все операции alt:V (Emit, спавн,
+    // метаданные) выполняются строго на главном потоке в Pump() из OnTick.
+    private readonly ConcurrentQueue<PendingAuth> _completed = new();
+    private readonly ConcurrentDictionary<uint, byte> _inFlight = new();
+
+    private sealed record PendingAuth(IPlayer Player, bool IsRegister, AuthResult Result, string Username, string Password);
     private readonly Action<IPlayer, Account> _onAuthed;
 
     public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server")
@@ -107,7 +118,10 @@ public sealed class AuthSystem
 
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("auth.OnDisconnect", () =>
     {
-        if (_authed.TryRemove(player.Id, out var acc))
+                // Игрок мог выйти, пока его вход считался в фоне — снимаем блокировку,
+        // иначе повторный заход тем же player.Id был бы проигнорирован.
+        _inFlight.TryRemove(player.Id, out _);
+if (_authed.TryRemove(player.Id, out var acc))
         {
             if (_activeAccounts.TryGetValue(acc.Id, out var activePid) && activePid == player.Id)
             {
@@ -130,8 +144,48 @@ public sealed class AuthSystem
     private void OnLogin(IPlayer player, string username, string password) => Safe.Run("auth.OnLogin", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
+        // Один запрос на игрока за раз: иначе спам кнопкой «Войти» плодит
+        // параллельные PBKDF2-вычисления и выжигает CPU.
+        if (!_inFlight.TryAdd(player.Id, 0)) return;
 
-        var res = _auth.Login(username ?? "", password ?? "", ThrottleKey(player));
+        var u = username ?? "";
+        var pw = password ?? "";
+        var key = ThrottleKey(player);
+        Task.Run(() =>
+        {
+            AuthResult r;
+            try { r = _auth.Login(u, pw, key); }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP] auth: сбой входа: {ex.Message}");
+                r = new AuthResult(AuthOutcome.WrongPassword, "внутренняя ошибка входа");
+            }
+            _completed.Enqueue(new PendingAuth(player, false, r, u, pw));
+        });
+    });
+
+    /// <summary>
+    /// Применение результатов входа/регистрации. Вызывается ТОЛЬКО с главного
+    /// потока (из OnTick) — здесь трогаются сущности alt:V.
+    /// </summary>
+    public void Pump()
+    {
+        while (_completed.TryDequeue(out var item))
+        {
+            var pl = item.Player;
+            try { _inFlight.TryRemove(pl.Id, out _); } catch { }
+            Safe.Run("auth.Pump", () =>
+            {
+                if (!pl.Exists || IsAuthed(pl)) return;
+                if (item.IsRegister) ApplyRegister(pl, item);
+                else ApplyLogin(pl, item);
+            });
+        }
+    }
+
+    private void ApplyLogin(IPlayer player, PendingAuth item) => Safe.Run("auth.ApplyLogin", () =>
+    {
+        var res = item.Result;
         if (!res.Ok || res.Account is null)
         {
             player.Emit("flovmp:auth:result", false, res.Message);
@@ -163,17 +217,41 @@ public sealed class AuthSystem
     private void OnRegister(IPlayer player, string username, string password) => Safe.Run("auth.OnRegister", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
+        if (!_inFlight.TryAdd(player.Id, 0)) return;
 
+        // Регистрация дороже входа: PBKDF2 считается дважды (хеш при создании
+        // + проверка при входе сразу после). Обе — в фоне.
         // throttleKey (IP) — иначе клиент мог бы спамить регистрацию: забить
         // БД пустышками + нагрузить CPU PBKDF2 (120k итераций на попытку).
-        var res = _auth.Register(username ?? "", password ?? "", ThrottleKey(player));
-        if (!res.Ok)
+        var u = username ?? "";
+        var pw = password ?? "";
+        var key = ThrottleKey(player);
+        Task.Run(() =>
         {
-            player.Emit("flovmp:auth:result", false, res.Message);
-            return;
-        }
+            AuthResult r;
+            try
+            {
+                var reg = _auth.Register(u, pw, key);
+                // При неуспехе регистрации отдаём её результат как есть.
+                r = reg.Ok ? _auth.Login(u, pw, key) : reg;
+                if (reg.Ok && !r.Ok)
+                {
+                    // Зарегистрировали, но войти не смогли — сообщаем причину входа.
+                    r = new AuthResult(r.Outcome, r.Message, r.Account);
+                }
+            }
+            catch (Exception ex)
+            {
+                Alt.Log($"[FloV:MP] auth: сбой регистрации: {ex.Message}");
+                r = new AuthResult(AuthOutcome.BadUsername, "внутренняя ошибка регистрации");
+            }
+            _completed.Enqueue(new PendingAuth(player, true, r, u, pw));
+        });
+    });
 
-        var login = _auth.Login(username!, password!, ThrottleKey(player));
+    private void ApplyRegister(IPlayer player, PendingAuth item) => Safe.Run("auth.ApplyRegister", () =>
+    {
+        var login = item.Result;
         if (!login.Ok || login.Account is null || !TryClaimAccount(login.Account.Id, player.Id))
         {
             player.Emit("flovmp:auth:result", false, login.Ok ? "аккаунт уже в игре" : login.Message);
