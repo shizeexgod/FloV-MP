@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Нагрузочный стенд серверных горячих путей FloV:MP.
+    Отдельный exe, в поставку клиенту НЕ входит: это инструмент приёмки,
+    который отвечает на вопрос «выдержит ли архитектура 2000 слотов»
+    числами, а не ощущениями.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>FloVMP.LoadTest</AssemblyName>
+    <RootNamespace>FloVMP.LoadTest</RootNamespace>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
+
+</Project>

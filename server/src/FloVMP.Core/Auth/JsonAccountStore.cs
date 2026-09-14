@@ -9,8 +9,15 @@ namespace FloVMP.Core.Auth;
 public sealed class JsonAccountStore : IAccountStore, IDisposable
 {
     private readonly string _path;
+    private readonly string _journalPath;
     private readonly object _lock = new();
     private readonly Dictionary<string, Account> _byName = new(StringComparer.OrdinalIgnoreCase);
+
+    // Индекс по номеру счёта. Без него FindByBankAccount делал линейный перебор
+    // всех аккаунтов на КАЖДЫЙ перевод денег, прямо в игровом потоке: на
+    // десятках тысяч учёток это заметный фриз на ровном месте.
+    private readonly Dictionary<string, string> _bankToName = new(StringComparer.OrdinalIgnoreCase);
+
     private int _nextId = 1;
 
     // ПРОИЗВОДИТЕЛЬНОСТЬ: раньше Save() вызывался синхронно на КАЖДОЕ изменение
@@ -29,6 +36,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
     public JsonAccountStore(string path)
     {
         _path = path;
+        _journalPath = path + ".journal";
         Load();
         _flushTimer = new System.Threading.Timer(_ => FlushIfDirty(), null, FlushIntervalMs, FlushIntervalMs);
     }
@@ -77,8 +85,8 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         var trimmed = bankAccountNumber.Trim();
         lock (_lock)
         {
-            var acc = _byName.Values.FirstOrDefault(a => string.Equals(a.BankAccountNumber, trimmed, StringComparison.OrdinalIgnoreCase));
-            return acc is not null ? Clone(acc) : null;
+            if (!_bankToName.TryGetValue(trimmed, out var name)) return null;
+            return _byName.TryGetValue(name, out var acc) ? Clone(acc) : null;
         }
     }
 
@@ -105,10 +113,16 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
                 BankAccountNumber = $"40817810{_nextId:D8}",
             };
             _byName[username] = acc;
-            // Регистрация — редкая операция, и терять новый аккаунт нельзя:
-            // пишем сразу. Частые Update() остаются в фоне (горячий путь).
+            Index(acc);
+
+            // Терять только что зарегистрированный аккаунт нельзя, поэтому
+            // запись немедленная — но НЕ переписыванием всего файла.
+            // Полный сброс стоит O(числа аккаунтов): нагрузочный стенд намерял
+            // 9 мс на регистрацию уже при 1500 учётках, а на десятках тысяч это
+            // сотни миллисекунд. Вместо этого дописываем одну строку в журнал
+            // (O(1)), а полный файл перезаписывает фоновый флаш.
+            AppendToJournalLocked(acc);
             _dirty = true;
-            FlushToDiskLocked();
             return Clone(acc);
         }
     }
@@ -117,22 +131,33 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
     {
         lock (_lock)
         {
-            if (!_byName.ContainsKey(account.Username))
+            if (!_byName.TryGetValue(account.Username, out var existing))
                 throw new InvalidOperationException($"нет учётки: {account.Username}");
-            _byName[account.Username] = Clone(account);
+
+            // Номер счёта может смениться (выдача/перевыпуск) — старый ключ
+            // обязан уйти из индекса, иначе перевод продолжит находить учётку
+            // по номеру, которого у неё уже нет.
+            if (!string.IsNullOrWhiteSpace(existing.BankAccountNumber))
+                _bankToName.Remove(existing.BankAccountNumber.Trim());
+
+            var clone = Clone(account);
+            _byName[account.Username] = clone;
+            Index(clone);
             Save();
         }
     }
 
     private void Load()
     {
-        if (!File.Exists(_path)) return;
+        if (File.Exists(_path))
+        {
         try
         {
             var list = JsonSerializer.Deserialize<List<Account>>(File.ReadAllText(_path)) ?? new();
             foreach (var a in list)
             {
                 _byName[a.Username] = a;
+                Index(a);
                 _nextId = Math.Max(_nextId, a.Id + 1);
             }
         }
@@ -143,7 +168,80 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
             Console.Error.WriteLine(
                 $"[FloV:MP] accounts.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}");
             _byName.Clear();
+            _bankToName.Clear();
         }
+        }
+
+        LoadJournal();
+    }
+
+    /// <summary>
+    /// Догружает аккаунты, зарегистрированные после последнего полного сброса.
+    ///
+    /// ВАЖНО: запись из журнала применяется ТОЛЬКО если такого имени ещё нет.
+    /// Порядок сброса — сначала полный файл, потом удаление журнала; если
+    /// сервер умрёт между этими шагами, журнал переживёт файл. Перезапись им
+    /// уже сохранённой учётки откатила бы её к состоянию на момент регистрации
+    /// (деньги, уровень админа). Добавление недостающих — безопасно.
+    /// </summary>
+    private void LoadJournal()
+    {
+        if (!File.Exists(_journalPath)) return;
+
+        var restored = 0;
+        try
+        {
+            foreach (var line in File.ReadAllLines(_journalPath))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                Account? acc;
+                try { acc = JsonSerializer.Deserialize<Account>(line); }
+                catch { continue; } // строка, оборванная аварией — пропускаем
+
+                if (acc is null || string.IsNullOrWhiteSpace(acc.Username)) continue;
+                if (_byName.ContainsKey(acc.Username)) continue;
+
+                _byName[acc.Username] = acc;
+                Index(acc);
+                _nextId = Math.Max(_nextId, acc.Id + 1);
+                restored++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: ошибка чтения: {ex.Message}");
+        }
+
+        if (restored > 0)
+        {
+            Console.WriteLine($"[FloV:MP] Восстановлено из журнала регистраций: {restored}");
+            _dirty = true; // вернём их в основной файл при первом же сбросе
+        }
+    }
+
+    /// <summary>Дописать одну учётку в журнал. Вызывать только под взятым _lock.</summary>
+    private void AppendToJournalLocked(Account acc)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(_journalPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.AppendAllText(_journalPath, JsonSerializer.Serialize(acc) + "\n");
+        }
+        catch (Exception ex)
+        {
+            // Журнал — страховка, а не источник истины: учётка уже в памяти и
+            // уйдёт на диск фоновым сбросом. Регистрацию из-за этого не рушим.
+            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: ошибка записи: {ex.Message}");
+        }
+    }
+
+    /// <summary>Поддержание индекса по номеру банковского счёта.</summary>
+    private void Index(Account acc)
+    {
+        if (!string.IsNullOrWhiteSpace(acc.BankAccountNumber))
+            _bankToName[acc.BankAccountNumber.Trim()] = acc.Username;
     }
 
     /// <summary>Пометить, что состояние изменилось. Запись выполнит фоновый флаш.</summary>
@@ -159,6 +257,20 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         File.WriteAllText(tmp, json);
         if (File.Exists(_path)) File.Replace(tmp, _path, null);
         else File.Move(tmp, _path);
+
+        // Журнал обнуляется ТОЛЬКО после того, как полный файл лёг на диск:
+        // всё, что в нём было, теперь есть в основном файле. Обратный порядок
+        // означал бы окно, в котором регистрации нет ни там, ни там.
+        try
+        {
+            if (File.Exists(_journalPath)) File.Delete(_journalPath);
+        }
+        catch (Exception ex)
+        {
+            // Не страшно: повторное чтение журнала добавит только недостающие
+            // учётки и ничего не перезапишет.
+            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: не удалось очистить: {ex.Message}");
+        }
     }
 
     private static Account Clone(Account a) => new()

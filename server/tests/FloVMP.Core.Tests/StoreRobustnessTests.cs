@@ -34,8 +34,14 @@ public sealed class StoreRobustnessTests : IDisposable
 
         Assert.Single(Directory.GetFiles(_dir, "accounts.json.corrupt-*"));
 
-        // новое сохранение создаёт свежий валидный файл
+        // После карантина регистрация снова работает и переживает перезапуск.
+        // Проверяется именно долговечность, а не наличие конкретного файла:
+        // запись идёт через журнал регистраций, а полный accounts.json
+        // перезаписывает фоновый сброс (Flush).
         store.Create("Fresh", "hash");
+        Assert.NotNull(new JsonAccountStore(path).FindByUsername("Fresh"));
+
+        store.Flush();
         Assert.True(File.Exists(path));
         Assert.NotNull(new JsonAccountStore(path).FindByUsername("Fresh"));
     }
