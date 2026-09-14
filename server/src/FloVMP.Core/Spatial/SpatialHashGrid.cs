@@ -127,57 +127,93 @@ public sealed class SpatialHashGrid<T> where T : notnull
     /// Находит все сущности в заданном радиусе (в пределах указанного виртуального мира).
     /// Проверяются только ячейки сетки, пересекающие окружность, гарантируя O(1) при нормальной плотности.
     /// </summary>
+    /// <remarks>
+    /// Эта перегрузка выделяет новый список на каждый вызов. На горячем пути
+    /// (запрос на каждого игрока каждый тик) это десятки мегабайт мусора в
+    /// минуту и паузы сборщика прямо в игровом тике — там используйте
+    /// перегрузку с буфером вызывающей стороны.
+    /// </remarks>
     public IReadOnlyList<T> FindInRadius(Vector3D center, float radius, int dimension = 0, bool use3D = true)
     {
-        if (float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0) return Array.Empty<T>();
-        if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z)) return Array.Empty<T>();
-        if (radius > 5000f) radius = 5000f; // Предотвращение исчерпания памяти при экстремальных радиусах
+        var results = new List<T>();
+        return FindInRadius(center, radius, dimension, results, use3D) == 0
+            ? Array.Empty<T>()
+            : results;
+    }
 
-        int minCellX = GetCellCoordinate(center.X - radius);
-        int maxCellX = GetCellCoordinate(center.X + radius);
-        int minCellY = GetCellCoordinate(center.Y - radius);
-        int maxCellY = GetCellCoordinate(center.Y + radius);
+    /// <summary>
+    /// То же, но результат складывается в буфер вызывающей стороны (он очищается).
+    /// Возвращает число найденных сущностей. Буфер переиспользуется между тиками,
+    /// поэтому запрос не создаёт мусора.
+    /// </summary>
+    public int FindInRadius(Vector3D center, float radius, int dimension, List<T> results, bool use3D = true)
+    {
+        if (results is null) throw new ArgumentNullException(nameof(results));
+        results.Clear();
+        if (!TryGetCellBounds(center, ref radius, out var b)) return 0;
 
         float radiusSq = radius * radius;
-        var results = new List<T>();
 
         lock (_lock)
         {
-            for (int cx = minCellX; cx <= maxCellX; cx++)
+            for (int cx = b.MinX; cx <= b.MaxX; cx++)
             {
-                for (int cy = minCellY; cy <= maxCellY; cy++)
+                for (int cy = b.MinY; cy <= b.MaxY; cy++)
                 {
-                    var cellKey = (cx, cy, dimension);
-                    if (!_cells.TryGetValue(cellKey, out var bucket))
-                    {
-                        continue;
-                    }
+                    if (!_cells.TryGetValue((cx, cy, dimension), out var bucket)) continue;
 
                     foreach (var entity in bucket)
                     {
-                        if (_entityLocations.TryGetValue(entity, out var rec))
-                        {
-                            float dx = rec.Position.X - center.X;
-                            float dy = rec.Position.Y - center.Y;
-                            float distSq = dx * dx + dy * dy;
-
-                            if (use3D)
-                            {
-                                float dz = rec.Position.Z - center.Z;
-                                distSq += dz * dz;
-                            }
-
-                            if (distSq <= radiusSq)
-                            {
-                                results.Add(entity);
-                            }
-                        }
+                        if (!_entityLocations.TryGetValue(entity, out var rec)) continue;
+                        if (WithinRadius(rec.Position, center, radiusSq, use3D, out _))
+                            results.Add(entity);
                     }
                 }
             }
         }
 
-        return results;
+        return results.Count;
+    }
+
+    /// <summary>
+    /// Находит сущности в радиусе вместе с их позицией и измерением — за один
+    /// проход под одной блокировкой.
+    ///
+    /// Зачем отдельный метод: типовой сценарий стриминга — «найти соседей, затем
+    /// узнать позицию каждого» — раньше требовал вызова TryGetPosition на
+    /// каждого соседа, то есть ещё одного взятия блокировки и поиска в словаре
+    /// на КАЖДОГО. При 500 игроках с 36 соседями это 18 000 лишних блокировок
+    /// за тик. Позиция уже лежит в записи сетки — отдаём её сразу.
+    /// </summary>
+    public int FindInRadiusWithPositions(Vector3D center, float radius, int dimension,
+                                         List<(T Entity, Vector3D Position, int Dimension)> results,
+                                         bool use3D = true)
+    {
+        if (results is null) throw new ArgumentNullException(nameof(results));
+        results.Clear();
+        if (!TryGetCellBounds(center, ref radius, out var b)) return 0;
+
+        float radiusSq = radius * radius;
+
+        lock (_lock)
+        {
+            for (int cx = b.MinX; cx <= b.MaxX; cx++)
+            {
+                for (int cy = b.MinY; cy <= b.MaxY; cy++)
+                {
+                    if (!_cells.TryGetValue((cx, cy, dimension), out var bucket)) continue;
+
+                    foreach (var entity in bucket)
+                    {
+                        if (!_entityLocations.TryGetValue(entity, out var rec)) continue;
+                        if (WithinRadius(rec.Position, center, radiusSq, use3D, out _))
+                            results.Add((entity, rec.Position, rec.Dimension));
+                    }
+                }
+            }
+        }
+
+        return results.Count;
     }
 
     /// <summary>
@@ -186,57 +222,84 @@ public sealed class SpatialHashGrid<T> where T : notnull
     /// </summary>
     public IReadOnlyList<(T Entity, float Distance)> FindInRadiusWithDistance(Vector3D center, float radius, int dimension = 0, bool use3D = true)
     {
-        if (float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0) return Array.Empty<(T, float)>();
-        if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z)) return Array.Empty<(T, float)>();
-        if (radius > 5000f) radius = 5000f;
+        var results = new List<(T Entity, float Distance)>();
+        return FindInRadiusWithDistance(center, radius, dimension, results, use3D) == 0
+            ? Array.Empty<(T, float)>()
+            : results;
+    }
 
-        int minCellX = GetCellCoordinate(center.X - radius);
-        int maxCellX = GetCellCoordinate(center.X + radius);
-        int minCellY = GetCellCoordinate(center.Y - radius);
-        int maxCellY = GetCellCoordinate(center.Y + radius);
+    /// <summary>
+    /// То же, но в буфер вызывающей стороны. Сортировка по дистанции
+    /// выполняется, только если <paramref name="sorted"/> = true: голосовой
+    /// маршрутизации порядок не нужен, а сортировка сотни элементов на каждого
+    /// говорящего каждый тик — заметная доля бюджета.
+    /// </summary>
+    public int FindInRadiusWithDistance(Vector3D center, float radius, int dimension,
+                                        List<(T Entity, float Distance)> results,
+                                        bool use3D = true, bool sorted = true)
+    {
+        if (results is null) throw new ArgumentNullException(nameof(results));
+        results.Clear();
+        if (!TryGetCellBounds(center, ref radius, out var b)) return 0;
 
         float radiusSq = radius * radius;
-        var results = new List<(T Entity, float Distance)>();
 
         lock (_lock)
         {
-            for (int cx = minCellX; cx <= maxCellX; cx++)
+            for (int cx = b.MinX; cx <= b.MaxX; cx++)
             {
-                for (int cy = minCellY; cy <= maxCellY; cy++)
+                for (int cy = b.MinY; cy <= b.MaxY; cy++)
                 {
-                    var cellKey = (cx, cy, dimension);
-                    if (!_cells.TryGetValue(cellKey, out var bucket))
-                    {
-                        continue;
-                    }
+                    if (!_cells.TryGetValue((cx, cy, dimension), out var bucket)) continue;
 
                     foreach (var entity in bucket)
                     {
-                        if (_entityLocations.TryGetValue(entity, out var rec))
-                        {
-                            float dx = rec.Position.X - center.X;
-                            float dy = rec.Position.Y - center.Y;
-                            float distSq = dx * dx + dy * dy;
-
-                            if (use3D)
-                            {
-                                float dz = rec.Position.Z - center.Z;
-                                distSq += dz * dz;
-                            }
-
-                            if (distSq <= radiusSq)
-                            {
-                                results.Add((entity, (float)Math.Sqrt(distSq)));
-                            }
-                        }
+                        if (!_entityLocations.TryGetValue(entity, out var rec)) continue;
+                        if (WithinRadius(rec.Position, center, radiusSq, use3D, out var distSq))
+                            results.Add((entity, MathF.Sqrt(distSq)));
                     }
                 }
             }
         }
 
-        results.Sort((a, b) => a.Distance.CompareTo(b.Distance));
-        return results;
+        if (sorted) results.Sort(static (x, y) => x.Distance.CompareTo(y.Distance));
+        return results.Count;
     }
+
+    /// <summary>
+    /// Проверка аргументов и вычисление диапазона ячеек, пересекающих окружность.
+    /// Возвращает false, если запрос бессмысленный (NaN, бесконечность, радиус не больше нуля).
+    /// </summary>
+    private bool TryGetCellBounds(Vector3D center, ref float radius, out CellBounds bounds)
+    {
+        bounds = default;
+        if (float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0) return false;
+        if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z)) return false;
+        if (float.IsInfinity(center.X) || float.IsInfinity(center.Y) || float.IsInfinity(center.Z)) return false;
+        if (radius > 5000f) radius = 5000f; // Предотвращение исчерпания памяти при экстремальных радиусах
+
+        bounds = new CellBounds(
+            GetCellCoordinate(center.X - radius),
+            GetCellCoordinate(center.X + radius),
+            GetCellCoordinate(center.Y - radius),
+            GetCellCoordinate(center.Y + radius));
+        return true;
+    }
+
+    private static bool WithinRadius(Vector3D pos, Vector3D center, float radiusSq, bool use3D, out float distSq)
+    {
+        float dx = pos.X - center.X;
+        float dy = pos.Y - center.Y;
+        distSq = dx * dx + dy * dy;
+        if (use3D)
+        {
+            float dz = pos.Z - center.Z;
+            distSq += dz * dz;
+        }
+        return distSq <= radiusSq;
+    }
+
+    private readonly record struct CellBounds(int MinX, int MaxX, int MinY, int MaxY);
 
     /// <summary>
     /// Возвращает текущее положение сущности, если она зарегистрирована в сетке.

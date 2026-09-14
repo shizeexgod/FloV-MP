@@ -33,7 +33,7 @@ public static class World
     private const float MapMax = 4200f;
 
     /// <summary>Типовые точки скопления игроков на RP-сервере.</summary>
-    private static readonly Vector3D[] Hotspots =
+    public static readonly Vector3D[] Hotspots =
     {
         new(-1037f, -2738f, 20f),  // аэропорт
         new(215f, -810f, 31f),     // центр / банк

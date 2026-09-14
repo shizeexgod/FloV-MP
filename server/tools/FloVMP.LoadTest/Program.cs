@@ -54,6 +54,9 @@ public static class Program
         Console.WriteLine($"GC: {(System.Runtime.GCSettings.IsServerGC ? "серверный" : "рабочей станции")} | " +
                           $"ядер: {Environment.ProcessorCount}");
 
+        if (args.Contains("--sweep"))
+            return RunSweep(ticks, tickRate, streamRadius, hotspotShare, speakingShare, seed, budgetMs, json);
+
         var results = new List<Samples>();
         var extra = new Dictionary<string, double>();
 
@@ -86,6 +89,90 @@ public static class Program
     }
 
     // ------------------------------------------------------------------
+    // Развёртка по онлайну: до какого числа игроков код укладывается в тик
+    // ------------------------------------------------------------------
+    /// <summary>
+    /// Прогон одного и того же сценария на растущем онлайне.
+    ///
+    /// Смысл: заменить ответ «масштаб неизвестен» на число. Стоимость тика
+    /// растёт быстрее линейной — вместе с онлайном растёт и плотность, то есть
+    /// число соседей у каждого игрока. Одна точка замера этого не показывает,
+    /// а развёртка показывает, где именно проходит потолок одного инстанса —
+    /// и, значит, когда пора шардировать.
+    /// </summary>
+    private static int RunSweep(int ticks, int tickRate, float streamRadius, float hotspotShare,
+                                float speakingShare, int seed, double budgetMs, string? json)
+    {
+        int[] steps = { 250, 500, 1000, 1500, 2000, 3000 };
+
+        Report.Header("Развёртка по онлайну — где проходит потолок одного инстанса");
+        Console.WriteLine($"{"игроков",10}{"соседей",10}{"p50",10}{"p95",10}{"p99",10}{"вердикт",12}");
+        Console.WriteLine(new string('-', 78));
+
+        var lastOk = 0;
+        var rows = new List<(int Players, double Neighbors, double P50, double P95, double P99, bool Ok)>();
+
+        foreach (var n in steps)
+        {
+            var extra = new Dictionary<string, double>();
+            var sim = World.Create(n, hotspotShare, seed);
+
+            // Вывод самого сценария глушим — в развёртке нужна только строка.
+            var stdout = Console.Out;
+            Console.SetOut(TextWriter.Null);
+            Samples s;
+            try { s = RunWorldTick(sim, ticks, tickRate, streamRadius, speakingShare, seed, extra); }
+            finally { Console.SetOut(stdout); }
+
+            var ok = s.P99 <= budgetMs;
+            if (ok) lastOk = n;
+            rows.Add((n, extra.GetValueOrDefault("neighbors_avg"), s.P50, s.P95, s.P99, ok));
+
+            var prev = Console.ForegroundColor;
+            Console.ForegroundColor = ok ? ConsoleColor.Green : ConsoleColor.Red;
+            Console.WriteLine($"{n,10}{extra.GetValueOrDefault("neighbors_avg"),10:F0}" +
+                              $"{s.P50,10:F2}{s.P95,10:F2}{s.P99,10:F2}{(ok ? "в бюджете" : "ПРЕВЫШЕН"),12}");
+            Console.ForegroundColor = prev;
+
+            // Дальше уже бессмысленно: если потолок пробит, следующие шаги
+            // только дольше считаются и ничего нового не скажут.
+            if (!ok) break;
+        }
+
+        Console.WriteLine();
+        if (lastOk == 0)
+            Report.Note($"В бюджет {budgetMs:F2} мс не уложился даже минимальный онлайн — ищите регрессию.");
+        else
+            Report.Note($"Один инстанс держит в бюджете тика ({budgetMs:F2} мс) до {lastOk} игроков включительно.");
+        Report.Note("Выше этой отметки нужен второй инстанс (шардирование по измерениям/районам),");
+        Report.Note("либо снижение частоты тика, либо сокращение радиуса стриминга.");
+        Console.WriteLine();
+        Report.Note("Ещё раз: это потолок НАШЕГО кода. Сетевой слой alt:V и живые клиенты");
+        Report.Note("сюда не входят — реальный потолок сервера не выше этого, но может быть ниже.");
+
+        if (json is not null)
+        {
+            using var w = new StreamWriter(json, false, System.Text.Encoding.UTF8);
+            w.WriteLine("{");
+            w.WriteLine($"  \"budget_ms\": {Num(budgetMs)},");
+            w.WriteLine($"  \"max_players_within_budget\": {lastOk},");
+            w.WriteLine("  \"steps\": [");
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                w.WriteLine($"    {{ \"players\": {r.Players}, \"neighbors_avg\": {Num(r.Neighbors)}, " +
+                            $"\"p50\": {Num(r.P50)}, \"p95\": {Num(r.P95)}, \"p99\": {Num(r.P99)}, " +
+                            $"\"passed\": {(r.Ok ? "true" : "false")} }}{(i == rows.Count - 1 ? "" : ",")}");
+            }
+            w.WriteLine("  ]");
+            w.WriteLine("}");
+            Report.Note($"отчёт записан: {json}");
+        }
+
+        return lastOk > 0 ? 0 : 1;
+    }
+
+    // ------------------------------------------------------------------
     // Сценарий 1: полный игровой тик
     // ------------------------------------------------------------------
     private static Samples RunWorldTick(SimPlayer[] sim, int ticks, int tickRate,
@@ -99,10 +186,20 @@ public static class Program
         var voice = new VoiceGridRouter(grid);
         var tickManager = new AdaptiveTickManager<ulong>();
 
-        // Интерьеры: пара десятков зон, как на живом RP-сервере.
-        for (var i = 0; i < 24; i++)
-            occlusion.RegisterZone($"zone{i}", new Vector3D(i * 100f, i * 100f, 0f),
-                                   new Vector3D(i * 100f + 40f, i * 100f + 40f, 20f));
+        // Интерьеры ставятся ВНУТРИ горячих точек, а не в случайных координатах:
+        // зона, мимо которой никто не ходит, ничего не отсекает, и стенд
+        // показал бы работу окклюзии как бесполезную. На живом сервере
+        // интерьеры стоят ровно там, где толпа — в банке, мэрии, участке.
+        var zoneId = 0;
+        foreach (var h in World.Hotspots)
+        {
+            for (var k = 0; k < 3; k++)
+            {
+                var offset = new Vector3D(h.X + k * 45f - 45f, h.Y + k * 45f - 45f, h.Z - 2f);
+                occlusion.RegisterZone($"zone{zoneId++}", offset,
+                                       new Vector3D(offset.X + 30f, offset.Y + 30f, offset.Z + 12f));
+            }
+        }
 
         foreach (var p in sim)
         {
@@ -120,13 +217,22 @@ public static class Program
         var syncPhase = new Samples("  адаптивная синхронизация", ticks);
 
         long neighborTotal = 0, neighborSamples = 0, visibleTotal = 0, voiceRecipients = 0;
-        var candidates = new List<(ulong Item, Vector3D Pos, int Dim)>(512);
+
+        // Буферы переиспользуются между тиками — так же, как это обязан делать
+        // серверный код. Список на каждый запрос дал бы десятки мегабайт мусора
+        // и паузы сборщика прямо в игровом тике.
+        var candidates = new List<(ulong Entity, Vector3D Position, int Dimension)>(512);
+        var neighbors = new List<ulong>(512);
+        var visibleBuffer = new List<ulong>(512);
         var sw = new Stopwatch();
         var phase = new Stopwatch();
 
-        // Прогрев: первые тики платят за раскладку по ячейкам и JIT, они бы
-        // испортили p99 шумом, не относящимся к устойчивой нагрузке.
-        var warmup = Math.Min(30, ticks / 10 + 1);
+        // Прогрев. Первые тики платят не только за раскладку по ячейкам, но и
+        // за многоуровневую компиляцию .NET: метод уходит в оптимизированный
+        // код лишь после нескольких десятков вызовов. Без достаточного прогрева
+        // именно эти тики оседают в p95/p99 и стенд «находит» несуществующий
+        // провал производительности.
+        var warmup = Math.Min(120, Math.Max(60, ticks / 4));
 
         for (var tick = 0; tick < ticks + warmup; tick++)
         {
@@ -151,19 +257,15 @@ public static class Program
             phase.Restart();
             foreach (var p in sim)
             {
-                var nearby = grid.FindInRadius(p.Position, streamRadius, p.Dimension);
-                if (measured) { neighborTotal += nearby.Count; neighborSamples++; }
+                // Позиции соседей приходят тем же запросом: отдельный
+                // TryGetPosition на каждого соседа стоил бы ещё одной
+                // блокировки сетки на каждую пару.
+                var found = grid.FindInRadiusWithPositions(p.Position, streamRadius, p.Dimension, candidates);
+                if (measured) { neighborTotal += found; neighborSamples++; }
 
-                candidates.Clear();
-                foreach (var id in nearby)
-                {
-                    if (id == p.Id) continue;
-                    if (grid.TryGetPosition(id, out var pos, out var dim))
-                        candidates.Add((id, pos, dim));
-                }
-
-                var visible = occlusion.FilterVisible(p.Position, p.Heading, p.Dimension, candidates, streamRadius);
-                if (measured) visibleTotal += visible.Count;
+                var visible = occlusion.FilterVisibleInto(
+                    p.Position, p.Heading, p.Dimension, candidates, visibleBuffer, streamRadius);
+                if (measured) visibleTotal += visible;
             }
             phase.Stop();
             if (measured) streamPhase.Add(phase.Elapsed.TotalMilliseconds);
@@ -185,9 +287,9 @@ public static class Program
             phase.Restart();
             foreach (var p in sim)
             {
-                var nearby = grid.FindInRadius(p.Position, 120f, p.Dimension);
+                grid.FindInRadius(p.Position, 120f, p.Dimension, neighbors);
                 var checkedPairs = 0;
-                foreach (var id in nearby)
+                foreach (var id in neighbors)
                 {
                     if (id == p.Id) continue;
                     tickManager.ShouldSyncThisTick(id, p.Id, tick);
@@ -371,6 +473,8 @@ public static class Program
               --speaking-share F  доля говорящих одновременно, 0..1 (0.12)
               --seed N            зерно генератора, для повторяемости (1337)
               --no-auth           пропустить замер PBKDF2 (он самый долгий)
+              --sweep             прогнать 250/500/1000/1500/2000/3000 и найти
+                                  потолок одного инстанса по бюджету тика
               --json PATH         записать отчёт в JSON для CI
 
             Код возврата 1, если p99 игрового тика вышел за бюджет.

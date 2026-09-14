@@ -297,6 +297,7 @@ public sealed class InventorySystem
                 }
                 repVeh.EngineHealth = 1000;
                 repVeh.BodyHealth = 1000;
+                Alt.EmitAllClients("flovmp:veh:repair", repVeh.Id);
                 s.Quantity -= 1;
                 if (s.Quantity <= 0) e.inv.Slots[slot] = null;
                 player.Emit("flovmp:inv:notice", "Транспорт успешно отремонтирован ремкомплектом");
@@ -365,6 +366,59 @@ public sealed class InventorySystem
         _store.Save(e.accountId, e.inv);
         Sync(player, e.inv);
     });
+
+    /// <summary>
+    /// Получить ссылку на инвентарь вошедшего игрока.
+    /// </summary>
+    public Inventory? GetPlayerInventory(IPlayer player)
+    {
+        if (!player.Exists) return null;
+        return _live.TryGetValue(player.Id, out var e) ? e.inv : null;
+    }
+
+    /// <summary>
+    /// Программное/командное использование предмета в указанном слоте.
+    /// </summary>
+    public void TryUseSlot(IPlayer player, int slot)
+    {
+        OnUse(player, slot);
+    }
+
+    /// <summary>
+    /// Программный/командный сброс предмета из указанного слота на землю.
+    /// </summary>
+    public void TryDropSlot(IPlayer player, int slot, int quantity)
+    {
+        OnDrop(player, slot, quantity);
+    }
+
+    /// <summary>
+    /// Подобрать ближайший предмет с земли (команда /pickup или клавиша взаимодействия).
+    /// </summary>
+    public bool TryPickupNearest(IPlayer player, out ItemStack? picked)
+    {
+        picked = null;
+        if (!_gate.Allow(player.Id)) return false;
+        if (player.Health <= 0) return false;
+        if (!_live.TryGetValue(player.Id, out var e)) return false;
+        if (IsCuffed?.Invoke(e.accountId) == true)
+        {
+            player.Emit("flovmp:inv:notice", "Вы скованы наручниками и не можете подбирать предметы");
+            return false;
+        }
+
+        var pPos = new FloVMP.Core.AntiCheat.Vector3D(player.Position.X, player.Position.Y, player.Position.Z);
+        if (_atomicTransactions.TryPickupNearestGroundItem(player.Id, e.inv, pPos, player.Dimension, 4.0f, out picked) && picked != null)
+        {
+            _store.Save(e.accountId, e.inv);
+            Sync(player, e.inv);
+            player.Emit("flovmp:inv:notice", $"Вы подобрали {ItemCatalog.Get(picked.ItemId)?.Name ?? picked.ItemId} x{picked.Quantity}");
+            FloVMP.Core.Logging.GameLog.Item("pickup",
+                FloVMP.Core.Logging.LogActor.Player(e.accountId, player.Name), picked.ItemId, picked.Quantity);
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Получить множество разрешённого оружия, находящегося в инвентаре игрока.

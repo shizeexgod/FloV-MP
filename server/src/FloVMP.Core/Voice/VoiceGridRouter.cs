@@ -77,6 +77,14 @@ public sealed class VoiceGridRouter
     private readonly object _radioLock = new();
     private readonly object _phoneLock = new();
 
+    // Переиспользуемый буфер соседей для маршрутизации голоса.
+    // Голос считается для каждого говорящего каждый тик; при сотнях говорящих
+    // одноразовые списки давали десятки мегабайт мусора в минуту и паузы
+    // сборщика прямо в игровом тике. Доступ к буферу — под _routeLock, потому
+    // что маршрутизировать может быть вызвана не только из игрового потока.
+    private readonly object _routeLock = new();
+    private readonly List<(ulong Entity, float Distance)> _nearbyBuffer = new(256);
+
     public VoiceGridRouter(SpatialHashGrid<ulong> spatialGrid)
     {
         _spatialGrid = spatialGrid ?? throw new ArgumentNullException(nameof(spatialGrid));
@@ -149,30 +157,37 @@ public sealed class VoiceGridRouter
         }
 
         float maxDist = GetMaxDistance(rangeMode);
-        var nearby = _spatialGrid.FindInRadiusWithDistance(speakerPos, maxDist, dimension);
-        if (nearby.Count == 0) return Array.Empty<VoiceRecipient>();
 
-        var recipients = new List<VoiceRecipient>(nearby.Count);
-
-        foreach (var (listenerId, distance) in nearby)
+        lock (_routeLock)
         {
-            if (listenerId == speakerId) continue; // Не отправляем собственный голос себе
+            // Порядок получателей неважен — каждому считается своя громкость,
+            // поэтому сортировка по дистанции отключена (sorted: false).
+            var count = _spatialGrid.FindInRadiusWithDistance(
+                speakerPos, maxDist, dimension, _nearbyBuffer, use3D: true, sorted: false);
+            if (count == 0) return Array.Empty<VoiceRecipient>();
 
-            // Проверка персонального мута
-            if (IsPlayerMutedBy(listenerId, speakerId)) continue;
+            var recipients = new List<VoiceRecipient>(count);
 
-            float volume = CalculateVolume(distance, maxDist, attenuation);
-            if (volume <= 0.001f) continue;
+            foreach (var (listenerId, distance) in _nearbyBuffer)
+            {
+                if (listenerId == speakerId) continue; // Не отправляем собственный голос себе
 
-            // Позиция источника звука относительно слушателя (для HRTF / 3D Audio)
-            // Примечание: вектор направлен от слушателя к говорящему
-            // Если в будущем потребуется точная позиция слушателя, берется из SpatialGrid
-            var relativeOffset = new Vector3D(speakerPos.X, speakerPos.Y, speakerPos.Z);
+                // Проверка персонального мута
+                if (IsPlayerMutedBy(listenerId, speakerId)) continue;
 
-            recipients.Add(new VoiceRecipient(listenerId, volume, relativeOffset, VoiceTransmissionType.Proximity3D));
+                float volume = CalculateVolume(distance, maxDist, attenuation);
+                if (volume <= 0.001f) continue;
+
+                // Позиция источника звука относительно слушателя (для HRTF / 3D Audio)
+                // Примечание: вектор направлен от слушателя к говорящему
+                // Если в будущем потребуется точная позиция слушателя, берется из SpatialGrid
+                var relativeOffset = new Vector3D(speakerPos.X, speakerPos.Y, speakerPos.Z);
+
+                recipients.Add(new VoiceRecipient(listenerId, volume, relativeOffset, VoiceTransmissionType.Proximity3D));
+            }
+
+            return recipients;
         }
-
-        return recipients;
     }
 
     /// <summary>

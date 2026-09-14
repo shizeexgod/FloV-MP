@@ -316,6 +316,16 @@ alt.everyTick(() => {
     if (player && player.valid) {
         native.setPlayerWantedLevel(player.scriptID, 0, false);
         native.setPlayerWantedLevelNow(player.scriptID, false);
+
+        // Контроль работы двигателя транспорта (синхронизация с сервером FloV:MP)
+        if (player.vehicle && native.getPedInVehicleSeat(player.vehicle.scriptID, -1, false) === player.scriptID) {
+            if (!player.vehicle.engineOn) {
+                native.setVehicleEngineOn(player.vehicle.scriptID, false, false, true);
+                native.setVehicleUndriveable(player.vehicle.scriptID, true);
+            } else {
+                native.setVehicleUndriveable(player.vehicle.scriptID, false);
+            }
+        }
     }
 
     // Блокировка колеса оружия
@@ -1177,6 +1187,11 @@ function handlePlayerRevived() {
     const local = alt.Player.local;
     if (local && local.valid) {
         try {
+            const pos = local.pos;
+            const heading = native.getEntityHeading(local.scriptID);
+            try {
+                native.networkResurrectLocalPlayer(pos.x, pos.y, pos.z, heading, true, false);
+            } catch (e) { }
             native.resurrectPed(local.scriptID);
             native.clearPedTasksImmediately(local.scriptID);
             native.setPedCanRagdoll(local.scriptID, true);
@@ -1226,12 +1241,15 @@ alt.onServer('starter:setTime', (hour, minute) => {
 alt.onServer('starter:toggleNoClip', () => {
     toggleNoClip();
 });
+alt.onServer('flovmp:admin:toggleNoClip', () => {
+    toggleNoClip();
+});
 
 alt.onServer('flovmp:admin:toggleEsp', (targetMode) => {
     toggleEsp(targetMode !== undefined ? targetMode : null);
 });
 
-alt.onServer('starter:setGodMode', (enabled) => {
+function applyGodMode(enabled) {
     godMode = !!enabled;
     const local = alt.Player.local;
     if (local && local.valid) {
@@ -1240,7 +1258,9 @@ alt.onServer('starter:setGodMode', (enabled) => {
             native.setPlayerInvincible(local.scriptID, godMode);
         } catch (e) { }
     }
-});
+}
+alt.onServer('starter:setGodMode', applyGodMode);
+alt.onServer('flovmp:admin:godMode', applyGodMode);
 
 alt.onServer('starter:setSpeed', (multiplier) => {
     const local = alt.Player.local;
@@ -1258,6 +1278,107 @@ alt.onServer('starter:setFrozen', (frozen) => {
         try {
             native.freezeEntityPosition(local.scriptID, !!frozen);
         } catch (e) { }
+    }
+});
+
+// Синхронизация замков дверей авто (аудио-сигнал + двойная вспышка габаритов)
+alt.onServer('flovmp:veh:lock', (vehId, isLocked) => {
+    const veh = alt.Vehicle.getByID(vehId);
+    if (!veh || !veh.valid) return;
+    try {
+        const scriptId = veh.scriptID;
+        native.setVehicleDoorsLocked(scriptId, isLocked ? 2 : 1);
+        native.setVehicleDoorsLockedForAllPlayers(scriptId, !!isLocked);
+        native.playSoundFromEntity(-1, "Remote_Click", scriptId, "PI_Menu_Sounds", true, 0);
+        native.setVehicleLights(scriptId, 2);
+        alt.setTimeout(() => {
+            if (veh.valid) native.setVehicleLights(scriptId, 0);
+            alt.setTimeout(() => {
+                if (veh.valid) native.setVehicleLights(scriptId, 2);
+                alt.setTimeout(() => {
+                    if (veh.valid) native.setVehicleLights(scriptId, 0);
+                }, 150);
+            }, 150);
+        }, 150);
+    } catch (_) { }
+});
+
+// Полный визуальный ремонт геометрии и кузова авто
+alt.onServer('flovmp:veh:repair', (vehId) => {
+    const veh = alt.Vehicle.getByID(vehId);
+    if (!veh || !veh.valid) return;
+    try {
+        native.setVehicleFixed(veh.scriptID);
+        native.setVehicleDeformationFixed(veh.scriptID);
+        native.setVehicleDirtLevel(veh.scriptID, 0.0);
+        native.setVehicleUndriveable(veh.scriptID, false);
+    } catch (_) { }
+});
+
+// Режим спектатора (/sp) с безопасным следованием без падения
+let isSpectating = false;
+alt.onServer('flovmp:admin:spectate', (targetPlayerId, enabled) => {
+    const local = alt.Player.local;
+    if (!local || !local.valid) return;
+    try {
+        isSpectating = !!enabled;
+        if (enabled) {
+            native.freezeEntityPosition(local.scriptID, true);
+            native.setEntityCollision(local.scriptID, false, false);
+            native.setEntityVisible(local.scriptID, false, 0);
+            native.setEntityAlpha(local.scriptID, 0, false);
+            native.setEntityInvincible(local.scriptID, true);
+
+            const targetPlayer = alt.Player.getByID(targetPlayerId);
+            if (targetPlayer && targetPlayer.valid && targetPlayer.scriptID) {
+                native.attachEntityToEntity(local.scriptID, targetPlayer.scriptID, 0, 0.0, -1.8, 1.2, 0.0, 0.0, 0.0, false, false, false, false, 2, true);
+            }
+        } else {
+            native.detachEntity(local.scriptID, true, true);
+            native.freezeEntityPosition(local.scriptID, false);
+            native.setEntityCollision(local.scriptID, true, true);
+            native.setEntityVisible(local.scriptID, true, 0);
+            native.resetEntityAlpha(local.scriptID);
+            native.setEntityInvincible(local.scriptID, godMode);
+        }
+    } catch (_) { }
+});
+
+// События транспорта: защита от рассинхрона двигателя и сброс ремня безопасности
+alt.on('enteredVehicle', (vehicle, seat) => {
+    try {
+        native.setVehicleNeedsToBeHotwired(vehicle.scriptID, false);
+        if (seat === 1 || native.getPedInVehicleSeat(vehicle.scriptID, -1, false) === alt.Player.local.scriptID) {
+            if (!vehicle.engineOn) {
+                native.setVehicleEngineOn(vehicle.scriptID, false, false, true);
+                native.setVehicleUndriveable(vehicle.scriptID, true);
+            } else {
+                native.setVehicleUndriveable(vehicle.scriptID, false);
+            }
+        }
+    } catch (_) { }
+});
+
+alt.on('leftVehicle', (vehicle, seat) => {
+    try {
+        seatbeltOn = false;
+        const player = alt.Player.local;
+        if (player && player.valid) {
+            native.setPedConfigFlag(player.scriptID, 32, true);
+        }
+    } catch (_) { }
+});
+
+alt.on('gameEntityCreate', (entity) => {
+    if (entity instanceof alt.Vehicle) {
+        try {
+            const isLocked = (entity.lockState === 2);
+            native.setVehicleDoorsLocked(entity.scriptID, isLocked ? 2 : 1);
+            native.setVehicleDoorsLockedForAllPlayers(entity.scriptID, isLocked);
+            if (!entity.engineOn) {
+                native.setVehicleEngineOn(entity.scriptID, false, false, true);
+            }
+        } catch (_) { }
     }
 });
 

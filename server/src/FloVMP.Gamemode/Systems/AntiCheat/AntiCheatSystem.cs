@@ -46,6 +46,8 @@ public class AntiCheatSystem
         Alt.OnPlayerEnterVehicle += OnPlayerEnterVehicle;
         Alt.OnPlayerLeaveVehicle += OnPlayerLeaveVehicle;
         Alt.OnClient<bool>("flovmp:admin:noclip", OnClientNoClip);
+        Alt.OnClient<IPlayer, float, float, float>("starter:teleportWaypoint", OnTeleportWaypoint);
+        Alt.OnClient<IPlayer, float, float, float>("flovmp:admin:teleportWaypoint", OnTeleportWaypoint);
     }
 
     public void Detach()
@@ -68,6 +70,31 @@ public class AntiCheatSystem
                 NotifyAdminTeleport(player, player.Position);
             }
         }
+    }
+
+    private void OnTeleportWaypoint(IPlayer player, float x, float y, float z)
+    {
+        if (!player.Exists) return;
+        var acc = _accountOf(player);
+        if (acc == null || acc.AdminLevel < 1)
+        {
+            Alt.LogWarning($"[Security Violation] Неавторизованный запрос teleportWaypoint от {player.Name} (ID: {player.Id})");
+            player.Emit("flovmp:chat:msg", "system", "", "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
+            return;
+        }
+
+        if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(z) ||
+            float.IsInfinity(x) || float.IsInfinity(y) || float.IsInfinity(z) ||
+            Math.Abs(x) > 25000f || Math.Abs(y) > 25000f || Math.Abs(z) > 5000f)
+        {
+            player.Emit("flovmp:chat:msg", "system", "", "{ef4444}[FloV:MP Security] Недопустимые координаты телепортации.");
+            return;
+        }
+
+        var targetPos = new Position(x, y, z + 1.0f);
+        player.Position = targetPos;
+        NotifyAdminTeleport(player, targetPos);
+        player.Emit("flovmp:chat:msg", "system", "", $"{{34d399}}Телепортация по метке: {x:F1}, {y:F1}, {z:F1}");
     }
 
     private WeaponDamageResponse OnWeaponDamage(

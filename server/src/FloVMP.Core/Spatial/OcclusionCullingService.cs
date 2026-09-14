@@ -180,6 +180,28 @@ public sealed class OcclusionCullingService
         bool useFov = false)
     {
         var result = new List<T>();
+        FilterVisibleInto(viewerPos, viewerHeading, viewerDim, candidates, result, maxDistance, useFov);
+        return result;
+    }
+
+    /// <summary>
+    /// То же, но результат складывается в буфер вызывающей стороны (он очищается).
+    ///
+    /// Фильтрация видимости вызывается для каждого наблюдателя каждый тик.
+    /// Новый список на каждый вызов — это сотни лишних аллокаций за тик и
+    /// паузы сборщика прямо в игровом цикле; на горячем пути нужен буфер.
+    /// </summary>
+    public int FilterVisibleInto<T>(
+        Vector3D viewerPos,
+        Vector3D viewerHeading,
+        int viewerDim,
+        IEnumerable<(T Item, Vector3D Pos, int Dim)> candidates,
+        List<T> result,
+        float? maxDistance = null,
+        bool useFov = false)
+    {
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        result.Clear();
         foreach (var (item, pos, dim) in candidates)
         {
             if (IsVisible(viewerPos, viewerHeading, viewerDim, pos, dim, maxDistance, useFov))
@@ -187,6 +209,6 @@ public sealed class OcclusionCullingService
                 result.Add(item);
             }
         }
-        return result;
+        return result.Count;
     }
 }

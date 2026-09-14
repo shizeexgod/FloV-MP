@@ -37,7 +37,7 @@ public sealed class ChatSystem
 
     private readonly ConcurrentDictionary<uint, (int count, DateTime first)> _rate = new();
     private readonly ConcurrentDictionary<uint, string> _names = new();
-    private readonly ConcurrentDictionary<uint, (Position originalPos, int originalDim)> _spectatingAdmins = new();
+    private readonly ConcurrentDictionary<uint, (Position originalPos, int originalDim, uint targetId)> _spectatingAdmins = new();
     private readonly ConcurrentDictionary<uint, bool> _godModeAdmins = new();
 
     public ChatSystem(
@@ -74,6 +74,7 @@ public sealed class ChatSystem
     {
         "passport", "lic", "licenses", "pay", "bank", "balance", "deposit", "withdraw",
         "transfer", "factions", "f", "d", "invite", "uninvite", "giverank",
+        "finvite", "funinvite", "fpromote", "fdemote", "fmembers", "demorgan", "jailtime",
         "cuff", "uncuff", "arrest", "release", "unarrest", "engine", "lock",
         "buyhouse", "sellhouse", "buyproperty", "sellproperty", "enter", "exit",
         "hlock", "house", "hdeposit", "hwithdraw", "haddmate", "hdelmate",
@@ -121,6 +122,8 @@ public sealed class ChatSystem
     public void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("chat.OnPlayerAuthed", () =>
     {
         _names[player.Id] = account.Username;
+        player.SetStreamSyncedMetaData("adminLevel", account.AdminLevel);
+        player.Emit("flovmp:console:setAdmin", account.AdminLevel);
         SendSystem(player, $"Добро пожаловать на сервер, {account.Username}. Введите /help для списка команд.");
         if (account.AdminLevel > 0)
         {
@@ -133,6 +136,27 @@ public sealed class ChatSystem
     {
         _rate.TryRemove(player.Id, out _);
         _godModeAdmins.TryRemove(player.Id, out _);
+        _spectatingAdmins.TryRemove(player.Id, out _);
+
+        // Если отключился игрок, за которым следил администратор — безопасно завершаем слежку
+        foreach (var (adminId, val) in _spectatingAdmins)
+        {
+            if (val.targetId == player.Id)
+            {
+                var adminPlayer = Alt.GetPlayerById(adminId);
+                if (adminPlayer != null && adminPlayer.Exists)
+                {
+                    SendSystem(adminPlayer, $"[Слежка] Игрок {player.Name} (ID {player.Id}) вышел с сервера. Вы вернулись на исходную позицию.");
+                    adminPlayer.Position = val.originalPos;
+                    adminPlayer.Dimension = val.originalDim;
+                    adminPlayer.Visible = true;
+                    adminPlayer.Emit("flovmp:admin:spectate", 0, false);
+                    _notifyTeleport?.Invoke(adminPlayer, adminPlayer.Position);
+                }
+                _spectatingAdmins.TryRemove(adminId, out _);
+            }
+        }
+
         if (_names.TryRemove(player.Id, out var name))
             Broadcast($"{name} вышел с сервера.");
     });
@@ -322,12 +346,18 @@ public sealed class ChatSystem
 
             case "bank":
             case "balance":
+            case "atm":
                 SendSystem(player, $"=== Финансовый статус: {acc.Username} ===");
                 SendSystem(player, $"Наличные: {acc.Cash:N0} руб.");
                 SendSystem(player, $"Банковский счёт: {acc.Bank:N0} руб. (№ {acc.BankAccountNumber})");
                 return;
 
             case "deposit":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете совершать банковские операции в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length == 0 || !long.TryParse(args[0], out var depAmt) || depAmt <= 0)
                 {
                     SendSystem(player, "Использование: /deposit <сумма>");
@@ -348,6 +378,11 @@ public sealed class ChatSystem
                 return;
 
             case "withdraw":
+                if (player.Health <= 0 || _factions?.IsCuffed(acc.Id) == true)
+                {
+                    SendSystem(player, "Вы не можете совершать банковские операции в наручниках или без сознания.");
+                    return;
+                }
                 if (args.Length == 0 || !long.TryParse(args[0], out var withAmt) || withAmt <= 0)
                 {
                     SendSystem(player, "Использование: /withdraw <сумма>");
@@ -547,6 +582,7 @@ public sealed class ChatSystem
                     : AltV.Net.Enums.VehicleLockState.Locked;
 
                 bool isLockedNow = lockVeh.LockState == AltV.Net.Enums.VehicleLockState.Locked;
+                Alt.EmitAllClients("flovmp:veh:lock", lockVeh.Id, isLockedNow);
                 SendSystem(player, isLockedNow ? "Двери заблокированы." : "Двери разблокированы.");
                 BroadcastNearbyMe(player, isLockedNow ? "нажал кнопку брелока сигнализации и заблокировал двери" : "нажал кнопку брелока сигнализации и разблокировал двери");
                 return;
@@ -679,6 +715,7 @@ public sealed class ChatSystem
                 return;
 
             case "invite":
+            case "finvite":
                 if (args.Length == 0) { SendSystem(player, "Использование: /invite <ID/ник>"); return; }
                 if (_factions != null)
                 {
@@ -707,6 +744,7 @@ public sealed class ChatSystem
                 return;
 
             case "uninvite":
+            case "funinvite":
                 if (args.Length == 0) { SendSystem(player, "Использование: /uninvite <ID/ник> [причина]"); return; }
                 if (_factions != null)
                 {
@@ -752,6 +790,99 @@ public sealed class ChatSystem
                     else
                     {
                         SendSystem(player, rankErr);
+                    }
+                }
+                return;
+
+            case "fpromote":
+                if (args.Length == 0) { SendSystem(player, "Использование: /fpromote <ID/ник>"); return; }
+                if (_factions != null)
+                {
+                    var promTarget = FindPlayer(args[0]);
+                    if (promTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var promAcc = _accountOf(promTarget);
+                    if (promAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                    var targetMem = _factions.GetMember(promAcc.Id);
+                    if (targetMem == null) { SendSystem(player, "Игрок не состоит в вашей организации."); return; }
+
+                    int nextRank = targetMem.RankLevel + 1;
+                    if (_factions.TrySetRank(acc.Id, promAcc.Id, nextRank, out var promErr))
+                    {
+                        var fac = _factions.GetFaction(targetMem.FactionId)!;
+                        var rInfo = fac.GetRank(nextRank);
+                        SendSystem(player, $"Вы повысили {promAcc.Username} до ранга '{rInfo?.Name ?? nextRank.ToString()}' ({nextRank}).");
+                        SendSystem(promTarget, $"Вам присвоен повышенный ранг '{rInfo?.Name ?? nextRank.ToString()}' ({nextRank}) офицером {acc.Username}. Поздравляем!");
+                    }
+                    else
+                    {
+                        SendSystem(player, promErr);
+                    }
+                }
+                return;
+
+            case "fdemote":
+                if (args.Length == 0) { SendSystem(player, "Использование: /fdemote <ID/ник>"); return; }
+                if (_factions != null)
+                {
+                    var demTarget = FindPlayer(args[0]);
+                    if (demTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                    var demAcc = _accountOf(demTarget);
+                    if (demAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
+                    var targetMem = _factions.GetMember(demAcc.Id);
+                    if (targetMem == null) { SendSystem(player, "Игрок не состоит в вашей организации."); return; }
+
+                    int prevRank = targetMem.RankLevel - 1;
+                    if (prevRank < 1)
+                    {
+                        SendSystem(player, "Сотрудник уже имеет минимальный ранг. Для увольнения используйте /uninvite.");
+                        return;
+                    }
+
+                    if (_factions.TrySetRank(acc.Id, demAcc.Id, prevRank, out var demErr))
+                    {
+                        var fac = _factions.GetFaction(targetMem.FactionId)!;
+                        var rInfo = fac.GetRank(prevRank);
+                        SendSystem(player, $"Вы понизили {demAcc.Username} до ранга '{rInfo?.Name ?? prevRank.ToString()}' ({prevRank}).");
+                        SendSystem(demTarget, $"Вам понижен ранг до '{rInfo?.Name ?? prevRank.ToString()}' ({prevRank}) офицером {acc.Username}.");
+                    }
+                    else
+                    {
+                        SendSystem(player, demErr);
+                    }
+                }
+                return;
+
+            case "fmembers":
+                if (_factions != null)
+                {
+                    var myMember = _factions.GetMember(acc.Id);
+                    if (myMember == null)
+                    {
+                        SendSystem(player, "Вы не состоите ни в одной организации.");
+                        return;
+                    }
+                    var fac = _factions.GetFaction(myMember.FactionId);
+                    if (fac == null) return;
+
+                    var onlineInFac = new List<(IPlayer p, Account a, int rank)>();
+                    foreach (var p in Alt.GetAllPlayers())
+                    {
+                        if (!p.Exists) continue;
+                        var pAcc = _accountOf(p);
+                        if (pAcc == null) continue;
+                        var mem = _factions.GetMember(pAcc.Id);
+                        if (mem != null && mem.FactionId == fac.Id)
+                        {
+                            onlineInFac.Add((p, pAcc, mem.RankLevel));
+                        }
+                    }
+
+                    SendSystem(player, $"=== Члены организации {fac.Name} онлайн ({onlineInFac.Count} чел.) ===");
+                    foreach (var (memPlayer, memAcc, rLevel) in onlineInFac.OrderByDescending(x => x.rank))
+                    {
+                        var rankDef = fac.GetRank(rLevel);
+                        var rankTitle = rankDef?.Name ?? $"Ранг {rLevel}";
+                        SendSystem(player, $"[{memPlayer.Id}] {memAcc.Username} — {rankTitle} ({rLevel})");
                     }
                 }
                 return;
@@ -891,6 +1022,29 @@ public sealed class ChatSystem
                         SendSystem(player, relErr);
                     }
                 }
+                return;
+
+            case "demorgan":
+            case "jailtime":
+                if (acc.IsJailed(DateTime.UtcNow))
+                {
+                    if (DateTime.TryParse(acc.JailUntilUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out var until))
+                    {
+                        var remaining = until - DateTime.UtcNow;
+                        var mins = Math.Max(0, (int)remaining.TotalMinutes);
+                        var secs = Math.Max(0, remaining.Seconds);
+                        SendSystem(player, $"[Заключение] Вам осталось отбывать: {mins} мин. {secs} сек.");
+                        return;
+                    }
+                }
+                if (_factions != null && _factions.IsArrested(acc.Id, out var remSec, out var demorganReason))
+                {
+                    int m = remSec / 60;
+                    int s = remSec % 60;
+                    SendSystem(player, $"[КПЗ] Вам осталось отбывать: {m} мин. {s} сек. (Статья: {demorganReason})");
+                    return;
+                }
+                SendSystem(player, "[Заключение] Вы не находитесь в заключении.");
                 return;
 
             case "buyhouse":
@@ -1405,6 +1559,7 @@ public sealed class ChatSystem
         "freeze", "kick", "mute", "jail", "ban", "banip", "slap", "warn", "bansc",
         "hwidban", "macban", "hardban", "takemoney", "sethp", "setarmor", "setskin",
         "setdim", "gethere", "tp", "tpm", "makeadmin", "clearadmin", "setadminlevel",
+        "speed", "weather", "time", "skin", "promote", "setadmin",
     };
 
     private void HandleAdminCommand(IPlayer player, Account acc, string cmd, string[] args, AdminCommandDef def)
@@ -1455,6 +1610,7 @@ public sealed class ChatSystem
                 var freezeTarget = FindPlayer(args[0]);
                 if (freezeTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 freezeTarget.Frozen = true;
+                freezeTarget.Emit("starter:setFrozen", true);
                 SendSystem(player, $"Вы заморозили {freezeTarget.Name} (ID {freezeTarget.Id}).");
                 SendSystem(freezeTarget, "Вы были заморожены администратором.");
                 break;
@@ -1464,6 +1620,7 @@ public sealed class ChatSystem
                 var unfreezeTarget = FindPlayer(args[0]);
                 if (unfreezeTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 unfreezeTarget.Frozen = false;
+                unfreezeTarget.Emit("starter:setFrozen", false);
                 SendSystem(player, $"Вы разморозили {unfreezeTarget.Name} (ID {unfreezeTarget.Id}).");
                 SendSystem(unfreezeTarget, "Вы были разморожены администратором.");
                 break;
@@ -1482,11 +1639,12 @@ public sealed class ChatSystem
                 var spTarget = FindPlayer(args[0]);
                 if (spTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 if (spTarget == player) { SendSystem(player, "Нельзя следить за самим собой."); return; }
-                _spectatingAdmins[player.Id] = (player.Position, player.Dimension);
+                _spectatingAdmins[player.Id] = (player.Position, player.Dimension, spTarget.Id);
                 player.Dimension = spTarget.Dimension;
                 player.Position = spTarget.Position + new Position(0, 0, 2.0f);
                 _notifyTeleport?.Invoke(player, player.Position);
                 player.Visible = false;
+                player.Emit("flovmp:admin:spectate", spTarget.Id, true);
                 SendSystem(player, $"Вы вошли в режим слежки за {spTarget.Name} (ID {spTarget.Id}). Для выхода введите /spoff.");
                 GameLog.Admin("spectate", LogActor.Admin(acc.Id, acc.Username), spTarget.Name);
                 break;
@@ -1498,13 +1656,25 @@ public sealed class ChatSystem
                     player.Dimension = orig.originalDim;
                     _notifyTeleport?.Invoke(player, player.Position);
                     player.Visible = true;
+                    player.Emit("flovmp:admin:spectate", 0, false);
                     SendSystem(player, "Вы вышли из режима слежки и вернулись на исходную позицию.");
                 }
                 else
                 {
                     player.Visible = true;
+                    player.Emit("flovmp:admin:spectate", 0, false);
                     SendSystem(player, "Вы не находитесь в режиме слежки.");
                 }
+                break;
+
+            case "noclip":
+                player.Emit("flovmp:admin:toggleNoClip");
+                player.Emit("starter:toggleNoClip");
+                break;
+
+            case "esp":
+                int? espMode = args.Length > 0 && int.TryParse(args[0], out var em) ? Math.Clamp(em, 0, 3) : null;
+                player.Emit("flovmp:admin:toggleEsp", espMode);
                 break;
 
             // ── Уровень 2: Модератор ───────────────────
@@ -1876,6 +2046,8 @@ public sealed class ChatSystem
                 {
                     repVeh.EngineHealth = 1000;
                     repVeh.BodyHealth = 1000;
+                    repVeh.SetStreamSyncedMetaData("fuel", 100.0f);
+                    Alt.EmitAllClients("flovmp:veh:repair", repVeh.Id);
                     SendSystem(player, "Транспорт отремонтирован.");
                     BroadcastNearbyMe(player, "достал инструменты и восстановил состояние автомобиля");
                 }
@@ -1905,6 +2077,8 @@ public sealed class ChatSystem
                 var newGod = !currentGod;
                 _godModeAdmins[player.Id] = newGod;
                 _setAdminExempt?.Invoke(acc.Id, newGod);
+                player.Emit("starter:setGodMode", newGod);
+                player.Emit("flovmp:admin:godMode", newGod);
                 if (newGod)
                 {
                     player.Health = 200;
@@ -1912,6 +2086,31 @@ public sealed class ChatSystem
                 }
                 SendSystem(player, newGod ? "[Админ] Режим бессмертия (GodMode) ВКЛЮЧЁН." : "[Админ] Режим бессмертия (GodMode) ВЫКЛЮЧЕН.");
                 GameLog.Admin("godmode", LogActor.Admin(acc.Id, acc.Username), newGod ? "enabled" : "disabled");
+                break;
+
+            case "speed":
+                var speedTarget = player;
+                float speedMult = 1.0f;
+                if (args.Length > 0 && float.TryParse(args[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sm))
+                {
+                    speedMult = sm;
+                }
+                else if (args.Length > 1 && float.TryParse(args[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sm2))
+                {
+                    var found = FindPlayer(args[0]);
+                    if (found != null)
+                    {
+                        speedTarget = found;
+                        speedMult = sm2;
+                    }
+                }
+                speedMult = Math.Clamp(speedMult, 1.0f, 1.49f);
+                speedTarget.Emit("starter:setSpeed", speedMult);
+                SendSystem(player, $"Множитель скорости бега для {speedTarget.Name} установлен на {speedMult:F2}.");
+                if (speedTarget != player)
+                {
+                    SendSystem(speedTarget, $"Администратор {acc.Username} установил вам скорость бега {speedMult:F2}.");
+                }
                 break;
 
             // ── Уровень 5: Старший Администратор ──────
@@ -1962,28 +2161,61 @@ public sealed class ChatSystem
                 break;
 
             case "setweather":
-                if (args.Length == 0 || !uint.TryParse(args[0], out var wId))
+            case "weather":
+                if (args.Length == 0)
                 {
-                    SendSystem(player, "Использование: /setweather <0-14>");
+                    SendSystem(player, "Использование: /weather <0-14 | CLEAR | EXTRASUNNY | CLOUDS | RAIN | THUNDER | FOGGY | XMAS | SNOW>");
                     return;
                 }
-                Alt.EmitAllClients("flovmp:env:weather", wId);
-                SendSystem(player, $"Погода сервера установлена на ID {wId}.");
+                uint finalWeatherId = 0;
+                if (uint.TryParse(args[0], out var parsedWId))
+                {
+                    finalWeatherId = parsedWId;
+                }
+                else
+                {
+                    var wName = args[0].ToUpperInvariant();
+                    finalWeatherId = wName switch
+                    {
+                        "EXTRASUNNY" => 0,
+                        "CLEAR" => 1,
+                        "CLOUDS" => 2,
+                        "SMOG" => 3,
+                        "FOGGY" => 4,
+                        "OVERCAST" => 5,
+                        "RAIN" => 6,
+                        "THUNDER" => 7,
+                        "CLEARING" => 8,
+                        "NEUTRAL" => 9,
+                        "SNOW" => 10,
+                        "BLIZZARD" => 11,
+                        "SNOWLIGHT" => 12,
+                        "XMAS" => 13,
+                        "HALLOWEEN" => 14,
+                        _ => 0
+                    };
+                }
+                Alt.EmitAllClients("flovmp:env:weather", finalWeatherId);
+                Alt.EmitAllClients("starter:setWeather", args[0].ToUpperInvariant());
+                SendSystem(player, $"Погода сервера установлена на: {args[0].ToUpperInvariant()} (ID {finalWeatherId}).");
                 break;
 
             case "settime":
+            case "time":
                 if (args.Length == 0 || !int.TryParse(args[0], out var h))
                 {
-                    SendSystem(player, "Использование: /settime <часы 0-23> [минуты]");
+                    SendSystem(player, "Использование: /time <часы 0-23> [минуты]");
                     return;
                 }
                 var m = args.Length > 1 && int.TryParse(args[1], out var parsedM) ? parsedM : 0;
                 Alt.EmitAllClients("flovmp:env:time", h, m);
+                Alt.EmitAllClients("starter:setTime", h, m);
                 SendSystem(player, $"Время сервера установлено на {h:D2}:{m:D2}.");
                 break;
 
             case "setskin":
-                if (args.Length < 2) { SendSystem(player, "Использование: /setskin <ID/ник> <модель_скина>"); return; }
+            case "skin":
+                if (args.Length < 2) { SendSystem(player, "Использование: /skin <ID/ник> <модель_скина>"); return; }
                 var skinTarget = FindPlayer(args[0]);
                 if (skinTarget == null) { SendSystem(player, "Игрок не найден."); return; }
                 var skinModel = args[1];
@@ -2105,6 +2337,7 @@ public sealed class ChatSystem
 
             // ── Уровень 7: Главный Администратор ───────
             case "makeadmin":
+            case "promote":
                 if (args.Length < 2 || !int.TryParse(args[1], out var newLvl) || newLvl is < 0 or > 6)
                 {
                     SendSystem(player, "Использование: /makeadmin <ID/ник> <уровень 0-6>");
@@ -2117,6 +2350,8 @@ public sealed class ChatSystem
                 promoteAcc.AdminLevel = newLvl;
                 _saveAccount?.Invoke(promoteAcc);
                 _setAdminExempt?.Invoke(promoteAcc.Id, newLvl > 0);
+                promoteTarget.SetStreamSyncedMetaData("adminLevel", newLvl);
+                promoteTarget.Emit("flovmp:console:setAdmin", newLvl);
                 SendSystem(promoteTarget, $"[Администрация] Ваш статус изменён на: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl) администратором {acc.Username}.");
                 SendSystem(player, $"Вы назначили {promoteTarget.Name} на должность: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl).");
                 GameLog.Admin("promote", LogActor.Admin(acc.Id, acc.Username), promoteTarget.Name, ("newLevel", newLvl));
@@ -2126,10 +2361,15 @@ public sealed class ChatSystem
                 if (args.Length == 0) { SendSystem(player, "Использование: /clearadmin <ник>"); return; }
                 var clearName = args[0];
                 var clearAcc = _findAccountByName?.Invoke(clearName);
+                IPlayer? onlineTarget = null;
                 if (clearAcc == null)
                 {
-                    var onlineTarget = FindPlayer(clearName);
+                    onlineTarget = FindPlayer(clearName);
                     clearAcc = onlineTarget != null ? _accountOf(onlineTarget) : null;
+                }
+                else
+                {
+                    onlineTarget = FindPlayer(clearAcc.Username);
                 }
                 if (clearAcc == null)
                 {
@@ -2139,6 +2379,11 @@ public sealed class ChatSystem
                 clearAcc.AdminLevel = 0;
                 _saveAccount?.Invoke(clearAcc);
                 _setAdminExempt?.Invoke(clearAcc.Id, false);
+                if (onlineTarget != null && onlineTarget.Exists)
+                {
+                    onlineTarget.SetStreamSyncedMetaData("adminLevel", 0);
+                    onlineTarget.Emit("flovmp:console:setAdmin", 0);
+                }
                 BroadcastAdmin($"[А-ЧАТ] Главный Администратор {acc.Username} снял права администратора с {clearAcc.Username}.");
                 SendSystem(player, $"Администраторские права успешно сняты с {clearAcc.Username}.");
                 GameLog.Admin("clearadmin", LogActor.Admin(acc.Id, acc.Username), clearAcc.Username);
@@ -2146,6 +2391,7 @@ public sealed class ChatSystem
 
             // ── Уровень 8: Руководитель проекта ───────
             case "setadminlevel":
+            case "setadmin":
                 if (args.Length < 2 || !int.TryParse(args[1], out var fullLvl) || fullLvl is < 0 or > 8)
                 {
                     SendSystem(player, "Использование: /setadminlevel <ID/ник> <уровень 0-8>");
@@ -2158,6 +2404,8 @@ public sealed class ChatSystem
                 fullAcc.AdminLevel = fullLvl;
                 _saveAccount?.Invoke(fullAcc);
                 _setAdminExempt?.Invoke(fullAcc.Id, fullLvl > 0);
+                fullTarget.SetStreamSyncedMetaData("adminLevel", fullLvl);
+                fullTarget.Emit("flovmp:console:setAdmin", fullLvl);
                 SendSystem(fullTarget, $"[Руководство] Ваш статус изменён на: {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl).");
                 SendSystem(player, $"Успешно установлен ранг {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl) для {fullTarget.Name}.");
                 GameLog.Admin("setadmin", LogActor.Admin(acc.Id, acc.Username), fullTarget.Name, ("level", fullLvl));

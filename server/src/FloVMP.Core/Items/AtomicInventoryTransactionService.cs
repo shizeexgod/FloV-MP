@@ -144,6 +144,68 @@ public sealed class AtomicInventoryTransactionService
     }
 
     /// <summary>
+    /// Найти и атомарно подобрать ближайший предмет с пола в радиусе maxDistance.
+    /// </summary>
+    public bool TryPickupNearestGroundItem(
+        ulong playerId,
+        Inventory playerInv,
+        Vector3D playerPos,
+        int playerDimension,
+        float maxDistance,
+        out ItemStack? pickedItem)
+    {
+        pickedItem = null;
+        string? bestDropId = null;
+        float bestDist = maxDistance;
+
+        foreach (var (id, drop) in _groundDrops)
+        {
+            if (drop.Dimension != playerDimension || drop.IsConsumed) continue;
+            var dist = drop.Position.DistanceTo(playerPos);
+            if (dist <= bestDist)
+            {
+                bestDist = dist;
+                bestDropId = id;
+            }
+        }
+
+        if (bestDropId == null) return false;
+
+        return TryPickupGroundItem(playerId, bestDropId, playerInv, playerPos, maxDistance, out pickedItem, playerDimension);
+    }
+
+    /// <summary>
+    /// Очистить устаревшие предметы с пола (предотвращение утечек памяти и скопления мусора).
+    /// </summary>
+    public int CleanupExpiredDrops(TimeSpan maxLifetime)
+    {
+        var threshold = DateTime.UtcNow - maxLifetime;
+        int count = 0;
+        foreach (var (id, drop) in _groundDrops)
+        {
+            if (drop.DroppedAtUtc < threshold && drop.TryClaim())
+            {
+                drop.MarkConsumed();
+                if (_groundDrops.TryRemove(id, out _))
+                {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Получить снимок всех активных предметов на полу в указанном виртуальном мире.
+    /// </summary>
+    public IReadOnlyList<GroundItemDrop> GetActiveDrops(int dimension = 0)
+    {
+        return _groundDrops.Values
+            .Where(d => d.Dimension == dimension && !d.IsConsumed)
+            .ToList();
+    }
+
+    /// <summary>
     /// Двухфазный атомарный обмен между двумя игроками (Two-Phase Commit Trade with Automatic Rollback).
     /// Исключает рассинхрон или дюп при отмене трейда во время подтверждения или нехватке слотов.
     /// </summary>
