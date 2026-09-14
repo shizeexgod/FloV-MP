@@ -152,6 +152,37 @@ def check_security_regressions(rep):
                 "" if ok else "есть дефолт - /alogin открыт всем, кто знает строку")
 
 
+# ------------- 2b. Согласованность админ-команд -------------
+
+def check_admin_commands(rep):
+    """Обработчик без регистрации = команда мертва ('неизвестная команда').
+    Регистрация без обработчика = админ вводит, молча ничего не происходит.
+    И то, и другое всплывает в бою, когда админ пытается снять нарушителя."""
+    section("2b. Согласованность админ-команд")
+    chat_p = ROOT / "server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs"
+    reg_p = ROOT / "server/src/FloVMP.Core/Admin/AdminCommandRegistry.cs"
+    if not (chat_p.exists() and reg_p.exists()):
+        rep.add(SKIP, "реестр команд", "файлы не найдены")
+        return
+
+    chat = chat_p.read_text(encoding="utf-8", errors="ignore")
+    reg = reg_p.read_text(encoding="utf-8", errors="ignore")
+    registered = set(re.findall(r'^\s*Register\("([^"]+)"', reg, re.M))
+    marker = "private void HandleAdminCommand"
+    if marker not in chat:
+        rep.add(WARN, "HandleAdminCommand", "не найден - структура изменилась")
+        return
+    cases = set(re.findall(r'case\s+"([a-z0-9_]+)"\s*:', chat[chat.find(marker):]))
+
+    dead = sorted(cases - registered)
+    noimpl = sorted(registered - cases)
+    rep.add(PASS if not dead else FAIL, "нет мёртвых команд (обработчик без регистрации)",
+            ", ".join(dead) if dead else "чисто")
+    rep.add(PASS if not noimpl else FAIL, "нет команд без обработчика (реклама в /ahelp впустую)",
+            ", ".join(noimpl) if noimpl else "чисто")
+    rep.add(PASS, "всего админ-команд", str(len(registered)))
+
+
 # ------------------- 3. Горячий путь (блокировка тика) -------------------
 
 def check_hot_path(rep):
@@ -280,6 +311,7 @@ def main():
     rep = Report()
     check_structure(rep)
     check_security_regressions(rep)
+    check_admin_commands(rep)
     check_hot_path(rep)
     check_version_consistency(rep)
 

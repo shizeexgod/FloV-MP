@@ -21,6 +21,8 @@ public static class AdminCommandRegistry
         Register("sp", 1, "/sp <ID/ник>", "Следить за игроком (режим спектатора)");
         Register("spoff", 1, "/spoff", "Выйти из режима слежки");
         Register("ans", 1, "/ans <ID/ник> <ответ>", "Ответить на обращение / репорт");
+        Register("noclip", 1, "/noclip", "Включить/выключить режим полёта (F4 NoClip)");
+        Register("esp", 1, "/esp [0-3]", "Переключить админ-видение (F3 Wallhack)");
 
         // ── Уровень 2: Модератор ───────────────────────────────────
         Register("goto", 2, "/goto <ID/ник>", "Телепортироваться к игроку");
@@ -55,6 +57,10 @@ public static class AdminCommandRegistry
         Register("fix", 4, "/fix", "Починить транспорт (алиас /repair)");
         Register("fuel", 4, "/fuel", "Заправить транспорт до 100%");
         Register("god", 4, "/god", "Режим неуязвимости администратора (GodMode)");
+        // Алиас: обработчик в ChatSystem ловит и "god", и "godmode". Без
+        // регистрации /godmode отвечал "неизвестная команда".
+        Register("godmode", 4, "/godmode", "Режим неуязвимости администратора (алиас /god)");
+        Register("speed", 4, "/speed [множитель 1.0-1.49] [ID/ник]", "Установить множитель скорости бега");
 
         // ── Уровень 5: Старший Администратор ──────────────────────
         Register("hwidban", 5, "/hwidban <ID/ник> <дней> [причина]", "Аппаратная блокировка по железу (HWID + MAC)");
@@ -62,8 +68,11 @@ public static class AdminCommandRegistry
         Register("tp", 5, "/tp <X> <Y> <Z>", "Телепорт по точным координатам");
         Register("tpm", 5, "/tpm [redsquare|city|police|hospital]", "Быстрый телепорт по ключевым локациям сервера");
         Register("setweather", 5, "/setweather <ID_погоды>", "Изменить погоду на сервере");
+        Register("weather", 5, "/weather <0-14|CLEAR|...>", "Изменить погоду на сервере (алиас /setweather)");
         Register("settime", 5, "/settime <часы 0-23> [минуты]", "Изменить игровое время");
+        Register("time", 5, "/time <часы 0-23> [минуты]", "Изменить игровое время (алиас /settime)");
         Register("setskin", 5, "/setskin <ID/ник> <модель>", "Изменить модель персонажа (скин)");
+        Register("skin", 5, "/skin <ID/ник> <модель>", "Изменить модель персонажа (алиас /setskin)");
 
         // ── Уровень 6: Куратор / Зам. ГА ──────────────────────────
         Register("hardban", 6, "/hardban <ID/ник> [причина]", "Тотальная перманентная блокировка (Account+IP+SC+HWID+MAC)");
@@ -71,14 +80,19 @@ public static class AdminCommandRegistry
         Register("takemoney", 6, "/takemoney <ID/ник> <сумма>", "Изъять наличные средства у игрока");
         Register("giveitem", 6, "/giveitem <ID/ник> <item_id> <кол-во>", "Выдать предмет в инвентарь");
         Register("setdim", 6, "/setdim <ID/ник> <dimension>", "Установить виртуальный мир (дименшн)");
-        Register("snapshot", 6, "/snapshot <take|list|restore> <ID/ник> [snapshotId]", "Снимки состояний (Time-Machine) и точечный откат персонажа");
+        // ВРЕМЕННО НЕ РЕГИСТРИРУЕТСЯ: SnapshotManager написан, но обработчика
+        // команды в ChatSystem нет — админ вводил /snapshot и молча ничего не
+        // происходило. Вернуть регистрацию вместе с реализацией обработчика.
+        // Register("snapshot", 6, "/snapshot <take|list|restore> <ID/ник> [snapshotId]", "Снимки состояний (Time-Machine) и точечный откат персонажа");
 
         // ── Уровень 7: Главный Администратор (ГА) ─────────────────
         Register("makeadmin", 7, "/makeadmin <ID/ник> <уровень 0-6>", "Назначить администратора (до 6 ранга)");
+        Register("promote", 7, "/promote <ID/ник> <уровень 0-6>", "Назначить администратора (алиас /makeadmin)");
         Register("clearadmin", 7, "/clearadmin <ник>", "Снять администратора");
 
         // ── Уровень 8: Руководитель проекта / Разработчик ─────────
         Register("setadminlevel", 8, "/setadminlevel <ID/ник> <уровень 0-8>", "Полный доступ к уровням администрации");
+        Register("setadmin", 8, "/setadmin <ID/ник> <уровень 0-8>", "Установить уровень администратора (алиас /setadminlevel)");
         Register("srvrestart", 8, "/srvrestart [секунд]", "Перезапустить сервер с оповещением");
     }
 
