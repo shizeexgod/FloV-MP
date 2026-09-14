@@ -90,11 +90,11 @@ public static class AltvToml
     /// <summary>
     /// Приводит ник к безопасному для TOML literal-строки виду: только буквы,
     /// цифры, пробел и <c>. _ -</c>; управляющие символы и кавычки убираются;
-    /// длина ≤ 32. Пустой результат -> дефолт 'shize5'.
+    /// длина ≤ 32. Пустой результат -> дефолт 'Player'.
     /// </summary>
     private static string SanitizeName(string? nickname)
     {
-        if (string.IsNullOrWhiteSpace(nickname)) return "shize5";
+        if (string.IsNullOrWhiteSpace(nickname)) return "Player";
         var sb = new System.Text.StringBuilder(nickname.Length);
         foreach (var ch in nickname.Trim())
         {
@@ -103,7 +103,7 @@ public static class AltvToml
                 sb.Append(ch);
         }
         var name = sb.ToString().Trim();
-        return name.Length == 0 ? "shize5" : name;
+        return name.Length == 0 ? "Player" : name;
     }
 
     public static string DetectPlatform(string gtaPath)

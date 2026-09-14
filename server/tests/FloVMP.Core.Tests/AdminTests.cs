@@ -107,6 +107,36 @@ public class AdminTests
     }
 
     [Fact]
+    public void NewAdminCommands_LevelsAreEnforced()
+    {
+        // Level 1: noclip, esp
+        Assert.True(AdminCommandRegistry.CanExecute(1, "noclip"));
+        Assert.True(AdminCommandRegistry.CanExecute(1, "esp"));
+        Assert.False(AdminCommandRegistry.CanExecute(0, "noclip"));
+        Assert.False(AdminCommandRegistry.CanExecute(0, "esp"));
+
+        // Level 4: speed
+        Assert.True(AdminCommandRegistry.CanExecute(4, "speed"));
+        Assert.False(AdminCommandRegistry.CanExecute(3, "speed"));
+
+        // Level 5: weather, time, skin
+        Assert.True(AdminCommandRegistry.CanExecute(5, "weather"));
+        Assert.True(AdminCommandRegistry.CanExecute(5, "time"));
+        Assert.True(AdminCommandRegistry.CanExecute(5, "skin"));
+        Assert.False(AdminCommandRegistry.CanExecute(4, "weather"));
+        Assert.False(AdminCommandRegistry.CanExecute(4, "time"));
+        Assert.False(AdminCommandRegistry.CanExecute(4, "skin"));
+
+        // Level 7: promote
+        Assert.True(AdminCommandRegistry.CanExecute(7, "promote"));
+        Assert.False(AdminCommandRegistry.CanExecute(6, "promote"));
+
+        // Level 8: setadmin
+        Assert.True(AdminCommandRegistry.CanExecute(8, "setadmin"));
+        Assert.False(AdminCommandRegistry.CanExecute(7, "setadmin"));
+    }
+
+    [Fact]
     public void Account_MuteChecks_WorkProperly()
     {
         var acc = new Account { Username = "TestUser" };
@@ -168,7 +198,9 @@ public class AdminTests
             var mgr = new AdminBootstrapManager(tempFile);
             Assert.False(string.IsNullOrWhiteSpace(mgr.CurrentSetupToken));
             Assert.StartsWith("FLV-", mgr.CurrentSetupToken);
-            Assert.True(mgr.CanAutoClaim);
+            // Безопасный дефолт: авто-захват прав первым игроком ВЫКЛЮЧЕН.
+            // Первичная настройка только через токен из консоли сервера.
+            Assert.False(mgr.CanAutoClaim);
         }
         finally
         {
@@ -183,10 +215,25 @@ public class AdminTests
         try
         {
             var mgr = new AdminBootstrapManager(tempFile);
-            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "127.0.0.1"));
-            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "::1"));
-            Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "localhost"));
+            // Безопасный дефолт: localhost НЕ даёт прав. За nginx/прокси IP
+            // схлопывается в 127.0.0.1 — иначе Основателя получили бы все.
+            Environment.SetEnvironmentVariable("FLOVMP_ALLOW_LOCAL_OWNER", null);
+            Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "127.0.0.1"));
+            Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "::1"));
+            Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "localhost"));
             Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "192.168.1.100"));
+
+            // Осознанное включение для локальной отладки — работает.
+            try
+            {
+                Environment.SetEnvironmentVariable("FLOVMP_ALLOW_LOCAL_OWNER", "1");
+                Assert.Equal(8, mgr.GetAssignedRank(0, "RegularUser", "127.0.0.1"));
+                Assert.Equal(0, mgr.GetAssignedRank(0, "RegularUser", "192.168.1.100"));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FLOVMP_ALLOW_LOCAL_OWNER", null);
+            }
         }
         finally
         {
@@ -234,22 +281,28 @@ public class AdminTests
         try
         {
             var mgr = new AdminBootstrapManager(tempFile);
-            mgr.SetAdmin("ModeratorUser", 2);
-            mgr.SetAdmin("CuratorUser", 6);
-            mgr.SetAdmin("OverClamped", 15); // Должно обрезаться до 8
+            // Привязка по SocialClubId — единственная безопасная (ник задаётся
+            // клиентом и подделывается).
+            mgr.SetAdmin("1001", 2);
+            mgr.SetAdmin("1002", 6);
+            mgr.SetAdmin("1003", 15); // Должно обрезаться до 8
 
-            Assert.Equal(2, mgr.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
-            Assert.Equal(6, mgr.GetAssignedRank(0, "CuratorUser", "10.0.0.1"));
-            Assert.Equal(8, mgr.GetAssignedRank(0, "OverClamped", "10.0.0.1"));
+            Assert.Equal(2, mgr.GetAssignedRank(1001, "ЛюбойНик", "10.0.0.1"));
+            Assert.Equal(6, mgr.GetAssignedRank(1002, "ЛюбойНик", "10.0.0.1"));
+            Assert.Equal(8, mgr.GetAssignedRank(1003, "ЛюбойНик", "10.0.0.1"));
 
-            // Проверка снятия прав (уровень 0)
-            mgr.SetAdmin("ModeratorUser", 0);
+            // Права по НИКУ не действуют по умолчанию: чужой ник прав не даёт.
+            mgr.SetAdmin("ModeratorUser", 5);
             Assert.Equal(0, mgr.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
 
-            // Проверка перезагрузки с диска
+            // Проверка снятия прав (уровень 0)
+            mgr.SetAdmin("1001", 0);
+            Assert.Equal(0, mgr.GetAssignedRank(1001, "ЛюбойНик", "10.0.0.1"));
+
+            // Проверка перезагрузки с диска (привязка по SocialClubId переживает рестарт)
             var mgrReloaded = new AdminBootstrapManager(tempFile);
-            Assert.Equal(6, mgrReloaded.GetAssignedRank(0, "CuratorUser", "10.0.0.1"));
-            Assert.Equal(0, mgrReloaded.GetAssignedRank(0, "ModeratorUser", "10.0.0.1"));
+            Assert.Equal(6, mgrReloaded.GetAssignedRank(1002, "ЛюбойНик", "10.0.0.1"));
+            Assert.Equal(0, mgrReloaded.GetAssignedRank(1001, "ЛюбойНик", "10.0.0.1"));
         }
         finally
         {

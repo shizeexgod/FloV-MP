@@ -20,7 +20,20 @@ public class AdminConfigFile
     public Dictionary<string, int> Admins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     [JsonPropertyName("autoClaimFirstPlayer")]
-    public bool AutoClaimFirstPlayer { get; set; } = true;
+    // ВАЖНО: по умолчанию ВЫКЛЮЧЕНО. При true первый подключившийся игрок
+    // автоматически становился Основателем (8) без токена — на публичном
+    // запуске это значит, что права заберёт случайный человек. Безопасный
+    // путь первичной настройки: токен из консоли сервера (/claimowner <токен>)
+    // либо setadmin/setfounder из консоли.
+    public bool AutoClaimFirstPlayer { get; set; } = false;
+
+    /// <summary>
+    /// Разрешать ли выдачу прав по НИКУ игрока. По умолчанию ВЫКЛЮЧЕНО:
+    /// ник в alt:V задаётся клиентом (altv.toml), поэтому любой желающий может
+    /// взять ник администратора и получить его уровень. Безопасная привязка —
+    /// по SocialClubId. Включать только осознанно (напр. локальная отладка).
+    /// </summary>
+    public bool AllowNameBasedAdmin { get; set; } = false;
 
     [JsonPropertyName("setupToken")]
     public string SetupToken { get; set; } = "";
@@ -132,6 +145,34 @@ public class AdminBootstrapManager
                     _config.Founders.Add(envOwnerSc.Trim());
             }
 
+            // Диагностика: записи, привязанные к НИКУ, больше не дают прав
+            // (AllowNameBasedAdmin=false), т.к. ник подделывается клиентом.
+            // Громко предупреждаем, чтобы владелец не остался без доступа.
+            if (!_config.AllowNameBasedAdmin)
+            {
+                var nameKeyed = new List<string>();
+                foreach (var f in _config.Founders)
+                    if (!ulong.TryParse(f, out _)) nameKeyed.Add($"founder:{f}");
+                foreach (var kv in _config.Admins)
+                    if (!ulong.TryParse(kv.Key, out _)) nameKeyed.Add($"admin:{kv.Key}({kv.Value})");
+
+                if (nameKeyed.Count > 0)
+                {
+                    Console.WriteLine("========================================================");
+                    Console.WriteLine("[FloV:MP Security] ВНИМАНИЕ: права по НИКУ отключены.");
+                    Console.WriteLine("  Ник в alt:V задаётся клиентом — любой мог взять ник");
+                    Console.WriteLine("  админа и получить его уровень. Эти записи НЕ действуют:");
+                    foreach (var n in nameKeyed) Console.WriteLine($"    - {n}");
+                    Console.WriteLine("  Как восстановить доступ (любой способ):");
+                    Console.WriteLine("    1) В консоли сервера:  setadmin <SocialClubId> 8");
+                    Console.WriteLine("    2) В игре:             /claimowner <токен из консоли>");
+                    Console.WriteLine("    3) Переменная окружения FLOVMP_OWNER_SC=<SocialClubId>");
+                    Console.WriteLine("  (Осознанно вернуть привязку по нику: AllowNameBasedAdmin=true");
+                    Console.WriteLine("   в config/admins.json — НЕ рекомендуется на публичном сервере.)");
+                    Console.WriteLine("========================================================");
+                }
+            }
+
             // Если список пуст и токена нет — сгенерировать токен настройки
             if (_config.Admins.Count == 0 && _config.Founders.Count == 0 && string.IsNullOrWhiteSpace(_config.SetupToken))
             {
@@ -147,21 +188,32 @@ public class AdminBootstrapManager
 
     public int GetAssignedRank(ulong socialClubId, string playerName, string? ip = null)
     {
-        if (!string.IsNullOrEmpty(ip) && (ip == "127.0.0.1" || ip == "::1" || ip == "localhost"))
+        // ВАЖНО: раньше любой игрок с localhost-IP безусловно получал 8 уровень.
+        // За nginx/прокси/NAT реальный IP схлопывается в 127.0.0.1 — и права
+        // Основателя получали ВСЕ подключившиеся. Теперь этот путь выключен по
+        // умолчанию и включается только явным FLOVMP_ALLOW_LOCAL_OWNER=1
+        // (для локальной отладки на своей машине, не для прода).
+        if (!string.IsNullOrEmpty(ip) && (ip == "127.0.0.1" || ip == "::1" || ip == "localhost")
+            && string.Equals(Environment.GetEnvironmentVariable("FLOVMP_ALLOW_LOCAL_OWNER"), "1", StringComparison.Ordinal))
             return 8;
 
         lock (_lock)
         {
             var scStr = socialClubId > 0 ? socialClubId.ToString() : null;
 
+            // Привязка по SocialClubId — основная и безопасная.
             if (scStr != null && _config.Founders.Contains(scStr)) return 8;
-            if (!string.IsNullOrEmpty(playerName) && _config.Founders.Contains(playerName)) return 8;
-
             if (scStr != null && _config.Admins.TryGetValue(scStr, out var scRank) && scRank > 0)
                 return scRank;
 
-            if (!string.IsNullOrEmpty(playerName) && _config.Admins.TryGetValue(playerName, out var nameRank) && nameRank > 0)
-                return nameRank;
+            // Привязка по НИКУ — только если явно разрешена (ник подделывается
+            // клиентом, см. AllowNameBasedAdmin).
+            if (_config.AllowNameBasedAdmin && !string.IsNullOrEmpty(playerName))
+            {
+                if (_config.Founders.Contains(playerName)) return 8;
+                if (_config.Admins.TryGetValue(playerName, out var nameRank) && nameRank > 0)
+                    return nameRank;
+            }
 
             return 0;
         }
@@ -173,7 +225,8 @@ public class AdminBootstrapManager
         {
             var scStr = socialClubId > 0 ? socialClubId.ToString() : null;
             if (scStr != null && _config.Founders.Contains(scStr)) return true;
-            if (!string.IsNullOrEmpty(playerName) && _config.Founders.Contains(playerName)) return true;
+            if (_config.AllowNameBasedAdmin && !string.IsNullOrEmpty(playerName)
+                && _config.Founders.Contains(playerName)) return true;
             return false;
         }
     }
