@@ -229,8 +229,14 @@ def check_build_and_tests(rep):
     code, out = run_cmd(["dotnet", "test",
                          "server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj",
                          "-c", "Release", "--nologo", "-v", "q"])
-    passed = re.search(r"пройдено\s+(\d+)", out) or re.search(r"Passed:\s+(\d+)", out)
-    detail = "пройдено " + passed.group(1) if passed else out.strip()[:160]
+    # ВНИМАНИЕ: "пройдено" встречается и внутри "не пройдено" — берём только
+    # число, перед которым НЕТ "не ", иначе отчёт врёт про 0 тестов.
+    passed = re.search(r"(?<!не )пройдено\s+(\d+)", out) or re.search(r"Passed:\s+(\d+)", out)
+    failed = re.search(r"не пройдено\s+(\d+)", out) or re.search(r"Failed:\s+(\d+)", out)
+    detail = "пройдено {}{}".format(
+        passed.group(1) if passed else "?",
+        ", провалено " + failed.group(1) if failed and failed.group(1) != "0" else ""
+    ) if (passed or failed) else out.strip()[:160]
     rep.add(PASS if code == 0 else FAIL, "юнит-тесты", detail)
 
 
