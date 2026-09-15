@@ -212,6 +212,132 @@ def check_hot_path(rep):
         rep.add(PASS if pumped else FAIL, "Pump() подключён к OnTick",
                 "" if pumped else "результаты входа никогда не применятся - игроки зависнут на авторизации")
 
+    # Регистрация не должна переписывать accounts.json целиком: стоимость
+    # растёт с числом учёток (замерено 9.21 мс при 1500, 0.16 мс с журналом).
+    journal = "AppendToJournalLocked" in txt and "_journalPath" in txt
+    rep.add(PASS if journal else FAIL, "регистрация не переписывает весь файл",
+            "" if journal else "Create() делает полный сброс -> O(n) на каждую регистрацию")
+
+    # Поиск по номеру счёта идёт на каждый перевод денег, в игровом потоке.
+    indexed = "_bankToName" in txt
+    rep.add(PASS if indexed else FAIL, "поиск по номеру счёта по индексу",
+            "" if indexed else "FindByBankAccount перебирает все аккаунты на каждый /transfer")
+
+    # Запросы соседей делаются для каждого игрока каждый тик: перегрузка с
+    # буфером убирает десятки мегабайт мусора и паузы сборщика в тике.
+    grid = ROOT / "server/src/FloVMP.Core/Spatial/SpatialHashGrid.cs"
+    if grid.exists():
+        g = grid.read_text(encoding="utf-8", errors="ignore")
+        buffered = "FindInRadiusWithPositions" in g and "List<T> results" in g
+        rep.add(PASS if buffered else FAIL, "запросы соседей без аллокаций",
+                "" if buffered else "каждый запрос выделяет новый список -> паузы GC в игровом тике")
+
+
+# ------------- 3b. Блокировки: обещание команды = реальность -------------
+
+def check_bans(rep):
+    section("3b. Блокировки (бан по IP/HWID должен реально банить)")
+
+    svc = ROOT / "server/src/FloVMP.Core/Security/MultiTierBanService.cs"
+    if not svc.exists():
+        rep.add(FAIL, "MultiTierBanService", "файл не найден")
+        return
+
+    s_txt = svc.read_text(encoding="utf-8", errors="ignore")
+    persisted = "IBanStore" in s_txt and "Persist(" in s_txt
+    rep.add(PASS if persisted else FAIL, "баны сохраняются в хранилище",
+            "" if persisted else "баны только в памяти -> рестарт снимает все блокировки")
+
+    refresh = "RefreshFromStore" in s_txt
+    rep.add(PASS if refresh else WARN, "дозагрузка банов с других инстансов",
+            "" if refresh else "при горизонтали бан с соседнего сервера не дойдёт")
+
+    # Главное обещание: команды с идентификаторами обязаны создавать запись
+    # с этими идентификаторами, а не только ставить флаг на аккаунте.
+    for path, label in (
+        ("server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs", "RP-геймод"),
+        ("server/src/FloVMP.Starter/StarterResource.cs", "базовая платформа"),
+    ):
+        f = ROOT / path
+        if not f.exists():
+            rep.add(SKIP, "команды бана ({})".format(label), "файл не найден")
+            continue
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        real = "CreateBan(" in t and "hwidHash:" in t
+        rep.add(PASS if real else FAIL, "команды бана пишут идентификаторы ({})".format(label),
+                "" if real else "бан по IP/HWID ставит флаг только на аккаунте - читер вернётся с новой учётки")
+
+        enforced = "RejectIfBanned" in t or "CheckConnection(" in t
+        rep.add(PASS if enforced else FAIL, "бан проверяется при входе ({})".format(label),
+                "" if enforced else "блокировка записывается, но вход не проверяется - бан не работает")
+
+
+# ------------- 3c. Миграции схемы БД -------------
+
+def check_migrations(rep):
+    section("3c. Миграции схемы БД")
+
+    mig_dir = ROOT / "sql/migrations"
+    if not mig_dir.is_dir():
+        rep.add(FAIL, "каталог sql/migrations", "схема не накатывается из кода")
+        return
+
+    files = sorted(mig_dir.glob("*.sql"))
+    rep.add(PASS if files else FAIL, "миграции найдены ({})".format(len(files)),
+            "" if files else "каталог пуст")
+
+    # CREATE DATABASE / USE внутри миграции увели бы накат в чужую базу мимо
+    # FLOVMP_DB_NAME, а сервер продолжил бы работать с пустой.
+    bad = []
+    versions = {}
+    for f in files:
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        for line in t.splitlines():
+            head = line.strip().upper()
+            if head.startswith("USE ") or head.startswith("CREATE DATABASE"):
+                bad.append(f.name)
+                break
+        digits = ""
+        for ch in f.name:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        versions.setdefault(digits, []).append(f.name)
+
+    rep.add(PASS if not bad else FAIL, "нет CREATE DATABASE/USE в миграциях",
+            "" if not bad else "увели бы накат в чужую базу: " + ", ".join(bad))
+
+    dupes = [v for v, names in versions.items() if len(names) > 1]
+    rep.add(PASS if not dupes else FAIL, "номера миграций уникальны",
+            "" if not dupes else "дубли номеров: " + ", ".join(dupes))
+
+    runner = ROOT / "server/src/FloVMP.Core/Database/MigrationRunner.cs"
+    if runner.exists():
+        r = runner.read_text(encoding="utf-8", errors="ignore")
+        locked = "GET_LOCK" in r
+        rep.add(PASS if locked else FAIL, "накат защищён блокировкой",
+                "" if locked else "два инстанса мигрируют одновременно -> гонка на схеме")
+        wired = "RunMigrations" in (ROOT / "server/src/FloVMP.Core/Database/AccountStoreFactory.cs")\
+            .read_text(encoding="utf-8", errors="ignore")
+        rep.add(PASS if wired else FAIL, "миграции подключены к старту",
+                "" if wired else "раннер есть, но никто его не вызывает")
+    else:
+        rep.add(FAIL, "MigrationRunner", "файл не найден - схема накатывается руками")
+
+    # Миграции обязаны доезжать до сервера: раннер ищет sql/migrations рядом
+    # с рабочей папкой, и без копии в сборочном скрипте схема не накатится.
+    for script, label in (("scripts/assemble-runtime.ps1", "Windows"),
+                          ("scripts/assemble-linux-server.ps1", "Linux")):
+        sc = ROOT / script
+        if not sc.exists():
+            rep.add(SKIP, "миграции в пакете ({})".format(label), "скрипт не найден")
+            continue
+        packed = "sql" in sc.read_text(encoding="utf-8", errors="ignore") and \
+                 "migrations" in sc.read_text(encoding="utf-8", errors="ignore")
+        rep.add(PASS if packed else FAIL, "миграции кладутся в пакет ({})".format(label),
+                "" if packed else "сервер стартует без миграций и молча уходит на JSON")
+
 
 # --------------------------- 4. Сборка и тесты ---------------------------
 
@@ -332,6 +458,8 @@ def main():
     check_security_regressions(rep)
     check_admin_commands(rep)
     check_hot_path(rep)
+    check_bans(rep)
+    check_migrations(rep)
     check_version_consistency(rep)
 
     if args.build or args.all:
