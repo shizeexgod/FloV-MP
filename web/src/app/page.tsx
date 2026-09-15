@@ -44,6 +44,28 @@ function BrowserFrame({ src, alt, urlLabel, priority = false }: { src: string; a
   );
 }
 
+/**
+ * Необязательный фоновый арт для хиро/фото-карточек. Пока файл не положен в
+ * public/media — просто не рендерится (без битых иконок), сетка/градиент
+ * остаются единственным фоном. Как только промпты из медиа-брифа сгенерированы
+ * и сохранены по указанным путям, картинка проявится сама на следующей загрузке.
+ */
+function OptionalPhoto({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onLoad={(e) => e.currentTarget.classList.add('is-loaded')}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export default function HomePage() {
   const t = useT();
 
@@ -51,6 +73,9 @@ export default function HomePage() {
     <div>
       {/* ---------------- HERO ---------------- */}
       <div className="relative overflow-hidden">
+        <div className="hero-photo-layer" aria-hidden>
+          <OptionalPhoto src="/media/hero/city-dusk.jpg" alt="" />
+        </div>
         <div className="grid-bg pointer-events-none absolute inset-0 -z-10 h-[640px]" aria-hidden />
         <Container className="py-20 sm:py-28">
           <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
@@ -99,17 +124,25 @@ export default function HomePage() {
         </Container>
       </div>
 
-      {/* ---------------- КАК НАЧАТЬ ---------------- */}
+      {/* ---------------- НАЧАЛО РАБОТЫ (фото-карточки шагов) ---------------- */}
       <Section>
         <SectionHeading title={t.home.flowTitle} sub={t.home.flowSub} />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {t.home.flow.map((f, i) => (
-            <Reveal key={f.n} delay={i * 70}>
-              <div className="glass no-lift flex h-full items-start gap-3.5 rounded-xl p-5">
-                <span className="section-num shrink-0 text-[1.2rem]">{f.n}</span>
-                <div>
-                  <h3 className="text-[13.5px] font-bold text-white">{f.t}</h3>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{f.d}</p>
+            <Reveal key={f.n} delay={i * 90}>
+              <div className="photo-card group aspect-[16/11] sm:aspect-[16/10]">
+                <OptionalPhoto src={f.img} alt={f.imgAlt} />
+                <div className="photo-card__content flex h-full flex-col justify-end p-6 sm:p-7">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">{f.n}</span>
+                  <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+                    <div className="max-w-xs">
+                      <h3 className="text-[1.05rem] font-extrabold leading-tight text-white sm:text-[1.2rem]">{f.t}</h3>
+                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{f.d}</p>
+                    </div>
+                    <BtnLink href={f.href} variant={i === 0 ? 'primary' : 'ghost'} className="h-10 shrink-0 px-4 text-xs">
+                      {f.cta}
+                    </BtnLink>
+                  </div>
                 </div>
               </div>
             </Reveal>

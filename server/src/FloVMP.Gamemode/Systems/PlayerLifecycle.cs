@@ -91,20 +91,16 @@ public sealed class PlayerLifecycle
         var posX = position.X;
         var posY = position.Y;
         var posZ = position.Z;
-        Task.Delay(300).ContinueWith(_ =>
+        // Раньше это был Task.Delay(...).ContinueWith(...): продолжение уходило
+        // на произвольный поток пула и трогало сущность alt:V, живущую в
+        // нативной памяти. Между p.Exists и p.Emit игрок успевает отключиться,
+        // и обращение уходит в освобождённую память. На главном потоке такого
+        // окна нет — тик не прерывается отключением.
+        Systems.MainThreadScheduler.RunAfter(300, "post-spawn.welcome", () =>
         {
-            try
-            {
-                if (p.Exists)
-                {
-                    p.Emit("flovmp:auth:hide");
-                    p.Emit("flovmp:client:welcome", pName, index, posX, posY, posZ);
-                }
-            }
-            catch (Exception ex)
-            {
-                Alt.Log($"[FloV:MP] post-spawn emit warning: {ex.Message}");
-            }
+            if (!p.Exists) return;
+            p.Emit("flovmp:auth:hide");
+            p.Emit("flovmp:client:welcome", pName, index, posX, posY, posZ);
         });
     }
 

@@ -279,6 +279,7 @@ public class GamemodeResource : Resource
     {
         // Аккаунты пишутся в фоне с дебаунсом (чтобы не блокировать игровой тик),
         // поэтому на остановке обязаны принудительно сбросить их на диск.
+        Safe.Run("core.OnStop.scheduler", Systems.MainThreadScheduler.Clear);
         Safe.Run("core.OnStop.accounts", () => (_accountStore as IDisposable)?.Dispose());
         // Баны обязаны попасть на диск при остановке: иначе выданный за
         // последнюю секунду бан не переживёт перезапуск.
@@ -340,6 +341,10 @@ public class GamemodeResource : Resource
         // применяются здесь — на главном потоке, где только и можно трогать
         // сущности alt:V.
         _auth?.Pump();
+
+        // Отложенные действия с сущностями alt:V — строго здесь, на главном
+        // потоке (см. MainThreadScheduler).
+        Systems.MainThreadScheduler.Pump();
 
         _hud?.Tick();
         _antiCheat?.Tick();

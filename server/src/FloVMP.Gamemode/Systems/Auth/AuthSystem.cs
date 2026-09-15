@@ -106,22 +106,17 @@ public sealed class AuthSystem
         // index.js навесит обработчики — и игрок застрянет на чёрном экране.
         Alt.Log($"[FloV:MP] auth: {player.Name} подключился, ждём готовности клиента");
 
+        // Раньше здесь был Task.Delay(...).ContinueWith(...): продолжение
+        // выполнялось на произвольном потоке пула и перебирало игроков плюс
+        // трогало сущность alt:V в нативной памяти. Теперь то же самое, но в
+        // тике главного потока, где игрок не может исчезнуть посреди проверки.
         var playerId = player.Id;
-        Task.Delay(2000).ContinueWith(_ =>
+        Systems.MainThreadScheduler.RunAfter(2000, "auth.show.fallback", () =>
         {
-            try
-            {
-                var p = Alt.GetAllPlayers().FirstOrDefault(x => x.Id == playerId);
-                if (p != null && p.Exists && !IsAuthed(p))
-                {
-                    Alt.Log($"[FloV:MP] auth: страховочная отправка flovmp:auth:show для {p.Name}");
-                    p.Emit("flovmp:auth:show", _serverName);
-                }
-            }
-            catch (Exception ex)
-            {
-                Alt.Log($"[FloV:MP] auth fallback warning: {ex.Message}");
-            }
+            var p = Alt.GetPlayerById(playerId);
+            if (p is null || !p.Exists || IsAuthed(p)) return;
+            Alt.Log($"[FloV:MP] auth: страховочная отправка flovmp:auth:show для {p.Name}");
+            p.Emit("flovmp:auth:show", _serverName);
         });
     });
 
