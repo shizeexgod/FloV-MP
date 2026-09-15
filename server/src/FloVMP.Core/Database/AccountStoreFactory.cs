@@ -2,6 +2,7 @@
 using FloVMP.Core.Logging;
 using MySqlConnector;
 
+using FloVMP.Core;
 namespace FloVMP.Core.Database;
 
 /// <summary>
@@ -26,15 +27,13 @@ public static class AccountStoreFactory
                 using var conn = new MySqlConnection(connectionString);
                 conn.Open();
                 GameLog.System("db_connected", ("provider", "MariaDB/MySQL"), ("database", conn.Database));
-                Console.WriteLine($"[FloV:MP] [DB] Успешное подключение к MariaDB ({conn.Database})");
+                CoreConsole.Write($"[FloV:MP] [DB] Успешное подключение к MariaDB ({conn.Database})");
                 return new MySqlAccountStore(connectionString);
             }
             catch (Exception ex)
             {
                 GameLog.System("db_fallback", ("error", ex.Message), ("fallback", jsonFallbackPath));
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"[FloV:MP] [DB] Внимание: MariaDB недоступна ({ex.Message}). Переход на локальное хранилище: {jsonFallbackPath}");
-                Console.ResetColor();
+                CoreConsole.Write($"[FloV:MP] [DB] Внимание: MariaDB недоступна ({ex.Message}). Переход на локальное хранилище: {jsonFallbackPath}");
             }
         }
 
@@ -50,19 +49,19 @@ public static class AccountStoreFactory
     {
         if (Environment.GetEnvironmentVariable("FLOVMP_DB_MIGRATE") == "0")
         {
-            Console.WriteLine("[FloV:MP] [DB] Миграции отключены (FLOVMP_DB_MIGRATE=0).");
+            CoreConsole.Write("[FloV:MP] [DB] Миграции отключены (FLOVMP_DB_MIGRATE=0).");
             return;
         }
 
-        var report = MigrationRunner.Run(connectionString, log: Console.WriteLine);
+        var report = MigrationRunner.Run(connectionString, log: CoreConsole.Write);
 
         if (report.Skipped)
         {
-            Console.WriteLine($"[FloV:MP] [DB] Миграции пропущены: {report.SkipReason}");
+            CoreConsole.Write($"[FloV:MP] [DB] Миграции пропущены: {report.SkipReason}");
             return;
         }
 
-        Console.WriteLine($"[FloV:MP] [DB] Миграции: применено {report.Applied}, " +
+        CoreConsole.Write($"[FloV:MP] [DB] Миграции: применено {report.Applied}, " +
                           $"уже актуально {report.AlreadyUpToDate}" +
                           (report.HasDrift ? $", РАСХОЖДЕНИЙ {report.Drift.Count}" : "") + ".");
     }

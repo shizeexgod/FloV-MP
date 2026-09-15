@@ -90,7 +90,7 @@ public static class MigrationRunner
     /// </summary>
     public static MigrationReport Run(string? connectionString, string? migrationsDir = null, Action<string>? log = null)
     {
-        log ??= Console.WriteLine;
+        log ??= CoreConsole.Write;
 
         if (string.IsNullOrWhiteSpace(connectionString))
             return new MigrationReport { Skipped = true, SkipReason = "нет строки подключения (режим JSON-хранилища)" };

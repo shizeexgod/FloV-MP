@@ -1,5 +1,6 @@
 using MySqlConnector;
 
+using FloVMP.Core;
 namespace FloVMP.Core.Security;
 
 /// <summary>
@@ -26,22 +27,20 @@ public static class BanStoreFactory
                 }
                 var store = new MySqlBanStore(connectionString);
                 var loaded = store.LoadAll().Count;
-                Console.WriteLine($"[FloV:MP] [Ban] Блокировки: общая таблица MariaDB (записей: {loaded}). " +
+                CoreConsole.Write($"[FloV:MP] [Ban] Блокировки: общая таблица MariaDB (записей: {loaded}). " +
                                   "Баны действуют на всех инстансах.");
                 return store;
             }
             catch (Exception ex)
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"[FloV:MP] [Ban] MariaDB недоступна ({ex.Message}). " +
+                CoreConsole.Write($"[FloV:MP] [Ban] MariaDB недоступна ({ex.Message}). " +
                                   $"Блокировки уходят в локальный файл: {jsonFallbackPath}");
-                Console.WriteLine("[FloV:MP] [Ban] ВНИМАНИЕ: локальные баны не действуют на других инстансах.");
-                Console.ResetColor();
+                CoreConsole.Write("[FloV:MP] [Ban] ВНИМАНИЕ: локальные баны не действуют на других инстансах.");
             }
         }
         else
         {
-            Console.WriteLine($"[FloV:MP] [Ban] Блокировки: локальный файл {jsonFallbackPath} " +
+            CoreConsole.Write($"[FloV:MP] [Ban] Блокировки: локальный файл {jsonFallbackPath} " +
                               "(база не настроена — на нескольких инстансах баны не разойдутся).");
         }
 

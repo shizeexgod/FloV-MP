@@ -74,6 +74,12 @@ public class GamemodeResource : Resource
     {
         Alt.Log($"[FloV:MP] core: gamemode start (v{BuildInfo.Version})");
 
+        // Диагностика платформы (режим БД, миграции, хранилище блокировок)
+        // обязана попадать в server.log: обычный Console.WriteLine из ресурса
+        // alt:V теряется, туда идёт только прошедшее через Alt.Log.
+        FloVMP.Core.CoreConsole.Out = msg => Alt.Log(msg);
+        FloVMP.Core.CoreConsole.Warn = msg => Alt.LogWarning(msg);
+
         var dataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
         GameLog.Configure(new FileLogSink(Path.Combine(dataDir, "logs")));
         GameLog.System("gamemode_start", ("version", BuildInfo.Version));
@@ -97,8 +103,11 @@ public class GamemodeResource : Resource
         // Радиус 25 м — как в платформе, чтобы поведение не расходилось.
         Safe.Run("core.voice.create", () =>
         {
+            // Может вернуть null БЕЗ исключения, если в server.toml нет
+            // секции [voice] — проверяем результат, а не отсутствие ошибки.
             _voiceChannel = Alt.CreateVoiceChannel(true, VoiceRangeMeters);
-            Alt.Log($"[FloV:MP] core: голосовой канал создан (радиус {VoiceRangeMeters} м)");
+            if (_voiceChannel is not null)
+                Alt.Log($"[FloV:MP] core: голосовой канал создан (радиус {VoiceRangeMeters} м)");
         });
         if (_voiceChannel is null)
             Alt.LogWarning("[FloV:MP] core: голосовой канал НЕ создан — проверьте секцию [voice] в server.toml " +

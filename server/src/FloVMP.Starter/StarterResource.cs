@@ -79,6 +79,13 @@ public class StarterResource : Resource
         }
         catch { }
 
+        // Диагностика платформы (режим БД, накат миграций, выбор хранилища
+        // блокировок) должна попадать в server.log. Обычный Console.WriteLine
+        // из ресурса alt:V теряется — в лог идёт только то, что прошло через
+        // Alt.Log. Проверено живым запуском: этих строк там не было ни разу.
+        FloVMP.Core.CoreConsole.Out = msg => Alt.Log(msg);
+        FloVMP.Core.CoreConsole.Warn = msg => Alt.LogWarning(msg);
+
         _adminManager = new AdminBootstrapManager();
 
         // Хранилище банов: общая таблица MariaDB, если база настроена, иначе
@@ -107,8 +114,12 @@ public class StarterResource : Resource
 
         try
         {
+            // CreateVoiceChannel может вернуть null БЕЗ исключения, если в
+            // server.toml нет секции [voice] — поэтому проверяем результат, а
+            // не только отсутствие ошибки.
             _spatialVoiceChannel = Alt.CreateVoiceChannel(true, 25.0f);
-            Alt.Log("[FloV:MP Starter] Голосовой канал создан (пространственный, радиус 25 м).");
+            if (_spatialVoiceChannel is not null)
+                Alt.Log("[FloV:MP Starter] Голосовой канал создан (пространственный, радиус 25 м).");
         }
         catch (Exception ex)
         {

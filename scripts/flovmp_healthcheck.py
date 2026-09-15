@@ -272,6 +272,59 @@ def check_bans(rep):
                 "" if enforced else "блокировка записывается, но вход не проверяется - бан не работает")
 
 
+# ------------- 3e. Порядок ключей в server.toml (тихий убийца) -------------
+
+def check_server_toml_order(rep):
+    """
+    В TOML всё, что идёт ПОСЛЕ заголовка [table], принадлежит этой таблице.
+    Если modules/resources оказались ниже [threads], сервер читает их как
+    threads.modules и threads.resources — то есть не читает вовсе.
+
+    Чем это опасно: сервер стартует УСПЕШНО. В логе ни одной ошибки, "Server
+    started", порт слушается — и ни одного ресурса. Пустой мир, игрок заходит
+    и висит. Именно так и было в runtime/server/server.toml: C#-ресурс не
+    загружался вообще, и это невозможно заметить по логу.
+    """
+    section("3e. Порядок ключей в server.toml")
+
+    TOP_LEVEL = ("modules", "resources", "name", "host", "port", "players",
+                 "gamemode", "announce", "debug")
+
+    checked = 0
+    for rel in ("config/server.toml", "runtime/server/server.toml"):
+        f = ROOT / rel
+        if not f.exists():
+            continue
+        checked += 1
+
+        first_table = None
+        misplaced = []
+        for i, raw in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("["):
+                if first_table is None:
+                    first_table = (i, line)
+                continue
+            if first_table is None:
+                continue
+            key = line.split("=")[0].strip()
+            if key in TOP_LEVEL:
+                misplaced.append((i, key, first_table[1]))
+
+        if misplaced:
+            detail = "; ".join(
+                "{} (строка {}) попал внутрь {}".format(k, i, t) for i, k, t in misplaced)
+            rep.add(FAIL, "{}: ключи верхнего уровня на месте".format(rel),
+                    detail + " - сервер стартует БЕЗ них и не пишет ни одной ошибки")
+        else:
+            rep.add(PASS, "{}: ключи верхнего уровня на месте".format(rel))
+
+    if checked == 0:
+        rep.add(SKIP, "server.toml", "ни одного файла не найдено")
+
+
 # ------------- 3d. Голосовой чат: три места, где он отваливался -------------
 
 def check_voice(rep):
@@ -531,6 +584,7 @@ def main():
     check_hot_path(rep)
     check_bans(rep)
     check_voice(rep)
+    check_server_toml_order(rep)
     check_migrations(rep)
     check_version_consistency(rep)
 
