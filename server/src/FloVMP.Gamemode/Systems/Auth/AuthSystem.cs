@@ -37,6 +37,9 @@ public sealed class AuthSystem
     private readonly ConcurrentQueue<PendingAuth> _completed = new();
     private readonly ConcurrentDictionary<uint, byte> _inFlight = new();
 
+    /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
+    private readonly ConcurrentDictionary<uint, byte> _clientReady = new();
+
     private sealed record PendingAuth(IPlayer Player, bool IsRegister, AuthResult Result, string Username, string Password);
     private readonly Action<IPlayer, Account> _onAuthed;
 
@@ -168,6 +171,13 @@ public sealed class AuthSystem
     private void OnClientReady(IPlayer player) => Safe.Run("auth.OnClientReady", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
+
+        // Событие приходит ОТ КЛИЕНТА и может слаться модифицированным клиентом
+        // сколько угодно раз: каждый вызов — запись в лог и ответное событие,
+        // то есть усилитель для DoS. Готовность осмысленна один раз за
+        // подключение.
+        if (!_clientReady.TryAdd(player.Id, 0)) return;
+
         Alt.Log($"[FloV:MP] auth: клиент {player.Name} готов, отправляем flovmp:auth:show");
         player.Emit("flovmp:auth:show", _serverName);
     });
@@ -177,6 +187,7 @@ public sealed class AuthSystem
                 // Игрок мог выйти, пока его вход считался в фоне — снимаем блокировку,
         // иначе повторный заход тем же player.Id был бы проигнорирован.
         _inFlight.TryRemove(player.Id, out _);
+        _clientReady.TryRemove(player.Id, out _);
 if (_authed.TryRemove(player.Id, out var acc))
         {
             if (_activeAccounts.TryGetValue(acc.Id, out var activePid) && activePid == player.Id)

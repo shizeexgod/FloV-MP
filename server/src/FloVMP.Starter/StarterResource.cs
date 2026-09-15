@@ -39,6 +39,9 @@ public class StarterResource : Resource
     // которого нарушитель заходит обратно через пять секунд. Для продукта,
     // который ставят владельцам серверов, отсутствие бана — не «упрощение»,
     // а нерабочая модерация.
+    /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _clientReady = new();
+
     private FloVMP.Core.Security.IBanStore? _banStore;
     private FloVMP.Core.Security.MultiTierBanService? _bans;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
@@ -403,6 +406,13 @@ public class StarterResource : Resource
     private void OnClientReady(IPlayer player)
     {
         if (player == null || !player.Exists) return;
+
+        // Событие приходит ОТ КЛИЕНТА, то есть его может слать модифицированный
+        // клиент сколько угодно раз. Каждый вызов — работа на сервере и два
+        // ответных события игроку, то есть усилитель для DoS. Готовность
+        // осмысленна ровно один раз за подключение, повторы игнорируем.
+        if (!_clientReady.TryAdd(player.Id, true)) return;
+
         player.Emit("starter:initClient", DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
         player.Emit("flovmp:client:welcome", player.Name, 0, DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
 
@@ -661,6 +671,7 @@ public class StarterResource : Resource
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
+        _clientReady.TryRemove(player.Id, out _);
         _adminLevels.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
