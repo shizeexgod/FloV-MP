@@ -260,6 +260,10 @@
     overflow: hidden;
     border-radius: 1.25rem;
     border: 1px solid var(--line);
+    /* Фон-заглушка на случай, если фото ещё не загружено в /public/media — секция всё равно выглядит завершённой */
+    background:
+      radial-gradient(120% 140% at 15% 100%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 60%),
+      linear-gradient(165deg, var(--panel-soft), var(--panel) 70%);
   }
   .photo-card img {
     position: absolute;
@@ -279,6 +283,34 @@
     pointer-events: none;
   }
   .photo-card__content { position: relative; z-index: 1; }
+
+  /* ---------- Хиро: полноэкранная фото-подложка (необязательная — если файла нет, просто не рендерится) ---------- */
+  .hero-photo-layer {
+    position: absolute;
+    inset: 0;
+    z-index: -20;
+    overflow: hidden;
+  }
+  .hero-photo-layer img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 30%;
+    opacity: 0;
+    filter: saturate(1.05);
+    transition: opacity 1.1s ease;
+  }
+  .hero-photo-layer img.is-loaded { opacity: 0.4; }
+  .hero-photo-layer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg) 20%, transparent) 0%, var(--bg) 92%),
+      linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 10%, transparent) 46%, color-mix(in srgb, var(--bg) 55%, transparent) 100%);
+  }
 
   /* ---------- Eyebrow / порядковые номера секций ---------- */
   .eyebrow {

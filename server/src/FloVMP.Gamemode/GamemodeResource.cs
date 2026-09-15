@@ -60,6 +60,12 @@ public class GamemodeResource : Resource
     private long _lastVehTickMs;
     private int _lastPayDayHour = -1;
     private long _lastBanSyncMs;
+
+    /// <summary>
+    /// Когда гасить сервер по команде /restart, в миллисекундах часов ресурса.
+    /// 0 = перезапуск не запланирован.
+    /// </summary>
+    private long _restartAtMs;
     private int _banSyncInFlight;
 
     /// <summary>
@@ -186,12 +192,13 @@ public class GamemodeResource : Resource
             inventory: _inv,
             notifyTeleport: (p, pos) => _antiCheat?.NotifyAdminTeleport(p, pos),
             setAdminExempt: (accId, exempt) => _antiCheat?.Service.SetAdminExemption(accId, exempt),
-            restartServer: sec => Task.Run(async () =>
-            {
-                await Task.Delay(sec * 1000);
-                Safe.Run("core.restart.save", () => _inv?.SaveAll());
-                Alt.StopServer();
-            }),
+            // Остановка сервера обязана происходить на главном потоке.
+            // Раньше это делал Task.Run: Alt.StopServer() вызывался из пула
+            // потоков, пока главный крутил тик, — ровно тот же класс гонок в
+            // нативной памяти движка, из-за которого уже переделывали респавн.
+            // Теперь команда только ставит отметку времени, а гасит сервер
+            // OnTick.
+            restartServer: sec => _restartAtMs = _clock.ElapsedMilliseconds + Math.Max(0, sec) * 1000L,
             platformMode: !fullMode,
             bans: _bans,
             voiceChannel: () => _voiceChannel);
@@ -338,6 +345,19 @@ public class GamemodeResource : Resource
         _antiCheat?.Tick();
 
         var now = _clock.ElapsedMilliseconds;
+
+        // Запланированный /restart. Выполняется здесь, на главном потоке:
+        // гасить сервер из фонового потока — гонка в нативной памяти движка.
+        if (_restartAtMs != 0 && now >= _restartAtMs)
+        {
+            _restartAtMs = 0;
+            Alt.Log("[FloV:MP] core: плановый перезапуск, сохраняем состояние");
+            Safe.Run("core.restart.save", () => _inv?.SaveAll());
+            Safe.Run("core.restart.accounts", () => (_accountStore as IDisposable)?.Dispose());
+            Safe.Run("core.restart.bans", () => (_banStore as IDisposable)?.Dispose());
+            Alt.StopServer();
+            return;
+        }
 
         // Адаптивное масштабирование тикрейта каждые 100 мс
         if (now - _lastTickScaleMs >= 100)
