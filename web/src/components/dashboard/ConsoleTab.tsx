@@ -13,8 +13,10 @@ export function ConsoleTab() {
     sseActive,
     toggleSseStream,
     sendConsoleCommand,
+    servers,
     D,
   } = useDashboard();
+  const agentOnline = servers.some((server) => server.status === 'online');
   return (
         <div className="relative space-y-6 animate-fade-in">
           {/* Header */}
@@ -29,9 +31,9 @@ export function ConsoleTab() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emeraldx/30 bg-emeraldx/15 px-3 py-1 font-mono text-[11px] font-bold text-emeraldx">
-                <span className="h-2 w-2 rounded-full bg-emeraldx animate-pulse" />
-                {D.console.agentConnected}
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1 font-mono text-[11px] font-semibold text-white/60">
+                <span className={`h-1.5 w-1.5 rounded-full ${agentOnline ? 'bg-emeraldx' : 'bg-white/25'}`} />
+                {agentOnline ? D.console.agentConnected : D.console.agentOffline}
               </span>
               <button
                 onClick={toggleSseStream}
@@ -42,21 +44,11 @@ export function ConsoleTab() {
                 }`}
                 title={D.console.sseTitle}
               >
-                <Radio className={`h-3.5 w-3.5 ${sseActive ? 'animate-pulse' : ''}`} />
+                <Radio className="h-3.5 w-3.5" />
                 {sseActive ? D.console.sseOn : D.console.sseOff}
               </button>
               <button
-                onClick={() =>
-                  setConsoleLogs([
-                    {
-                      id: Date.now(),
-                      time: new Date().toLocaleTimeString('ru-RU'),
-                      tag: 'System',
-                      text: D.toast.consoleCleared,
-                      tone: 'info',
-                    },
-                  ])
-                }
+                onClick={() => setConsoleLogs([])}
                 className="btn btn-ghost h-9 px-3 text-xs"
               >
                 {D.console.clear}
@@ -83,7 +75,7 @@ export function ConsoleTab() {
           </div>
 
           {/* Terminal Box */}
-          <div className="rounded-3xl border border-white/15 bg-ink-950/90 p-5 shadow-2xl backdrop-blur-xl">
+          <div className="card no-lift bg-ink-950/90 p-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 font-mono text-xs text-slate-500">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-red-500/80" />
@@ -95,6 +87,9 @@ export function ConsoleTab() {
             </div>
 
             <div className="mt-4 max-h-[480px] min-h-[340px] space-y-2 overflow-y-auto font-mono text-xs leading-relaxed no-scrollbar">
+              {consoleLogs.length === 0 ? (
+                <div className="grid min-h-[300px] place-items-center text-center text-white/30">{D.console.noOutput}</div>
+              ) : null}
               {consoleLogs.map((log) => (
                 <div key={log.id} className="flex items-start gap-3">
                   <span className="text-slate-600">{log.time}</span>

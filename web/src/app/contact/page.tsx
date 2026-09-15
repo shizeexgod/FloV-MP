@@ -15,10 +15,10 @@ export default function ContactPage() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = [
-      'Заявка с сайта FloV:MP',
-      `Имя / ник: ${name || '—'}`,
-      `Контакт для ответа: ${contact || '—'}`,
-      `О проекте: ${about || '—'}`,
+      t.contact.formMessageTitle,
+      `${t.contact.formMessageName}: ${name || '—'}`,
+      `${t.contact.formMessageContact}: ${contact || '—'}`,
+      `${t.contact.formMessageAbout}: ${about || '—'}`,
     ].join('\n');
     const url = `https://t.me/share/url?url=${encodeURIComponent(LEGAL.siteUrl)}&text=${encodeURIComponent(text)}`;
     window.open(url, '_blank', 'noopener,noreferrer');

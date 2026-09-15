@@ -51,8 +51,8 @@ export default function FeaturesPage() {
 
       <Container className="py-16">
         <Reveal>
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-8 text-center sm:p-12">
-            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">{t.home.ctaTitle}</h2>
+          <div className="card card-hover p-8 text-center sm:p-12">
+            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl"><span className="h-grad">{t.home.ctaTitle}</span></h2>
             <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <BtnLink href="/pricing" variant="primary" arrow className="h-11 px-6 text-sm">
                 {t.common.getLicense}

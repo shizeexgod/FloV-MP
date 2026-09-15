@@ -86,7 +86,7 @@ function Eyebrow({ value }: { value?: string }) {
 }
 
 export function PageHero({
-  eyebrow,
+  eyebrow: _eyebrow,
   title,
   sub,
 }: {
@@ -98,8 +98,7 @@ export function PageHero({
     <div>
       <Container className="py-16 sm:py-24">
         <Reveal>
-          <Eyebrow value={eyebrow} />
-          <h1 className="mt-3 max-w-3xl text-[1.75rem] font-extrabold leading-[1.14] tracking-tight sm:text-[2.4rem] sm:leading-[1.1]">
+          <h1 className="max-w-3xl text-[1.75rem] font-extrabold leading-[1.14] tracking-tight sm:text-[2.4rem] sm:leading-[1.1]">
             <span className="h-grad">{title}</span>
           </h1>
           {sub ? <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-white/55">{sub}</p> : null}

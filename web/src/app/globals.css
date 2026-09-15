@@ -180,11 +180,17 @@
   .no-lift:hover { transform: none; box-shadow: none; }
 
   .glass-panel {
-    background: rgba(19, 19, 22, 0.72);
-    backdrop-filter: blur(18px) saturate(125%);
-    -webkit-backdrop-filter: blur(18px) saturate(125%);
+    background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 1rem;
+    transition: transform 0.22s var(--ease), border-color 0.2s ease,
+      background-color 0.2s ease, box-shadow 0.24s ease;
+  }
+  .glass-panel:hover {
+    transform: translateY(-1.5px);
+    border-color: var(--line-strong);
+    background: var(--panel-soft);
+    box-shadow: 0 10px 28px -16px rgba(0, 0, 0, 0.55);
   }
 
   .glass-hover,
@@ -239,7 +245,13 @@
     overflow: hidden;
     border: 1px solid var(--line-strong);
     background: var(--panel);
-    box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    box-shadow: 0 14px 38px -24px rgba(0, 0, 0, 0.75);
+    transition: transform 0.24s var(--ease), border-color 0.2s ease, box-shadow 0.24s ease;
+  }
+  .browser-frame:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 18px 44px -24px rgba(0, 0, 0, 0.78);
   }
   .browser-frame__bar {
     display: flex;
@@ -613,5 +625,5 @@
     scroll-behavior: auto !important;
   }
   .reveal { opacity: 1; transform: none; }
-  .card:hover, .glass:hover, .card-hover:hover, .glass-hover:hover { transform: none; }
+  .card:hover, .glass:hover, .glass-panel:hover, .browser-frame:hover, .card-hover:hover, .glass-hover:hover { transform: none; }
 }

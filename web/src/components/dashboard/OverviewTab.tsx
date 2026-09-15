@@ -92,7 +92,7 @@ export function OverviewTab() {
                                   : 'border-red-500/30 bg-red-500/15 text-red-400'
                               }`}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emeraldx animate-pulse' : 'bg-red-400'}`} />
+                              <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emeraldx' : 'bg-red-400'}`} />
                               {active ? D.overview.active : D.overview.suspended}
                             </span>
                           </div>

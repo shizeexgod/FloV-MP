@@ -257,7 +257,7 @@ export function ProjectsTab() {
                                   : 'border-violetx/30 bg-violetx/15 text-violetx'
                               }`}
                             >
-                              <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
                               {srv.environment}
                             </span>
                           </div>
@@ -404,7 +404,7 @@ export function ProjectsTab() {
                                     : 'bg-slate-700/20 text-slate-400 border border-slate-600/30'
                                 }`}
                               >
-                                <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emeraldx animate-pulse' : 'bg-slate-500'}`} />
+                        <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emeraldx' : 'bg-slate-500'}`} />
                                 {isRunning ? D.proj.running : D.proj.stopped}
                               </span>
                             </td>

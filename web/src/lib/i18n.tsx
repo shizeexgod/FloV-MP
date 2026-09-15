@@ -20,10 +20,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem(KEY) as Lang | null;
       if (saved === 'ru' || saved === 'en') setLangState(saved);
-      else {
-        const nav = navigator.language?.toLowerCase() ?? '';
-        setLangState(nav.startsWith('ru') || nav.startsWith('uk') || nav.startsWith('be') || nav.startsWith('kk') ? 'ru' : 'en');
-      }
+      else setLangState('ru');
     } catch {
       /* ignore */
     }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { createSignedLicenseFlv } from '@/lib/license';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/v1/licenses/download-by-key?key=FLV-XXXX-XXXX-XXXX
  * Автоматическое получение криптографического license.flv по ключу лицензии (для install.sh).
@@ -49,7 +51,7 @@ export async function GET(req: NextRequest) {
       issuedTo: lic.username || 'Licensee',
       plan: lic.plan || 'enterprise',
       maxPlayers: lic.max_players || 5000,
-      maxServers: lic.plan === 'enterprise' ? 10 : 3,
+      maxServers: lic.plan === 'enterprise' || lic.plan === 'lifetime' ? 10 : 3,
       days: remainingDays,
     });
 

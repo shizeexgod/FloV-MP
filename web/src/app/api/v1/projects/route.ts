@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       if (e instanceof BadJsonError) return badRequest();
       throw e;
     }
-    const { name, slug, plan = 'enterprise', maxPlayers = 1500 } = body;
+    const { name, slug, plan = 'lifetime', maxPlayers = 1500 } = body;
 
     if (!name || !slug) {
       return NextResponse.json({ success: false, error: 'Name and slug are required' }, { status: 400 });

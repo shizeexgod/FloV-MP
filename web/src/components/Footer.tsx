@@ -48,7 +48,7 @@ export default function Footer() {
               <p>{t.footer.hoursAuto}</p>
               <p>
                 {t.footer.hoursSupportPrefix}
-                {lv(LEGAL.supportHours)}
+                {t.footer.supportHours}
               </p>
             </div>
           </div>
@@ -128,7 +128,7 @@ export default function Footer() {
         <div className="mt-8 flex flex-col gap-3 text-[12px] text-white/40 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <span>© 2026 FloV:MP. {t.common.allRightsReserved}</span>
           <span>{lv(LEGAL.ownerName)}</span>
-          <span>ИНН {lv(LEGAL.inn)}</span>
+          <span>{t.footer.taxIdLabel} {lv(LEGAL.inn)}</span>
           <span className="hidden lg:inline">{t.footer.descriptor}</span>
           {LEGAL.telegramUrl && (
             <a

@@ -5,12 +5,14 @@ import {
   ArrowRight,
   Boxes,
   Cloud,
+  KeyRound,
   Gauge,
   Layers,
   Mic,
   Plug,
   Rocket,
   ScrollText,
+  ServerCog,
   ShieldCheck,
   Terminal,
 } from 'lucide-react';
@@ -22,47 +24,58 @@ const FEATURE_ICONS = [Gauge, Boxes, Mic, ShieldCheck, ScrollText, Cloud, Rocket
 // idx карточек, растянутых на 2 колонки в bento-сетке (lg+)
 const FEATURE_SPAN2 = new Set([0, 5]);
 
-function BrowserFrame({ src, alt, urlLabel, priority = false }: { src: string; alt: string; urlLabel: string; priority?: boolean }) {
+function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'projects' | 'console' | 'security' }) {
+  const rows = mode === 'projects'
+    ? [labels.production, labels.development, labels.test]
+    : mode === 'console'
+      ? ['CoreCLR · .NET 8', 'UDP 7788', 'FastDL · HTTP/2']
+      : ['FloV:ID', 'HMAC-SHA256', labels.ipBinding];
+
   return (
     <div className="browser-frame">
       <div className="browser-frame__bar">
-        <span className="browser-frame__dot bg-[#ff5f57]" />
-        <span className="browser-frame__dot bg-[#febc2e]" />
-        <span className="browser-frame__dot bg-[#28c840]" />
-        <span className="ml-3 truncate font-mono text-[11px] text-white/35">{urlLabel}</span>
+        <span className="browser-frame__dot bg-white/25" />
+        <span className="browser-frame__dot bg-white/15" />
+        <span className="browser-frame__dot bg-white/10" />
+        <span className="ml-3 truncate font-mono text-[11px] text-white/35">flovmp.ru/dashboard</span>
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt={alt}
-        width={1440}
-        height={805}
-        loading={priority ? 'eager' : 'lazy'}
-        {...(priority ? { fetchPriority: 'high' as const } : {})}
-      />
+      <div className="grid min-h-[300px] grid-cols-[116px_1fr] bg-[#0d0d10] p-3 sm:min-h-[350px] sm:grid-cols-[150px_1fr] sm:p-4">
+        <div className="border-r border-white/[0.07] pr-3 sm:pr-4">
+          <div className="mb-5 text-[11px] font-extrabold text-white">FloV<span className="text-brand">:MP</span></div>
+          {[labels.projects, labels.servers, labels.telemetry, labels.console].map((label, index) => (
+            <div key={label} className={`mb-1.5 rounded-lg px-2 py-2 text-[9px] sm:text-[11px] ${index === (mode === 'projects' ? 0 : mode === 'console' ? 3 : 1) ? 'bg-brand/[0.12] text-brand' : 'text-white/35'}`}>
+              {label}
+            </div>
+          ))}
+        </div>
+        <div className="min-w-0 pl-3 sm:pl-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[9px] text-white/35 sm:text-[11px]">{labels.workspace}</div>
+              <div className="mt-1 text-sm font-extrabold text-white sm:text-base">{labels.project}</div>
+            </div>
+            <span className="rounded-lg border border-brand/25 px-2 py-1 text-[8px] font-semibold text-brand sm:text-[10px]">Lifetime</span>
+          </div>
+          <hr className="rule-soft my-4" />
+          <div className="space-y-2.5">
+            {rows.map((row, index) => (
+              <div key={row} className="group flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-3 transition-colors hover:border-white/[0.14] hover:bg-white/[0.04]">
+                <div>
+                  <div className="text-[10px] font-semibold text-white/80 sm:text-[12px]">{row}</div>
+                  <div className="mt-1 font-mono text-[8px] text-white/25 sm:text-[9px]">
+                    {mode === 'projects' ? labels.environment : mode === 'console' ? labels.runtime : labels.protection}
+                  </div>
+                </div>
+                <span className={`h-1.5 w-1.5 rounded-full ${index === 0 ? 'bg-brand' : 'bg-white/20'}`} />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 font-mono text-[8px] leading-relaxed text-white/35 sm:text-[10px]">
+            {mode === 'console' ? '> server status' : mode === 'security' ? 'signature = HMAC-SHA256' : 'project / environments / resources'}
+          </div>
+        </div>
+      </div>
     </div>
-  );
-}
-
-/**
- * Необязательный фоновый арт для хиро/фото-карточек. Пока файл не положен в
- * public/media — просто не рендерится (без битых иконок), сетка/градиент
- * остаются единственным фоном. Как только промпты из медиа-брифа сгенерированы
- * и сохранены по указанным путям, картинка проявится сама на следующей загрузке.
- */
-function OptionalPhoto({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
-  const [failed, setFailed] = React.useState(false);
-  if (failed) return null;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      loading="lazy"
-      onLoad={(e) => e.currentTarget.classList.add('is-loaded')}
-      onError={() => setFailed(true)}
-    />
   );
 }
 
@@ -73,9 +86,6 @@ export default function HomePage() {
     <div>
       {/* ---------------- HERO ---------------- */}
       <div className="relative overflow-hidden">
-        <div className="hero-photo-layer" aria-hidden>
-          <OptionalPhoto src="/media/hero/city-dusk.jpg" alt="" />
-        </div>
         <Container className="py-20 sm:py-28">
           <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
             <div>
@@ -109,36 +119,30 @@ export default function HomePage() {
             </div>
 
             <Reveal delay={200}>
-              <div className="relative">
-                <div aria-hidden className="absolute -inset-8 -z-10 rounded-[3rem] bg-brand/15 blur-[80px] sm:-inset-12" />
-                <BrowserFrame
-                  src="/media/shot-dashboard-console.png"
-                  alt={t.home.heroShotAlt}
-                  urlLabel="flovmp.ru/dashboard"
-                  priority
-                />
+              <div>
+                <ProductPreview labels={t.home.preview} />
               </div>
             </Reveal>
           </div>
         </Container>
       </div>
 
-      {/* ---------------- НАЧАЛО РАБОТЫ (фото-карточки шагов) ---------------- */}
+      {/* ---------------- НАЧАЛО РАБОТЫ ---------------- */}
       <Section>
         <SectionHeading title={t.home.flowTitle} sub={t.home.flowSub} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {t.home.flow.map((f, i) => (
             <Reveal key={f.n} delay={i * 90}>
-              <div className="photo-card group aspect-[16/11] sm:aspect-[16/10]">
-                <OptionalPhoto src={f.img} alt={f.imgAlt} />
-                <div className="photo-card__content flex h-full flex-col justify-end p-6 sm:p-7">
-                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">{f.n}</span>
-                  <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-                    <div className="max-w-xs">
-                      <h3 className="text-[1.05rem] font-extrabold leading-tight text-white sm:text-[1.2rem]">{f.t}</h3>
-                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{f.d}</p>
-                    </div>
-                    <BtnLink href={f.href} variant={i === 0 ? 'primary' : 'ghost'} className="h-10 shrink-0 px-4 text-xs">
+              <div className="card group flex h-full min-h-[230px] flex-col p-6 sm:p-7">
+                <div className="flex items-center justify-between">
+                  <span className="section-num">0{i + 1}</span>
+                  {i === 0 ? <KeyRound className="icon-pop h-5 w-5 text-brand" /> : <ServerCog className="icon-pop h-5 w-5 text-brand" />}
+                </div>
+                <div className="mt-auto pt-10">
+                  <h3 className="text-[1.05rem] font-extrabold leading-tight text-white sm:text-[1.2rem]">{f.t}</h3>
+                  <p className="mt-2 max-w-md text-[13px] leading-relaxed text-white/55">{f.d}</p>
+                  <div className="mt-5">
+                    <BtnLink href={f.href} variant={i === 0 ? 'primary' : 'ghost'} className="h-10 px-4 text-xs" arrow>
                       {f.cta}
                     </BtnLink>
                   </div>
@@ -161,16 +165,14 @@ export default function HomePage() {
               }`}
             >
               <Reveal>
-                <div className="section-num">{p.n}</div>
-                <h3 className="mt-3 max-w-sm text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
+                <h3 className="max-w-sm text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
                   {p.t}
                 </h3>
                 <p className="mt-3.5 max-w-sm text-[14px] leading-relaxed text-white/55">{p.d}</p>
               </Reveal>
               <Reveal delay={100}>
-                <div className="relative">
-                  <OptionalPhoto src={p.ambientImg} alt="" className="ambient-photo" />
-                  <BrowserFrame src={p.img} alt={p.imgAlt} urlLabel="flovmp.ru/dashboard" />
+                <div>
+                  <ProductPreview labels={t.home.preview} mode={i === 0 ? 'projects' : i === 1 ? 'console' : 'security'} />
                 </div>
               </Reveal>
             </div>
@@ -187,9 +189,7 @@ export default function HomePage() {
             return (
               <Reveal key={f.t} delay={(i % 4) * 60} className={FEATURE_SPAN2.has(i) ? 'lg:col-span-2' : ''}>
                 <div className="card card-hover h-full p-5">
-                  <div className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-white/70">
-                    <Icon className="icon-pop h-4 w-4" />
-                  </div>
+                  <Icon className="icon-pop h-5 w-5 text-brand" />
                   <h3 className="mt-4 text-[14px] font-semibold text-white">{f.t}</h3>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{f.d}</p>
                 </div>
@@ -206,10 +206,6 @@ export default function HomePage() {
 
       {/* ---------------- FACTS BAND ---------------- */}
       <section className="relative overflow-hidden py-16 sm:py-20">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[380px] w-[780px] -translate-x-1/2 rounded-full bg-brand/10 blur-[110px]"
-        />
         <Container><hr className="rule mb-16 sm:mb-20" /></Container>
         <Container>
           <Reveal className="mb-10 text-center">
@@ -280,9 +276,7 @@ export default function HomePage() {
           {t.home.ownership.map((o, i) => (
             <Reveal key={o.t} delay={i * 70}>
               <div className="card card-hover h-full p-6">
-                <div className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-white/70">
-                  {i === 0 ? <Layers className="icon-pop h-4 w-4" /> : <Boxes className="icon-pop h-4 w-4" />}
-                </div>
+                {i === 0 ? <Layers className="icon-pop h-5 w-5 text-brand" /> : <Boxes className="icon-pop h-5 w-5 text-brand" />}
                 <h3 className="mt-4 text-[14px] font-semibold text-white">{o.t}</h3>
                 <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{o.d}</p>
               </div>
@@ -294,8 +288,8 @@ export default function HomePage() {
       {/* ---------------- CTA ---------------- */}
       <Section bordered={false}>
         <Reveal>
-          <div className="rounded-2xl border border-brand/25 bg-brand/[0.05] p-10 text-center sm:p-14">
-            <h2 className="mx-auto max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.ctaTitle}</h2>
+          <div className="card card-hover p-10 text-center sm:p-14">
+            <h2 className="mx-auto max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl"><span className="h-grad">{t.home.ctaTitle}</span></h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-white/55">{t.home.ctaSub}</p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <BtnLink href="/contact" variant="primary" className="h-12 px-6 text-sm">

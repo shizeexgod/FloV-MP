@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, AlertTriangle, BarChart3, CreditCard, Download, KeyRound, Layers, Percent, Plug, Plus, ScrollText, Server, Settings, Terminal, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Download, KeyRound, Layers, Percent, Plug, Plus, ScrollText, Server, Settings, Terminal } from 'lucide-react';
 import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
@@ -13,12 +13,10 @@ import {
 } from '@/components/dashboard/_ctx';
 import { ProjectsTab } from '@/components/dashboard/ProjectsTab';
 import { ConsoleTab } from '@/components/dashboard/ConsoleTab';
-import { TroubleshootTab } from '@/components/dashboard/TroubleshootTab';
 import { OverviewTab } from '@/components/dashboard/OverviewTab';
 import { TelemetryTab } from '@/components/dashboard/TelemetryTab';
 import { SdkTab } from '@/components/dashboard/SdkTab';
 import { BuilderTab } from '@/components/dashboard/BuilderTab';
-import { BillingTab } from '@/components/dashboard/BillingTab';
 import { AffiliateTab } from '@/components/dashboard/AffiliateTab';
 import { AnalyticsTab } from '@/components/dashboard/AnalyticsTab';
 import { WatchdogTab } from '@/components/dashboard/WatchdogTab';
@@ -29,13 +27,11 @@ import { IpBindModal } from '@/components/dashboard/IpBindModal';
 import { NewLicenseModal } from '@/components/dashboard/NewLicenseModal';
 import { NewProjectModal } from '@/components/dashboard/NewProjectModal';
 import { ProjectSettingsModal } from '@/components/dashboard/ProjectSettingsModal';
-import { InvoiceModal } from '@/components/dashboard/InvoiceModal';
 import type { TwoFaState } from '@/components/dashboard/_ctx';
 
-const TAB_ICONS: Record<TabKey, React.ElementType> = {
+const TAB_ICONS: Partial<Record<TabKey, React.ElementType>> = {
   projects: Server,
   console: Terminal,
-  troubleshoot: Zap,
   overview: KeyRound,
   telemetry: Activity,
   analytics: BarChart3,
@@ -44,17 +40,16 @@ const TAB_ICONS: Record<TabKey, React.ElementType> = {
   api: Plug,
   sdk: Download,
   builder: Layers,
-  billing: CreditCard,
   affiliate: Percent,
   settings: Settings,
 };
 
 type NavGroupId = 'manage' | 'monitor' | 'tools' | 'account';
 const NAV_GROUPS: { id: NavGroupId; keys: TabKey[] }[] = [
-  { id: 'manage', keys: ['projects', 'overview', 'console', 'watchdog', 'logs'] },
-  { id: 'monitor', keys: ['telemetry', 'analytics'] },
-  { id: 'tools', keys: ['troubleshoot', 'api', 'sdk', 'builder'] },
-  { id: 'account', keys: ['billing', 'affiliate', 'settings'] },
+  { id: 'manage', keys: ['projects', 'overview'] },
+  { id: 'monitor', keys: ['telemetry', 'analytics', 'watchdog', 'logs'] },
+  { id: 'tools', keys: ['console', 'api', 'sdk', 'builder'] },
+  { id: 'account', keys: ['affiliate', 'settings'] },
 ];
 
 /* =============================================================== */
@@ -78,19 +73,7 @@ export default function DashboardPage() {
 
   /* txAdmin Console state */
   const [consoleInput, setConsoleInput] = useState('');
-  const [consoleLogs, setConsoleLogs] = useState<Array<{ id: number; time: string; tag: string; text: string; tone: 'info' | 'warn' | 'error' | 'cmd' }>>([
-    { id: 1, time: '19:42:01', tag: 'Core', text: 'FloV:MP Server Runtime v1.0.4 started (Build b3307 unhooked)', tone: 'info' },
-    { id: 2, time: '19:42:02', tag: 'Network', text: 'UDP 7788 listening on 0.0.0.0:7788 (1500 max players)', tone: 'info' },
-    { id: 3, time: '19:42:03', tag: 'AntiCheat', text: 'FloV:Shield security invariants active (Speed, Teleport, Weapon whitelists)', tone: 'info' },
-    { id: 4, time: '19:42:04', tag: 'Database', text: 'MariaDB pool connected (flovmp_db @ localhost:3306)', tone: 'info' },
-    { id: 5, time: '19:42:05', tag: 'Agent', text: 'RemoteServerAgent connected to Cloud Control Plane (Token: agnt_live_prod_99f48a)', tone: 'info' },
-    { id: 6, time: '19:42:15', tag: 'Telemetry', text: 'Heartbeat tick sent -> 60.0 Hz tickrate, 60.0 FPS, 384 MB CoreCLR', tone: 'info' },
-  ]);
-
-  /* AI Troubleshooter state */
-  const [troubleshootText, setTroubleshootText] = useState('');
-  const [diagnosing, setDiagnosing] = useState(false);
-  const [diagnosticResult, setDiagnosticResult] = useState<any>(null);
+  const [consoleLogs, setConsoleLogs] = useState<Array<{ id: number; time: string; tag: string; text: string; tone: 'info' | 'warn' | 'error' | 'cmd' }>>([]);
 
   const [showKeyId, setShowKeyId] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -127,12 +110,12 @@ export default function DashboardPage() {
   const [newProjOpen, setNewProjOpen] = useState(false);
   const [newProjName, setNewProjName] = useState('');
   const [newProjSlug, setNewProjSlug] = useState('');
-  const [newProjPlan, setNewProjPlan] = useState('enterprise');
+  const [newProjPlan, setNewProjPlan] = useState('lifetime');
   const [creatingProj, setCreatingProj] = useState(false);
 
   /* new license modal */
   const [newLicOpen, setNewLicOpen] = useState(false);
-  const [newPlan, setNewPlan] = useState('business');
+  const [newPlan, setNewPlan] = useState('lifetime');
   const [newName, setNewName] = useState('');
   const [newIp, setNewIp] = useState('');
   const [creatingLic, setCreatingLic] = useState(false);
@@ -546,31 +529,6 @@ export default function DashboardPage() {
     }
   };
 
-  const runTroubleshoot = async (sampleLogs?: string) => {
-    const textToAnalyze = sampleLogs || troubleshootText;
-    if (!textToAnalyze.trim()) {
-      show(D.toast.pasteLogs, 'error');
-      return;
-    }
-    setDiagnosing(true);
-    setDiagnosticResult(null);
-    try {
-      const res = await fetch('/api/v1/ai/troubleshoot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logs: textToAnalyze }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || D.toast.errAnalyze);
-      setDiagnosticResult(data.diagnosis);
-      show(D.toast.aiDone);
-    } catch (err: any) {
-      show(err.message, 'error');
-    } finally {
-      setDiagnosing(false);
-    }
-  };
-
   const loadInvoices = async () => {
     setLoadingInvoices(true);
     try {
@@ -810,7 +768,6 @@ export default function DashboardPage() {
     user, licenses, tab, setTab,
     projects, selectedProject, servers, loadingServers, dispatchingAction,
     consoleInput, setConsoleInput, consoleLogs, setConsoleLogs,
-    troubleshootText, setTroubleshootText, diagnosing, diagnosticResult,
     showKeyId, setShowKeyId, copied,
     ipLicense, setIpLicense, ipValue, setIpValue, ipName, setIpName, ipErr, savingIp,
     settingsModalOpen, setSettingsModalOpen,
@@ -831,7 +788,7 @@ export default function DashboardPage() {
     rotatingKey, rotateApiKey,
     loadServers, handleSelectProject, openProjectSettings, saveProjectSettings, testWebhooks,
     loadResources, handleResourceControl, toggleSseStream, createProjectHandler,
-    handleDispatchCommand, sendConsoleCommand, runTroubleshoot, loadInvoices, loadTelemetry,
+    handleDispatchCommand, sendConsoleCommand, loadInvoices, loadTelemetry,
     copy, openIpModal, saveIp, createLicense, payInvoice, createInvoice, sendHeartbeat, buildLauncher,
   };
 
@@ -841,23 +798,17 @@ export default function DashboardPage() {
       {node}
 
       {/* Header */}
-      <div className="card card-edge mb-6 flex flex-col gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div className="flex items-center gap-3.5">
-          <span className="block h-11 w-11 overflow-hidden rounded-xl border border-white/10 bg-ink-800">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/logo.png" alt="" className="h-full w-full object-cover" />
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold tracking-tight text-white sm:text-xl">{D.hello}, {user?.username}</h1>
-              <Badge tone={user?.role === 'admin' ? 'red' : 'brand'}>
-                {user?.role === 'admin' ? D.roleAdmin : D.roleClient}
-              </Badge>
-            </div>
-            <p className="mt-0.5 text-[12px] text-white/45">
-              {D.headerSub}
-            </p>
+      <div className="card card-edge mb-6 flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl"><span className="h-grad">{D.hello}, {user?.username}</span></h1>
+            <Badge tone={user?.role === 'admin' ? 'red' : 'brand'}>
+              {user?.role === 'admin' ? D.roleAdmin : D.roleClient}
+            </Badge>
           </div>
+          <p className="mt-1.5 text-[13px] text-white/45">
+            {D.headerSub}
+          </p>
         </div>
         <button onClick={() => setNewLicOpen(true)} className="btn btn-primary h-10 px-4 text-xs">
           <Plus className="h-4 w-4" />
@@ -869,7 +820,20 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[248px_1fr]">
         {/* Left sidebar — sections grouped by category */}
         <aside className="lg:sticky lg:top-6 lg:h-max">
-          <nav className="glass no-lift rounded-2xl p-2.5">
+          <label className="sr-only" htmlFor="dashboard-section">{D.navGroups.manage}</label>
+          <select
+            id="dashboard-section"
+            value={tab}
+            onChange={(e) => setTab(e.target.value as TabKey)}
+            className="field h-11 px-3 lg:hidden"
+          >
+            {NAV_GROUPS.map((g) => (
+              <optgroup key={g.id} label={D.navGroups[g.id]}>
+                {g.keys.map((k) => <option key={k} value={k}>{D.tabs[k]}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <nav className="glass no-lift hidden p-2.5 lg:block">
             {NAV_GROUPS.map((g, gi) => (
               <div key={g.id} className={gi > 0 ? 'mt-1.5' : ''}>
                 {gi > 0 && <hr className="rule-soft my-2" />}
@@ -878,7 +842,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-0.5">
                   {g.keys.map((k) => {
-                    const Icon = TAB_ICONS[k];
+                    const Icon = TAB_ICONS[k] ?? Layers;
                     const on = tab === k;
                     return (
                       <button
@@ -909,9 +873,6 @@ export default function DashboardPage() {
       {/* ============ txAdmin CONSOLE ============ */}
       {tab === 'console' && <ConsoleTab />}
 
-      {/* ============ AI TROUBLESHOOTER ============ */}
-      {tab === 'troubleshoot' && <TroubleshootTab />}
-
       {/* ============ OVERVIEW ============ */}
       {tab === 'overview' && <OverviewTab />}
 
@@ -936,9 +897,6 @@ export default function DashboardPage() {
       {/* ============ BUILDER ============ */}
       {tab === 'builder' && <BuilderTab />}
 
-      {/* ============ BILLING ============ */}
-      {tab === 'billing' && <BillingTab />}
-
       {/* ============ AFFILIATE ============ */}
       {tab === 'affiliate' && <AffiliateTab />}
 
@@ -957,7 +915,6 @@ export default function DashboardPage() {
       {/* Project Settings & Webhook Modal */}
       <ProjectSettingsModal />
 
-      <InvoiceModal />
     </div>
     </DashboardProvider>
   );

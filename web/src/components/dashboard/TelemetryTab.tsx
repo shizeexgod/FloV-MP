@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Activity, CheckCircle2, Cpu, Gauge, HardDrive, RefreshCw, Users, Zap } from 'lucide-react';
+import { Activity, Cpu, Gauge, HardDrive, RefreshCw, Users, Zap } from 'lucide-react';
 import { Spinner } from '@/components/ui';
 import { useDashboard, MetricCard, timeShort } from './_ctx';
 
@@ -16,6 +16,19 @@ export function TelemetryTab() {
     primaryLic,
     latest,
   } = useDashboard();
+  const hasLatest = Boolean(latest);
+  const chartData = telemetry.slice(-24);
+  const chartMax = Math.max(1, ...chartData.map((point) => point.players));
+  const chartPoints = chartData.map((point, index) => ({
+    x: chartData.length === 1 ? 0 : (index / (chartData.length - 1)) * 800,
+    y: 148 - (point.players / chartMax) * 128,
+  }));
+  const polyline = chartPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  const areaPath = chartPoints.length > 1
+    ? `M ${chartPoints.map((point) => `${point.x} ${point.y}`).join(' L ')} L 800 160 L 0 160 Z`
+    : '';
+  const peakPlayers = chartData.length ? Math.max(...chartData.map((point) => point.players)) : null;
+
   return (
         <div className="relative space-y-8 animate-fade-in">
           <div className="glass-panel card-edge flex flex-col gap-5 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
@@ -26,7 +39,7 @@ export function TelemetryTab() {
               </h2>
               <p className="mt-1 font-mono text-[11px] text-slate-400">
                 key: <span className="text-brand">{primaryLic?.license_key || '—'}</span> · VDS:{' '}
-                <span className="text-white">{primaryLic?.bound_ip || '188.127.229.224'}</span>
+                <span className="text-white">{primaryLic?.bound_ip || '—'}</span>
               </p>
             </div>
             <div className="flex gap-2.5">
@@ -46,10 +59,10 @@ export function TelemetryTab() {
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard icon={Cpu} tone="text-emeraldx" ring="border-emeraldx/40 bg-emeraldx/10" label="Tick Rate" value={`${latest?.tick_rate ?? 60}.0`} unit="Hz" foot={D.tele.tickFoot} />
-            <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={`${latest?.fps ?? 60}.0`} unit="FPS" foot={D.tele.fpsFoot} />
-            <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={`${latest?.memory_mb ?? 248}`} unit="MB" foot={D.tele.ramFoot} />
-            <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label={D.tele.playersLabel} value={`${latest?.players ?? 1}`} unit={`/ ${primaryLic?.max_players ?? 1500}`} foot={D.tele.playersFoot} />
+            <MetricCard icon={Cpu} tone="text-emeraldx" ring="border-emeraldx/40 bg-emeraldx/10" label="Tick Rate" value={hasLatest ? String(latest!.tick_rate) : '—'} unit={hasLatest ? 'Hz' : ''} foot={D.tele.tickFoot} />
+            <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={hasLatest ? String(latest!.fps) : '—'} unit={hasLatest ? 'FPS' : ''} foot={D.tele.fpsFoot} />
+            <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={hasLatest ? String(latest!.memory_mb) : '—'} unit={hasLatest ? 'MB' : ''} foot={D.tele.ramFoot} />
+            <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label={D.tele.playersLabel} value={hasLatest ? String(latest!.players) : '—'} unit={hasLatest ? `/ ${latest!.max_players}` : ''} foot={D.tele.playersFoot} />
           </div>
 
           {/* 24-Hour Activity Chart & SLA */}
@@ -64,19 +77,15 @@ export function TelemetryTab() {
                   {D.tele.curveSub}
                 </p>
               </div>
-              <div className="flex items-center gap-3 font-mono text-xs">
-                <span className="flex items-center gap-1.5 rounded-full border border-emeraldx/30 bg-emeraldx/15 px-3 py-1 text-emeraldx font-bold">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  SLA: 99.98%
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
-                  {D.tele.peak}: <strong className="text-brand">{D.tele.peakVal}</strong>
-                </span>
-              </div>
+              {peakPlayers !== null ? (
+                <div className="font-mono text-xs text-white/45">
+                  {D.tele.peak}: <strong className="text-brand">{peakPlayers}</strong>
+                </div>
+              ) : null}
             </div>
 
-            {/* SVG Activity Curve */}
-            <div className="h-44 w-full">
+            {chartPoints.length > 1 ? (
+            <div className="h-44 w-full" aria-label={D.tele.curveTitle}>
               <svg className="h-full w-full overflow-visible" viewBox="0 0 800 160" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -89,36 +98,23 @@ export function TelemetryTab() {
                 <line x1="0" y1="80" x2="800" y2="80" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
                 <line x1="0" y1="120" x2="800" y2="120" stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
 
-                {/* Filled Area */}
                 <path
-                  d="M0,130 C70,120 120,140 180,110 C240,70 300,90 360,60 C420,30 480,45 540,25 C600,10 660,35 720,20 C760,10 790,25 800,30 L800,160 L0,160 Z"
+                  d={areaPath}
                   fill="url(#curveGradient)"
                 />
-                {/* Stroke Line */}
-                <path
-                  d="M0,130 C70,120 120,140 180,110 C240,70 300,90 360,60 C420,30 480,45 540,25 C600,10 660,35 720,20 C760,10 790,25 800,30"
+                <polyline
+                  points={polyline}
                   fill="none"
                   stroke="#ff3d8a"
                   strokeWidth="3"
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-
-                {/* Peak Dot */}
-                <circle cx="600" cy="10" r="5" fill="#ff3d8a" className="animate-pulse" />
-                <circle cx="600" cy="10" r="10" fill="none" stroke="#ff3d8a" strokeWidth="1.5" strokeOpacity="0.5" />
               </svg>
             </div>
-
-            {/* Time markers */}
-            <div className="mt-3 flex justify-between font-mono text-[10px] text-slate-500">
-              <span>00:00 ({D.tele.night})</span>
-              <span>04:00</span>
-              <span>08:00 ({D.tele.morning})</span>
-              <span>12:00 ({D.tele.day})</span>
-              <span>16:00</span>
-              <span>20:00 ({D.tele.prime})</span>
-              <span>23:59</span>
-            </div>
+            ) : (
+              <p className="py-14 text-center text-xs text-white/35">{D.tele.noPackets}</p>
+            )}
           </div>
 
           <div className="glass-panel card-edge rounded-3xl p-6 shadow-glass sm:p-8">

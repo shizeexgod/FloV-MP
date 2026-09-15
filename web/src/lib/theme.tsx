@@ -55,8 +55,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       const savedMode = localStorage.getItem(MODE_KEY);
       if (savedMode === 'light' || savedMode === 'dark') setModeState(savedMode);
-      const savedAccent = localStorage.getItem(ACCENT_KEY) as AccentKey | null;
-      if (savedAccent && ACCENTS.some((a) => a.key === savedAccent)) setAccentState(savedAccent);
+      setAccentState('pink');
+      applyAccent('pink');
+      localStorage.setItem(ACCENT_KEY, 'pink');
     } catch {
       /* ignore */
     }
@@ -98,7 +99,7 @@ export const THEME_BOOT_SCRIPT = `(function(){try{
 var m=localStorage.getItem('${MODE_KEY}');if(m!=='light'&&m!=='dark')m='dark';
 document.documentElement.setAttribute('data-theme',m);
 var A={pink:['#ff3d8a','#ff70ab','#d81f6a'],violet:['#8b5cf6','#a985fb','#6d3fd6'],blue:['#3b82f6','#6ba5fb','#2563d4'],emerald:['#10b981','#3fd6a3','#0a8f63'],amber:['#f59e0b','#ffb838','#c47d05']};
-var a=localStorage.getItem('${ACCENT_KEY}');if(!A[a])a='pink';
+var a='pink';
 var s=document.documentElement.style;
 s.setProperty('--brand',A[a][0]);s.setProperty('--brand-hi',A[a][1]);s.setProperty('--brand-lo',A[a][2]);
 }catch(e){}})();`;

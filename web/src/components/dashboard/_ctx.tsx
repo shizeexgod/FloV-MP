@@ -112,7 +112,7 @@ export interface LauncherBuildResult {
 }
 
 export type TabKey =
-  | 'projects' | 'console' | 'troubleshoot' | 'overview'
+  | 'projects' | 'console' | 'overview'
   | 'telemetry' | 'analytics' | 'sdk' | 'builder' | 'billing' | 'affiliate'
   | 'watchdog' | 'logs' | 'api' | 'settings';
 
@@ -135,7 +135,7 @@ export const COLOR_PRESETS = [
 ];
 
 export const planTone = (plan: string) =>
-  plan === 'enterprise' ? 'cyber' : plan === 'business' ? 'brand' : 'slate';
+  plan === 'lifetime' || plan === 'business' ? 'brand' : plan === 'enterprise' ? 'cyber' : 'slate';
 
 export const dateShort = (s: string) => new Date(s).toLocaleDateString('ru-RU');
 export const timeShort = (s: string) => new Date(s).toLocaleTimeString('ru-RU');
@@ -160,9 +160,6 @@ export interface DashCtx {
   dispatchingAction: string | null;
   consoleLogs: { id: number; time: string; tag: string; text: string; tone: 'info' | 'warn' | 'error' | 'cmd' }[];
   consoleInput: string;
-  troubleshootText: string;
-  diagnosing: boolean;
-  diagnosticResult: any;
   showKeyId: number | null;
   copied: string | null;
   ipLicense: License | null;

@@ -13,12 +13,13 @@ export async function POST(req: NextRequest) {
     const { plan, serverName, boundIp, customSlots, days: customDays } = await req.json();
 
     const validPlans: Record<string, { maxPlayers: number; days: number }> = {
+      lifetime: { maxPlayers: 1500, days: 36500 },
       indie: { maxPlayers: 128, days: 30 },
       business: { maxPlayers: 1500, days: 30 },
       enterprise: { maxPlayers: 5000, days: 365 },
     };
 
-    const selectedPlan = (plan && validPlans[plan]) ? plan : 'enterprise';
+    const selectedPlan = (plan && validPlans[plan]) ? plan : 'lifetime';
     const planConfig = validPlans[selectedPlan];
     const maxPlayers = customSlots ? Math.max(1, Number(customSlots)) : planConfig.maxPlayers;
     const durationDays = customDays ? Math.max(1, Number(customDays)) : planConfig.days;
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       issuedTo: session.username,
       plan: selectedPlan,
       maxPlayers,
-      maxServers: selectedPlan === 'enterprise' ? 10 : 3,
+      maxServers: selectedPlan === 'enterprise' || selectedPlan === 'lifetime' ? 10 : 3,
       days: durationDays,
     });
 

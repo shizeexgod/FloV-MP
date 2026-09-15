@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Menu, Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun } from 'lucide-react';
 import { useI18n, useT } from '@/lib/i18n';
-import { ACCENTS, useTheme, type AccentKey } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 /** Accent / language / theme controls — shared by the desktop dropdown and the mobile sheet. */
-export function ThemeControls({ ringOffset = '#131316' }: { ringOffset?: string }) {
+export function ThemeControls({ showLanguage = true }: { ringOffset?: string; showLanguage?: boolean }) {
   const t = useT();
   const { lang, setLang } = useI18n();
-  const { mode, setMode, accent, setAccent } = useTheme();
+  const { mode, setMode } = useTheme();
 
   const seg = (active: boolean) =>
     `flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[12px] font-semibold transition-colors ${
@@ -19,42 +19,21 @@ export function ThemeControls({ ringOffset = '#131316' }: { ringOffset?: string 
 
   return (
     <div className="space-y-3.5">
-      <div>
-        <div className={label}>{t.common.accent}</div>
-        <div className="mt-2.5 flex items-center gap-2">
-          {ACCENTS.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              onClick={() => setAccent(a.key as AccentKey)}
-              aria-label={a.label}
-              aria-pressed={accent === a.key}
-              className="grid h-7 w-7 place-items-center rounded-full transition-transform hover:scale-110"
-              style={{
-                backgroundColor: a.base,
-                boxShadow: accent === a.key ? `0 0 0 2px ${ringOffset}, 0 0 0 4px rgba(255,255,255,0.7)` : 'none',
-              }}
-            >
-              {accent === a.key && <Check className="h-3.5 w-3.5 text-white" />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <hr className="rule-soft" />
-
-      <div>
-        <div className={label}>{t.common.language}</div>
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
-          {(['ru', 'en'] as const).map((l) => (
-            <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l} className={seg(lang === l)}>
-              {l.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <hr className="rule-soft" />
+      {showLanguage ? (
+        <>
+          <div>
+            <div className={label}>{t.common.language}</div>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              {(['ru', 'en'] as const).map((l) => (
+                <button key={l} type="button" onClick={() => setLang(l)} aria-pressed={lang === l} className={seg(lang === l)}>
+                  {l.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <hr className="rule-soft" />
+        </>
+      ) : null}
 
       <div>
         <div className={label}>{t.common.theme}</div>
@@ -74,7 +53,7 @@ export function ThemeControls({ ringOffset = '#131316' }: { ringOffset?: string 
 }
 
 /** ☰ dropdown for the desktop header. */
-export default function ThemeMenu() {
+export default function ThemeMenu({ showLanguage = true }: { showLanguage?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +93,7 @@ export default function ThemeMenu() {
         style={{ backgroundColor: 'var(--panel)' }}
         role="menu"
       >
-        <ThemeControls ringOffset="var(--panel)" />
+        <ThemeControls ringOffset="var(--panel)" showLanguage={showLanguage} />
       </div>
     </div>
   );

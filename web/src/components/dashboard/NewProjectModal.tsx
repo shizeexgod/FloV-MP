@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { FolderKanban } from 'lucide-react';
 import { Spinner, Modal, FieldLabel } from '@/components/ui';
 import { useDashboard } from './_ctx';
 
@@ -12,8 +13,6 @@ export function NewProjectModal() {
     setNewProjName,
     newProjSlug,
     setNewProjSlug,
-    newProjPlan,
-    setNewProjPlan,
     creatingProj,
     createProjectHandler,
     D,
@@ -26,27 +25,9 @@ export function NewProjectModal() {
         description={D.modal.newProjDesc}
       >
         <form onSubmit={createProjectHandler} className="space-y-5">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { id: 'business', name: 'RP', slots: `512 ${D.proj.slots}`, tone: 'brand' },
-              { id: 'enterprise', name: 'Enterprise', slots: `1500+ ${D.proj.slots}`, tone: 'cyber' },
-            ].map((p) => (
-              <button
-                type="button"
-                key={p.id}
-                onClick={() => setNewProjPlan(p.id)}
-                className={`rounded-2xl border p-4 text-center transition-all ${
-                  newProjPlan === p.id
-                    ? p.tone === 'cyber'
-                      ? 'border-cyber/60 bg-cyber/10'
-                      : 'border-brand/60 bg-brand/10 shadow-neon-pink'
-                    : 'border-white/10 bg-white/[0.02]'
-                }`}
-              >
-                <div className="text-xs font-bold text-white">{p.name}</div>
-                <div className="mt-1 text-[10px] text-slate-400">{p.slots}</div>
-              </button>
-            ))}
+          <div className="flex items-start gap-3 text-sm text-white/65">
+            <FolderKanban className="mt-0.5 h-4 w-4 flex-none text-brand" />
+            <p className="leading-relaxed">{D.modal.newProjDesc}</p>
           </div>
           <div>
             <FieldLabel>{D.builder.projectName}</FieldLabel>
@@ -73,7 +54,8 @@ export function NewProjectModal() {
               className="field h-11 px-4 font-mono"
             />
           </div>
-          <div className="flex justify-end gap-3 border-t border-white/[0.08] pt-4">
+          <hr className="rule-soft" />
+          <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={() => setNewProjOpen(false)}

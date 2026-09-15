@@ -7,11 +7,16 @@ import { useDashboard } from './_ctx';
 const LEVELS = ['ALL', 'INFO', 'OK', 'WARN', 'ERROR', 'CRASH'] as const;
 
 export function LogsTab() {
-  const { D } = useDashboard();
+  const { D, consoleLogs } = useDashboard();
   const [q, setQ] = useState('');
   const [lvl, setLvl] = useState<(typeof LEVELS)[number]>('ALL');
 
-  const rows: [string, string, string, string][] = D.logs.rows;
+  const rows: [string, string, string, string][] = consoleLogs.map((entry) => [
+    entry.time,
+    entry.tone === 'cmd' ? 'INFO' : entry.tone.toUpperCase(),
+    entry.tag,
+    entry.text,
+  ]);
   const filtered = rows.filter(
     (r) =>
       (lvl === 'ALL' || r[1] === lvl) &&

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, LogOut, Menu, ShieldAlert, X } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import ThemeMenu, { ThemeControls } from './ThemeMenu';
+import LangSwitch from './LangSwitch';
 
 interface SessionUser {
   username: string;
@@ -99,11 +100,12 @@ export default function Navbar() {
         </div>
 
         <div className="ml-auto hidden items-center gap-2 md:flex">
+          <LangSwitch />
           {user ? (
             <>
               {user.role === 'admin' && (
                 <Link href="/admin" className={accountCls}>
-                  <ShieldAlert className="h-3.5 w-3.5 text-brand" /> Admin
+                  <ShieldAlert className="h-3.5 w-3.5 text-brand" /> {t.common.adminPanel}
                 </Link>
               )}
               <Link href="/dashboard" prefetch className={accountCls}>
@@ -124,7 +126,7 @@ export default function Navbar() {
               {t.common.login}
             </Link>
           )}
-          <ThemeMenu />
+          <ThemeMenu showLanguage={false} />
         </div>
 
         <button
@@ -162,7 +164,7 @@ export default function Navbar() {
             <div className="flex flex-col gap-2">
               {user.role === 'admin' && (
                 <Link href="/admin" className={accountCls + ' h-11 justify-center text-sm'}>
-                  <ShieldAlert className="h-4 w-4 text-brand" /> Admin
+                  <ShieldAlert className="h-4 w-4 text-brand" /> {t.common.adminPanel}
                 </Link>
               )}
               <Link href="/dashboard" prefetch className={accountCls + ' h-11 justify-center text-sm'}>
