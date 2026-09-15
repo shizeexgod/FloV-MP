@@ -40,6 +40,14 @@ public class GamemodeResource : Resource
     private RemoteServerAgent? _agent;
     private FloVMP.Gamemode.Systems.Api.HttpApiSystem? _httpApi;
     private FloVMP.Core.Auth.IAccountStore? _accountStore;
+    /// <summary>
+    /// Радиус слышимости пространственного голоса, метры. Совпадает с базовой
+    /// платформой — иначе игроки, привыкшие к одному серверу, на другом
+    /// сталкиваются с другой дальностью и считают это багом.
+    /// </summary>
+    private const float VoiceRangeMeters = 25.0f;
+
+    private IVoiceChannel? _voiceChannel;
     private FloVMP.Core.Security.IBanStore? _banStore;
     private FloVMP.Core.Security.MultiTierBanService? _bans;
     private FloVMP.Core.Spatial.AdaptiveTickManager<uint>? _tickManager;
@@ -82,6 +90,19 @@ public class GamemodeResource : Resource
         _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
             dbConn, Path.Combine(dataDir, "bans.json"));
         _bans = new FloVMP.Core.Security.MultiTierBanService(_banStore);
+
+        // Пространственный голос. В RP-режиме его не было ВООБЩЕ: канал
+        // создавался только в базовой платформе (FloVMP.Starter), поэтому при
+        // переключении сервера в полный режим голос молча пропадал.
+        // Радиус 25 м — как в платформе, чтобы поведение не расходилось.
+        Safe.Run("core.voice.create", () =>
+        {
+            _voiceChannel = Alt.CreateVoiceChannel(true, VoiceRangeMeters);
+            Alt.Log($"[FloV:MP] core: голосовой канал создан (радиус {VoiceRangeMeters} м)");
+        });
+        if (_voiceChannel is null)
+            Alt.LogWarning("[FloV:MP] core: голосовой канал НЕ создан — проверьте секцию [voice] в server.toml " +
+                           "и запущен ли altv-voice-server.");
 
         _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName, _bans);
         _auth.Attach();
@@ -163,7 +184,8 @@ public class GamemodeResource : Resource
                 Alt.StopServer();
             }),
             platformMode: !fullMode,
-            bans: _bans);
+            bans: _bans,
+            voiceChannel: () => _voiceChannel);
         _chat.Attach();
 
         _console = new ConsoleCommands(
@@ -568,11 +590,19 @@ public class GamemodeResource : Resource
         _hud?.OnAuthed(player, account);
         _inv?.OnAuthed(player, account);
         _chat?.OnPlayerAuthed(player, account);
+
+        // В голосовой канал игрок попадает только ПОСЛЕ авторизации: иначе
+        // висящий на экране входа слышал бы происходящее в игре и мог бы
+        // говорить, не войдя в аккаунт.
+        Safe.Run("core.voice.add", () => _voiceChannel?.AddPlayer(player));
     });
 
     private void OnPlayerDisconnect(IPlayer player, string reason) => Safe.Run("core.OnPlayerDisconnect", () =>
     {
         _tickManager?.UnregisterEntity(player.Id);
+        // Голосовой канал держит ссылку на игрока: без явного удаления
+        // отключившиеся накапливаются в канале — утечка и лишний трафик.
+        Safe.Run("core.voice.remove", () => _voiceChannel?.RemovePlayer(player));
         _antiCheat?.OnDisconnect(player);
         _hud?.OnDisconnect(player);
         _pendingRespawns.RemoveAll(r => r.Player == player);

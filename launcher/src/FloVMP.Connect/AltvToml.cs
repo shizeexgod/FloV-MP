@@ -32,10 +32,27 @@ public static class AltvToml
         branch = branch.Trim().ToLowerInvariant();
         if (branch != "release" && branch != "rc" && branch != "dev") branch = "release";
 
+        // Голос на стороне клиента. Раньше здесь было жёсткое voiceEnabled =
+        // false: сервер мог быть настроен идеально, голосовой сервер запущен —
+        // и всё равно никто никого не слышал, потому что клиенту голос был
+        // выключен. Одна из трёх причин, по которым голос не работал нигде.
+        //
+        // Включено по умолчанию: если сервер голос не предлагает, клиент
+        // просто не получает канал — ошибки не возникает. Выключается
+        // FLOVMP_VOICE=0 (на случай, если у игрока проблемы с микрофоном или
+        // драйвером звука и надо быстро исключить голос из картины).
+        var voiceOn = Environment.GetEnvironmentVariable("FLOVMP_VOICE") != "0";
+
+        // Активация по нажатию клавиши, а не по уровню звука: автоактивация
+        // на RP-сервере означает открытый микрофон у половины игроков.
+        // Включается отдельно, FLOVMP_VOICE_ACTIVATION=1.
+        var voiceActivation = voiceOn &&
+            Environment.GetEnvironmentVariable("FLOVMP_VOICE_ACTIVATION") == "1";
+
         var toml = $"""
             audioFrameLimit = false
             autoBackup = true
-            autoFindMic = false
+            autoFindMic = {(voiceOn ? "true" : "false")}
             branch = '{branch}'
             cachePath = '{cache}'
             cefAlwaysFullCopy = false
@@ -78,8 +95,8 @@ public static class AltvToml
             update = false
             useExternalConsole = false
             useSharedTextures = true
-            voiceActivationEnabled = false
-            voiceEnabled = false
+            voiceActivationEnabled = {(voiceActivation ? "true" : "false")}
+            voiceEnabled = {(voiceOn ? "true" : "false")}
 
             """;
 

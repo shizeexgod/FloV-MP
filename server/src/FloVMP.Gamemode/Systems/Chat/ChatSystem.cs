@@ -40,6 +40,11 @@ public sealed class ChatSystem
     // администратор был уверен, что забанил машину. Это хуже, чем отсутствие
     // функции: администратор принимает решения по ложным данным.
     private readonly MultiTierBanService? _bans;
+
+    // Голосовой канал — чтобы /mute глушил не только текст. Игрок, замученный
+    // за оскорбления в чате, продолжал спокойно кричать в голос: для
+    // администратора это выглядит как неработающий мут.
+    private readonly Func<IVoiceChannel?>? _voiceChannel;
     // Платформенный режим: RP-геймплей (экономика/фракции/документы/транспорт)
     // не входит в платформу — эти команды недоступны, сервер-владелец добавляет
     // свои. Базовый чат/инфо/модерация остаются.
@@ -63,7 +68,8 @@ public sealed class ChatSystem
         Action<IPlayer, Position>? notifyTeleport = null,
         Action<int, bool>? setAdminExempt = null,
         bool platformMode = false,
-        MultiTierBanService? bans = null)
+        MultiTierBanService? bans = null,
+        Func<IVoiceChannel?>? voiceChannel = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -78,6 +84,30 @@ public sealed class ChatSystem
         _setAdminExempt = setAdminExempt;
         _platformMode = platformMode;
         _bans = bans;
+        _voiceChannel = voiceChannel;
+    }
+
+    /// <summary>
+    /// Заглушить или вернуть голос игроку в пространственном канале.
+    /// Возвращает false, если голосовой канал недоступен — тогда команда
+    /// обязана сказать администратору, что голос НЕ заглушён, а не делать вид.
+    /// </summary>
+    private bool SetVoiceMuted(IPlayer target, bool muted)
+    {
+        var channel = _voiceChannel?.Invoke();
+        if (channel is null) return false;
+
+        try
+        {
+            if (muted) channel.MutePlayer(target);
+            else channel.UnmutePlayer(target);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Alt.Log($"[FloV:MP] [Voice] не удалось изменить мут голоса: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>
@@ -1785,6 +1815,10 @@ public sealed class ChatSystem
                 var muteUntil = DateTime.UtcNow.AddMinutes(muteMins);
                 muteAcc.MuteUntilUtc = muteUntil.ToString("O");
                 _saveAccount?.Invoke(muteAcc);
+                var voiceMuted = SetVoiceMuted(muteTarget, true);
+                SendSystem(player, voiceMuted
+                    ? "Заглушены и чат, и голос."
+                    : "Заглушён только ЧАТ: голосовой канал недоступен — игрок продолжит говорить.");
                 Broadcast($"[Мут] {muteTarget.Name} получил блокировку чата на {muteMins} мин. от администратора {acc.Username}. Причина: {muteReason}");
                 GameLog.Punishment("mute", LogActor.Admin(acc.Id, acc.Username), muteTarget.Name, muteReason, muteMins * 60);
                 break;
@@ -1799,6 +1833,9 @@ public sealed class ChatSystem
                     unmuteAcc.MuteUntilUtc = "";
                     _saveAccount?.Invoke(unmuteAcc);
                 }
+                // Снимаем и голосовой мут: иначе «размученный» игрок молчит
+                // в голосе, и никто не понимает, почему.
+                SetVoiceMuted(unmuteTarget, false);
                 Broadcast($"[Размут] {unmuteTarget.Name} был размучен администратором {acc.Username}.");
                 GameLog.Admin("unmute", LogActor.Admin(acc.Id, acc.Username), unmuteTarget.Name);
                 break;

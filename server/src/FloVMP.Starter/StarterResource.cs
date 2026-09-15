@@ -108,10 +108,20 @@ public class StarterResource : Resource
         try
         {
             _spatialVoiceChannel = Alt.CreateVoiceChannel(true, 25.0f);
+            Alt.Log("[FloV:MP Starter] Голосовой канал создан (пространственный, радиус 25 м).");
         }
         catch (Exception ex)
         {
-            Alt.LogWarning($"[FloV:MP Starter] Voice channel not activated (check voice-server): {ex.Message}");
+            Alt.LogWarning($"[FloV:MP Starter] Голосовой канал НЕ создан: {ex.Message}");
+        }
+
+        // Молчаливое отсутствие голоса — самая частая жалоба при установке.
+        // Причина почти всегда одна из двух, поэтому называем обе сразу.
+        if (_spatialVoiceChannel is null)
+        {
+            Alt.LogWarning("[FloV:MP Starter] Голос работать НЕ будет. Проверьте по порядку:");
+            Alt.LogWarning("  1) секция [voice] в server.toml (externalHost/externalPort/externalSecret);");
+            Alt.LogWarning("  2) запущен ли altv-voice-server и совпадает ли externalSecret в его voice.toml.");
         }
 
         Alt.OnPlayerConnect += OnPlayerConnect;
@@ -734,6 +744,7 @@ public class StarterResource : Resource
                 if (IsAdmin(player, 2))
                 {
                     SendChatMessage(player, "{f87171}Блокировки: {a1a1aa}/bans (список), /ban <id> <дней> [причина] (3), /banip <id> <дней> (4), /hwidban <id> <дней> (4), /hardban <id> <причина> (6, навсегда), /unban <ник|IP|HWID|ID бана> (4)");
+                    SendChatMessage(player, "{f87171}Голос: {a1a1aa}/vmute <id> — заглушить или вернуть голос игроку (переключатель)");
                 }
                 if (IsAdmin(player, 8))
                 {
@@ -1404,6 +1415,54 @@ public class StarterResource : Resource
             case "hwidban":
             case "hardban":
                 HandleBanCommand(player, cmd, parts);
+                break;
+
+            // Голосовой мут. Раньше заглушить голос было нечем вообще: игрок,
+            // кричащий в микрофон, останавливался только киком или баном.
+            case "vmute":
+            case "voicemute":
+                if (!IsAdmin(player, 2))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
+                    return;
+                }
+                if (_spatialVoiceChannel is null)
+                {
+                    SendChatMessage(player, "{ef4444}Голосовой канал не создан — глушить нечего (см. [voice] в server.toml).");
+                    return;
+                }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var vmuteId))
+                {
+                    SendChatMessage(player, "{fde047}Использование: /vmute <ID>  (повторный вызов снимает мут)");
+                    return;
+                }
+                var vmuteTarget = Alt.GetPlayerById(vmuteId);
+                if (vmuteTarget == null)
+                {
+                    SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                try
+                {
+                    // Переключатель, а не отдельные /vmute и /vunmute: админу
+                    // проще нажать одно и то же, чем помнить текущее состояние.
+                    if (_spatialVoiceChannel.IsPlayerMuted(vmuteTarget))
+                    {
+                        _spatialVoiceChannel.UnmutePlayer(vmuteTarget);
+                        SendChatMessage(player, $"{{34d399}}Голос игрока {vmuteTarget.Name} восстановлен.");
+                        Alt.Log($"[FloV:MP] [Voice] {player.Name} снял голосовой мут с {vmuteTarget.Name}");
+                    }
+                    else
+                    {
+                        _spatialVoiceChannel.MutePlayer(vmuteTarget);
+                        SendChatMessage(player, $"{{fde047}}Голос игрока {vmuteTarget.Name} заглушён.");
+                        Alt.Log($"[FloV:MP] [Voice] {player.Name} заглушил голос {vmuteTarget.Name}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    SendChatMessage(player, $"{{ef4444}}Не удалось изменить мут голоса: {ex.Message}");
+                }
                 break;
 
             case "unban":

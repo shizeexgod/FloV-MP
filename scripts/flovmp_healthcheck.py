@@ -272,6 +272,77 @@ def check_bans(rep):
                 "" if enforced else "блокировка записывается, но вход не проверяется - бан не работает")
 
 
+# ------------- 3d. Голосовой чат: три места, где он отваливался -------------
+
+def check_voice(rep):
+    section("3d. Голосовой чат (сквозная связность)")
+
+    # 1. Конфиг игрового сервера. Секции [voice] тут не было вовсе: голосовой
+    # сервер разворачивался и запускался службой, а игровой о нём не знал.
+    cfg = ROOT / "config/server.toml"
+    if cfg.exists():
+        c = cfg.read_text(encoding="utf-8", errors="ignore")
+        has_section = "[voice]" in c
+        rep.add(PASS if has_section else FAIL, "секция [voice] в server.toml",
+                "" if has_section else "игровой сервер не знает про голосовой -> голос не работает нигде")
+        if has_section:
+            keys_ok = all(k in c for k in ("externalHost", "externalPort", "externalSecret"))
+            rep.add(PASS if keys_ok else FAIL, "ключи внешнего голосового сервера",
+                    "" if keys_ok else "нужны externalHost/externalPort/externalSecret")
+    else:
+        rep.add(SKIP, "config/server.toml", "файл не найден")
+
+    # 2. Клиент. Жёсткое voiceEnabled = false сводило на нет любую настройку
+    # сервера: канал есть, а клиенту голос выключен.
+    toml = ROOT / "launcher/src/FloVMP.Connect/AltvToml.cs"
+    if toml.exists():
+        t = toml.read_text(encoding="utf-8", errors="ignore")
+        hard_off = "voiceEnabled = false" in t
+        rep.add(FAIL if hard_off else PASS, "голос не выключен жёстко в клиенте",
+                "voiceEnabled = false зашит -> игроки не услышат друг друга" if hard_off else "")
+    else:
+        rep.add(SKIP, "AltvToml.cs", "файл не найден")
+
+    # 3. Сервер обязан создавать канал и в базовой платформе, и в RP-режиме:
+    # раньше канал был только в платформе, и в полном режиме голос пропадал.
+    for path, label in (
+        ("server/src/FloVMP.Starter/StarterResource.cs", "базовая платформа"),
+        ("server/src/FloVMP.Gamemode/GamemodeResource.cs", "RP-режим"),
+    ):
+        f = ROOT / path
+        if not f.exists():
+            rep.add(SKIP, "голосовой канал ({})".format(label), "файл не найден")
+            continue
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        creates = "CreateVoiceChannel" in t
+        joins = "AddPlayer" in t and "RemovePlayer" in t
+        rep.add(PASS if creates else FAIL, "голосовой канал создаётся ({})".format(label),
+                "" if creates else "в этом режиме голоса нет вообще")
+        rep.add(PASS if joins else FAIL, "игроки входят и выходят из канала ({})".format(label),
+                "" if joins else "без RemovePlayer отключившиеся копятся в канале")
+
+    # 4. Мут голоса. Без него замученный за оскорбления игрок спокойно
+    # продолжает кричать в микрофон, и мут выглядит нерабочим.
+    starter = ROOT / "server/src/FloVMP.Starter/StarterResource.cs"
+    chat = ROOT / "server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs"
+    muted = (starter.exists() and "MutePlayer" in starter.read_text(encoding="utf-8", errors="ignore")) or \
+            (chat.exists() and "MutePlayer" in chat.read_text(encoding="utf-8", errors="ignore"))
+    rep.add(PASS if muted else FAIL, "голос можно заглушить",
+            "" if muted else "мут глушит только текст - нарушитель продолжает говорить")
+
+    # 5. Установщик обязан связать оба конца: одинаковый секрет в server.toml и
+    # voice.toml, и ПУБЛИЧНЫЙ адрес для клиента (с 127.0.0.1 голоса не будет).
+    dep = ROOT / "scripts/deploy-licensee.sh"
+    if dep.exists():
+        d = dep.read_text(encoding="utf-8", errors="ignore")
+        wired = "voice.toml" in d and "externalSecret" in d
+        rep.add(PASS if wired else FAIL, "установщик связывает игровой и голосовой серверы",
+                "" if wired else "голосовой сервер ставится, но не подключается к игровому")
+        public = "externalPublicHost" in d
+        rep.add(PASS if public else WARN, "клиенту отдаётся публичный адрес голоса",
+                "" if public else "с 127.0.0.1 игроки молча останутся без голоса")
+
+
 # ------------- 3c. Миграции схемы БД -------------
 
 def check_migrations(rep):
@@ -459,6 +530,7 @@ def main():
     check_admin_commands(rep)
     check_hot_path(rep)
     check_bans(rep)
+    check_voice(rep)
     check_migrations(rep)
     check_version_consistency(rep)
 

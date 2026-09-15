@@ -72,3 +72,29 @@ disableDependencyDownload = true
 # Теги мастер-листа не нужны (announce = false), секция оставлена пустой
 # как валидный якорь формата.
 [tags]
+
+# --- Голосовой чат ----------------------------------------------------
+# Секции [voice] здесь раньше НЕ БЫЛО вообще: голосовой сервер разворачивался
+# и запускался службой, но игровой сервер о нём не знал — голос не работал ни
+# на одной установке, хотя числился готовой возможностью.
+#
+# Имена ключей не угаданы, а вычитаны из самих бинарников 16.4.39:
+#   altv-server        -> bitrate, externalHost, externalPublicHost,
+#                         externalPort, externalSecret
+#   altv-voice-server  -> читает ./voice.toml: serverHost, serverPort,
+#                         playerHost, playerPort, externalSecret, worker-ports
+#
+# externalSecret ОБЯЗАН совпадать в обоих файлах. Пустой секрет = голосовой
+# сервер отказывает игровому в подключении ("missing secret" в его логе).
+# Установщик (scripts/deploy-licensee.sh) генерирует секрет сам и прописывает
+# его в оба файла; здесь значение-заглушка для ручной установки.
+#
+# externalPublicHost — адрес, который получает КЛИЕНТ. На VDS это внешний IP
+# или домен: с 127.0.0.1 игроки будут молча без голоса, потому что попытаются
+# подключиться к самим себе. Это самая частая ошибка настройки.
+[voice]
+bitrate            = 64000
+externalHost       = "127.0.0.1"
+externalPort       = 7790
+externalPublicHost = "CHANGE_ME_PUBLIC_IP_OR_DOMAIN"
+externalSecret     = "CHANGE_ME_VOICE_SECRET"
