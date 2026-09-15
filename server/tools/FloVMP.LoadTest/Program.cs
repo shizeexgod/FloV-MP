@@ -68,6 +68,7 @@ public static class Program
             RunAuthThroughput(extra);
 
         RunAccountStore(players, extra);
+        RunInventoryStore(players, extra);
 
         Report.Header("ИТОГ");
         Report.TableHeader();
@@ -431,6 +432,79 @@ public static class Program
         finally
         {
             try { Directory.Delete(dir, true); } catch { /* временный каталог, не критично */ }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Сценарий 4: автосейв инвентарей
+    // ------------------------------------------------------------------
+    /// <summary>
+    /// Стоимость автосейва — то место, где сервер замирал на минуты.
+    ///
+    /// Save() сериализовал словарь целиком (инвентари ВСЕХ аккаунтов) и
+    /// переписывал весь файл, а автосейв зовёт Save() на каждого игрока
+    /// онлайн: N полных перезаписей файла с N инвентарями, O(n^2) прямо в
+    /// игровом тике. В боевом логе это выглядело как
+    /// resourceManager.Update() took: 240988 ms.
+    /// </summary>
+    private static void RunInventoryStore(int players, Dictionary<string, double> extra)
+    {
+        Report.Header("Сценарий 4 — автосейв инвентарей: полный цикл сохранения");
+
+        var dir = Path.Combine(Path.GetTempPath(), "flovmp-loadtest-inv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "inventories.json");
+
+        try
+        {
+            var store = new FloVMP.Core.Items.JsonInventoryStore(path);
+            var n = Math.Min(players, 2000);
+
+            // Наполняем, как на живом сервере: у каждого игрока свой инвентарь.
+            for (var i = 0; i < n; i++)
+            {
+                var inv = new FloVMP.Core.Items.Inventory(slotCount: 24, maxWeight: 40);
+                inv.Add("water", (i % 9) + 1);
+                inv.Add("phone", 1);
+                store.Save(i, inv);
+            }
+            store.Flush();
+
+            // Собственно автосейв: сохранить всех разом.
+            var saves = new Samples("автосейв: одно сохранение", n);
+            for (var i = 0; i < n; i++)
+            {
+                var inv = new FloVMP.Core.Items.Inventory(slotCount: 24, maxWeight: 40);
+                inv.Add("water", (i % 9) + 2);
+                var sw = Stopwatch.StartNew();
+                store.Save(i, inv);
+                sw.Stop();
+                saves.Add(sw.Elapsed.TotalMilliseconds);
+            }
+
+            var flushSw = Stopwatch.StartNew();
+            store.Flush();
+            flushSw.Stop();
+
+            var cycleMs = saves.Count * saves.Mean + flushSw.Elapsed.TotalMilliseconds;
+
+            store.Dispose();
+
+            Report.TableHeader();
+            Report.Line(saves);
+            Console.WriteLine();
+            Report.Note($"полный автосейв {n} инвентарей: {cycleMs:F0} мс " +
+                        $"(из них запись на диск {flushSw.Elapsed.TotalMilliseconds:F0} мс)");
+            Report.Note($"размер файла:                 {new FileInfo(path).Length / 1024} КБ");
+            Report.Note("Запись на диск — ОДНА на весь автосейв, а не по одной на игрока.");
+            Report.Note("Со старым поведением здесь было бы N полных перезаписей файла.");
+
+            extra["inv_save_p99"] = saves.P99;
+            extra["inv_full_cycle_ms"] = cycleMs;
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { /* временный каталог */ }
         }
     }
 
