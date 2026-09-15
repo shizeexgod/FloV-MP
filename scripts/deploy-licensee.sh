@@ -169,15 +169,20 @@ fi
 # сервер о нём ничего не знал: секции [voice] в server.toml не было вовсе.
 # Голос не работал ни на одной установке, хотя числился готовой возможностью.
 #
-# Имена ключей вычитаны из самих бинарников 16.4.39 (altv-server и
-# altv-voice-server), а не подобраны наугад.
+# Формат сверен с живой рабочей установкой, а не подобран по строкам бинарника.
+# Ключевые детали, на которых легко ошибиться:
+#   * externalSecret — ЧИСЛО без кавычек, совпадает с secret в voice.toml;
+#   * портов ДВА: externalPort (игровой <-> голосовой, наружу не нужен) и
+#     externalPublicPort (сюда подключаются игроки, обязан быть открыт);
+#   * externalPublicHost — адрес для КЛИЕНТА: с 127.0.0.1 голоса не будет.
 echo -e "${CYAN}[4b/5] Настройка голосового чата...${NC}"
 
-VOICE_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-VOICE_PORT="${FLOVMP_VOICE_PORT:-7790}"
+# Секрет — целое число: alt:V ожидает здесь именно число, строка в кавычках
+# не подходит.
+VOICE_SECRET=$(( (RANDOM << 15 | RANDOM) & 0x7FFFFFFF ))
+VOICE_PORT="${FLOVMP_VOICE_PORT:-7896}"
+VOICE_PUBLIC_PORT="${FLOVMP_VOICE_PUBLIC_PORT:-7895}"
 
-# Публичный адрес для КЛИЕНТА. С 127.0.0.1 игроки молча остаются без голоса:
-# клиент попытается подключиться к самому себе. Поэтому берём внешний IP.
 PUBLIC_HOST="${FLOVMP_PUBLIC_HOST:-}"
 if [ -z "${PUBLIC_HOST}" ]; then
   PUBLIC_HOST=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || true)
@@ -186,40 +191,46 @@ if [ -z "${PUBLIC_HOST}" ]; then
   PUBLIC_HOST=$(hostname -I 2>/dev/null | awk '{print $1}')
 fi
 
-if [ -z "${PUBLIC_HOST}" ]; then
-  echo -e "${YELLOW}  Не удалось определить внешний адрес — голос выключен.${NC}"
+if [ ! -x "${VOICE_DIR}/altv-voice-server" ]; then
+  echo -e "${YELLOW}  Голосовой сервер не найден в ${VOICE_DIR} — голос пропущен.${NC}"
+elif [ -z "${PUBLIC_HOST}" ]; then
+  echo -e "${YELLOW}  Не удалось определить внешний адрес — голос пропущен.${NC}"
   echo -e "${YELLOW}  Задайте FLOVMP_PUBLIC_HOST=<ip|домен> и запустите установщик заново.${NC}"
 else
-  # Конфиг голосового сервера (он читает ./voice.toml из своей рабочей папки).
+  # Конфиг голосового сервера (читается из его рабочей папки).
+  # playerHost именно 0.0.0.0: за NAT публичного IP на интерфейсе нет.
   cat > "${VOICE_DIR}/voice.toml" <<VOICECFG
-serverHost = "127.0.0.1"
-serverPort = ${VOICE_PORT}
+# Внешний голосовой сервер alt:V. secret обязан совпадать с externalSecret
+# в server.toml игрового сервера.
+secret = ${VOICE_SECRET}
+host = "0.0.0.0"
+port = ${VOICE_PORT}
 playerHost = "0.0.0.0"
-playerPort = ${VOICE_PORT}
-externalSecret = "${VOICE_SECRET}"
+playerPort = ${VOICE_PUBLIC_PORT}
+loopback = 0
 VOICECFG
   chmod 600 "${VOICE_DIR}/voice.toml"
 
-  # Секция [voice] в конфиге игрового сервера. Заменяем целиком, если она уже
-  # есть, — иначе повторная установка накопила бы дубли и сервер не стартовал.
-  python3 - "${INSTALL_DIR}/server.toml" "${VOICE_PORT}" "${PUBLIC_HOST}" "${VOICE_SECRET}" <<'PYVOICE'
+  # Секция [voice] игрового сервера. Заменяем целиком, если она уже есть:
+  # иначе повторная установка накопила бы дубли и сервер не стартовал.
+  python3 - "${INSTALL_DIR}/server.toml" "${VOICE_PORT}" "${VOICE_PUBLIC_PORT}" "${PUBLIC_HOST}" "${VOICE_SECRET}" <<'PYVOICE'
 import io, re, sys
-path, port, public_host, secret = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+path, port, public_port, public_host, secret = sys.argv[1:6]
 text = io.open(path, encoding="utf-8").read()
-# Вырезаем прежнюю секцию [voice] до следующей секции или конца файла.
 text = re.sub(r"(?ms)^\[voice\].*?(?=^\[|\Z)", "", text)
 text = text.rstrip() + "\n\n[voice]\n"
-text += 'bitrate            = 64000\n'
+text += "bitrate            = 32000\n"
+text += "externalSecret     = %s\n" % secret
 text += 'externalHost       = "127.0.0.1"\n'
-text += 'externalPort       = %s\n' % port
+text += "externalPort       = %s\n" % port
 text += 'externalPublicHost = "%s"\n' % public_host
-text += 'externalSecret     = "%s"\n' % secret
+text += "externalPublicPort = %s\n" % public_port
 io.open(path, "w", encoding="utf-8", newline="\n").write(text)
-print("  [voice] прописан: %s:%s" % (public_host, port))
+print("  [voice] прописан: игрокам %s:%s" % (public_host, public_port))
 PYVOICE
 
-  echo -e "${GREEN}  Голос настроен: ${PUBLIC_HOST}:${VOICE_PORT}${NC}"
-  echo -e "${YELLOW}  Откройте порт ${VOICE_PORT} (TCP и UDP) в файрволе, иначе голоса не будет.${NC}"
+  echo -e "${GREEN}  Голос настроен.${NC}"
+  echo -e "${YELLOW}  Откройте порт ${VOICE_PUBLIC_PORT} (UDP и TCP) в файрволе — иначе голоса не будет.${NC}"
 fi
 
 echo -e "${CYAN}[5/5] Регистрация служб systemd (с PartOf= для голоса)...${NC}"

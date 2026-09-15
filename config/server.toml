@@ -78,23 +78,31 @@ disableDependencyDownload = true
 # и запускался службой, но игровой сервер о нём не знал — голос не работал ни
 # на одной установке, хотя числился готовой возможностью.
 #
-# Имена ключей не угаданы, а вычитаны из самих бинарников 16.4.39:
-#   altv-server        -> bitrate, externalHost, externalPublicHost,
-#                         externalPort, externalSecret
-#   altv-voice-server  -> читает ./voice.toml: serverHost, serverPort,
-#                         playerHost, playerPort, externalSecret, worker-ports
+# Значения ниже — не догадка: они сверены с ЖИВОЙ рабочей установкой
+# (/opt/licensee-test на VDS), где голосовой сервер действительно подключается
+# и создаёт каналы. Важные детали, на которых легко ошибиться:
 #
-# externalSecret ОБЯЗАН совпадать в обоих файлах. Пустой секрет = голосовой
-# сервер отказывает игровому в подключении ("missing secret" в его логе).
-# Установщик (scripts/deploy-licensee.sh) генерирует секрет сам и прописывает
-# его в оба файла; здесь значение-заглушка для ручной установки.
+#   * externalSecret — ЧИСЛО без кавычек, и оно обязано совпадать с secret
+#     в voice.toml голосового сервера;
+#   * портов ДВА и они разные: externalPort — связь игрового сервера с
+#     голосовым (наружу не нужен), externalPublicPort — туда подключаются
+#     игроки (обязан быть открыт в файрволе);
+#   * externalPublicHost — адрес, который получает КЛИЕНТ. С 127.0.0.1 игроки
+#     молча остаются без голоса: клиент пытается подключиться сам к себе.
 #
-# externalPublicHost — адрес, который получает КЛИЕНТ. На VDS это внешний IP
-# или домен: с 127.0.0.1 игроки будут молча без голоса, потому что попытаются
-# подключиться к самим себе. Это самая частая ошибка настройки.
+# Парный voice.toml голосового сервера:
+#   secret = <то же число>
+#   host = "0.0.0.0"
+#   port = <externalPort>
+#   playerHost = "0.0.0.0"      # именно 0.0.0.0: за NAT публичного IP на
+#   playerPort = <externalPublicPort>   # интерфейсе нет
+#   loopback = 0
+#
+# Установщик (scripts/deploy-licensee.sh) заполняет оба файла сам.
 [voice]
-bitrate            = 64000
+bitrate            = 32000
+externalSecret     = 1
 externalHost       = "127.0.0.1"
-externalPort       = 7790
+externalPort       = 7896
 externalPublicHost = "CHANGE_ME_PUBLIC_IP_OR_DOMAIN"
-externalSecret     = "CHANGE_ME_VOICE_SECRET"
+externalPublicPort = 7895
