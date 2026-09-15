@@ -168,7 +168,10 @@ export default function HomePage() {
                 <p className="mt-3.5 max-w-sm text-[14px] leading-relaxed text-white/55">{p.d}</p>
               </Reveal>
               <Reveal delay={100}>
-                <BrowserFrame src={p.img} alt={p.imgAlt} urlLabel="flovmp.ru/dashboard" />
+                <div className="relative">
+                  <OptionalPhoto src={p.ambientImg} alt="" className="ambient-photo" />
+                  <BrowserFrame src={p.img} alt={p.imgAlt} urlLabel="flovmp.ru/dashboard" />
+                </div>
               </Reveal>
             </div>
           ))}

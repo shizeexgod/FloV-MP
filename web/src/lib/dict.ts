@@ -107,6 +107,7 @@ const ru = {
         d: 'Ставится на ваш VDS и работает сам по себе. Нет общего списка серверов и зависимости от чужого бэкенда — проект нельзя отключить со стороны.',
         img: '/media/shot-dashboard-projects.png',
         imgAlt: 'Личный кабинет FloV:MP: проект «Держава Онлайн», лицензия Enterprise и подключённый боевой сервер',
+        ambientImg: '/media/pillars/pillar-engine.jpg',
       },
       {
         n: '02',
@@ -114,6 +115,7 @@ const ru = {
         d: 'Консоль сервера, логи, перезапуск, баны и настройки — в веб-панели. Не нужно заходить по SSH и держать рядом админа с доступом к серверу.',
         img: '/media/shot-dashboard-console.png',
         imgAlt: 'Облачная консоль txAdmin: живой лог запуска сервера FloV:MP с активным античитом и агентом',
+        ambientImg: '/media/pillars/pillar-console.jpg',
       },
       {
         n: '03',
@@ -121,6 +123,7 @@ const ru = {
         d: 'Серверный античит, бан по железу и Social Club, анти-VPN и проверка всех игровых сделок на стороне сервера, а не клиента.',
         img: '/media/shot-dashboard-overview.png',
         imgAlt: 'Раздел «Ключи и статус»: лицензионный ключ, привязка IP и срок действия в кабинете FloV:MP',
+        ambientImg: '/media/pillars/pillar-shield.jpg',
       },
     ],
 
@@ -954,6 +957,7 @@ const en: typeof ru = {
         d: 'It installs on your VDS and runs on its own. No shared server list, no dependency on someone else’s backend — the project cannot be switched off from outside.',
         img: '/media/shot-dashboard-projects.png',
         imgAlt: 'The FloV:MP dashboard: project "Держава Онлайн", an Enterprise license and a connected production server',
+        ambientImg: '/media/pillars/pillar-engine.jpg',
       },
       {
         n: '02',
@@ -961,6 +965,7 @@ const en: typeof ru = {
         d: 'Server console, logs, restarts, bans and settings live in a web panel. No SSH, no need to keep an admin with server access on hand.',
         img: '/media/shot-dashboard-console.png',
         imgAlt: 'The txAdmin cloud console: a live boot log for a FloV:MP server with the anti-cheat and agent active',
+        ambientImg: '/media/pillars/pillar-console.jpg',
       },
       {
         n: '03',
@@ -968,6 +973,7 @@ const en: typeof ru = {
         d: 'Server-side anti-cheat, hardware and Social Club bans, anti-VPN, and validation of every in-game deal on the server rather than the client.',
         img: '/media/shot-dashboard-overview.png',
         imgAlt: 'The Keys & status section: a license key, IP binding and expiry date in the FloV:MP dashboard',
+        ambientImg: '/media/pillars/pillar-shield.jpg',
       },
     ],
 

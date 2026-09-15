@@ -320,6 +320,22 @@
       linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 10%, transparent) 46%, color-mix(in srgb, var(--bg) 55%, transparent) 100%);
   }
 
+  /* ---------- Атмосферная подсветка за скриншотом в зигзаг-блоке (необязательная) ---------- */
+  .ambient-photo {
+    position: absolute;
+    inset: -14%;
+    z-index: -10;
+    width: auto;
+    height: auto;
+    max-width: none;
+    object-fit: cover;
+    border-radius: 2rem;
+    opacity: 0;
+    filter: blur(46px) saturate(1.15);
+    transition: opacity 1s ease;
+  }
+  .ambient-photo.is-loaded { opacity: 0.4; }
+
   /* ---------- Eyebrow / порядковые номера секций ---------- */
   .eyebrow {
     font-family: 'Unbounded', 'Manrope', ui-sans-serif, sans-serif;
