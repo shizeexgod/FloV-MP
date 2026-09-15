@@ -21,7 +21,7 @@ namespace FloVMP.Gamemode;
 /// Клиентские события: flovmp:inv:move {from,to}, flovmp:inv:drop {slot,qty},
 /// flovmp:inv:use {slot}.
 /// </summary>
-public sealed class InventorySystem
+public sealed class InventorySystem : IDisposable
 {
     private readonly IInventoryStore _store;
     private readonly ConcurrentDictionary<uint, (Inventory inv, int accountId)> _live = new();
@@ -37,6 +37,17 @@ public sealed class InventorySystem
     {
         _store = new JsonInventoryStore(storePath);
         IsCuffed = isCuffed;
+    }
+
+    /// <summary>
+    /// Остановка системы: сбросить инвентари на диск и погасить фоновый
+    /// таймер записи. Без этого таймер продолжает тикать после остановки
+    /// ресурса, а при перезагрузке ресурса их становится два.
+    /// </summary>
+    public void Dispose()
+    {
+        Safe.Run("inv.Dispose.save", SaveAll);
+        Safe.Run("inv.Dispose.store", () => (_store as IDisposable)?.Dispose());
     }
 
     public void Attach()
@@ -79,6 +90,12 @@ public sealed class InventorySystem
     {
         foreach (var (_, (inv, accountId)) in _live)
             Safe.Run("inv.SaveAll", () => _store.Save(accountId, inv));
+
+        // Save() теперь только помечает состояние грязным (иначе автосейв делал
+        // бы N полных перезаписей файла со всеми инвентарями — O(n^2) прямо в
+        // игровом тике). Здесь, в точке автосейва, задержка допустима, поэтому
+        // явно сбрасываем на диск: инвентари не должны ждать таймера.
+        Safe.Run("inv.SaveAll.flush", _store.Flush);
     }
 
     /// <summary>Выдать предмет игроку в инвентарь (административные команды / игровые награды).</summary>

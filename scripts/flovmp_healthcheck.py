@@ -223,6 +223,20 @@ def check_hot_path(rep):
     rep.add(PASS if indexed else FAIL, "поиск по номеру счёта по индексу",
             "" if indexed else "FindByBankAccount перебирает все аккаунты на каждый /transfer")
 
+    # Инвентари: Save() переписывал СЛОВАРЬ ЦЕЛИКОМ (все аккаунты) на каждое
+    # сохранение, а автосейв зовёт Save() на каждого игрока онлайн - O(n^2)
+    # прямо в тике. На боевом сервере это дало resourceManager.Update()
+    # took: 240988 ms, то есть четыре минуты заморозки.
+    inv = ROOT / "server/src/FloVMP.Core/Inventory/JsonInventoryStore.cs"
+    if inv.exists():
+        iv = inv.read_text(encoding="utf-8", errors="ignore")
+        deferred = "_dirty" in iv and "public void Flush()" in iv
+        rep.add(PASS if deferred else FAIL, "запись инвентарей отложенная",
+                "" if deferred else "Save() переписывает весь файл -> автосейв замораживает сервер")
+        safe = "IDisposable" in iv
+        rep.add(PASS if safe else FAIL, "инвентари сбрасываются на остановке",
+                "" if safe else "фоновая запись без Dispose -> потеря данных при рестарте")
+
     # Запросы соседей делаются для каждого игрока каждый тик: перегрузка с
     # буфером убирает десятки мегабайт мусора и паузы сборщика в тике.
     grid = ROOT / "server/src/FloVMP.Core/Spatial/SpatialHashGrid.cs"

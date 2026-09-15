@@ -73,6 +73,15 @@ const ru = {
     ctaSecondary: 'Смотреть документацию',
     trustLine: 'Один сервер — один VDS. Раздача файлов и лаунчер уже внутри. Оплата один раз, лицензия навсегда.',
     statusRegion: 'RU · UDP 7788',
+    heroShotAlt: 'Облачная консоль FloV:MP в браузере: живой лог запуска сервера, статус агента и античита',
+
+    flowTitle: 'Как начать',
+    flowSub: 'От оплаты до первого игрока на сервере — без сборки инфраструктуры с нуля.',
+    flow: [
+      { n: '1', t: 'Оформите лицензию', d: 'Один платёж 25 000 ₽ — ключ привязывается к вашему проекту навсегда, без ежемесячных списаний.' },
+      { n: '2', t: 'Разверните движок на VDS', d: 'Скачайте дистрибутив в кабинете, укажите ключ и IP в server.toml, запустите ./start.sh.' },
+      { n: '3', t: 'Соберите лаунчер и откройте вход', d: 'Настройте бренд лаунчера в кабинете и раздайте установщик игрокам — сервер уже принимает подключения.' },
+    ],
 
     pillarsTitle: 'Почему берут FloV:MP',
     pillars: [
@@ -80,17 +89,31 @@ const ru = {
         n: '01',
         t: 'Движок работает у вас',
         d: 'Ставится на ваш VDS и работает сам по себе. Нет общего списка серверов и зависимости от чужого бэкенда — проект нельзя отключить со стороны.',
+        img: '/media/shot-dashboard-projects.png',
+        imgAlt: 'Личный кабинет FloV:MP: проект «Держава Онлайн», лицензия Enterprise и подключённый боевой сервер',
       },
       {
         n: '02',
         t: 'Управление из браузера',
         d: 'Консоль сервера, логи, перезапуск, баны и настройки — в веб-панели. Не нужно заходить по SSH и держать рядом админа с доступом к серверу.',
+        img: '/media/shot-dashboard-console.png',
+        imgAlt: 'Облачная консоль txAdmin: живой лог запуска сервера FloV:MP с активным античитом и агентом',
       },
       {
         n: '03',
         t: 'Защита от читеров и обмана',
         d: 'Серверный античит, бан по железу и Social Club, анти-VPN и проверка всех игровых сделок на стороне сервера, а не клиента.',
+        img: '/media/shot-dashboard-overview.png',
+        imgAlt: 'Раздел «Ключи и статус»: лицензионный ключ, привязка IP и срок действия в кабинете FloV:MP',
       },
+    ],
+
+    factsTitle: 'Технические факты, а не маркетинг',
+    facts: [
+      ['60 Hz', 'тикрейт сетевого рантайма'],
+      ['UDP 7788', 'игровой порт по умолчанию'],
+      ['HMAC-SHA256', 'подпись каждой проверки лицензии'],
+      ['7 дней', 'льготный период без связи с порталом'],
     ],
 
     featuresTitle: 'Что входит в платформу',
@@ -881,6 +904,15 @@ const en: typeof ru = {
     ctaSecondary: 'Read the docs',
     trustLine: 'One server — one VDS. File delivery and the launcher are already inside. Pay once, license forever.',
     statusRegion: 'RU · UDP 7788',
+    heroShotAlt: 'The FloV:MP cloud console in the browser: a live server boot log, agent status and anti-cheat',
+
+    flowTitle: 'How to get started',
+    flowSub: 'From payment to the first player on the server — no infrastructure to build from scratch.',
+    flow: [
+      { n: '1', t: 'Get the license', d: 'One payment of 25,000 ₽ — the key is tied to your project forever, with no monthly charges.' },
+      { n: '2', t: 'Deploy the engine on a VDS', d: 'Download the distribution in the dashboard, set the key and IP in server.toml, run ./start.sh.' },
+      { n: '3', t: 'Build the launcher and open the doors', d: 'Brand the launcher in the dashboard and hand out the installer — the server is already accepting connections.' },
+    ],
 
     pillarsTitle: 'Why people pick FloV:MP',
     pillars: [
@@ -888,17 +920,31 @@ const en: typeof ru = {
         n: '01',
         t: 'The engine runs on your box',
         d: 'It installs on your VDS and runs on its own. No shared server list, no dependency on someone else’s backend — the project cannot be switched off from outside.',
+        img: '/media/shot-dashboard-projects.png',
+        imgAlt: 'The FloV:MP dashboard: project "Держава Онлайн", an Enterprise license and a connected production server',
       },
       {
         n: '02',
         t: 'Manage it from the browser',
         d: 'Server console, logs, restarts, bans and settings live in a web panel. No SSH, no need to keep an admin with server access on hand.',
+        img: '/media/shot-dashboard-console.png',
+        imgAlt: 'The txAdmin cloud console: a live boot log for a FloV:MP server with the anti-cheat and agent active',
       },
       {
         n: '03',
         t: 'Protection from cheaters and fraud',
         d: 'Server-side anti-cheat, hardware and Social Club bans, anti-VPN, and validation of every in-game deal on the server rather than the client.',
+        img: '/media/shot-dashboard-overview.png',
+        imgAlt: 'The Keys & status section: a license key, IP binding and expiry date in the FloV:MP dashboard',
       },
+    ],
+
+    factsTitle: 'Technical facts, not marketing',
+    facts: [
+      ['60 Hz', 'network runtime tick rate'],
+      ['UDP 7788', 'default game port'],
+      ['HMAC-SHA256', 'signature on every license check'],
+      ['7 days', 'grace period with no portal connection'],
     ],
 
     featuresTitle: 'What the platform includes',

@@ -291,7 +291,10 @@ public class GamemodeResource : Resource
         _licenseClient?.Dispose();
         _licenseClient = null;
 
-        Safe.Run("core.OnStop.flush", () => _inv?.SaveAll());
+        // Dispose сбрасывает инвентари на диск И гасит фоновый таймер записи:
+        // без этого таймер тикает после остановки ресурса, а при перезагрузке
+        // ресурса их становится два.
+        Safe.Run("core.OnStop.flush", () => _inv?.Dispose());
         Safe.Run("core.OnStop.log", () =>
         {
             GameLog.System("gamemode_stop");

@@ -114,7 +114,13 @@ public sealed class InventoryTests
             var a = new Inventory(slotCount: 12, maxWeight: 30);
             a.Add("water", 12);
             a.Add("phone", 1);
-            new JsonInventoryStore(path).Save(7, a);
+            // Save() больше не пишет на диск сразу: полная перезапись файла на
+            // каждое сохранение давала O(n^2) в игровом тике (автосейв делал
+            // N перезаписей файла со всеми N инвентарями). Долговечность даёт
+            // Flush/Dispose — их и проверяем.
+            var store = new JsonInventoryStore(path);
+            store.Save(7, a);
+            store.Dispose();
 
             var b = new JsonInventoryStore(path).Load(7);
             Assert.Equal(12, b.SlotCount);
