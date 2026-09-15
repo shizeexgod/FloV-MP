@@ -76,7 +76,6 @@ export default function HomePage() {
         <div className="hero-photo-layer" aria-hidden>
           <OptionalPhoto src="/media/hero/city-dusk.jpg" alt="" />
         </div>
-        <div className="grid-bg pointer-events-none absolute inset-0 -z-10 h-[640px]" aria-hidden />
         <Container className="py-20 sm:py-28">
           <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
             <div>
@@ -204,7 +203,6 @@ export default function HomePage() {
 
       {/* ---------------- FACTS BAND ---------------- */}
       <section className="relative overflow-hidden py-16 sm:py-20">
-        <div className="grid-bg pointer-events-none absolute inset-0 -z-10" aria-hidden />
         <div
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[380px] w-[780px] -translate-x-1/2 rounded-full bg-brand/10 blur-[110px]"

@@ -34,6 +34,10 @@ public static class Program
         var hotspotShare = GetFloat(args, "--hotspot-share", 0.65f);
         var speakingShare = GetFloat(args, "--speaking-share", 0.12f);
         var seed = GetInt(args, "--seed", 1337);
+        // Размер ячейки сетки — главный рычаг стоимости стриминга. Меньше
+        // ячейка = больше словарных поисков на запрос, больше = больше лишних
+        // проверок дистанции. Оптимум подбирается замером, а не на глаз.
+        var cellSize = GetFloat(args, "--cell-size", 64f);
         var skipAuth = args.Contains("--no-auth");
         var json = GetArg(args, "--json");
 
@@ -55,14 +59,14 @@ public static class Program
                           $"ядер: {Environment.ProcessorCount}");
 
         if (args.Contains("--sweep"))
-            return RunSweep(ticks, tickRate, streamRadius, hotspotShare, speakingShare, seed, budgetMs, json);
+            return RunSweep(ticks, tickRate, streamRadius, hotspotShare, speakingShare, seed, budgetMs, json, cellSize);
 
         var results = new List<Samples>();
         var extra = new Dictionary<string, double>();
 
         var sim = World.Create(players, hotspotShare, seed);
 
-        results.Add(RunWorldTick(sim, ticks, tickRate, streamRadius, speakingShare, seed, extra));
+        results.Add(RunWorldTick(sim, ticks, tickRate, streamRadius, speakingShare, seed, extra, cellSize));
 
         if (!skipAuth)
             RunAuthThroughput(extra);
@@ -103,7 +107,8 @@ public static class Program
     /// и, значит, когда пора шардировать.
     /// </summary>
     private static int RunSweep(int ticks, int tickRate, float streamRadius, float hotspotShare,
-                                float speakingShare, int seed, double budgetMs, string? json)
+                                float speakingShare, int seed, double budgetMs, string? json,
+                                float cellSize = 64f)
     {
         int[] steps = { 250, 500, 1000, 1500, 2000, 3000 };
 
@@ -133,7 +138,7 @@ public static class Program
             var stdout = Console.Out;
             Console.SetOut(TextWriter.Null);
             Samples s;
-            try { s = RunWorldTick(sim, ticks, tickRate, streamRadius, speakingShare, seed, extra); }
+            try { s = RunWorldTick(sim, ticks, tickRate, streamRadius, speakingShare, seed, extra, cellSize); }
             finally { Console.SetOut(stdout); }
 
             var ok = s.P99 <= budgetMs;
@@ -221,11 +226,11 @@ public static class Program
     // ------------------------------------------------------------------
     private static Samples RunWorldTick(SimPlayer[] sim, int ticks, int tickRate,
                                         float streamRadius, float speakingShare, int seed,
-                                        Dictionary<string, double> extra)
+                                        Dictionary<string, double> extra, float cellSize = 64f)
     {
         Report.Header($"Сценарий 1 — игровой тик: сетка + стриминг + голос + адаптивная синхронизация");
 
-        var grid = new SpatialHashGrid<ulong>(cellSize: 64f);
+        var grid = new SpatialHashGrid<ulong>(cellSize: cellSize);
         var occlusion = new OcclusionCullingService { DefaultMaxDistance = streamRadius };
         var voice = new VoiceGridRouter(grid);
         var tickManager = new AdaptiveTickManager<ulong>();
@@ -589,6 +594,7 @@ public static class Program
               --hotspot-share F   доля игроков в горячих точках, 0..1 (0.65)
               --speaking-share F  доля говорящих одновременно, 0..1 (0.12)
               --seed N            зерно генератора, для повторяемости (1337)
+              --cell-size F       размер ячейки пространственной сетки, м (64)
               --no-auth           пропустить замер PBKDF2 (он самый долгий)
               --sweep             прогнать 250/500/1000/1500/2000/3000 и найти
                                   потолок одного инстанса по бюджету тика

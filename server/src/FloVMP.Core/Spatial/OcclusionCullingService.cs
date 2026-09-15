@@ -202,13 +202,123 @@ public sealed class OcclusionCullingService
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
         result.Clear();
+
+        // Зоны снимаются ОДИН раз на весь список кандидатов, а не на каждого.
+        // Раньше IsVisible брал блокировку на КАЖДОГО кандидата: при 1500
+        // игроках со ста соседями это 150 000 захватов блокировки за тик,
+        // плюс перебор всех зон внутри каждого. Снимок под одной блокировкой
+        // и дальше проверки без неё.
+        //
+        // Берём только зоны нужного измерения: игрок в интерьере не может быть
+        // отсечён зоной из чужого виртуального мира, а лишние зоны — это
+        // лишний проход по каждому кандидату.
+        var zones = SnapshotZones(viewerDim);
+
+        float limit = maxDistance ?? DefaultMaxDistance;
+        float limitSq = limit * limit;
+        float proximitySq = HearingProximityRadius * HearingProximityRadius;
+
         foreach (var (item, pos, dim) in candidates)
         {
-            if (IsVisible(viewerPos, viewerHeading, viewerDim, pos, dim, maxDistance, useFov))
+            if (IsVisibleFast(viewerPos, viewerHeading, viewerDim, pos, dim,
+                              limitSq, proximitySq, zones, useFov))
             {
                 result.Add(item);
             }
         }
         return result.Count;
+    }
+
+    // Переиспользуемый буфер снимка зон: выделять список на каждый вызов
+    // фильтра — сотни аллокаций за тик, ровно то, от чего уходили в сетке.
+    private readonly List<OcclusionZone> _zoneSnapshot = new();
+
+    /// <summary>
+    /// Снимок зон нужного измерения под одной блокировкой.
+    /// Возвращает null, если зон нет вовсе — тогда весь блок окклюзии
+    /// пропускается целиком (типовой случай для открытого мира).
+    /// </summary>
+    private List<OcclusionZone>? SnapshotZones(int dimension)
+    {
+        lock (_lock)
+        {
+            if (_zones.Count == 0) return null;
+
+            _zoneSnapshot.Clear();
+            foreach (var zone in _zones.Values)
+                if (zone.Dimension == dimension) _zoneSnapshot.Add(zone);
+
+            return _zoneSnapshot.Count == 0 ? null : _zoneSnapshot;
+        }
+    }
+
+    /// <summary>
+    /// Та же логика, что в <see cref="IsVisible"/>, но без блокировки и без
+    /// извлечения квадратного корня: дистанция сравнивается в квадратах.
+    /// Корень на горячем пути не нужен — сравнение с порогом эквивалентно.
+    /// </summary>
+    private bool IsVisibleFast(
+        Vector3D viewerPos, Vector3D viewerHeading, int viewerDim,
+        Vector3D targetPos, int targetDim,
+        float limitSq, float proximitySq,
+        List<OcclusionZone>? zones,
+        bool useFov)
+    {
+        // 1. Разные виртуальные миры — 100% изоляция
+        if (viewerDim != targetDim) return false;
+
+        // 2. Дистанция (в квадратах)
+        float dx = viewerPos.X - targetPos.X;
+        float dy = viewerPos.Y - targetPos.Y;
+        float dz = viewerPos.Z - targetPos.Z;
+        float distSq = dx * dx + dy * dy + dz * dz;
+
+        if (float.IsNaN(distSq) || float.IsInfinity(distSq)) return false;
+        if (distSq > limitSq) return false;
+
+        // В упор — всегда видно/слышно (честный ближний бой)
+        if (distSq <= proximitySq) return true;
+
+        // 3. Зоны окклюзии
+        if (zones is not null)
+        {
+            foreach (var zone in zones)
+            {
+                bool viewerInside = zone.Contains(viewerPos, viewerDim);
+                bool targetInside = zone.Contains(targetPos, targetDim);
+                if (viewerInside == targetInside) continue;
+
+                if (zone.EntrancePosition.HasValue)
+                {
+                    var ent = zone.EntrancePosition.Value;
+                    float er = zone.EntranceRadius * zone.EntranceRadius;
+                    if (DistSq(viewerPos, ent) <= er || DistSq(targetPos, ent) <= er)
+                        continue; // видимость через открытый вход
+                }
+
+                return false; // глухая стена зоны
+            }
+        }
+
+        // 4. Опциональный конус видимости
+        if (useFov)
+        {
+            var dist = MathF.Sqrt(distSq);
+            if (dist > 0.0001f)
+            {
+                float ndx = (targetPos.X - viewerPos.X) / dist;
+                float ndy = (targetPos.Y - viewerPos.Y) / dist;
+                float dot = ndx * viewerHeading.X + ndy * viewerHeading.Y;
+                if (dot < MathF.Cos(110.0f * 0.5f * MathF.PI / 180.0f)) return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static float DistSq(Vector3D a, Vector3D b)
+    {
+        float dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+        return dx * dx + dy * dy + dz * dz;
     }
 }

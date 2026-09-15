@@ -65,7 +65,7 @@ export default function Footer() {
                     href={LEGAL.telegramUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-white/50 transition-colors hover:text-brand"
+                    className="hover-text inline-block text-white/50 transition-colors hover:text-brand"
                   >
                     {lv(LEGAL.telegramHandle)}
                   </a>
@@ -73,14 +73,14 @@ export default function Footer() {
               )}
               {LEGAL.phone && (
                 <li>
-                  <a href={`tel:${LEGAL.phone}`} className="text-white/50 transition-colors hover:text-brand">
+                  <a href={`tel:${LEGAL.phone}`} className="hover-text inline-block text-white/50 transition-colors hover:text-brand">
                     {lv(LEGAL.phoneDisplay)}
                   </a>
                 </li>
               )}
               {LEGAL.email && (
                 <li>
-                  <a href={`mailto:${LEGAL.email}`} className="text-white/50 transition-colors hover:text-brand">
+                  <a href={`mailto:${LEGAL.email}`} className="hover-text inline-block text-white/50 transition-colors hover:text-brand">
                     {LEGAL.email}
                   </a>
                 </li>
@@ -99,7 +99,7 @@ export default function Footer() {
             <ul className="mt-4 space-y-2.5">
               {docLinks.map((l) => (
                 <li key={l.href}>
-                  <Link href={l.href} className="text-[13px] text-white/50 transition-colors hover:text-brand">
+                  <Link href={l.href} className="hover-text inline-block text-[13px] text-white/50 transition-colors hover:text-brand">
                     {l.label}
                   </Link>
                 </li>
@@ -115,7 +115,7 @@ export default function Footer() {
             <ul className="mt-4 space-y-2.5">
               {productLinks.map((l) => (
                 <li key={l.href}>
-                  <Link href={l.href} className="text-[13px] text-white/50 transition-colors hover:text-brand">
+                  <Link href={l.href} className="hover-text inline-block text-[13px] text-white/50 transition-colors hover:text-brand">
                     {l.label}
                   </Link>
                 </li>
@@ -135,9 +135,9 @@ export default function Footer() {
               href={LEGAL.telegramUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 font-medium text-white/50 transition-colors hover:text-brand"
+              className="group flex items-center gap-1.5 font-medium text-white/50 transition-colors hover:text-brand"
             >
-              <Send className="h-3.5 w-3.5" />
+              <Send className="icon-pop h-3.5 w-3.5" />
               Telegram
             </a>
           )}
