@@ -12,7 +12,7 @@ namespace FloVMP.Core.Security;
 /// проверки идут по памяти сервиса — запрос к БД на каждый вход игрока был бы
 /// как раз тем, чего допускать нельзя.
 /// </summary>
-public sealed class MySqlBanStore : IBanStore
+public sealed class MySqlBanStore : IBanStore, IIncrementalBanStore
 {
     private readonly string _connectionString;
 

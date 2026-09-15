@@ -62,6 +62,9 @@ public class MultiTierBanService
     // отсутствие хранилища означало бы, что рестарт снимает все баны.
     private readonly IBanStore? _store;
 
+    // Момент последней синхронизации — чтобы спрашивать у базы только новое.
+    private DateTime? _lastRefreshUtc;
+
     public MultiTierBanService() { }
 
     public MultiTierBanService(IBanStore store)
@@ -83,14 +86,37 @@ public class MultiTierBanService
     {
         if (_store is null) return 0;
 
+        IReadOnlyList<BanRecord> batch;
+        var startedAt = DateTime.UtcNow;
+
+        if (_store is IIncrementalBanStore incremental)
+        {
+            // Берём только изменившееся: перечитывать всю таблицу банов каждые
+            // полминуты на каждом инстансе — постоянная нагрузка на базу,
+            // растущая вместе с числом банов.
+            //
+            // Окно назад на минуту намеренно: часы инстансов и базы расходятся,
+            // и запрос «строго после прошлой синхронизации» может пропустить
+            // бан, записанный в ту же секунду. Лучше перечитать десяток записей
+            // повторно, чем не увидеть свежий бан.
+            var since = _lastRefreshUtc?.AddMinutes(-1);
+            batch = incremental.LoadChangedSince(since);
+        }
+        else
+        {
+            batch = _store.LoadAll();
+        }
+
         var changed = 0;
-        foreach (var record in _store.LoadAll())
+        foreach (var record in batch)
         {
             if (string.IsNullOrWhiteSpace(record.Id)) continue;
             if (_bans.TryGetValue(record.Id, out var known) && known == record) continue;
             _bans[record.Id] = record;
             changed++;
         }
+
+        _lastRefreshUtc = startedAt;
         return changed;
     }
 
