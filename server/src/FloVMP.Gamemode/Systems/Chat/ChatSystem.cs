@@ -8,6 +8,7 @@ using FloVMP.Core.Chat;
 using FloVMP.Core.Documents;
 using FloVMP.Core.Factions;
 using FloVMP.Core.Logging;
+using FloVMP.Core.Security;
 
 namespace FloVMP.Gamemode;
 
@@ -30,6 +31,15 @@ public sealed class ChatSystem
     private readonly Action<int>? _restartServer;
     private readonly Action<IPlayer, Position>? _notifyTeleport;
     private readonly Action<int, bool>? _setAdminExempt;
+
+    // Многоуровневые блокировки (IP / Social Club / HWID / MAC).
+    // До её подключения команды /banip, /bansc, /hwidban, /macban и /hardban
+    // писали в чат «заблокирован по IP / по железу», но на деле ставили флаг
+    // ТОЛЬКО на аккаунте: ни IP, ни HWID, ни MAC нигде не сохранялись и нигде
+    // не проверялись. Читер регистрировал новый аккаунт и возвращался, а
+    // администратор был уверен, что забанил машину. Это хуже, чем отсутствие
+    // функции: администратор принимает решения по ложным данным.
+    private readonly MultiTierBanService? _bans;
     // Платформенный режим: RP-геймплей (экономика/фракции/документы/транспорт)
     // не входит в платформу — эти команды недоступны, сервер-владелец добавляет
     // свои. Базовый чат/инфо/модерация остаются.
@@ -52,7 +62,8 @@ public sealed class ChatSystem
         Action<int>? restartServer = null,
         Action<IPlayer, Position>? notifyTeleport = null,
         Action<int, bool>? setAdminExempt = null,
-        bool platformMode = false)
+        bool platformMode = false,
+        MultiTierBanService? bans = null)
     {
         _accountOf = accountOf;
         _saveAccount = saveAccount;
@@ -66,6 +77,59 @@ public sealed class ChatSystem
         _notifyTeleport = notifyTeleport;
         _setAdminExempt = setAdminExempt;
         _platformMode = platformMode;
+        _bans = bans;
+    }
+
+    /// <summary>
+    /// Записать настоящую многоуровневую блокировку: не только флаг на
+    /// аккаунте, но и идентификаторы игрока (IP / Social Club / HWID / MAC),
+    /// по которым проверяется каждый последующий вход.
+    ///
+    /// Возвращает false, если сервис блокировок не подключён — тогда команда
+    /// обязана честно сказать администратору, что забанен только аккаунт.
+    /// Обещать бан по железу и не делать его — хуже, чем не уметь его вовсе.
+    /// </summary>
+    private bool RecordTierBan(IPlayer target, Account targetAcc, Account adminAcc,
+                               BanTier tier, string reason, int durationDays)
+    {
+        if (_bans is null) return false;
+
+        try
+        {
+            _bans.CreateBan(
+                accountId: targetAcc.Id,
+                username: targetAcc.Username,
+                ip: target.Ip,
+                socialClubId: target.SocialClubId.ToString(),
+                hwidHash: target.HardwareIdHash.ToString("X16"),
+                macAddress: target.HardwareIdExHash.ToString("X16"),
+                tier: tier,
+                adminUsername: adminAcc.Username,
+                reason: reason,
+                durationDays: durationDays);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Флаг на аккаунте уже проставлен вызывающим кодом, игрок будет
+            // кикнут в любом случае. Но администратор должен узнать, что
+            // блокировка по железу не записалась.
+            Alt.Log($"[FloV:MP] [Ban] не удалось записать многоуровневый бан: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Сообщение администратору о реальной глубине выданной блокировки.
+    /// Разные тексты для «записано» и «не записано» — чтобы в логе поддержки
+    /// было видно, какой бан на самом деле действует.
+    /// </summary>
+    private void ReportTierBan(IPlayer admin, bool recorded, string what)
+    {
+        SendSystem(admin, recorded
+            ? $"Блокировка записана: {what}. Действует при каждом входе, в том числе с нового аккаунта."
+            : $"ВНИМАНИЕ: заблокирован ТОЛЬКО аккаунт. {what} НЕ записана " +
+              "(сервис блокировок не подключён) — игрок вернётся с нового аккаунта.");
     }
 
     // RP-команды игрока (экономика/фракции/документы/транспорт) — в платформенном
@@ -1864,6 +1928,8 @@ public sealed class ChatSystem
                 banipAcc.BanReason = $"[IP BAN] {banipReason}";
                 banipAcc.BanUntilUtc = DateTime.UtcNow.AddDays(banipDays).ToString("O");
                 _saveAccount?.Invoke(banipAcc);
+                var banipRecorded = RecordTierBan(banipTarget, banipAcc, acc, BanTier.IpBan, banipReason, banipDays);
+                ReportTierBan(player, banipRecorded, $"аккаунт + IP {banipTarget.Ip}");
                 Broadcast($"[Бан IP] {banipTarget.Name} заблокирован по IP на {banipDays} дн. администратором {acc.Username}. Причина: {banipReason}");
                 GameLog.Punishment("banip", LogActor.Admin(acc.Id, acc.Username), banipTarget.Name, banipReason, (long)banipDays * 86400);
                 banipTarget.Kick($"Ваш аккаунт и IP заблокированы на {banipDays} дн. Причина: {banipReason}");
@@ -1878,6 +1944,24 @@ public sealed class ChatSystem
                 SendSystem(player, $"Аккаунт ID: {checkAcc?.Id ?? 0} | IP: {checkTarget.Ip} | SocialClub ID: {checkTarget.SocialClubId}");
                 SendSystem(player, $"HWID Hash: {checkTarget.HardwareIdHash:X16} | HWID Ex: {checkTarget.HardwareIdExHash:X16}");
                 SendSystem(player, $"Статус бана аккаунта: {(checkAcc?.IsBanned == true ? "ЗАБЛОКИРОВАН до " + checkAcc.BanUntilUtc : "Чист")}");
+                // Раньше команда показывала только флаг аккаунта, и админ не
+                // мог отличить «забанен по железу» от «забанен только аккаунт».
+                if (_bans is null)
+                {
+                    SendSystem(player, "Блокировки по IP/SC/HWID: сервис не подключён (работает только бан аккаунта).");
+                }
+                else
+                {
+                    var tier = _bans.CheckConnection(
+                        checkAcc?.Id ?? 0, checkTarget.Ip, checkTarget.SocialClubId.ToString(),
+                        checkTarget.HardwareIdHash.ToString("X16"),
+                        checkTarget.HardwareIdExHash.ToString("X16"),
+                        FloVMP.Core.Security.HwidPolicyMode.Strict);
+                    SendSystem(player, tier.IsBlocked
+                        ? $"Блокировка по идентификаторам: ДА ({tier.MatchedFlag}) — {tier.Reason}" +
+                          (tier.ExpiresAtUtc is null ? " (навсегда)" : $" до {tier.ExpiresAtUtc:u}")
+                        : "Блокировка по идентификаторам: нет.");
+                }
                 break;
 
             case "unban":
@@ -1889,7 +1973,13 @@ public sealed class ChatSystem
                 unbanAcc.BanReason = "";
                 unbanAcc.BanUntilUtc = "";
                 _saveAccount?.Invoke(unbanAcc);
-                SendSystem(player, $"Аккаунт '{unbanName}' успешно разблокирован.");
+                // Снять надо и многоуровневые записи: иначе аккаунт
+                // разблокирован, а игрока по-прежнему не пускает его же IP или
+                // HWID — и никто не понимает, почему «разбаненный» не заходит.
+                var liftedTiers = _bans?.Unban(unbanName) ?? 0;
+                SendSystem(player, liftedTiers > 0
+                    ? $"Аккаунт '{unbanName}' разблокирован. Снято блокировок по IP/SC/HWID: {liftedTiers}."
+                    : $"Аккаунт '{unbanName}' успешно разблокирован.");
                 GameLog.Admin("unban", LogActor.Admin(acc.Id, acc.Username), unbanName);
                 break;
 
@@ -1960,6 +2050,8 @@ public sealed class ChatSystem
                 banscAcc.BanReason = $"[SC BAN] {banscReason}";
                 banscAcc.BanUntilUtc = DateTime.UtcNow.AddDays(banscDays).ToString("O");
                 _saveAccount?.Invoke(banscAcc);
+                var banscRecorded = RecordTierBan(banscTarget, banscAcc, acc, BanTier.SocialClubBan, banscReason, banscDays);
+                ReportTierBan(player, banscRecorded, $"аккаунт + Social Club {banscTarget.SocialClubId}");
                 Broadcast($"[Social Club Бан] {banscTarget.Name} заблокирован по лицензии SC на {banscDays} дн. администратором {acc.Username}. Причина: {banscReason}");
                 GameLog.Punishment("bansc", LogActor.Admin(acc.Id, acc.Username), banscTarget.Name, banscReason, (long)banscDays * 86400);
                 banscTarget.Kick($"Ваш Rockstar Social Club заблокирован на {banscDays} дн. Причина: {banscReason}");
@@ -2130,6 +2222,8 @@ public sealed class ChatSystem
                 hwidAcc.BanReason = $"[HWID BAN] {hwidReason}";
                 hwidAcc.BanUntilUtc = DateTime.UtcNow.AddDays(hwidDays).ToString("O");
                 _saveAccount?.Invoke(hwidAcc);
+                var hwidRecorded = RecordTierBan(hwidTarget, hwidAcc, acc, BanTier.HardwareBan, hwidReason, hwidDays);
+                ReportTierBan(player, hwidRecorded, "аккаунт + HWID + MAC");
                 Broadcast($"[HWID БАН] {hwidTarget.Name} заблокирован по железу (FloV:ID) на {hwidDays} дн. администратором {acc.Username}. Причина: {hwidReason}");
                 GameLog.Punishment("hwidban", LogActor.Admin(acc.Id, acc.Username), hwidTarget.Name, hwidReason, (long)hwidDays * 86400);
                 hwidTarget.Kick($"Ваш ПК заблокирован по железу на {hwidDays} дн. Причина: {hwidReason}");
@@ -2248,6 +2342,10 @@ public sealed class ChatSystem
                 hardAcc.BanReason = $"[HARDBAN: Account+IP+SC+HWID+MAC] {hardReason}";
                 hardAcc.BanUntilUtc = DateTime.UtcNow.AddYears(10).ToString("O");
                 _saveAccount?.Invoke(hardAcc);
+                // durationDays 0 = навсегда: раньше здесь стояло «10 лет»
+                // на аккаунте, а по железу не блокировалось вообще ничего.
+                var hardRecorded = RecordTierBan(hardTarget, hardAcc, acc, BanTier.HardBan, hardReason, 0);
+                ReportTierBan(player, hardRecorded, "аккаунт + IP + подсеть /24 + Social Club + HWID + MAC");
                 Broadcast($"[HARDBAN] Вредитель {hardTarget.Name} получил ТОТАЛЬНУЮ блокировку (Account+IP+SC+HWID). Причина: {hardReason}");
                 GameLog.Punishment("hardban", LogActor.Admin(acc.Id, acc.Username), hardTarget.Name, hardReason, 315360000);
                 hardTarget.Kick($"ТОТАЛЬНЫЙ БАН (HardBan: HWID+SC+IP+Acc): {hardReason}");

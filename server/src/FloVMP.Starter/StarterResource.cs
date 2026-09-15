@@ -34,6 +34,13 @@ public class StarterResource : Resource
 
     private IVoiceChannel? _spatialVoiceChannel;
     private AdminBootstrapManager _adminManager = null!;
+
+    // Блокировки. В базовой платформе их не было вообще — только kick, после
+    // которого нарушитель заходит обратно через пять секунд. Для продукта,
+    // который ставят владельцам серверов, отсутствие бана — не «упрощение»,
+    // а нерабочая модерация.
+    private FloVMP.Core.Security.IBanStore? _banStore;
+    private FloVMP.Core.Security.MultiTierBanService? _bans;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
 
@@ -74,6 +81,16 @@ public class StarterResource : Resource
 
         _adminManager = new AdminBootstrapManager();
 
+        // Хранилище банов: общая таблица MariaDB, если база настроена, иначе
+        // локальный файл. Фабрика сама печатает выбранный режим — владелец
+        // сервера должен знать, действуют ли его баны на всех инстансах.
+        var starterDataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
+        var starterDbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
+                            new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
+        _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
+            starterDbConn, Path.Combine(starterDataDir, "bans.json"));
+        _bans = new FloVMP.Core.Security.MultiTierBanService(_banStore);
+
         Alt.Log("[FloV:MP Starter] Dedicated server initialized successfully!");
         Alt.Log("[FloV:MP Starter] Security: Server-Side RBAC active. Regular players isolated from admin actions.");
 
@@ -111,6 +128,11 @@ public class StarterResource : Resource
 
     public override void OnStop()
     {
+        // Баны на диск до отписки от событий: выданный в последнюю секунду бан
+        // обязан пережить перезапуск.
+        try { (_banStore as IDisposable)?.Dispose(); }
+        catch (Exception ex) { Alt.LogWarning($"[FloV:MP] Не удалось сохранить баны: {ex.Message}"); }
+
         Alt.OnPlayerConnect -= OnPlayerConnect;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         Alt.OnPlayerDead -= OnPlayerDead;
@@ -134,9 +156,165 @@ public class StarterResource : Resource
         Alt.EmitAllClients("flovmp:chat:msg", kind, author, message);
     }
 
+    /// <summary>
+    /// Проверка входящего подключения по IP / Social Club / HWID / MAC.
+    /// Возвращает true, если игрок отклонён.
+    ///
+    /// Проверка идёт по памяти сервиса, без похода в БД: она выполняется на
+    /// главном потоке при каждом подключении, и запрос к базе здесь означал бы
+    /// задержку тика на каждом входе.
+    /// </summary>
+    private bool RejectIfBanned(IPlayer player)
+    {
+        if (_bans is null) return false;
+
+        try
+        {
+            var result = _bans.CheckConnection(
+                accountId: 0,
+                ip: player.Ip,
+                socialClubId: player.SocialClubId.ToString(),
+                hwidHash: player.HardwareIdHash.ToString("X16"),
+                macAddress: player.HardwareIdExHash.ToString("X16"),
+                policy: FloVMP.Core.Security.HwidPolicyMode.Strict);
+
+            if (!result.IsBlocked) return false;
+
+            var until = result.ExpiresAtUtc is null
+                ? "навсегда"
+                : $"до {result.ExpiresAtUtc:dd.MM.yyyy HH:mm} UTC";
+            Alt.Log($"[FloV:MP] [Ban] отклонён вход {player.Name} ({player.Ip}): " +
+                    $"{result.MatchedFlag} — {result.Reason}");
+            player.Kick($"Доступ заблокирован ({until}). Причина: {result.Reason}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Сломанная проверка не должна запирать вход всем подряд: в
+            // сомнительной ситуации пускаем и пишем в лог, а не глушим сервер.
+            Alt.LogWarning($"[FloV:MP] [Ban] ошибка проверки блокировки: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Общий обработчик /ban, /banip, /hwidban, /hardban.
+    ///
+    /// Разные команды отличаются только глубиной блокировки, поэтому логика
+    /// одна: четыре почти одинаковые копии разъезжаются при первой же правке.
+    /// Администратору явно сообщается, что именно заблокировано — обещать бан
+    /// по железу и поставить флаг только на аккаунт хуже, чем не уметь его.
+    /// </summary>
+    private void HandleBanCommand(IPlayer admin, string cmd, string[] parts)
+    {
+        // Порог уровня растёт вместе с необратимостью: hardban — навсегда и по
+        // железу, такое не должен уметь младший модератор.
+        var required = cmd == "hardban" ? 6 : cmd == "ban" ? 3 : 4;
+        if (!IsAdmin(admin, required))
+        {
+            SendChatMessage(admin, $"{{ef4444}}[FloV:MP Security] Доступ запрещен (требуется Уровень {required}+).");
+            return;
+        }
+
+        if (_bans is null)
+        {
+            SendChatMessage(admin, "{ef4444}Сервис блокировок не подключён — блокировка невозможна.");
+            return;
+        }
+
+        var permanent = cmd == "hardban";
+        var minArgs = permanent ? 2 : 3;
+        if (parts.Length < minArgs || !uint.TryParse(parts[1], out var targetId))
+        {
+            SendChatMessage(admin, permanent
+                ? "{fde047}Использование: /hardban <ID> <причина>"
+                : $"{{fde047}}Использование: /{cmd} <ID> <дней> [причина]");
+            return;
+        }
+
+        var target = Alt.GetPlayerById(targetId);
+        if (target == null)
+        {
+            SendChatMessage(admin, "{ef4444}Игрок с таким ID не найден.");
+            return;
+        }
+
+        if (target.Id == admin.Id)
+        {
+            SendChatMessage(admin, "{ef4444}Себя забанить нельзя.");
+            return;
+        }
+
+        // Администратор равного или большего уровня не банится: иначе двое
+        // старших админов могут выбить друг друга с сервера.
+        if (GetAssignedAdminRank(target) >= GetAssignedAdminRank(admin))
+        {
+            SendChatMessage(admin, "{ef4444}Нельзя заблокировать администратора равного или большего уровня.");
+            return;
+        }
+
+        var days = 0;
+        var reasonFrom = 2;
+        if (!permanent)
+        {
+            if (!int.TryParse(parts[2], out days) || days <= 0)
+            {
+                SendChatMessage(admin, $"{{fde047}}Использование: /{cmd} <ID> <дней> [причина]");
+                return;
+            }
+            reasonFrom = 3;
+        }
+
+        var banReason = parts.Length > reasonFrom
+            ? string.Join(' ', parts[reasonFrom..])
+            : "Нарушение правил сервера";
+
+        var tier = cmd switch
+        {
+            "hardban" => FloVMP.Core.Security.BanTier.HardBan,
+            "hwidban" => FloVMP.Core.Security.BanTier.HardwareBan,
+            "banip" => FloVMP.Core.Security.BanTier.IpBan,
+            _ => FloVMP.Core.Security.BanTier.StandardBan,
+        };
+
+        FloVMP.Core.Security.BanRecord record;
+        try
+        {
+            record = _bans.CreateBan(
+                accountId: 0,
+                username: target.Name,
+                ip: target.Ip,
+                socialClubId: target.SocialClubId.ToString(),
+                hwidHash: target.HardwareIdHash.ToString("X16"),
+                macAddress: target.HardwareIdExHash.ToString("X16"),
+                tier: tier,
+                adminUsername: admin.Name,
+                reason: banReason,
+                durationDays: days);
+        }
+        catch (Exception ex)
+        {
+            SendChatMessage(admin, $"{{ef4444}}Не удалось выдать блокировку: {ex.Message}");
+            Alt.LogWarning($"[FloV:MP] [Ban] ошибка выдачи блокировки: {ex}");
+            return;
+        }
+
+        var duration = permanent ? "навсегда" : $"на {days} дн.";
+        BroadcastChatMessage($"{{ef4444}}[Бан] {target.Name} заблокирован {duration} администратором {admin.Name}. Причина: {banReason}");
+        SendChatMessage(admin, $"{{34d399}}Блокировка {record.Id} выдана. Уровень: {record.Flags}.");
+        Alt.Log($"[FloV:MP] [Ban] {admin.Name} забанил {target.Name} ({tier}, {duration}): {banReason}");
+
+        target.Kick($"Вы заблокированы {duration}. Причина: {banReason}");
+    }
+
     private void OnPlayerConnect(IPlayer player, string reason)
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) подключается...");
+
+        // Блокировка проверяется ДО спавна: забаненный не должен появляться в
+        // мире даже на мгновение, иначе остальные игроки видят «призрака», а
+        // сам он успевает выстрелить или задавить кого-то перед киком.
+        if (RejectIfBanned(player)) return;
 
         // Чистый спавн игрока
         player.Model = DefaultPlayerModel;
@@ -354,6 +532,99 @@ public class StarterResource : Resource
                 Alt.Log($"[Console] Игрок {kickTarget.Name} кикнут: {kReason}");
                 break;
 
+            // Блокировки из консоли — путь владельца сервера, когда он не в
+            // игре: без него единственным способом забанить был бы вход в игру
+            // администратором.
+            case "ban":
+            case "hardban":
+                if (_bans is null) { Alt.Log("[Console] Сервис блокировок не подключён."); return; }
+                if (args.Length == 0)
+                {
+                    Alt.Log("[Console] Использование: ban <ID|Ник> <дней> [причина]  |  hardban <ID|Ник> [причина]");
+                    return;
+                }
+                IPlayer? banTarget = null;
+                if (uint.TryParse(args[0], out var bId)) banTarget = Alt.GetPlayerById(bId);
+                banTarget ??= Alt.GetAllPlayers().FirstOrDefault(
+                    p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
+                if (banTarget == null)
+                {
+                    Alt.Log($"[Console] Игрок '{args[0]}' не найден онлайн " +
+                            "(заблокировать офлайн-игрока пока можно только по записи в БД).");
+                    return;
+                }
+
+                var consolePermanent = name.Equals("hardban", StringComparison.OrdinalIgnoreCase);
+                var consoleDays = 0;
+                var consoleReasonFrom = 1;
+                if (!consolePermanent)
+                {
+                    if (args.Length < 2 || !int.TryParse(args[1], out consoleDays) || consoleDays <= 0)
+                    {
+                        Alt.Log("[Console] Использование: ban <ID|Ник> <дней> [причина]");
+                        return;
+                    }
+                    consoleReasonFrom = 2;
+                }
+
+                var consoleReason = args.Length > consoleReasonFrom
+                    ? string.Join(' ', args.Skip(consoleReasonFrom))
+                    : "Заблокирован администратором сервера";
+
+                try
+                {
+                    var rec = _bans.CreateBan(
+                        accountId: 0,
+                        username: banTarget.Name,
+                        ip: banTarget.Ip,
+                        socialClubId: banTarget.SocialClubId.ToString(),
+                        hwidHash: banTarget.HardwareIdHash.ToString("X16"),
+                        macAddress: banTarget.HardwareIdExHash.ToString("X16"),
+                        tier: consolePermanent
+                            ? FloVMP.Core.Security.BanTier.HardBan
+                            : FloVMP.Core.Security.BanTier.StandardBan,
+                        adminUsername: "console",
+                        reason: consoleReason,
+                        durationDays: consoleDays);
+
+                    var howLong = consolePermanent ? "навсегда" : $"на {consoleDays} дн.";
+                    BroadcastChatMessage($"{{ef4444}}[Бан] {banTarget.Name} заблокирован {howLong}. Причина: {consoleReason}");
+                    Alt.Log($"[Console] Блокировка {rec.Id}: {banTarget.Name} ({rec.Flags}, {howLong}) — {consoleReason}");
+                    banTarget.Kick($"Вы заблокированы {howLong}. Причина: {consoleReason}");
+                }
+                catch (Exception ex)
+                {
+                    Alt.Log($"[Console] Не удалось выдать блокировку: {ex.Message}");
+                }
+                break;
+
+            case "unban":
+                if (_bans is null) { Alt.Log("[Console] Сервис блокировок не подключён."); return; }
+                if (args.Length == 0)
+                {
+                    Alt.Log("[Console] Использование: unban <ник|IP|HWID|ID бана>");
+                    return;
+                }
+                var consoleLifted = _bans.Unban(args[0]);
+                Alt.Log(consoleLifted > 0
+                    ? $"[Console] Снято блокировок: {consoleLifted} (запрос: {args[0]})"
+                    : $"[Console] Блокировок по запросу '{args[0]}' не найдено.");
+                break;
+
+            case "bans":
+            case "banlist":
+                if (_bans is null) { Alt.Log("[Console] Сервис блокировок не подключён."); return; }
+                var allBans = _bans.GetAllBans().Where(b => b.IsActive)
+                                   .OrderByDescending(b => b.BannedAtUtc).ToList();
+                Alt.Log($"─── ДЕЙСТВУЮЩИЕ БЛОКИРОВКИ: {allBans.Count} ───");
+                foreach (var b in allBans)
+                {
+                    var until = b.ExpiresAtUtc is null ? "навсегда" : $"до {b.ExpiresAtUtc:u}";
+                    Alt.Log($"  • {b.Id} | {b.Username} | {b.Flags} | {until} | выдал: {b.AdminUsername} | {b.Reason}");
+                }
+                if (allBans.Count == 0) Alt.Log("  (список пуст)");
+                break;
+
             case "online":
                 var players = Alt.GetAllPlayers();
                 Alt.Log($"[Console] Онлайн: {players.Count} игроков");
@@ -459,6 +730,10 @@ public class StarterResource : Resource
                 if (IsAdmin(player, 1))
                 {
                     SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /car [модель], /fix, /dv, /gun [название], /disarm, /tp <x y z>, /goto <id>, /gethere <id>, /freeze <id>, /unfreeze <id>, /revive [id], /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
+                }
+                if (IsAdmin(player, 2))
+                {
+                    SendChatMessage(player, "{f87171}Блокировки: {a1a1aa}/bans (список), /ban <id> <дней> [причина] (3), /banip <id> <дней> (4), /hwidban <id> <дней> (4), /hardban <id> <причина> (6, навсегда), /unban <ник|IP|HWID|ID бана> (4)");
                 }
                 if (IsAdmin(player, 8))
                 {
@@ -1120,6 +1395,64 @@ public class StarterResource : Resource
                 var reason = parts.Length > 2 ? string.Join(' ', parts[2..]) : "Исключен администратором";
                 BroadcastChatMessage($"{{ef4444}}[Kick] {kickTarget.Name} был исключен администратором {player.Name}. Причина: {reason}");
                 kickTarget.Kick(reason);
+                break;
+
+            // Блокировки. До их появления в платформе был только /kick, после
+            // которого нарушитель возвращается через пять секунд.
+            case "ban":
+            case "banip":
+            case "hwidban":
+            case "hardban":
+                HandleBanCommand(player, cmd, parts);
+                break;
+
+            case "unban":
+                if (!IsAdmin(player, 4))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 4+).");
+                    return;
+                }
+                if (parts.Length < 2)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /unban <ник|IP|HWID|ID бана>");
+                    return;
+                }
+                if (_bans is null)
+                {
+                    SendChatMessage(player, "{ef4444}Сервис блокировок не подключён.");
+                    return;
+                }
+                var liftedCount = _bans.Unban(parts[1]);
+                SendChatMessage(player, liftedCount > 0
+                    ? $"{{34d399}}Снято блокировок: {liftedCount} (запрос: {parts[1]})."
+                    : $"{{fde047}}Блокировок по запросу '{parts[1]}' не найдено.");
+                if (liftedCount > 0)
+                    Alt.Log($"[FloV:MP] [Ban] {player.Name} снял блокировок: {liftedCount} по запросу '{parts[1]}'");
+                break;
+
+            case "bans":
+            case "banlist":
+                if (!IsAdmin(player, 2))
+                {
+                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
+                    return;
+                }
+                if (_bans is null)
+                {
+                    SendChatMessage(player, "{ef4444}Сервис блокировок не подключён.");
+                    return;
+                }
+                var active = _bans.GetAllBans().Where(b => b.IsActive).ToList();
+                SendChatMessage(player, $"{{60a5fa}}=== Действующие блокировки: {active.Count} ===");
+                // Выводим не весь список: сотни строк в чате бесполезны и
+                // забивают историю. Полный список — командой bans в консоли.
+                foreach (var b in active.OrderByDescending(b => b.BannedAtUtc).Take(10))
+                {
+                    var until = b.ExpiresAtUtc is null ? "навсегда" : $"до {b.ExpiresAtUtc:dd.MM.yyyy HH:mm}";
+                    SendChatMessage(player, $"{{d1d5db}}{b.Id} | {b.Username} | {b.Flags} | {until} | {b.Reason}");
+                }
+                if (active.Count > 10)
+                    SendChatMessage(player, $"{{9ca3af}}...и ещё {active.Count - 10}. Полный список: команда bans в консоли сервера.");
                 break;
 
             case "clear":

@@ -40,12 +40,18 @@ public sealed class AuthSystem
     private sealed record PendingAuth(IPlayer Player, bool IsRegister, AuthResult Result, string Username, string Password);
     private readonly Action<IPlayer, Account> _onAuthed;
 
-    public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server")
+    // Многоуровневые блокировки (IP / Social Club / HWID / MAC). Необязательны:
+    // без них работает только бан аккаунта, как было раньше.
+    private readonly FloVMP.Core.Security.MultiTierBanService? _bans;
+
+    public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server",
+                      FloVMP.Core.Security.MultiTierBanService? bans = null)
     {
         _store = store;
         _auth = new AuthService(_store);
         _onAuthed = onAuthed;
         _serverName = serverName;
+        _bans = bans;
     }
 
     public AuthSystem(string accountsPath, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server")
@@ -85,6 +91,13 @@ public sealed class AuthSystem
     private void OnConnect(IPlayer player, string reason) => Safe.Run("auth.OnConnect", () =>
     {
         if (!player.Exists) return;
+
+        // Блокировка по идентификаторам проверяется ДО показа экрана входа:
+        // забаненный по железу не должен вообще видеть форму логина, а тем
+        // более получать возможность зарегистрировать новый аккаунт — ровно
+        // этим раньше и обходился «бан по HWID».
+        if (_bans is not null && RejectIfBanned(player)) return;
+
         // NUI логина покажем, когда клиентский ресурс сообщит, что готов
         // (flovmp:client:ready). Иначе auth:show может уйти раньше, чем
         // index.js навесит обработчики — и игрок застрянет на чёрном экране.
@@ -108,6 +121,49 @@ public sealed class AuthSystem
             }
         });
     });
+
+    /// <summary>
+    /// Проверка входящего подключения по IP / Social Club / HWID / MAC.
+    /// Возвращает true, если игрок отклонён.
+    ///
+    /// Проверка идёт по памяти сервиса, без обращения к БД: она выполняется на
+    /// главном потоке для каждого входа, и поход в базу здесь означал бы
+    /// задержку тика при каждом подключении.
+    /// </summary>
+    private bool RejectIfBanned(IPlayer player)
+    {
+        if (_bans is null) return false;
+
+        try
+        {
+            var result = _bans.CheckConnection(
+                accountId: 0, // аккаунт ещё неизвестен — вход не выполнен
+                ip: player.Ip,
+                socialClubId: player.SocialClubId.ToString(),
+                hwidHash: player.HardwareIdHash.ToString("X16"),
+                macAddress: player.HardwareIdExHash.ToString("X16"),
+                policy: FloVMP.Core.Security.HwidPolicyMode.Strict);
+
+            if (!result.IsBlocked) return false;
+
+            var until = result.ExpiresAtUtc is null
+                ? "навсегда"
+                : $"до {result.ExpiresAtUtc:dd.MM.yyyy HH:mm} UTC";
+            Alt.Log($"[FloV:MP] [Ban] отклонён вход {player.Name} ({player.Ip}): {result.MatchedFlag} — {result.Reason}");
+            FloVMP.Core.Logging.GameLog.System("ban_connection_rejected",
+                ("player", player.Name), ("flag", result.MatchedFlag?.ToString() ?? "?"),
+                ("reason", result.Reason ?? ""));
+            player.Kick($"Доступ заблокирован ({until}). Причина: {result.Reason}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Сломанная проверка не должна запирать вход всем подряд: в
+            // сомнительной ситуации пускаем и пишем в лог, а не глушим сервер.
+            Alt.Log($"[FloV:MP] [Ban] ошибка проверки блокировки: {ex.Message}");
+            return false;
+        }
+    }
 
     private void OnClientReady(IPlayer player) => Safe.Run("auth.OnClientReady", () =>
     {

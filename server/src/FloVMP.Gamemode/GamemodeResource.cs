@@ -40,6 +40,8 @@ public class GamemodeResource : Resource
     private RemoteServerAgent? _agent;
     private FloVMP.Gamemode.Systems.Api.HttpApiSystem? _httpApi;
     private FloVMP.Core.Auth.IAccountStore? _accountStore;
+    private FloVMP.Core.Security.IBanStore? _banStore;
+    private FloVMP.Core.Security.MultiTierBanService? _bans;
     private FloVMP.Core.Spatial.AdaptiveTickManager<uint>? _tickManager;
     private FloVMP.Core.Spatial.OcclusionCullingService? _occlusion;
     
@@ -49,6 +51,15 @@ public class GamemodeResource : Resource
     private long _lastTickScaleMs;
     private long _lastVehTickMs;
     private int _lastPayDayHour = -1;
+    private long _lastBanSyncMs;
+    private int _banSyncInFlight;
+
+    /// <summary>
+    /// Как часто инстанс перечитывает общий список блокировок. 30 секунд —
+    /// компромисс: бан с соседнего сервера доходит достаточно быстро, но
+    /// запрос к БД не превращается в постоянную фоновую нагрузку.
+    /// </summary>
+    private const int BanSyncIntervalMs = 30_000;
     private readonly List<(IPlayer Player, Account? Account, long RespawnAtMs)> _pendingRespawns = new();
 
     public override void OnStart()
@@ -64,7 +75,15 @@ public class GamemodeResource : Resource
         var accountStore = FloVMP.Core.Database.AccountStoreFactory.Create(dbConn, Path.Combine(dataDir, "accounts.json"));
         _accountStore = accountStore; // нужен для гарантированной записи на OnStop
 
-        _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName);
+        // Многоуровневые блокировки (IP / Social Club / HWID / MAC).
+        // Хранилище общее с аккаунтами: на MariaDB баны действуют на всех
+        // инстансах, на локальном файле — только на этом (об этом фабрика
+        // предупреждает в консоли при старте).
+        _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
+            dbConn, Path.Combine(dataDir, "bans.json"));
+        _bans = new FloVMP.Core.Security.MultiTierBanService(_banStore);
+
+        _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName, _bans);
         _auth.Attach();
 
         // Встроенный HTTP-API (:7799) — авторизация для лаунчера + живой /info.
@@ -143,7 +162,8 @@ public class GamemodeResource : Resource
                 Safe.Run("core.restart.save", () => _inv?.SaveAll());
                 Alt.StopServer();
             }),
-            platformMode: !fullMode);
+            platformMode: !fullMode,
+            bans: _bans);
         _chat.Attach();
 
         _console = new ConsoleCommands(
@@ -222,6 +242,9 @@ public class GamemodeResource : Resource
         // Аккаунты пишутся в фоне с дебаунсом (чтобы не блокировать игровой тик),
         // поэтому на остановке обязаны принудительно сбросить их на диск.
         Safe.Run("core.OnStop.accounts", () => (_accountStore as IDisposable)?.Dispose());
+        // Баны обязаны попасть на диск при остановке: иначе выданный за
+        // последнюю секунду бан не переживёт перезапуск.
+        Safe.Run("core.OnStop.bans", () => (_banStore as IDisposable)?.Dispose());
         _accountStore = null;
 
         _httpApi?.Stop();
@@ -373,6 +396,37 @@ public class GamemodeResource : Resource
                         ChatSystem.SendSystem(veh.Driver, "[Транспорт] В баке закончилось топливо! Двигатель заглох.");
                     }
                 }
+            }
+        }
+
+        // Дозагрузка блокировок, выданных на других инстансах. Уходит в фон:
+        // чтение из БД на главном потоке задержало бы тик, а результат
+        // применяется в потокобезопасный словарь сервиса.
+        if (_bans is not null && now - _lastBanSyncMs >= BanSyncIntervalMs)
+        {
+            _lastBanSyncMs = now;
+            // Защита от наложения: если прошлая синхронизация ещё идёт
+            // (медленная БД), новую не запускаем — иначе запросы копятся.
+            if (System.Threading.Interlocked.CompareExchange(ref _banSyncInFlight, 1, 0) == 0)
+            {
+                var bans = _bans;
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var changed = bans.RefreshFromStore();
+                        if (changed > 0)
+                            Alt.Log($"[FloV:MP] [Ban] синхронизировано блокировок с другими инстансами: {changed}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Alt.Log($"[FloV:MP] [Ban] синхронизация не удалась: {ex.Message}");
+                    }
+                    finally
+                    {
+                        System.Threading.Interlocked.Exchange(ref _banSyncInFlight, 0);
+                    }
+                });
             }
         }
 
