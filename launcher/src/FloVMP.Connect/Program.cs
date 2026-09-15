@@ -69,6 +69,29 @@ Console.WriteLine($"[connect] GTA V     : {gtaDir}");
 Console.WriteLine($"[connect] Файл игры : {gameExe}");
 Console.WriteLine($"[connect] Платформа : {detectedPlatform.ToUpperInvariant()}");
 
+// Состояние BattlEye проверяем ДО запуска: если он активен, игрок увидит
+// причину сразу, а не через четыре минуты ожидания. Ничего не выключаем —
+// только смотрим и объясняем (подробности в BattlEye.cs).
+if (OperatingSystem.IsWindows())
+{
+    BattlEye.RepairServiceIfBroken(); // уборка за старыми версиями коннектора
+    BattlEye.Preflight(gtaDir);
+}
+
+// Режим проверки без запуска игры: лаунчер зовёт его, чтобы показать
+// предупреждение в интерфейсе заранее.
+if (args.Contains("--check"))
+{
+    var beStatus = OperatingSystem.IsWindows() ? BattlEye.Check(gtaDir) : null;
+    Console.WriteLine($"[check] клиент   : {clientExe}");
+    Console.WriteLine($"[check] игра     : {gameExe}");
+    Console.WriteLine($"[check] платформа: {detectedPlatform}");
+    Console.WriteLine($"[check] battleye : {beStatus?.Summary ?? "проверка доступна только на Windows"}");
+    // Код 10 — «запускать можно, но BattlEye помешает»; лаунчер отличает его
+    // от обычной ошибки конфигурации и показывает инструкцию, а не ошибку.
+    return beStatus?.LikelyBlocksLaunch == true ? 10 : 0;
+}
+
 // Настраиваем прямой маршрут к серверу в обход VPN/TUN (исключает таймауты загрузки ресурсов)
 EnsureDirectRouteToHost(connect);
 
@@ -304,6 +327,10 @@ try
             if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(240) && !altvUp)
             {
                 Console.WriteLine("[connect] Время ожидания старта игры истекло (240 сек).");
+                // Глухой таймаут ничего не говорит игроку и превращается в
+                // обращение в поддержку. Печатаем причину и что с ней делать.
+                if (OperatingSystem.IsWindows())
+                    BattlEye.ExplainLaunchFailure(gtaDir, waitStopwatch.Elapsed);
                 break;
             }
         }

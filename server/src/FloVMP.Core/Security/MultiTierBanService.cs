@@ -57,6 +57,58 @@ public class MultiTierBanService
 {
     private readonly ConcurrentDictionary<string, BanRecord> _bans = new();
 
+    // Хранилище блокировок. Необязательное: без него сервис работает как
+    // раньше (только в памяти), и это допустимо для тестов. На живом сервере
+    // отсутствие хранилища означало бы, что рестарт снимает все баны.
+    private readonly IBanStore? _store;
+
+    public MultiTierBanService() { }
+
+    public MultiTierBanService(IBanStore store)
+    {
+        _store = store;
+        foreach (var record in store.LoadAll())
+            if (!string.IsNullOrWhiteSpace(record.Id)) _bans[record.Id] = record;
+    }
+
+    /// <summary>Сколько блокировок держит сервис (включая снятые).</summary>
+    public int Count => _bans.Count;
+
+    /// <summary>
+    /// Дозагрузить блокировки, появившиеся в общем хранилище. Нужна при
+    /// нескольких инстансах: бан, выданный на соседнем сервере, иначе дошёл бы
+    /// сюда только после перезапуска.
+    /// </summary>
+    public int RefreshFromStore()
+    {
+        if (_store is null) return 0;
+
+        var changed = 0;
+        foreach (var record in _store.LoadAll())
+        {
+            if (string.IsNullOrWhiteSpace(record.Id)) continue;
+            if (_bans.TryGetValue(record.Id, out var known) && known == record) continue;
+            _bans[record.Id] = record;
+            changed++;
+        }
+        return changed;
+    }
+
+    private void Persist(BanRecord record)
+    {
+        if (_store is null) return;
+        try { _store.Upsert(record); }
+        catch (Exception ex)
+        {
+            // Бан уже действует в памяти этого инстанса — падать из-за
+            // недоступной БД в момент выдачи бана нельзя. Но и промолчать
+            // нельзя: администратор должен знать, что бан не переживёт рестарт.
+            Console.Error.WriteLine(
+                $"[FloV:MP] ВНИМАНИЕ: блокировка {record.Id} не сохранена ({ex.Message}). " +
+                "Она действует до перезапуска сервера.");
+        }
+    }
+
     public static BanFlags TierToFlags(BanTier tier) => tier switch
     {
         BanTier.StandardBan => BanFlags.Account,
@@ -99,6 +151,7 @@ public class MultiTierBanService
             true);
 
         _bans[id] = record;
+        Persist(record);
         return record;
     }
 
@@ -131,6 +184,7 @@ public class MultiTierBanService
             true);
 
         _bans[id] = record;
+        Persist(record);
         return record;
     }
 
@@ -212,6 +266,7 @@ public class MultiTierBanService
                 var updated = ban with { IsActive = false };
                 if (_bans.TryUpdate(key, updated, ban))
                 {
+                    Persist(updated);
                     unbanned++;
                 }
             }
