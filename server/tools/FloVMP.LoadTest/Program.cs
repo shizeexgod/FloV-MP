@@ -77,6 +77,7 @@ public static class Program
         Console.WriteLine();
         var worldP99 = results[0].P99;
         Report.Verdict($"игровой тик при {players} игроках", worldP99, budgetMs);
+        WarnIfNoisy(results[0]);
 
         Console.WriteLine();
         Report.Note("Что стенд НЕ проверяет: сетевой слой alt:V, реальных клиентов,");
@@ -115,6 +116,16 @@ public static class Program
 
         foreach (var n in steps)
         {
+            // Между шагами обязательно чистим память. Иначе сетка, буферы и
+            // мусор предыдущего шага доживают до следующего, и замер растёт на
+            // ровном месте: 1500 игроков внутри развёртки показывали 35.8 мс
+            // против 19.3 мс в отдельном прогоне. Развёртка для того и нужна,
+            // чтобы сравнивать шаги между собой — значит, каждый должен
+            // стартовать с одинаково чистой памяти.
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+
             var extra = new Dictionary<string, double>();
             var sim = World.Create(n, hotspotShare, seed);
 
@@ -126,14 +137,22 @@ public static class Program
             finally { Console.SetOut(stdout); }
 
             var ok = s.P99 <= budgetMs;
+            var noisy = s.P50 > 0.01 && s.P99 / s.P50 >= 2.5;
             if (ok) lastOk = n;
             rows.Add((n, extra.GetValueOrDefault("neighbors_avg"), s.P50, s.P95, s.P99, ok));
 
             var prev = Console.ForegroundColor;
             Console.ForegroundColor = ok ? ConsoleColor.Green : ConsoleColor.Red;
             Console.WriteLine($"{n,10}{extra.GetValueOrDefault("neighbors_avg"),10:F0}" +
-                              $"{s.P50,10:F2}{s.P95,10:F2}{s.P99,10:F2}{(ok ? "в бюджете" : "ПРЕВЫШЕН"),12}");
+                              $"{s.P50,10:F2}{s.P95,10:F2}{s.P99,10:F2}" +
+                              $"{(ok ? "в бюджете" : (noisy ? "ШУМ?" : "ПРЕВЫШЕН")),12}");
             Console.ForegroundColor = prev;
+
+            if (!ok && noisy)
+            {
+                Report.Note("  Разброс p99/p50 велик — замер, похоже, испорчен посторонней");
+                Report.Note("  нагрузкой на машине. Повторите на свободной, это может быть не потолок.");
+            }
 
             // Дальше уже бессмысленно: если потолок пробит, следующие шаги
             // только дольше считаются и ничего нового не скажут.
@@ -171,6 +190,30 @@ public static class Program
         }
 
         return lastOk > 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Предупредить, если замер похож на испорченный посторонней нагрузкой.
+    ///
+    /// Стенд считает чистое процессорное время нашего кода, и параллельная
+    /// сборка или антивирус на той же машине бьют именно по хвостам: p50
+    /// остаётся прежним, а p99 взлетает втрое. Без этой подсказки легко
+    /// принять шум за регрессию — у меня самого один такой прогон показал
+    /// 59.96 мс там, где на свободной машине 24.18 мс.
+    /// </summary>
+    private static void WarnIfNoisy(Samples tick)
+    {
+        if (tick.P50 <= 0.01) return;
+        var spread = tick.P99 / tick.P50;
+        if (spread < 2.5) return;
+
+        var prev = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine();
+        Console.WriteLine($"  [ВНИМАНИЕ] p99 выше p50 в {spread:F1} раза — похоже, машина была занята");
+        Console.WriteLine("  чем-то ещё (сборка, антивирус, другой прогон). Хвосты замера ненадёжны,");
+        Console.WriteLine("  повторите на свободной машине, прежде чем считать это регрессией.");
+        Console.ForegroundColor = prev;
     }
 
     // ------------------------------------------------------------------
