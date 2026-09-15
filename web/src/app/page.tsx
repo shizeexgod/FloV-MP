@@ -185,7 +185,7 @@ export default function HomePage() {
               <Reveal key={f.t} delay={(i % 4) * 60} className={FEATURE_SPAN2.has(i) ? 'lg:col-span-2' : ''}>
                 <div className="card card-hover h-full p-5">
                   <div className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-white/70">
-                    <Icon className="h-4 w-4" />
+                    <Icon className="icon-pop h-4 w-4" />
                   </div>
                   <h3 className="mt-4 text-[14px] font-semibold text-white">{f.t}</h3>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{f.d}</p>
@@ -278,7 +278,7 @@ export default function HomePage() {
             <Reveal key={o.t} delay={i * 70}>
               <div className="card card-hover h-full p-6">
                 <div className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-white/70">
-                  {i === 0 ? <Layers className="h-4 w-4" /> : <Boxes className="h-4 w-4" />}
+                  {i === 0 ? <Layers className="icon-pop h-4 w-4" /> : <Boxes className="icon-pop h-4 w-4" />}
                 </div>
                 <h3 className="mt-4 text-[14px] font-semibold text-white">{o.t}</h3>
                 <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{o.d}</p>

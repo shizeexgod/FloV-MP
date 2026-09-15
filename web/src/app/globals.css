@@ -201,7 +201,12 @@
 
   /* ---------- Иконка/акцент внутри интерактивного элемента — лёгкий bounce-scale ---------- */
   .icon-pop { transition: transform 0.22s var(--ease-back), color 0.18s ease; }
-  .group:hover .icon-pop, a:hover > .icon-pop, button:hover > .icon-pop { transform: scale(1.1); }
+  .group:hover .icon-pop,
+  a:hover > .icon-pop,
+  button:hover > .icon-pop,
+  .card:hover .icon-pop,
+  .glass:hover .icon-pop,
+  .photo-card:hover .icon-pop { transform: scale(1.1); }
 
   /* ---------- Текст ссылок/пунктов меню — едва заметный рост + посветление ---------- */
   .hover-text {
