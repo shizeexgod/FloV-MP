@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import socket
 import subprocess
@@ -574,23 +575,48 @@ def check_live_server(rep, target):
     except OSError as e:
         rep.add(FAIL, "игровой порт {}".format(game_port), "недоступен: {}".format(e))
 
+    # Голосовой порт. Игроки подключаются к нему напрямую, и закрытый файрвол
+    # здесь означает «голоса нет» при идеально настроенном конфиге — причём
+    # молча, без единой ошибки где-либо.
+    voice_port = int(os.environ.get("FLOVMP_VOICE_PUBLIC_PORT", "7895"))
+    try:
+        with socket.create_connection((host, voice_port), timeout=5):
+            rep.add(PASS, "голосовой порт {} принимает TCP".format(voice_port))
+    except OSError as e:
+        rep.add(WARN, "голосовой порт {}".format(voice_port),
+                "недоступен ({}) - если голос настроен, игроки его не услышат".format(e))
+
+    info = None
     for api_port in (7799, 80):
         url = ("http://{}:{}/info".format(host, api_port) if api_port != 80
                else "http://{}/info".format(host))
         try:
             with urllib.request.urlopen(url, timeout=6) as r:
-                payload = json.loads(r.read().decode("utf-8", "replace"))
+                info = json.loads(r.read().decode("utf-8", "replace"))
             rep.add(PASS, "/info отвечает ({})".format(api_port),
-                    "online={} players={}/{}".format(payload.get("online"),
-                                                     payload.get("players"),
-                                                     payload.get("maxPlayers")))
-            if payload.get("online") is not True:
+                    "online={} players={}/{}".format(info.get("online"),
+                                                     info.get("players"),
+                                                     info.get("maxPlayers")))
+            if info.get("online") is not True:
                 rep.add(FAIL, "сервер сообщает online=false")
-            return
+            break
         except Exception:
             continue
-    rep.add(WARN, "/info", "не ответил ни на :7799, ни на :80 "
-                           "(если API закрыт снаружи за nginx - это нормально)")
+
+    if info is None:
+        rep.add(WARN, "/info", "не ответил ни на :7799, ни на :80 "
+                               "(если API закрыт снаружи за nginx - это нормально)")
+        return
+
+    # Главная проверка ночи: сервер может рапортовать online=true, слушать порт
+    # и при этом не загрузить НИ ОДНОГО ресурса (ключи modules/resources
+    # съедены секцией в TOML). Снаружи это неотличимо от рабочего сервера,
+    # пока игрок не зайдёт в пустой мир. /info отдаёт версию гейммода только
+    # если C#-ресурс действительно стартовал.
+    gm = info.get("gamemode") or ""
+    rep.add(PASS if gm else FAIL, "C#-ресурс загружен (гейммод отвечает)",
+            "гейммод: {}".format(gm) if gm else
+            "сервер online, но гейммод не представился - похоже, ресурсы не загрузились")
 
 
 # --------------------------------- main ---------------------------------
