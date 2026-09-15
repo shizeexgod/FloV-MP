@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ru" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#09090b">
+<title>Вход — FloV:MP</title>
+<style>
+  /*
+    Экран входа FloV:MP.
+
+    Палитра совпадает с чатом (zinc + золотой акцент #fbbf24) — иначе игрок
+    видит два интерфейса от разных проектов в одной игре.
+
+    Контракт с сервером (AuthSystem):
+      сервер -> клиент: flovmp:auth:show(serverName), flovmp:auth:hide,
+                        flovmp:auth:result(ok, message)
+      клиент -> сервер: flovmp:auth:login(user, pass),
+                        flovmp:auth:register(user, pass)
+  */
+
+  :root {
+    color-scheme: dark;
+
+    --bg:        #09090b;
+    --panel:     #0e0e12;
+    --line:      #27272a;
+    --line-soft: #1c1c20;
+    --text:      #f4f4f5;
+    --muted:     #a1a1aa;
+    --dim:       #71717a;
+    --accent:    #fbbf24;
+    --accent-dk: #b45309;
+    --danger:    #f87171;
+    --ok:        #34d399;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    /* Фон игры виден по краям: затемняем, но не глушим полностью — игрок
+       должен понимать, что он уже в мире, а не в отдельном лаунчере. */
+    background:
+      radial-gradient(1200px 800px at 50% 30%, rgba(251, 191, 36, 0.06), transparent 60%),
+      rgba(9, 9, 11, 0.88);
+    display: grid;
+    place-items: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .card {
+    width: min(420px, calc(100vw - 48px));
+    background: var(--panel);
+    border: 1px solid var(--line);
+    /* Прямоугольные скругления, без «капсул» — как в лаунчере Majestic. */
+    border-radius: 10px;
+    padding: 28px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    animation: rise 220ms ease-out;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+    flex: none;
+  }
+
+  .brand-name {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 650;
+    text-wrap: balance;
+    /* Имя сервера задаёт владелец: оно может быть и коротким, и очень длинным. */
+    overflow-wrap: anywhere;
+  }
+
+  .subtitle {
+    margin: 0 0 22px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* --- переключатель вход/регистрация --- */
+  .tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    background: #0a0a0d;
+    border: 1px solid var(--line-soft);
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+
+  .tab {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 550;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  .tab:hover { color: var(--text); }
+
+  .tab[aria-selected="true"] {
+    background: #1a1a20;
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+
+  /* --- поля --- */
+  .field { margin-bottom: 14px; }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--muted);
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+
+  input {
+    width: 100%;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: #0a0a0d;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 11px 12px;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+  }
+
+  input::placeholder { color: var(--dim); }
+
+  input:hover { border-color: #3f3f46; }
+
+  input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18);
+  }
+
+  input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+
+  .hint {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--dim);
+  }
+
+  /* --- кнопка --- */
+  .submit {
+    width: 100%;
+    margin-top: 6px;
+    appearance: none;
+    border: 0;
+    border-radius: 7px;
+    background: var(--accent);
+    color: #1c1400;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 650;
+    padding: 12px;
+    cursor: pointer;
+    transition: background-color 140ms ease, transform 90ms ease;
+  }
+
+  .submit:hover { background: #fcd34d; }
+  .submit:active { transform: translateY(1px); }
+
+  .submit:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35);
+  }
+
+  .submit[data-busy="true"] {
+    background: var(--accent-dk);
+    color: #fde68a;
+    cursor: progress;
+  }
+
+  /* --- сообщение --- */
+  .message {
+    margin-top: 14px;
+    min-height: 18px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .message[data-kind="error"] { color: var(--danger); }
+  .message[data-kind="ok"]    { color: var(--ok); }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    vertical-align: -1px;
+    border: 2px solid rgba(28, 20, 0, 0.35);
+    border-top-color: #1c1400;
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .footnote {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line-soft);
+    font-size: 11.5px;
+    color: var(--dim);
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<main class="card">
+  <div class="brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <span class="brand-name">FloV:MP</span>
+  </div>
+
+  <h1 id="server-name">Игровой сервер</h1>
+  <p class="subtitle" id="subtitle">Войдите в аккаунт, чтобы продолжить.</p>
+
+  <div class="tabs" role="tablist" aria-label="Вход или регистрация">
+    <button type="button" class="tab" id="tab-login" role="tab"
+            aria-selected="true" aria-controls="auth-form">Вход</button>
+    <button type="button" class="tab" id="tab-register" role="tab"
+            aria-selected="false" aria-controls="auth-form">Регистрация</button>
+  </div>
+
+  <form id="auth-form" autocomplete="on" novalidate>
+    <div class="field">
+      <label for="username">Логин</label>
+      <input id="username" name="username" type="text"
+             autocomplete="username" spellcheck="false"
+             autocapitalize="none" maxlength="24"
+             placeholder="Например, Ivan_Petrov…">
+    </div>
+
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" spellcheck="false"
+             maxlength="72" placeholder="Не короче 6 символов…">
+      <p class="hint" id="password-hint" hidden>Минимум 6 символов.</p>
+    </div>
+
+    <button type="submit" class="submit" id="submit">Войти</button>
+  </form>
+
+  <p class="message" id="message" role="status" aria-live="polite"></p>
+
+  <p class="footnote">Аккаунт хранится на этом сервере и не связан с Rockstar&nbsp;Games.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var form      = document.getElementById('auth-form');
+  var userInput = document.getElementById('username');
+  var passInput = document.getElementById('password');
+  var submitBtn = document.getElementById('submit');
+  var message   = document.getElementById('message');
+  var tabLogin  = document.getElementById('tab-login');
+  var tabReg    = document.getElementById('tab-register');
+  var passHint  = document.getElementById('password-hint');
+  var subtitle  = document.getElementById('subtitle');
+  var serverEl  = document.getElementById('server-name');
+
+  var mode = 'login';
+  var busy = false;
+
+  /* alt:V подставляет объект `alt` в NUI. Вне игры (открыли файл в браузере
+     для правки вёрстки) его нет — тогда просто пишем в консоль, чтобы страницу
+     можно было отлаживать без запуска сервера. */
+  var bridge = (typeof alt !== 'undefined' && alt)
+    ? alt
+    : { emit: function () { console.log('[auth:mock]', arguments); }, on: function () {} };
+
+  function setMode(next) {
+    mode = next;
+    var isReg = next === 'register';
+
+    tabLogin.setAttribute('aria-selected', String(!isReg));
+    tabReg.setAttribute('aria-selected', String(isReg));
+
+    submitBtn.textContent = isReg ? 'Создать Аккаунт' : 'Войти';
+    subtitle.textContent = isReg
+      ? 'Придумайте логин и пароль — они понадобятся при следующем входе.'
+      : 'Войдите в аккаунт, чтобы продолжить.';
+
+    /* Менеджеру паролей надо сказать, что поле сменило назначение, иначе он
+       предложит существующий пароль на форме регистрации. */
+    passInput.setAttribute('autocomplete', isReg ? 'new-password' : 'current-password');
+    passHint.hidden = !isReg;
+
+    clearMessage();
+    userInput.focus();
+  }
+
+  function clearMessage() {
+    message.textContent = '';
+    message.removeAttribute('data-kind');
+    userInput.removeAttribute('aria-invalid');
+    passInput.removeAttribute('aria-invalid');
+  }
+
+  function fail(text, field) {
+    message.textContent = text;
+    message.setAttribute('data-kind', 'error');
+    if (field) {
+      field.setAttribute('aria-invalid', 'true');
+      field.focus();
+    }
+  }
+
+  function setBusy(on) {
+    busy = on;
+    submitBtn.disabled = false; /* кнопка остаётся кликабельной до старта запроса */
+    submitBtn.setAttribute('data-busy', String(on));
+    submitBtn.innerHTML = on
+      ? '<span class="spinner" aria-hidden="true"></span>' +
+        (mode === 'register' ? 'Создаём аккаунт…' : 'Входим…')
+      : (mode === 'register' ? 'Создать Аккаунт' : 'Войти');
+  }
+
+  tabLogin.addEventListener('click', function () { if (!busy) setMode('login'); });
+  tabReg.addEventListener('click', function () { if (!busy) setMode('register'); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+
+    var user = userInput.value.trim();
+    var pass = passInput.value;
+
+    /* Проверки дублируют серверные намеренно: так игрок узнаёт об ошибке
+       мгновенно, а не после похода на сервер. Решение всё равно за сервером. */
+    if (user.length < 3) {
+      fail('Логин слишком короткий — нужно минимум 3 символа.', userInput);
+      return;
+    }
+    if (pass.length < 6) {
+      fail('Пароль слишком короткий — нужно минимум 6 символов.', passInput);
+      return;
+    }
+
+    clearMessage();
+    setBusy(true);
+    bridge.emit(mode === 'register' ? 'flovmp:auth:register' : 'flovmp:auth:login', user, pass);
+  });
+
+  /* Enter в любом поле отправляет форму — это делает сама форма. Escape
+     очищает сообщение, чтобы можно было начать заново, не перезаходя. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !busy) clearMessage();
+  });
+
+  bridge.on('flovmp:auth:server', function (name) {
+    if (name) serverEl.textContent = String(name);
+  });
+
+  bridge.on('flovmp:auth:result', function (ok, text) {
+    setBusy(false);
+    if (ok) {
+      message.textContent = text || 'Готово.';
+      message.setAttribute('data-kind', 'ok');
+      passInput.value = '';
+      return;
+    }
+    /* Сообщение приходит с сервера и уже человеческое — показываем как есть. */
+    fail(text || 'Не удалось войти. Проверьте логин и пароль.',
+         /парол/i.test(text || '') ? passInput : userInput);
+  });
+
+  bridge.on('flovmp:auth:reset', function () {
+    setBusy(false);
+    passInput.value = '';
+    clearMessage();
+  });
+
+  setMode('login');
+}());
+</script>
+
+</body>
+</html>

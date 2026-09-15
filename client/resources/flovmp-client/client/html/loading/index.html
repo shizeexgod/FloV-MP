@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#09090b">
+<title>Загрузка — FloV:MP</title>
+<style>
+  /*
+    Загрузочный экран FloV:MP.
+
+    Зачем он нужен. Между подключением к серверу и появлением формы входа у
+    игрока был чёрный экран без единого слова. Дольше нескольких секунд это
+    неотличимо от зависшей игры: человек закрывает клиент и идёт писать в
+    поддержку, что «сервер не работает». Экран не ускоряет загрузку — он
+    показывает, что она идёт, и на каком она шаге.
+
+    Контракт с клиентским скриптом:
+      flovmp:loading:show(serverName)
+      flovmp:loading:step(text, percentOrNull)   percent = null -> неопределённый прогресс
+      flovmp:loading:hide
+  */
+
+  :root {
+    color-scheme: dark;
+
+    --bg:     #09090b;
+    --text:   #f4f4f5;
+    --muted:  #a1a1aa;
+    --dim:    #71717a;
+    --line:   #27272a;
+    --accent: #fbbf24;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1400px 900px at 50% 40%, rgba(251, 191, 36, 0.05), transparent 65%),
+      var(--bg);
+    display: grid;
+    place-items: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .wrap {
+    width: min(460px, calc(100vw - 48px));
+    text-align: center;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 26px;
+  }
+
+  .brand-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .brand-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 24px;
+    font-weight: 650;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+
+  .step {
+    margin: 0 0 24px;
+    font-size: 13.5px;
+    color: var(--muted);
+    min-height: 20px;
+    overflow-wrap: anywhere;
+  }
+
+  /* --- полоса прогресса --- */
+  .bar {
+    height: 4px;
+    background: #17171b;
+    border-radius: 2px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    border-radius: 2px;
+    /* Только transform/width по ширине — композитор-дружественно и без
+       transition: all, который перерисовывал бы и цвет, и границу. */
+    transition: width 280ms ease-out;
+  }
+
+  /* Неопределённый прогресс: когда движок не сообщает процент, честнее
+     показать «идёт работа», чем рисовать выдуманные проценты. */
+  .bar[data-indeterminate="true"] .bar-fill {
+    width: 35%;
+    animation: slide 1400ms ease-in-out infinite;
+  }
+
+  @keyframes slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+
+  .percent {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+    min-height: 16px;
+  }
+
+  .tip {
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid #1c1c20;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--dim);
+    overflow-wrap: anywhere;
+  }
+
+  .tip b { color: var(--muted); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    /* Без анимации неопределённая полоса должна быть видна как заполненная,
+       иначе она выглядит как «0%, ничего не происходит». */
+    .bar[data-indeterminate="true"] .bar-fill { width: 100%; opacity: 0.35; }
+  }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <div class="brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <span class="brand-name">FloV:MP</span>
+  </div>
+
+  <h1 id="server-name">Подключение…</h1>
+  <p class="step" id="step" role="status" aria-live="polite">Устанавливаем соединение…</p>
+
+  <div class="bar" id="bar" data-indeterminate="true"
+       role="progressbar" aria-label="Прогресс загрузки">
+    <div class="bar-fill" id="bar-fill"></div>
+  </div>
+  <p class="percent" id="percent"></p>
+
+  <p class="tip" id="tip"></p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var serverEl = document.getElementById('server-name');
+  var stepEl   = document.getElementById('step');
+  var bar      = document.getElementById('bar');
+  var fill     = document.getElementById('bar-fill');
+  var percent  = document.getElementById('percent');
+  var tipEl    = document.getElementById('tip');
+
+  var bridge = (typeof alt !== 'undefined' && alt)
+    ? alt
+    : { emit: function () {}, on: function () {} };
+
+  /* Подсказки крутятся, пока идёт загрузка. Смысл не в развлечении: первое,
+     что спрашивают новые игроки — как говорить и как открыть меню. */
+  var TIPS = [
+    '<b>Голос:</b> удерживайте <b>N</b>, чтобы говорить. Вас слышат те, кто рядом.',
+    '<b>Чат:</b> клавиша <b>T</b>. Команды начинаются с «/», список — <b>/help</b>.',
+    '<b>Не запускается игра?</b> Отключите BattlEye в настройках Rockstar&nbsp;Games Launcher.',
+    '<b>Консоль:</b> клавиша <b>F8</b> — там видно, что происходит, если что-то пошло не так.',
+    '<b>Первый запуск</b> дольше обычного: игра компилирует шейдеры.'
+  ];
+
+  var tipIndex = Math.floor(Math.random() * TIPS.length);
+  var tipTimer = null;
+
+  function showTip() {
+    tipEl.innerHTML = TIPS[tipIndex % TIPS.length];
+    tipIndex++;
+  }
+
+  function startTips() {
+    showTip();
+    if (tipTimer) clearInterval(tipTimer);
+    tipTimer = setInterval(showTip, 7000);
+  }
+
+  function stopTips() {
+    if (tipTimer) { clearInterval(tipTimer); tipTimer = null; }
+  }
+
+  function setStep(text, value) {
+    if (text) stepEl.textContent = String(text);
+
+    var known = typeof value === 'number' && isFinite(value) && value >= 0;
+    if (known) {
+      var pct = Math.max(0, Math.min(100, Math.round(value)));
+      bar.setAttribute('data-indeterminate', 'false');
+      bar.setAttribute('aria-valuenow', String(pct));
+      bar.setAttribute('aria-valuemin', '0');
+      bar.setAttribute('aria-valuemax', '100');
+      fill.style.width = pct + '%';
+      /* Проценты форматируются локалью, а не склейкой строк. */
+      percent.textContent = new Intl.NumberFormat('ru-RU').format(pct) + '%';
+    } else {
+      bar.setAttribute('data-indeterminate', 'true');
+      bar.removeAttribute('aria-valuenow');
+      fill.style.width = '';
+      percent.textContent = '';
+    }
+  }
+
+  bridge.on('flovmp:loading:show', function (name) {
+    if (name) serverEl.textContent = String(name);
+    startTips();
+  });
+
+  bridge.on('flovmp:loading:step', function (text, value) {
+    setStep(text, value);
+  });
+
+  bridge.on('flovmp:loading:hide', function () {
+    stopTips();
+  });
+
+  startTips();
+}());
+</script>
+
+</body>
+</html>

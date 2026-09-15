@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<!-- Тёмная тема объявлена явно: без color-scheme нативные поля,
+     скроллбары и автозаполнение остаются светлыми на тёмном фоне. -->
+<meta name="theme-color" content="#09090b">
   <meta charset="utf-8" />
   <title>FloV:MP — Чат</title>
   <script>
@@ -26,6 +29,7 @@
   </script>
   <style>
     :root {
+      color-scheme: dark;
       --accent: #ffffff;
       --accent-dim: #a1a1aa;
       --accent-ink: #09090b;
@@ -216,7 +220,7 @@
       border-color: rgba(255, 255, 255, 0.55) !important;
       background: rgba(255, 255, 255, 0.05);
       box-shadow: 0 0 22px rgba(255, 255, 255, 0.18), 0 20px 50px rgba(0, 0, 0, 0.8);
-      transition: all 0.1s ease-out;
+      transition: background-color 0.1s ease-out, border-color 0.1s ease-out, color 0.1s ease-out, opacity 0.1s ease-out, transform 0.1s ease-out;
     }
 
     /* Input Field Row */
@@ -411,7 +415,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      transition: all 0.12s ease;
+      transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease, transform 0.12s ease;
       white-space: nowrap;
       user-select: none;
     }
@@ -426,13 +430,39 @@
     .pv-btn strong, .pv-btn span {
       color: #ffffff;
     }
-  </style>
+  
+      /* Часть игроков физически плохо переносит движение интерфейса.
+         Правило системное: если человек попросил меньше анимации — её нет. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      /* Обводка фокуса снималась ради вида, но вместе с ней пропадала
+         клавиатурная навигация: игрок с Tab не видел, где он находится.
+         :focus-visible возвращает её только при работе с клавиатуры —
+         при клике мышью кольца не будет. */
+      :focus-visible {
+        outline: 2px solid #fbbf24;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      /* Ник, причина бана и текст сообщения приходят снаружи и бывают
+         любой длины. Без переноса одно длинное слово растягивает контейнер
+         и ломает вёрстку у всех. */
+      body, input, textarea { overflow-wrap: anywhere; }
+</style>
 </head>
 <body>
 <!-- Standalone Browser Preview Toolbar -->
 <div id="preview-toolbar" class="font-mono">
   <div class="pv-brand">
-    <span class="pv-dot"></span>
+    <span class="pv-dot" aria-hidden="true"></span>
     <span>FloV:MP Chat Preview</span>
   </div>
   <div class="pv-actions">
@@ -465,7 +495,7 @@
       <span class="input-prompt font-mono">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
       </span>
-      <input id="chat-input" maxlength="256" placeholder="Введите сообщение или команду (/)..." autocomplete="off" spellcheck="false" />
+      <input id="chat-input" maxlength="256" aria-label="Сообщение в чат" placeholder="Введите сообщение или команду (/)…" autocomplete="off" spellcheck="false" />
     </div>
 
     <!-- Footer Meta -->

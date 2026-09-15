@@ -1,10 +1,14 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<!-- Тёмная тема объявлена явно: без color-scheme нативные поля,
+     скроллбары и автозаполнение остаются светлыми на тёмном фоне. -->
+<meta name="theme-color" content="#09090b">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FloV:MP Console</title>
   <style>
+    :root { color-scheme: dark; }
     * {
       box-sizing: border-box;
       margin: 0;
@@ -305,7 +309,7 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.3px;
-      transition: all 0.1s ease;
+      transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease, opacity 0.1s ease, transform 0.1s ease;
     }
     .filter-tag:hover {
       color: #d4d4d8;
@@ -472,7 +476,7 @@
       align-items: center;
       justify-content: center;
       gap: 5px;
-      transition: all 0.1s ease;
+      transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease, opacity 0.1s ease, transform 0.1s ease;
     }
     .devtools-btn:hover {
       background: rgba(255, 255, 255, 0.12);
@@ -531,6 +535,15 @@
       }
     }
     .ac-item {
+      /* Раньше это был div: мышью работал, с клавиатуры нет, и диктор не
+         понимал, что это кнопка. Теперь <button>, поэтому снимаем его
+         браузерные стили — иначе пункты списка станут серыми «кнопками». */
+      appearance: none;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      text-align: left;
       padding: 6px 12px;
       font-size: 11.5px;
       display: flex;
@@ -651,7 +664,7 @@
       border-top-color: rgba(255, 255, 255, 0.45) !important;
       background: rgba(255, 255, 255, 0.045);
       box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.08);
-      transition: all 0.1s ease-out;
+      transition: background-color 0.1s ease-out, border-color 0.1s ease-out, color 0.1s ease-out, opacity 0.1s ease-out, transform 0.1s ease-out;
     }
 
     /* ─── RBAC: Скрытие админ-элементов для обычных игроков ─── */
@@ -661,7 +674,33 @@
     #console-window.is-admin .admin-only {
       display: inline-flex !important;
     }
-  </style>
+  
+      /* Часть игроков физически плохо переносит движение интерфейса.
+         Правило системное: если человек попросил меньше анимации — её нет. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+
+      /* Обводка фокуса снималась ради вида, но вместе с ней пропадала
+         клавиатурная навигация: игрок с Tab не видел, где он находится.
+         :focus-visible возвращает её только при работе с клавиатуры —
+         при клике мышью кольца не будет. */
+      :focus-visible {
+        outline: 2px solid #fbbf24;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      /* Ник, причина бана и текст сообщения приходят снаружи и бывают
+         любой длины. Без переноса одно длинное слово растягивает контейнер
+         и ломает вёрстку у всех. */
+      body, input, textarea { overflow-wrap: anywhere; }
+</style>
 </head>
 <body>
 
@@ -758,7 +797,7 @@
       </div>
 
       <div style="display: flex; align-items: center; gap: 8px;">
-        <input type="text" id="search-input" class="search-input font-mono" placeholder="Поиск по логам..." oninput="handleSearch(this.value)">
+        <input type="text" id="search-input" class="search-input font-mono" aria-label="Поиск по логам" placeholder="Поиск по логам…" oninput="handleSearch(this.value)">
       </div>
     </div>
 
@@ -771,7 +810,7 @@
     <!-- Input Bar with 21st.dev Command Keycaps -->
     <div id="input-bar">
       <span class="prompt-label font-mono">&gt;</span>
-      <input type="text" id="cmd-input" class="cmd-input font-mono" placeholder="Введите команду (/noclip, /heal, /car, /tp, help, quit)..." autocomplete="off" spellcheck="false">
+      <input type="text" id="cmd-input" class="cmd-input font-mono" aria-label="Команда консоли" placeholder="Введите команду (/noclip, /heal, /car, /tp, help, quit)…" autocomplete="off" spellcheck="false">
       <div style="display: flex; align-items: center; gap: 5px;">
         <kbd class="font-mono">Tab</kbd>
         <kbd class="font-mono">↵ Enter</kbd>
@@ -1133,7 +1172,7 @@
               Транспорт
             </div>
             <div class="devtools-row">
-              <input type="text" id="dev-veh-model" class="devtools-input" value="adder" placeholder="Модель авто...">
+              <input type="text" id="dev-veh-model" class="devtools-input" value="adder" aria-label="Модель транспорта" placeholder="Модель авто…">
               <button class="devtools-btn devtools-btn-white" onclick="execCmd('car ' + document.getElementById('dev-veh-model').value)">Спавн</button>
             </div>
             <div class="devtools-row">
@@ -1344,10 +1383,10 @@
       acSelectedIndex = 0;
       let html = '';
       filteredCommands.forEach((c, idx) => {
-        html += `<div class="ac-item ${idx === 0 ? 'selected' : ''}" onclick="selectAutocomplete('${c.cmd.split(' ')[0]}')">
+        html += `<button type="button" class="ac-item ${idx === 0 ? 'selected' : ''}" onclick="selectAutocomplete('${c.cmd.split(' ')[0]}')">
           <strong>/${c.cmd}</strong>
           <span class="ac-desc">${c.desc}</span>
-        </div>`;
+        </button>`;
       });
       acPopup.innerHTML = html;
       acPopup.style.display = 'flex';

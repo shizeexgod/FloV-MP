@@ -42,6 +42,13 @@ let currentAdminLevel = 0;
 let godMode = false;
 let cursorDepth = 0;
 
+// Экраны входа и загрузки. Раньше их не было вовсе: сервер слал
+// flovmp:auth:show, а клиент это событие игнорировал — то есть в RP-режиме
+// игрок подключался и оставался в чёрном экране без формы входа навсегда.
+let authView = null;
+let loadingView = null;
+let authVisible = false;
+
 // Голосовой чат
 let isVoiceTalking = false;
 let voiceReleaseTimeout = null;
@@ -63,6 +70,117 @@ function popCursor() {
         try { alt.showCursor(false); } catch (e) { }
     }
 }
+
+// =============================================================================
+// 0. ЭКРАНЫ ВХОДА И ЗАГРУЗКИ
+// =============================================================================
+
+/**
+ * Загрузочный экран. Показывается сразу после подключения и снимается, когда
+ * игрок вошёл в аккаунт.
+ *
+ * Зачем: между подключением и появлением формы входа у игрока был чёрный экран
+ * без единого слова. Дольше нескольких секунд это неотличимо от зависшей игры —
+ * человек закрывает клиент и пишет в поддержку, что сервер не работает.
+ */
+function openLoading(serverName) {
+    if (loadingView) return;
+    try {
+        loadingView = new alt.WebView('http://resource/client/html/loading/index.html');
+        loadingView.on('load', () => {
+            try { loadingView.emit('flovmp:loading:show', serverName || ''); } catch (e) { }
+        });
+        // Курсор здесь НЕ показываем: на загрузочном экране нечего нажимать,
+        // а лишний курсор поверх игры выглядит как зависший интерфейс.
+        try { alt.toggleGameControls(false); } catch (e) { }
+    } catch (e) {
+        alt.log(`[FloV:MP] Не удалось открыть загрузочный экран: ${e}`);
+        loadingView = null;
+    }
+}
+
+function setLoadingStep(text, percent) {
+    if (!loadingView) return;
+    try { loadingView.emit('flovmp:loading:step', text, percent); } catch (e) { }
+}
+
+function closeLoading() {
+    if (!loadingView) return;
+    try { loadingView.emit('flovmp:loading:hide'); } catch (e) { }
+    try { loadingView.destroy(); } catch (e) { }
+    loadingView = null;
+}
+
+/**
+ * Экран входа. Открывается по команде сервера (flovmp:auth:show).
+ *
+ * Управление игрой глушится, курсор показывается через общий менеджер
+ * вложенности — иначе закрытие чата «съело» бы курсор у формы входа.
+ */
+function openAuth(serverName) {
+    if (authView) {
+        // Сервер мог прислать show повторно (страховочная отправка через 2 с).
+        try { authView.emit('flovmp:auth:server', serverName || ''); } catch (e) { }
+        return;
+    }
+
+    try {
+        authView = new alt.WebView('http://resource/client/html/auth/index.html');
+        authVisible = true;
+
+        authView.on('load', () => {
+            try { authView.emit('flovmp:auth:server', serverName || ''); } catch (e) { }
+        });
+
+        authView.on('flovmp:auth:login', (user, pass) => {
+            alt.emitServer('flovmp:auth:login', String(user || ''), String(pass || ''));
+        });
+
+        authView.on('flovmp:auth:register', (user, pass) => {
+            alt.emitServer('flovmp:auth:register', String(user || ''), String(pass || ''));
+        });
+
+        authView.focus();
+        pushCursor();
+        try { alt.toggleGameControls(false); } catch (e) { }
+    } catch (e) {
+        alt.log(`[FloV:MP] Не удалось открыть экран входа: ${e}`);
+        authView = null;
+        authVisible = false;
+    }
+}
+
+function closeAuth() {
+    if (!authView) return;
+    try { authView.unfocus(); } catch (e) { }
+    try { authView.destroy(); } catch (e) { }
+    authView = null;
+
+    // popCursor только если мы его действительно поднимали, иначе счётчик
+    // вложенности уйдёт в минус и курсор пропадёт у чата.
+    if (authVisible) {
+        authVisible = false;
+        popCursor();
+    }
+    try { alt.toggleGameControls(true); } catch (e) { }
+}
+
+alt.onServer('flovmp:auth:show', (serverName) => {
+    // Загрузка закончилась ровно тогда, когда есть что показать игроку.
+    setLoadingStep('Готово. Открываем вход…', 100);
+    closeLoading();
+    openAuth(serverName);
+});
+
+alt.onServer('flovmp:auth:hide', () => {
+    closeAuth();
+    closeLoading();
+});
+
+alt.onServer('flovmp:auth:result', (ok, message) => {
+    if (!authView) return;
+    try { authView.emit('flovmp:auth:result', !!ok, String(message || '')); } catch (e) { }
+});
 
 // =============================================================================
 // 1. СИСТЕМА СВОБОДНОГО ПОЛЁТА (NoClip) — Архитектура Sayonara RP
@@ -1116,8 +1234,16 @@ alt.on('connectionComplete', () => {
     inGame = true;
     native.displayRadar(true);
     native.displayHud(true);
+
+    // Загрузочный экран поднимается ПЕРВЫМ: всё, что ниже, занимает время, и
+    // именно эти секунды игрок раньше видел как чёрный экран.
+    openLoading('');
+    setLoadingStep('Готовим интерфейс…', null);
+
     openChat();
     getOrCreateDevConsole(); // Прогрев WebView консоли для мгновенного отклика (0мс)
+
+    setLoadingStep('Ждём ответа сервера…', null);
     alt.emitServer('flovmp:client:ready');
 });
 
@@ -1133,6 +1259,12 @@ alt.on('disconnect', () => {
     isVoiceTalking = false;
     if (noClip) toggleNoClip();
     espMode = 0;
+
+    // Экраны снимаем ДО сброса cursorDepth: closeAuth сам уменьшает счётчик,
+    // а обнуление после него гарантирует, что курсор не останется висеть.
+    closeAuth();
+    closeLoading();
+
     cursorDepth = 0;
     try { alt.showCursor(false); } catch (e) { }
     try { alt.toggleGameControls(true); } catch (e) { }
