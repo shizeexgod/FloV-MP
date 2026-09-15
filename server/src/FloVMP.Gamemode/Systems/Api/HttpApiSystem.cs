@@ -49,6 +49,26 @@ public sealed class HttpApiSystem
     private int _inFlight;
     private readonly ConcurrentDictionary<string, (int count, DateTime start)> _rate = new();
 
+    /// <summary>
+    /// Origin, которому разрешён доступ из браузера. Пусто = заголовки CORS не
+    /// отправляются вовсе, и это правильный режим по умолчанию.
+    ///
+    /// Раньше здесь стояло <c>Access-Control-Allow-Origin: *</c> на API, где
+    /// среди прочего живёт POST /api/auth/login. Со звёздочкой ЛЮБОЙ сайт мог
+    /// заставить браузер посетителя долбиться в этот эндпоинт И прочитать
+    /// ответ — то есть подбирать пароли чужими IP-адресами, размазывая
+    /// перебор по посетителям и обходя ограничение частоты (оно на IP).
+    ///
+    /// Никому это не было нужно: лаунчер ходит сюда нативным HTTP-клиентом, а
+    /// веб-портал дёргает /info со своей стороны (Next.js, серверный fetch) —
+    /// оба на CORS не смотрят вообще. Проверено поиском по client/ и web/.
+    ///
+    /// Если позже понадобится браузерный доступ — FLOVMP_API_CORS_ORIGIN с
+    /// конкретным адресом портала, не со звёздочкой.
+    /// </summary>
+    private static readonly string CorsOrigin =
+        Environment.GetEnvironmentVariable("FLOVMP_API_CORS_ORIGIN") ?? "";
+
     public HttpApiSystem(
         IAccountStore store,
         Func<int> playerCount,
@@ -186,9 +206,13 @@ public sealed class HttpApiSystem
     {
         var path = (ctx.Request.Url?.AbsolutePath ?? "/").TrimEnd('/');
         if (path.Length == 0) path = "/";
-        ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
-        ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        ctx.Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+        if (CorsOrigin.Length > 0)
+        {
+            ctx.Response.AddHeader("Access-Control-Allow-Origin", CorsOrigin);
+            ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            ctx.Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+            ctx.Response.AddHeader("Vary", "Origin");
+        }
 
         if (ctx.Request.HttpMethod == "OPTIONS") { ctx.Response.StatusCode = 204; ctx.Response.Close(); return; }
 

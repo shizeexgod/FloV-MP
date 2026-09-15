@@ -78,6 +78,10 @@ catch (Exception ex)
 // анти-брутфорс AuthService (лимит попыток в окне) не переживает между
 // запросами HTTP API — некритично для редких login/register, встроенный
 // rate-limit самого alt:V-подключения (не этого API) всё равно на месте.
+// Origin, которому разрешён доступ из браузера. Пусто = CORS выключен
+// (правильный режим по умолчанию, см. комментарий у заголовков ниже).
+var CorsOrigin = Environment.GetEnvironmentVariable("FLOVMP_API_CORS_ORIGIN") ?? "";
+
 var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 var accountStore = new JsonAccountStore(accountsPath);
 var authService = new AuthService(accountStore);
@@ -91,9 +95,20 @@ _ = Task.Run(() =>
             var ctx = listener.GetContext();
             var path = ctx.Request.Url?.AbsolutePath ?? "";
 
-            ctx.Response.AddHeader("Access-Control-Allow-Origin", "*");
-            ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            ctx.Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+            // Тот же API, что и в HttpApiSystem, с тем же POST /api/auth/login.
+            // Со звёздочкой ЛЮБОЙ сайт мог заставить браузер посетителя долбиться
+            // сюда и прочитать ответ — то есть подбирать пароли чужими IP,
+            // размазывая перебор и обходя ограничение частоты (оно на IP).
+            // Браузерного потребителя у этого API нет: лаунчер ходит нативным
+            // HTTP-клиентом, портал дёргает /info со своей стороны.
+            // Пусто = заголовки CORS не отправляются вовсе.
+            if (CorsOrigin.Length > 0)
+            {
+                ctx.Response.AddHeader("Access-Control-Allow-Origin", CorsOrigin);
+                ctx.Response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                ctx.Response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+                ctx.Response.AddHeader("Vary", "Origin");
+            }
             if (ctx.Request.HttpMethod == "OPTIONS")
             {
                 ctx.Response.StatusCode = 204;
