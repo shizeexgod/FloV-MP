@@ -17,6 +17,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FloVMP.Launcher.Core\FloVMP.Launcher.Core.csproj" />
     <ProjectReference Include="..\..\src\FloVMP.Launcher.Native\FloVMP.Launcher.Native.csproj" />
+    <!-- FloVMP.Connect — WinExe, но AltvToml из него формирует altv.toml клиента:
+         одна кривая строка там означает, что клиент не стартует вовсе. Без
+         ссылки эта логика оставалась вообще без тестов. -->
+    <ProjectReference Include="..\..\src\FloVMP.Connect\FloVMP.Connect.csproj" />
   </ItemGroup>
 
 </Project>

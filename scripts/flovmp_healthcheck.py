@@ -503,18 +503,27 @@ def check_build_and_tests(rep):
         rep.add(PASS if code == 0 else FAIL, "сборка " + Path(proj).stem,
                 "" if code == 0 else (errs[0][:160] if errs else out.strip()[:160]))
 
-    code, out = run_cmd(["dotnet", "test",
-                         "server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj",
-                         "-c", "Release", "--nologo", "-v", "q"])
-    # ВНИМАНИЕ: "пройдено" встречается и внутри "не пройдено" — берём только
-    # число, перед которым НЕТ "не ", иначе отчёт врёт про 0 тестов.
-    passed = re.search(r"(?<!не )пройдено\s+(\d+)", out) or re.search(r"Passed:\s+(\d+)", out)
-    failed = re.search(r"не пройдено\s+(\d+)", out) or re.search(r"Failed:\s+(\d+)", out)
-    detail = "пройдено {}{}".format(
-        passed.group(1) if passed else "?",
-        ", провалено " + failed.group(1) if failed and failed.group(1) != "0" else ""
-    ) if (passed or failed) else out.strip()[:160]
-    rep.add(PASS if code == 0 else FAIL, "юнит-тесты", detail)
+    # Оба набора: серверный и лаунчерный. Лаунчерный раньше не запускался
+    # здесь вовсе, хотя именно он проверяет генерацию altv.toml — одна кривая
+    # строка там означает, что клиент не стартует вообще.
+    suites = [
+        ("юнит-тесты сервера", "server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj"),
+        ("юнит-тесты лаунчера", "launcher/tests/FloVMP.Launcher.Tests/FloVMP.Launcher.Tests.csproj"),
+    ]
+    for label, proj in suites:
+        if not (ROOT / proj).exists():
+            rep.add(SKIP, label, "проект не найден")
+            continue
+        code, out = run_cmd(["dotnet", "test", proj, "-c", "Release", "--nologo", "-v", "q"])
+        # ВНИМАНИЕ: "пройдено" встречается и внутри "не пройдено" — берём только
+        # число, перед которым НЕТ "не ", иначе отчёт врёт про 0 тестов.
+        passed = re.search(r"(?<!не )пройдено\s+(\d+)", out) or re.search(r"Passed:\s+(\d+)", out)
+        failed = re.search(r"не пройдено\s+(\d+)", out) or re.search(r"Failed:\s+(\d+)", out)
+        detail = "пройдено {}{}".format(
+            passed.group(1) if passed else "?",
+            ", провалено " + failed.group(1) if failed and failed.group(1) != "0" else ""
+        ) if (passed or failed) else out.strip()[:160]
+        rep.add(PASS if code == 0 else FAIL, label, detail)
 
 
 # ------------- 5. Согласованность версий клиента и сервера -------------
