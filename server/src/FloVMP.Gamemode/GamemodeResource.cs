@@ -367,9 +367,22 @@ public class GamemodeResource : Resource
             var released = _factions?.TickArrests(1);
             if (released != null && released.Count > 0)
             {
+                // Карта аккаунт -> игрок строится ОДИН раз. Раньше на каждого
+                // освобождённого вызывался Alt.GetAllPlayers() с линейным
+                // поиском: при массовом освобождении это O(освобождённых x
+                // онлайна) плюс аллокация полного списка игроков на каждой
+                // итерации — на двух тысячах онлайна заметный провал тика.
+                var onlineByAccount = new Dictionary<int, IPlayer>();
+                foreach (var pl in Alt.GetAllPlayers())
+                {
+                    if (!pl.Exists) continue;
+                    var a = _auth?.AccountOf(pl);
+                    if (a != null) onlineByAccount[a.Id] = pl;
+                }
+
                 foreach (var accId in released)
                 {
-                    var p = Alt.GetAllPlayers().FirstOrDefault(pl => pl.Exists && _auth?.AccountOf(pl)?.Id == accId);
+                    onlineByAccount.TryGetValue(accId, out var p);
                     if (p != null && p.Exists)
                     {
                         p.Dimension = 0;
