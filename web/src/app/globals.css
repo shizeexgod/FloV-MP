@@ -82,6 +82,8 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  a, button { touch-action: manipulation; }
+
   body {
     background-color: var(--bg);
     color: var(--text);
@@ -103,7 +105,8 @@
     text-shadow: 0 0 10px color-mix(in srgb, var(--brand) 55%, transparent);
   }
 
-  h1, h2, h3, h4 { letter-spacing: -0.022em; }
+  h1, h2, h3, h4 { letter-spacing: -0.022em; text-wrap: balance; }
+  p { text-wrap: pretty; }
   /* Дисплейный шрифт (как на icsnotify.ru) — только крупные заголовки */
   h1, h2 { font-family: 'Unbounded', 'Manrope', ui-sans-serif, sans-serif; letter-spacing: -0.03em; }
 
@@ -397,21 +400,24 @@
   .btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
   .btn:active { transform: translateY(0) scale(0.98); filter: brightness(1); }
   .btn:disabled { opacity: 0.55; pointer-events: none; }
+  .btn > * { position: relative; z-index: 2; }
   .btn svg { transition: transform 0.22s var(--ease-back); }
   .btn:hover svg:last-child { transform: translateX(2px); }
   /* Диагональный блик — пробегает один раз при наведении */
   .btn::before {
     content: '';
     position: absolute;
-    inset: 0;
+    top: -25%;
+    bottom: -25%;
+    left: -45%;
+    width: 32%;
     z-index: 1;
     pointer-events: none;
-    background-image: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.35) 50%, transparent 60%);
-    background-size: 240% 100%;
-    background-position: 120% 0;
-    transition: background-position 0.65s ease-out;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+    transform: skewX(-18deg) translateX(0);
+    transition: transform 0.58s var(--ease);
   }
-  .btn:hover::before { background-position: -20% 0; }
+  .btn:hover::before { transform: skewX(-18deg) translateX(520%); }
 
   .btn-primary {
     color: #120309;
@@ -445,6 +451,17 @@
     background: none;
   }
   .btn-link:hover { transform: none; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Язык меняется мягко: контент успевает перестроиться без резкого скачка. */
+  @keyframes language-switch {
+    from { opacity: 0.72; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  html[data-language-switching='true'] main,
+  html[data-language-switching='true'] footer,
+  html[data-language-switching='true'] header nav {
+    animation: language-switch 0.28s var(--ease) both;
+  }
 
   /* ---------- Inputs ---------- */
   .field {
@@ -495,10 +512,11 @@
   /* ---------- Scroll-reveal ---------- */
   .reveal {
     opacity: 0;
-    transform: translateY(16px);
-    transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+    transform: translateY(14px);
+    transition: opacity 0.62s var(--ease), transform 0.62s var(--ease);
+    will-change: opacity, transform;
   }
-  .reveal.is-visible { opacity: 1; transform: none; }
+  .reveal.is-visible { opacity: 1; transform: none; will-change: auto; }
 }
 
 @layer utilities {

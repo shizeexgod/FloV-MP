@@ -20,19 +20,23 @@ export function Reveal({
   const [seen, setSeen] = useState(false);
 
   useEffect(() => {
-    // Reveal on mount (two rAF so the CSS transition plays). Never leaves content
-    // hidden even if IntersectionObserver never fires (backgrounded tab, etc.).
-    let raf1 = 0;
-    let raf2 = 0;
-    const fallback = window.setTimeout(() => setSeen(true), 250);
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setSeen(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      clearTimeout(fallback);
-    };
+    const node = ref.current;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!node || reducedMotion || !('IntersectionObserver' in window)) {
+      setSeen(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setSeen(true);
+        observer.disconnect();
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -7% 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -151,7 +155,7 @@ export function BtnLink({
   const inner = (
     <>
       {children}
-      {arrow ? <ArrowRight className="h-4 w-4" /> : null}
+      {arrow ? <ArrowRight aria-hidden="true" className="h-4 w-4" /> : null}
     </>
   );
   if (external) {

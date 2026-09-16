@@ -31,11 +31,11 @@ export default function Footer() {
           {/* Brand + working hours */}
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="block h-9 w-9 overflow-hidden rounded-[10px] border border-white/10 bg-ink-800">
+              <span className="block h-9 w-9 shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/branding/logo.png" alt="FloV:MP" className="h-full w-full object-cover" />
+                <img src="/branding/logo.png" alt="" width="36" height="36" loading="lazy" className="h-full w-full object-contain" />
               </span>
-              <span className="text-[16px] font-extrabold text-white">
+              <span translate="no" className="text-[16px] font-extrabold text-white">
                 FloV<span className="text-brand">:MP</span>
               </span>
             </div>
@@ -137,7 +137,7 @@ export default function Footer() {
               rel="noopener noreferrer"
               className="group flex items-center gap-1.5 font-medium text-white/50 transition-colors hover:text-brand"
             >
-              <Send className="icon-pop h-3.5 w-3.5" />
+              <Send aria-hidden="true" className="icon-pop h-3.5 w-3.5" />
               Telegram
             </a>
           )}

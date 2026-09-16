@@ -25,10 +25,10 @@ const FEATURE_ICONS = [Gauge, Boxes, Mic, ShieldCheck, ScrollText, Cloud, Rocket
 const FEATURE_SPAN2 = new Set([0, 5]);
 
 function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'projects' | 'console' | 'security' }) {
-  const rows = mode === 'projects'
+  const rows: string[] = mode === 'projects'
     ? [labels.production, labels.development, labels.test]
     : mode === 'console'
-      ? ['CoreCLR · .NET 8', 'UDP 7788', 'FastDL · HTTP/2']
+      ? labels.consoleRows
       : ['FloV:ID', 'HMAC-SHA256', labels.ipBinding];
 
   return (
@@ -39,9 +39,9 @@ function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'pr
         <span className="browser-frame__dot bg-white/10" />
         <span className="ml-3 truncate font-mono text-[11px] text-white/35">flovmp.ru/dashboard</span>
       </div>
-      <div className="grid min-h-[300px] grid-cols-[116px_1fr] bg-[#0d0d10] p-3 sm:min-h-[350px] sm:grid-cols-[150px_1fr] sm:p-4">
+      <div className="grid min-h-[270px] grid-cols-[116px_1fr] bg-[#0d0d10] p-3 sm:min-h-[310px] sm:grid-cols-[150px_1fr] sm:p-4">
         <div className="border-r border-white/[0.07] pr-3 sm:pr-4">
-          <div className="mb-5 text-[11px] font-extrabold text-white">FloV<span className="text-brand">:MP</span></div>
+          <div translate="no" className="mb-5 text-[11px] font-extrabold text-white">FloV<span className="text-brand">:MP</span></div>
           {[labels.projects, labels.servers, labels.telemetry, labels.console].map((label, index) => (
             <div key={label} className={`mb-1.5 rounded-lg px-2 py-2 text-[9px] sm:text-[11px] ${index === (mode === 'projects' ? 0 : mode === 'console' ? 3 : 1) ? 'bg-brand/[0.12] text-brand' : 'text-white/35'}`}>
               {label}
@@ -54,7 +54,7 @@ function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'pr
               <div className="text-[9px] text-white/35 sm:text-[11px]">{labels.workspace}</div>
               <div className="mt-1 text-sm font-extrabold text-white sm:text-base">{labels.project}</div>
             </div>
-            <span className="rounded-lg border border-brand/25 px-2 py-1 text-[8px] font-semibold text-brand sm:text-[10px]">Lifetime</span>
+            <span className="rounded-lg border border-brand/25 px-2 py-1 text-[8px] font-semibold text-brand sm:text-[10px]">{labels.lifetime}</span>
           </div>
           <hr className="rule-soft my-4" />
           <div className="space-y-2.5">
@@ -71,7 +71,7 @@ function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'pr
             ))}
           </div>
           <div className="mt-4 rounded-xl border border-white/[0.07] bg-black/20 p-3 font-mono text-[8px] leading-relaxed text-white/35 sm:text-[10px]">
-            {mode === 'console' ? '> server status' : mode === 'security' ? 'signature = HMAC-SHA256' : 'project / environments / resources'}
+            {mode === 'console' ? labels.consoleLine : mode === 'security' ? labels.securityLine : labels.projectLine}
           </div>
         </div>
       </div>
@@ -103,11 +103,11 @@ export default function HomePage() {
 
               <Reveal delay={160}>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                  <BtnLink href="/pricing" variant="primary" arrow className="h-12 px-6 text-sm">
+                  <BtnLink href="/pricing" variant="primary" arrow className="h-12 px-6 text-sm sm:min-w-[220px]">
                     {t.home.ctaPrimary}
                   </BtnLink>
-                  <BtnLink href="/docs" variant="ghost" className="h-12 px-6 text-sm">
-                    <Terminal className="h-4 w-4" />
+                  <BtnLink href="/docs" variant="ghost" className="h-12 px-6 text-sm sm:min-w-[220px]">
+                    <Terminal aria-hidden="true" className="h-4 w-4" />
                     {t.home.ctaSecondary}
                   </BtnLink>
                 </div>
@@ -136,7 +136,7 @@ export default function HomePage() {
               <div className="card group flex h-full min-h-[230px] flex-col p-6 sm:p-7">
                 <div className="flex items-center justify-between">
                   <span className="section-num">0{i + 1}</span>
-                  {i === 0 ? <KeyRound className="icon-pop h-5 w-5 text-brand" /> : <ServerCog className="icon-pop h-5 w-5 text-brand" />}
+                  {i === 0 ? <KeyRound aria-hidden="true" className="icon-pop h-5 w-5 text-brand" /> : <ServerCog aria-hidden="true" className="icon-pop h-5 w-5 text-brand" />}
                 </div>
                 <div className="mt-auto pt-10">
                   <h3 className="text-[1.05rem] font-extrabold leading-tight text-white sm:text-[1.2rem]">{f.t}</h3>
@@ -160,15 +160,17 @@ export default function HomePage() {
           {t.home.pillars.map((p, i) => (
             <div
               key={p.n}
-              className={`grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-14 ${
+              className={`grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-14 ${
                 i % 2 === 1 ? 'lg:[&>*:first-child]:order-2' : ''
               }`}
             >
               <Reveal>
-                <h3 className="max-w-sm text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
+                <div className="lg:pt-8">
+                  <h3 className="max-w-sm text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
                   {p.t}
-                </h3>
-                <p className="mt-3.5 max-w-sm text-[14px] leading-relaxed text-white/55">{p.d}</p>
+                  </h3>
+                  <p className="mt-3.5 max-w-sm text-[14px] leading-relaxed text-white/55">{p.d}</p>
+                </div>
               </Reveal>
               <Reveal delay={100}>
                 <div>
@@ -189,7 +191,7 @@ export default function HomePage() {
             return (
               <Reveal key={f.t} delay={(i % 4) * 60} className={FEATURE_SPAN2.has(i) ? 'lg:col-span-2' : ''}>
                 <div className="card card-hover h-full p-5">
-                  <Icon className="icon-pop h-5 w-5 text-brand" />
+                  <Icon aria-hidden="true" className="icon-pop h-5 w-5 text-brand" />
                   <h3 className="mt-4 text-[14px] font-semibold text-white">{f.t}</h3>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{f.d}</p>
                 </div>
@@ -204,27 +206,6 @@ export default function HomePage() {
         </Reveal>
       </Section>
 
-      {/* ---------------- FACTS BAND ---------------- */}
-      <section className="relative overflow-hidden py-16 sm:py-20">
-        <Container><hr className="rule mb-16 sm:mb-20" /></Container>
-        <Container>
-          <Reveal className="mb-10 text-center">
-            <h2 className="text-[1.3rem] font-extrabold sm:text-[1.6rem]">
-              <span className="h-grad">{t.home.factsTitle}</span>
-            </h2>
-          </Reveal>
-          <div className="grid grid-cols-2 gap-y-8 sm:grid-cols-4">
-            {t.home.facts.map(([v, l], i) => (
-              <Reveal key={v} delay={i * 60} className="text-center">
-                <div className="font-mono text-[1.6rem] font-bold text-white sm:text-[2rem]">{v}</div>
-                <div className="mt-1.5 text-[12px] text-white/45">{l}</div>
-              </Reveal>
-            ))}
-          </div>
-        </Container>
-        <Container><hr className="rule mt-16 sm:mt-20" /></Container>
-      </section>
-
       {/* ---------------- QUICK START ---------------- */}
       <Section>
         <SectionHeading eyebrow="03" title={t.home.quickstartTitle} sub={t.home.quickstartSub} />
@@ -232,7 +213,7 @@ export default function HomePage() {
           <Reveal>
             <div className="card h-full p-6">
               <div className="flex items-center gap-2 text-[13px] font-medium">
-                <Terminal className="h-4 w-4 text-brand" />
+                <Terminal aria-hidden="true" className="h-4 w-4 text-brand" />
                 {t.home.quickstartCmds}
               </div>
               <div className="mt-4 space-y-2 font-mono text-[12px]">
@@ -253,7 +234,7 @@ export default function HomePage() {
           <Reveal delay={80}>
             <div className="card h-full p-6">
               <div className="flex items-center gap-2 text-[13px] font-medium">
-                <ShieldCheck className="h-4 w-4 text-brand" />
+                <ShieldCheck aria-hidden="true" className="h-4 w-4 text-brand" />
                 {t.home.quickstartBans}
               </div>
               <div className="mt-4 space-y-2 font-mono text-[12px]">
@@ -276,7 +257,7 @@ export default function HomePage() {
           {t.home.ownership.map((o, i) => (
             <Reveal key={o.t} delay={i * 70}>
               <div className="card card-hover h-full p-6">
-                {i === 0 ? <Layers className="icon-pop h-5 w-5 text-brand" /> : <Boxes className="icon-pop h-5 w-5 text-brand" />}
+                {i === 0 ? <Layers aria-hidden="true" className="icon-pop h-5 w-5 text-brand" /> : <Boxes aria-hidden="true" className="icon-pop h-5 w-5 text-brand" />}
                 <h3 className="mt-4 text-[14px] font-semibold text-white">{o.t}</h3>
                 <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{o.d}</p>
               </div>
@@ -292,12 +273,12 @@ export default function HomePage() {
             <h2 className="mx-auto max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl"><span className="h-grad">{t.home.ctaTitle}</span></h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-relaxed text-white/55">{t.home.ctaSub}</p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <BtnLink href="/contact" variant="primary" className="h-12 px-6 text-sm">
+              <BtnLink href="/contact" variant="primary" className="h-12 px-6 text-sm sm:min-w-[190px]">
                 {t.common.contactSupport}
               </BtnLink>
-              <BtnLink href="/auth/register" variant="ghost" className="h-12 px-6 text-sm">
+              <BtnLink href="/auth/register" variant="ghost" className="h-12 px-6 text-sm sm:min-w-[190px]">
                 {t.common.register}
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight aria-hidden="true" className="h-4 w-4" />
               </BtnLink>
             </div>
           </div>

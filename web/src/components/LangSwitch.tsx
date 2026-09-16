@@ -4,21 +4,28 @@ import React from 'react';
 import { useI18n } from '@/lib/i18n';
 
 export default function LangSwitch({ className = '' }: { className?: string }) {
-  const { lang, setLang } = useI18n();
+  const { lang, setLang, t } = useI18n();
   return (
     <div
-      className={`inline-flex items-center rounded-lg border border-white/10 bg-white/[0.03] p-0.5 ${className}`}
+      className={`relative inline-grid h-9 w-[76px] grid-cols-2 items-center rounded-xl border border-white/10 bg-white/[0.03] p-1 ${className}`}
       role="group"
-      aria-label="Language"
+      aria-label={t.common.language}
     >
+      <span
+        aria-hidden="true"
+        className={`pointer-events-none absolute left-1 top-1 h-7 w-[34px] rounded-lg bg-brand shadow-[0_4px_14px_-7px_rgba(255,61,138,0.9)] transition-transform duration-300 ease-[cubic-bezier(.16,1,.3,1)] ${
+          lang === 'en' ? 'translate-x-[34px]' : 'translate-x-0'
+        }`}
+      />
       {(['ru', 'en'] as const).map((l) => (
         <button
           key={l}
           type="button"
           onClick={() => setLang(l)}
           aria-pressed={lang === l}
-          className={`rounded-md px-2 py-1 font-mono text-[11px] font-semibold uppercase transition-colors ${
-            lang === l ? 'bg-brand text-[#0a0a0c]' : 'text-white/45 hover:text-white/80'
+          aria-label={l === 'ru' ? 'Русский' : 'English'}
+          className={`relative z-10 grid h-7 place-items-center rounded-lg font-mono text-[10px] font-semibold uppercase transition-colors duration-200 ${
+            lang === l ? 'text-[#0a0a0c]' : 'text-white/45 hover:text-white/80'
           }`}
         >
           {l}

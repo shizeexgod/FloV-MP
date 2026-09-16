@@ -39,11 +39,11 @@ export function ThemeControls({ showLanguage = true }: { ringOffset?: string; sh
         <div className={label}>{t.common.theme}</div>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <button type="button" onClick={() => setMode('light')} aria-pressed={mode === 'light'} className={seg(mode === 'light')}>
-            <Sun className="h-3.5 w-3.5" />
+            <Sun aria-hidden="true" className="h-3.5 w-3.5" />
             {t.common.themeLight}
           </button>
           <button type="button" onClick={() => setMode('dark')} aria-pressed={mode === 'dark'} className={seg(mode === 'dark')}>
-            <Moon className="h-3.5 w-3.5" />
+            <Moon aria-hidden="true" className="h-3.5 w-3.5" />
             {t.common.themeDark}
           </button>
         </div>
@@ -83,11 +83,11 @@ export default function ThemeMenu({ showLanguage = true }: { showLanguage?: bool
           open ? 'border-white/20 bg-white/[0.08] text-white' : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white'
         }`}
       >
-        <Menu className="h-4 w-4" />
+        <Menu aria-hidden="true" className="h-4 w-4" />
       </button>
 
       <div
-        className={`absolute right-0 top-[calc(100%+0.55rem)] w-64 origin-top-right rounded-2xl border border-white/[0.12] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] transition-all duration-200 ${
+        className={`absolute right-0 top-[calc(100%+0.55rem)] w-64 origin-top-right rounded-2xl border border-white/[0.12] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-200 ${
           open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
         }`}
         style={{ backgroundColor: 'var(--panel)' }}

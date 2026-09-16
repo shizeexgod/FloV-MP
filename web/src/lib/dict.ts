@@ -90,6 +90,11 @@ const ru = {
       runtime: 'Компонент рантайма',
       protection: 'Контур защиты',
       ipBinding: 'Привязка IPv4',
+      lifetime: 'Бессрочно',
+      consoleRows: ['Слой CoreCLR · .NET 8', 'Игровой порт UDP 7788', 'FastDL · HTTP/2'],
+      consoleLine: '> статус сервера',
+      securityLine: 'подпись = HMAC-SHA256',
+      projectLine: 'проект / среды / ресурсы',
     },
 
     flowTitle: 'Начало работы',
@@ -128,14 +133,6 @@ const ru = {
         t: 'Защита от читеров и обмана',
         d: 'Серверный античит, бан по железу и Social Club, анти-VPN и проверка всех игровых сделок на стороне сервера, а не клиента.',
       },
-    ],
-
-    factsTitle: 'Технические параметры платформы',
-    facts: [
-      ['60 Hz', 'тикрейт сетевого рантайма'],
-      ['UDP 7788', 'игровой порт по умолчанию'],
-      ['HMAC-SHA256', 'подпись каждой проверки лицензии'],
-      ['7 дней', 'льготный период без связи с порталом'],
     ],
 
     featuresTitle: 'Что входит в платформу',
@@ -896,6 +893,11 @@ const en: typeof ru = {
       runtime: 'Runtime component',
       protection: 'Security layer',
       ipBinding: 'IPv4 binding',
+      lifetime: 'Lifetime',
+      consoleRows: ['CoreCLR · .NET 8', 'UDP 7788 game port', 'FastDL · HTTP/2'],
+      consoleLine: '> server status',
+      securityLine: 'signature = HMAC-SHA256',
+      projectLine: 'project / environments / resources',
     },
 
     flowTitle: 'Getting started',
@@ -934,14 +936,6 @@ const en: typeof ru = {
         t: 'Protection from cheaters and fraud',
         d: 'Server-side anti-cheat, hardware and Social Club bans, anti-VPN, and validation of every in-game deal on the server rather than the client.',
       },
-    ],
-
-    factsTitle: 'Platform technical specification',
-    facts: [
-      ['60 Hz', 'network runtime tick rate'],
-      ['UDP 7788', 'default game port'],
-      ['HMAC-SHA256', 'signature on every license check'],
-      ['7 days', 'grace period with no portal connection'],
     ],
 
     featuresTitle: 'What the platform includes',
