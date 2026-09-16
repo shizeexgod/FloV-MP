@@ -90,7 +90,7 @@ public sealed class FileLogSink : ILogSink
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[FloV:MP] FileLogSink worker упал: {ex}");
+            CoreConsole.Warning($"[FloV:MP] FileLogSink worker упал: {ex}");
         }
 
         // добить остаток при завершении канала
@@ -117,7 +117,7 @@ public sealed class FileLogSink : ILogSink
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[FloV:MP] лог не записан ({grp.Key}): {ex.Message}");
+                CoreConsole.Warning($"[FloV:MP] лог не записан ({grp.Key}): {ex.Message}");
             }
         }
     }

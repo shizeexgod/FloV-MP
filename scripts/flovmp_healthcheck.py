@@ -243,6 +243,21 @@ def check_hot_path(rep):
         rep.add(PASS if safe else FAIL, "инвентари сбрасываются на остановке",
                 "" if safe else "фоновая запись без Dispose -> потеря данных при рестарте")
 
+    # Вывод Core мимо Alt.Log. В server.log alt:V попадает только то, что
+    # прошло через Alt.Log, а обычный Console.WriteLine из ресурса теряется
+    # целиком. Так терялись ошибки записи аккаунтов, восстановление из журнала,
+    # ошибки сохранения админов и сигнал о переборе токена владельца.
+    raw_console = []
+    for f in (ROOT / "server/src/FloVMP.Core").rglob("*.cs"):
+        if f.name == "CoreConsole.cs" or "obj" in f.parts or "bin" in f.parts:
+            continue
+        for i, line in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            if re.search(r"(?<![\w.])Console\.(Error\.)?Write", line):
+                raw_console.append("{}:{}".format(f.name, i))
+    rep.add(PASS if not raw_console else FAIL, "вывод Core идёт в лог сервера",
+            "" if not raw_console else
+            "мимо Alt.Log (не попадёт в server.log): " + ", ".join(raw_console[:5]))
+
     # Запросы соседей делаются для каждого игрока каждый тик: перегрузка с
     # буфером убирает десятки мегабайт мусора и паузы сборщика в тике.
     grid = ROOT / "server/src/FloVMP.Core/Spatial/SpatialHashGrid.cs"

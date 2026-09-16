@@ -70,7 +70,7 @@ public sealed class JsonBanStore : IBanStore, IDisposable
             catch (Exception ex)
             {
                 _dirty = true; // не теряем: повторим на следующем тике таймера
-                Console.Error.WriteLine($"[FloV:MP] bans.json: ошибка записи: {ex.Message}");
+                CoreConsole.Warning($"[FloV:MP] bans.json: ошибка записи: {ex.Message}");
             }
         }
     }
@@ -97,7 +97,7 @@ public sealed class JsonBanStore : IBanStore, IDisposable
             // Битый файл банов не должен мешать серверу подняться, но и тихо
             // разбаниваться нельзя: файл уходит в карантин с явным сообщением.
             var quarantined = StoreFiles.QuarantineCorrupt(_path);
-            Console.Error.WriteLine(
+            CoreConsole.Warning(
                 $"[FloV:MP] ВНИМАНИЕ: bans.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}. " +
                 "Действующие блокировки сброшены — проверьте список банов.");
             _records.Clear();

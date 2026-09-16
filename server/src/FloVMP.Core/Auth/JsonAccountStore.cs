@@ -59,7 +59,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         catch (Exception ex)
         {
             _dirty = true; // не теряем изменения — повторим на следующем тике
-            Console.Error.WriteLine($"[FloV:MP] accounts.json: ошибка записи: {ex.Message}");
+            CoreConsole.Warning($"[FloV:MP] accounts.json: ошибка записи: {ex.Message}");
         }
     }
 
@@ -165,7 +165,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         {
             // битый файл — не роняем сервер: отодвигаем в карантин, стартуем пустыми
             var quarantined = StoreFiles.QuarantineCorrupt(_path);
-            Console.Error.WriteLine(
+            CoreConsole.Warning(
                 $"[FloV:MP] accounts.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}");
             _byName.Clear();
             _bankToName.Clear();
@@ -210,12 +210,12 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: ошибка чтения: {ex.Message}");
+            CoreConsole.Warning($"[FloV:MP] accounts.json.journal: ошибка чтения: {ex.Message}");
         }
 
         if (restored > 0)
         {
-            Console.WriteLine($"[FloV:MP] Восстановлено из журнала регистраций: {restored}");
+            CoreConsole.Write($"[FloV:MP] Восстановлено из журнала регистраций: {restored}");
             _dirty = true; // вернём их в основной файл при первом же сбросе
         }
     }
@@ -233,7 +233,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         {
             // Журнал — страховка, а не источник истины: учётка уже в памяти и
             // уйдёт на диск фоновым сбросом. Регистрацию из-за этого не рушим.
-            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: ошибка записи: {ex.Message}");
+            CoreConsole.Warning($"[FloV:MP] accounts.json.journal: ошибка записи: {ex.Message}");
         }
     }
 
@@ -269,7 +269,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         {
             // Не страшно: повторное чтение журнала добавит только недостающие
             // учётки и ничего не перезапишет.
-            Console.Error.WriteLine($"[FloV:MP] accounts.json.journal: не удалось очистить: {ex.Message}");
+            CoreConsole.Warning($"[FloV:MP] accounts.json.journal: не удалось очистить: {ex.Message}");
         }
     }
 
