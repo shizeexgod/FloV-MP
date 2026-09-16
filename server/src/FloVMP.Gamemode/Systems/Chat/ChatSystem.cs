@@ -288,6 +288,10 @@ public sealed class ChatSystem
         }
 
         var msg = text.StartsWith("//", StringComparison.Ordinal) ? text[1..] : text;
+        // Цвет в чате — привилегия системы: игрок не должен уметь покрасить
+        // своё сообщение под системное предупреждение.
+        msg = ChatSanitizer.StripColorCodes(msg).Trim();
+        if (msg.Length == 0) return;
         var senderPos = player.Position;
         var senderDim = player.Dimension;
         foreach (var p in Alt.GetAllPlayers())
@@ -326,7 +330,7 @@ public sealed class ChatSystem
 
             case "me":
                 if (args.Length == 0) { SendSystem(player, "Использование: /me <действие>"); return; }
-                var action = string.Join(' ', args);
+                var action = ChatSanitizer.StripColorCodes(string.Join(' ', args));
                 var mePos = player.Position;
                 var meDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
@@ -336,7 +340,7 @@ public sealed class ChatSystem
 
             case "b":
                 if (args.Length == 0) { SendSystem(player, "Использование: /b <OOC сообщение>"); return; }
-                var oocMsg = string.Join(' ', args);
+                var oocMsg = ChatSanitizer.StripColorCodes(string.Join(' ', args));
                 var bPos = player.Position;
                 var bDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
@@ -347,7 +351,7 @@ public sealed class ChatSystem
             case "s":
             case "shout":
                 if (args.Length == 0) { SendSystem(player, "Использование: /s <сообщение>"); return; }
-                var sMsg = string.Join(' ', args);
+                var sMsg = ChatSanitizer.StripColorCodes(string.Join(' ', args));
                 var sPos = player.Position;
                 var sDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
@@ -367,7 +371,10 @@ public sealed class ChatSystem
                     SendSystem(player, "Игрок слишком далеко, чтобы шептать ему на ухо (максимум 3.5м).");
                     return;
                 }
-                var wMsg = string.Join(' ', args[1..]);
+                // Шёпот отправляется СИСТЕМНЫМ стилем (SendSystem), а текст игрока
+                // стоит внутри. С цветовыми кодами это самая убедительная подделка
+                // системного сообщения из всех — цвет из текста игрока убираем.
+                var wMsg = ChatSanitizer.StripColorCodes(string.Join(' ', args[1..]));
                 SendSystem(player, $"[Шёпот для {wTargetAcc.Username}] {wMsg}");
                 SendSystem(wTarget, $"[{acc.Username} шепчет вам на ухо] {wMsg}");
                 foreach (var p in Alt.GetAllPlayers())
@@ -556,7 +563,7 @@ public sealed class ChatSystem
 
             case "do":
                 if (args.Length == 0) { SendSystem(player, "Использование: /do <описание>"); return; }
-                var doAction = string.Join(' ', args);
+                var doAction = ChatSanitizer.StripColorCodes(string.Join(' ', args));
                 var doPos = player.Position;
                 var doDim = player.Dimension;
                 foreach (var p in Alt.GetAllPlayers())
@@ -566,7 +573,7 @@ public sealed class ChatSystem
 
             case "try":
                 if (args.Length == 0) { SendSystem(player, "Использование: /try <действие>"); return; }
-                var tryAction = string.Join(' ', args);
+                var tryAction = ChatSanitizer.StripColorCodes(string.Join(' ', args)).Replace("|", "/");
                 var isSuccess = Random.Shared.Next(0, 2) == 1;
                 var outcomeTag = isSuccess ? "[Удачно]" : "[Неудачно]";
                 var tryPos = player.Position;
@@ -578,7 +585,7 @@ public sealed class ChatSystem
 
             case "todo":
                 if (args.Length == 0) { SendSystem(player, "Использование: /todo <фраза*действие>"); return; }
-                var rawTodo = string.Join(' ', args);
+                var rawTodo = ChatSanitizer.StripColorCodes(string.Join(' ', args));
                 var parts = rawTodo.Split('*', 2);
                 var speech = parts[0].Trim();
                 var actionPart = parts.Length > 1 ? parts[1].Trim() : "";

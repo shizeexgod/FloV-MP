@@ -39,6 +39,60 @@ public class StarterResource : Resource
     // которого нарушитель заходит обратно через пять секунд. Для продукта,
     // который ставят владельцам серверов, отсутствие бана — не «упрощение»,
     // а нерабочая модерация.
+    // --- Защита чата ---------------------------------------------------------
+    // Лимит совпадает с RP-режимом (ChatSystem): 4 сообщения за 3 секунды.
+    // В базовой платформе его не было вовсе — один игрок со скриптом мог
+    // заваливать чат без предела, а каждое сообщение уходит ВСЕМ игрокам, то
+    // есть это был DoS одним подключением.
+    private const int ChatMaxPerWindow = 4;
+    private static readonly TimeSpan ChatWindow = TimeSpan.FromSeconds(3);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, (int Count, DateTime Start)> _chatRate = new();
+
+    // Радиусы отыгровок — те же, что в RP-режиме, чтобы поведение не
+    // расходилось между режимами. /me и /do — действие персонажа, их видят
+    // рядом стоящие; крик слышно дальше.
+    private const float RpActionRadius = 25.0f;
+    private const float ShoutRadius = 55.0f;
+
+    /// <summary>Не превысил ли игрок лимит сообщений. Возвращает true, если превысил.</summary>
+    private bool ChatRateLimited(IPlayer player)
+    {
+        var now = DateTime.UtcNow;
+        var window = _chatRate.AddOrUpdate(player.Id,
+            _ => (1, now),
+            (_, cur) => now - cur.Start > ChatWindow ? (1, now) : (cur.Count + 1, cur.Start));
+        return window.Count > ChatMaxPerWindow;
+    }
+
+    /// <summary>Отправить сообщение тем, кто рядом (в том же измерении).</summary>
+    private void SendNearby(IPlayer origin, float radius, string message, string kind, string author)
+    {
+        var pos = origin.Position;
+        var dim = origin.Dimension;
+        var radiusSq = radius * radius;
+
+        foreach (var p in Alt.GetAllPlayers())
+        {
+            if (!p.Exists || p.Dimension != dim) continue;
+            var dx = p.Position.X - pos.X;
+            var dy = p.Position.Y - pos.Y;
+            var dz = p.Position.Z - pos.Z;
+            if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
+            p.Emit("flovmp:chat:msg", kind, author, message);
+        }
+    }
+
+    /// <summary>
+    /// Типы погоды GTA V, которые понимает нативная функция клиента.
+    /// Команда /weather рассылает погоду всем игрокам, поэтому принимается
+    /// только значение из этого списка.
+    /// </summary>
+    private static readonly HashSet<string> ValidWeatherTypes = new(StringComparer.Ordinal)
+    {
+        "EXTRASUNNY", "CLEAR", "NEUTRAL", "SMOG", "FOGGY", "OVERCAST", "CLOUDS",
+        "CLEARING", "RAIN", "THUNDER", "SNOW", "BLIZZARD", "SNOWLIGHT", "XMAS", "HALLOWEEN",
+    };
+
     /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _clientReady = new();
 
@@ -697,6 +751,7 @@ public class StarterResource : Resource
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         _clientReady.TryRemove(player.Id, out _);
+        _chatRate.TryRemove(player.Id, out _);
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
@@ -753,13 +808,26 @@ public class StarterResource : Resource
 
     private void OnChatMessage(IPlayer player, string message)
     {
+        if (player == null || !player.Exists) return;
         if (string.IsNullOrWhiteSpace(message)) return;
 
-        // Ограничение длины сообщения и удаление управляющих символов
+        // Лимит проверяется ДО всего остального, в том числе до команд:
+        // заваливать сервер можно и командами, а не только текстом.
+        if (ChatRateLimited(player))
+        {
+            SendChatMessage(player, "{fde047}Не так быстро.");
+            return;
+        }
+
         if (message.Length > 256)
             message = message[..256];
-        message = message.Trim();
-        if (message.Length == 0) return;
+
+        // Раньше здесь стоял комментарий «удаление управляющих символов», но сам
+        // код их не удалял — только обрезал длину. Очистка общая с RP-режимом
+        // (FloVMP.Core.Chat.ChatSanitizer) и покрыта тестами.
+        var cleaned = FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(message);
+        if (cleaned is null) return;
+        message = cleaned;
 
         if (message.StartsWith("/"))
         {
@@ -807,7 +875,10 @@ public class StarterResource : Resource
                     return;
                 }
                 var meAction = string.Join(' ', parts.Skip(1));
-                BroadcastChatMessage(meAction, "me", player.Name);
+                // Действие персонажа видят рядом стоящие. Раньше /me уходило
+                // всему серверу: и по смыслу RP неверно, и при 2000 игроках
+                // каждое /me превращалось в 2000 отправок.
+                SendNearby(player, RpActionRadius, meAction, "me", player.Name);
                 break;
 
             case "do":
@@ -817,7 +888,7 @@ public class StarterResource : Resource
                     return;
                 }
                 var doAction = string.Join(' ', parts.Skip(1));
-                BroadcastChatMessage(doAction, "do", player.Name);
+                SendNearby(player, RpActionRadius, doAction, "do", player.Name);
                 break;
 
             case "b":
@@ -839,7 +910,7 @@ public class StarterResource : Resource
                     return;
                 }
                 var shoutText = string.Join(' ', parts.Skip(1));
-                BroadcastChatMessage(shoutText, "shout", $"[{player.Id}] {player.Name}");
+                SendNearby(player, ShoutRadius, shoutText, "shout", $"[{player.Id}] {player.Name}");
                 break;
 
             case "w":
@@ -1382,8 +1453,16 @@ public class StarterResource : Resource
                     return;
                 }
                 var speedMult = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sm) ? sm : 1.0f;
-                player.Emit("starter:setSpeed", speedMult);
-                SendChatMessage(player, $"{{38bdf8}}Множитель скорости бега: {speedMult:F2}");
+                // GTA принимает множитель бега только в пределах 1.0–1.49; клиент
+                // и так его зажимает. Но сервер раньше отвечал админу исходным
+                // числом — «множитель: 1000.00» при реально применённом 1.49, —
+                // то есть сообщал неправду о том, что произошло.
+                if (float.IsNaN(speedMult) || float.IsInfinity(speedMult)) speedMult = 1.0f;
+                var appliedSpeed = Math.Clamp(speedMult, 1.0f, 1.49f);
+                player.Emit("starter:setSpeed", appliedSpeed);
+                SendChatMessage(player, Math.Abs(appliedSpeed - speedMult) > 0.001f
+                    ? $"{{fde047}}Множитель скорости бега: {appliedSpeed:F2} (игра допускает только 1.00–1.49)"
+                    : $"{{38bdf8}}Множитель скорости бега: {appliedSpeed:F2}");
                 break;
 
             case "weather":
@@ -1395,6 +1474,17 @@ public class StarterResource : Resource
                 if (parts.Length > 1)
                 {
                     var weatherType = parts[1].ToUpperInvariant();
+                    // Погода рассылается ВСЕМ игрокам и объявляется в общий чат,
+                    // поэтому проверяется по списку. Раньше любая строка уходила
+                    // каждому клиенту в нативную функцию: одна опечатка админа
+                    // ломала погоду всему серверу, а фигурные скобки во вводе
+                    // раскрашивали сообщение в общем чате.
+                    if (!ValidWeatherTypes.Contains(weatherType))
+                    {
+                        SendChatMessage(player, "{ef4444}Неизвестная погода. Доступно: " +
+                                                string.Join(", ", ValidWeatherTypes));
+                        return;
+                    }
                     Alt.EmitAllClients("starter:setWeather", weatherType);
                     BroadcastChatMessage($"{{38bdf8}}[Погода] Администратор установил погоду: {weatherType}");
                 }
@@ -1413,6 +1503,13 @@ public class StarterResource : Resource
                 if (parts.Length > 1 && int.TryParse(parts[1], out var hour))
                 {
                     var minute = parts.Length > 2 && int.TryParse(parts[2], out var m) ? m : 0;
+                    // Время рассылается всем игрокам. Без проверки «/time 99 99»
+                    // уходило каждому клиенту и объявлялось в общий чат как 99:99.
+                    if (hour < 0 || hour > 23 || minute < 0 || minute > 59)
+                    {
+                        SendChatMessage(player, "{ef4444}Час должен быть от 0 до 23, минута — от 0 до 59.");
+                        return;
+                    }
                     Alt.EmitAllClients("starter:setTime", hour, minute);
                     BroadcastChatMessage($"{{38bdf8}}[Время] Администратор установил время: {hour:D2}:{minute:D2}");
                 }
