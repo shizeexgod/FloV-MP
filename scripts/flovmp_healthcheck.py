@@ -292,6 +292,81 @@ def check_bans(rep):
                 "" if enforced else "блокировка записывается, но вход не проверяется - бан не работает")
 
 
+# ------------- 3f. Контракт событий клиент <-> сервер -------------
+
+# События, которые сервер шлёт, но клиент намеренно не обрабатывает. Каждое
+# обязано иметь причину: иначе это та самая молчаливая дыра.
+KNOWN_UNHANDLED_SERVER_EVENTS = {
+    # Инвентарь полного RP-режима: интерфейса инвентаря в клиенте пока нет.
+    "flovmp:inv:sync": "интерфейс инвентаря ещё не сделан (RP-режим)",
+}
+
+
+def check_event_contract(rep):
+    """
+    Сверка «что шлёт одна сторона» против «что слушает другая».
+
+    Этот класс ошибок дал пять находок подряд и все — молчаливые:
+      * flovmp:auth:show — сервер показывал форму входа, клиент её не слушал,
+        и в RP-режиме игрок висел в чёрном экране навсегда;
+      * flovmp:hud:init / hud:tick — здоровье и деньги уходили в никуда;
+      * flovmp:inv:notice — отказы инвентаря не показывались;
+      * flovmp:inv:sync — инвентарь не отображается.
+    Ни одна из них не даёт ошибки ни в логе сервера, ни в логе клиента.
+    """
+    section("3f. Контракт событий клиент <-> сервер")
+
+    client_dir = ROOT / "client/resources/flovmp-client/client"
+    server_dir = ROOT / "server/src"
+    if not client_dir.is_dir() or not server_dir.is_dir():
+        rep.add(SKIP, "контракт событий", "каталоги клиента или сервера не найдены")
+        return
+
+    def scan(root, exts, pattern):
+        found = set()
+        for f in root.rglob("*"):
+            if f.suffix not in exts or "node_modules" in f.parts or "obj" in f.parts:
+                continue
+            try:
+                found.update(re.findall(pattern, f.read_text(encoding="utf-8", errors="ignore")))
+            except OSError:
+                continue
+        return found
+
+    server_emits = scan(server_dir, {".cs"}, r'\.Emit\(\s*"([^"]+)"')
+    server_listens = scan(server_dir, {".cs"}, r'OnClient(?:<[^>]*>)?\(\s*"([^"]+)"')
+    client_emits = scan(client_dir, {".js"}, r"emitServer\(\s*'([^']+)'")
+    client_listens = scan(client_dir, {".js"}, r"onServer\(\s*'([^']+)'")
+
+    rep.add(PASS, "событий найдено",
+            "сервер шлёт {}, слушает {}; клиент шлёт {}, слушает {}".format(
+                len(server_emits), len(server_listens), len(client_emits), len(client_listens)))
+
+    # Клиент шлёт, сервер не слушает: действие игрока уходит в пустоту.
+    lost_actions = sorted(client_emits - server_listens)
+    rep.add(PASS if not lost_actions else FAIL,
+            "каждое действие клиента обрабатывается сервером",
+            "" if not lost_actions else "уходят в пустоту: " + ", ".join(lost_actions))
+
+    # Сервер шлёт, клиент не слушает: данные не доходят до игрока.
+    unheard = sorted(server_emits - client_listens)
+    unexplained = [e for e in unheard if e not in KNOWN_UNHANDLED_SERVER_EVENTS]
+    known = [e for e in unheard if e in KNOWN_UNHANDLED_SERVER_EVENTS]
+
+    rep.add(PASS if not unexplained else FAIL,
+            "каждое событие сервера доходит до клиента",
+            "" if not unexplained else "клиент не слушает: " + ", ".join(unexplained))
+
+    for e in known:
+        rep.add(WARN, "известная недоделка: " + e, KNOWN_UNHANDLED_SERVER_EVENTS[e])
+
+    # Исключение, которое больше не нужно, — тоже ошибка: список должен
+    # отражать реальность, а не прошлые долги.
+    stale = sorted(k for k in KNOWN_UNHANDLED_SERVER_EVENTS if k not in unheard)
+    rep.add(PASS if not stale else WARN, "список известных недоделок актуален",
+            "" if not stale else "уже обрабатываются, убрать из списка: " + ", ".join(stale))
+
+
 # ------------- 3e. Порядок ключей в server.toml (тихий убийца) -------------
 
 def check_server_toml_order(rep):
@@ -639,6 +714,7 @@ def main():
     check_bans(rep)
     check_voice(rep)
     check_server_toml_order(rep)
+    check_event_contract(rep)
     check_migrations(rep)
     check_version_consistency(rep)
 
