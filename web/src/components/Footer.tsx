@@ -127,8 +127,6 @@ export default function Footer() {
         <hr className="rule-soft mt-12" />
         <div className="mt-8 flex flex-col gap-3 text-[12px] text-white/40 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <span>© 2026 FloV:MP. {t.common.allRightsReserved}</span>
-          <span>{lv(LEGAL.ownerName)}</span>
-          <span>{t.footer.taxIdLabel} {lv(LEGAL.inn)}</span>
           <span className="hidden lg:inline">{t.footer.descriptor}</span>
           {LEGAL.telegramUrl && (
             <a

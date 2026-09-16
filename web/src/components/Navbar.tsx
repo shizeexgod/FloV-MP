@@ -66,7 +66,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-[60] px-3 pt-3 sm:px-4">
       <nav
-        className={`mx-auto flex h-14 max-w-6xl items-center gap-3 rounded-2xl border px-3 backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300 sm:px-4 ${
+        className={`mx-auto flex h-14 max-w-6xl items-center gap-3 rounded-2xl border px-3 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 sm:px-4 ${
           scrolled
             ? 'border-white/[0.12] bg-[#131316]/90 shadow-[0_16px_50px_-20px_rgba(0,0,0,0.7)]'
             : 'border-white/[0.08] bg-[#131316]/70 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.6)]'
@@ -83,13 +83,13 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="ml-3 hidden items-center gap-0.5 lg:flex">
+        <div className="ml-3 hidden items-center gap-1 lg:flex">
           {LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               prefetch
-              className={`relative whitespace-nowrap rounded-xl px-3 py-2 text-[13px] font-semibold transition-colors hover:bg-white/[0.06] hover:text-white ${
+              className={`nav-link relative whitespace-nowrap px-3 py-2 text-[13px] font-semibold ${
                 isActive(l.href) ? 'text-white' : 'text-white/55'
               }`}
             >
@@ -144,7 +144,7 @@ export default function Navbar() {
       {/* Mobile sheet */}
       <div
         id="mobile-navigation"
-        className={`mx-auto mt-2 max-w-6xl overflow-hidden rounded-2xl border border-white/[0.1] backdrop-blur-xl transition-[max-height,opacity] duration-300 md:hidden ${
+        className={`mx-auto mt-2 max-w-6xl overflow-hidden rounded-2xl border border-white/[0.1] backdrop-blur-md transition-[max-height,opacity] duration-300 md:hidden ${
           open ? 'max-h-[720px] opacity-100' : 'max-h-0 border-transparent opacity-0'
         }`}
         style={{ backgroundColor: 'color-mix(in srgb, var(--panel) 96%, transparent)' }}
@@ -155,7 +155,7 @@ export default function Navbar() {
               key={l.href}
               href={l.href}
               prefetch
-              className={`block rounded-xl px-3 py-3 text-[15px] font-semibold transition-colors hover:bg-white/5 hover:text-white ${
+              className={`nav-link block px-3 py-3 text-[15px] font-semibold ${
                 isActive(l.href) ? 'text-brand' : 'text-white/70'
               }`}
             >

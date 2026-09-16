@@ -44,7 +44,7 @@ const ru = {
 
   footer: {
     tagline:
-      'Независимый мультиплеерный движок нового поколения для GTA V и SaaS-платформа управления игровыми проектами.',
+      'Независимый мультиплеер для GTA V: собственный движок, лаунчер и инструменты управления игровым проектом.',
     colContacts: 'Контакты',
     colDocs: 'Документы',
     colProduct: 'Продукт',
@@ -53,7 +53,7 @@ const ru = {
     hoursSupportPrefix: 'Поддержка: ',
     supportHours: 'Пн–Пт, 10:00–19:00 (МСК)',
     taxIdLabel: 'ИНН',
-    descriptor: 'Автономный движок и SaaS-платформа для GTA V проектов',
+    descriptor: 'Свой мультиплеер и управление GTA V проектом в одном месте',
     links: {
       features: 'Возможности',
       pricing: 'Лицензия',
@@ -847,7 +847,7 @@ const en: typeof ru = {
 
   footer: {
     tagline:
-      'Next-generation independent multiplayer engine for GTA V and a SaaS platform for managing game projects.',
+      'Independent GTA V multiplayer with its own engine, launcher, and project management tools.',
     colContacts: 'Contacts',
     colDocs: 'Documents',
     colProduct: 'Product',
@@ -856,7 +856,7 @@ const en: typeof ru = {
     hoursSupportPrefix: 'Support: ',
     supportHours: 'Mon–Fri, 10:00–19:00 (MSK)',
     taxIdLabel: 'Tax ID',
-    descriptor: 'Autonomous engine and SaaS platform for GTA V projects',
+    descriptor: 'Multiplayer and GTA V project management in one place',
     links: {
       features: 'Features',
       pricing: 'License',

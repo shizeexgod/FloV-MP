@@ -21,8 +21,6 @@ import { BtnLink, Container, Reveal, Section, SectionHeading } from '@/component
 
 // Порядок соответствует t.home.features
 const FEATURE_ICONS = [Gauge, Boxes, Mic, ShieldCheck, ScrollText, Cloud, Rocket, Plug];
-// idx карточек, растянутых на 2 колонки в bento-сетке (lg+)
-const FEATURE_SPAN2 = new Set([0, 5]);
 
 function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'projects' | 'console' | 'security' }) {
   const rows: string[] = mode === 'projects'
@@ -160,16 +158,16 @@ export default function HomePage() {
           {t.home.pillars.map((p, i) => (
             <div
               key={p.n}
-              className={`grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-14 ${
+              className={`grid grid-cols-1 items-center gap-8 lg:grid-cols-2 lg:gap-14 ${
                 i % 2 === 1 ? 'lg:[&>*:first-child]:order-2' : ''
               }`}
             >
               <Reveal>
-                <div className="lg:pt-8">
-                  <h3 className="max-w-sm text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
-                  {p.t}
+                <div className="mx-auto w-full max-w-[430px]">
+                  <h3 className="text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
+                    {p.t}
                   </h3>
-                  <p className="mt-3.5 max-w-sm text-[14px] leading-relaxed text-white/55">{p.d}</p>
+                  <p className="mt-3.5 text-[14px] leading-relaxed text-white/55">{p.d}</p>
                 </div>
               </Reveal>
               <Reveal delay={100}>
@@ -189,8 +187,8 @@ export default function HomePage() {
           {t.home.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
             return (
-              <Reveal key={f.t} delay={(i % 4) * 60} className={FEATURE_SPAN2.has(i) ? 'lg:col-span-2' : ''}>
-                <div className="card card-hover h-full p-5">
+              <Reveal key={f.t} delay={(i % 4) * 60} className="h-full">
+                <div className="card card-hover flex h-full min-h-[210px] flex-col p-5">
                   <Icon aria-hidden="true" className="icon-pop h-5 w-5 text-brand" />
                   <h3 className="mt-4 text-[14px] font-semibold text-white">{f.t}</h3>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/50">{f.d}</p>

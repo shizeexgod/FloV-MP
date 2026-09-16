@@ -78,7 +78,7 @@
   * { border-color: var(--line); }
 
   html {
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -223,6 +223,17 @@
     transform-origin: left center;
   }
   .hover-text:hover { transform: scale(1.035); }
+
+  /* Навигация реагирует типографикой, без фоновых плашек. */
+  .nav-link {
+    transform-origin: center;
+    transition: color 0.18s ease, transform 0.2s var(--ease), text-shadow 0.2s ease;
+  }
+  .nav-link:hover {
+    color: #fff;
+    transform: scale(1.045);
+    text-shadow: 0 0 18px rgba(255, 255, 255, 0.16);
+  }
 
   .card-edge {
     position: relative;

@@ -1,6 +1,6 @@
 /**
  * FloV:MP Discord Bot SDK & Integration Helper
- * Allows Discord bots to interact directly with FloV:MP servers and SaaS control plane.
+ * Allows Discord bots to interact directly with FloV:MP servers and the web control plane.
  */
 
 export interface FlovBotConfig {

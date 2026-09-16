@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "project": {
+    "name": "flovmp-portal",
+    "productType": "GTA V multiplayer platform",
+    "stack": [
+      "nextjs",
+      "react",
+      "shadcn",
+      "tailwind-v3"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/app/globals.css"
+    ],
+    "components": [],
+    "assets": [],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "dark",
+    "colors": {},
+    "typography": {
+      "--text": {
+        "value": "#16171d",
+        "source": "src/app/globals.css"
+      },
+      "--text-dim": {
+        "value": "#565a68",
+        "source": "src/app/globals.css"
+      }
+    },
+    "spacing": {},
+    "radius": {},
+    "shadows": {},
+    "motion": {
+      "--ease": {
+        "value": "cubic-bezier(.16, 1, .3, 1)",
+        "source": "src/app/globals.css"
+      },
+      "--ease-back": {
+        "value": "cubic-bezier(.34, 1.56, .64, 1)",
+        "source": "src/app/globals.css"
+      }
+    },
+    "density": "comfortable"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [
+      "Use the existing pink FloV:MP accent and dark tokens",
+      "Use Lucide icons",
+      "Keep motion subtle and honor prefers-reduced-motion",
+      "Keep Russian and English content fully separated"
+    ],
+    "avoid": [
+      "SaaS wording in public product copy",
+      "Gaming-clan and cyberpunk visual clichés",
+      "Decorative fake metrics",
+      "Background-filled hover states for primary navigation links"
+    ]
+  },
+  "decisions": [
+    {
+      "date": "2026-09-16",
+      "decision": "Public positioning focuses on an independent GTA V multiplayer platform, not SaaS terminology. Header navigation uses subtle typographic scale and contrast on hover without background fills. Feature grids use complete equal-width rows without empty bento cells."
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "design.colorMode:light",
+      "source": "src/app/globals.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/app/globals.css"
+    },
+    {
+      "fact": "project.stack:nextjs",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v3",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-16T12:02:25.265Z"
+}

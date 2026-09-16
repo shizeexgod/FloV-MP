@@ -8,18 +8,18 @@ import Footer from '@/components/Footer';
 export const metadata: Metadata = {
   metadataBase: new URL('https://flovmp.ru'),
   title: {
-    default: 'FloV:MP — Автономный мультиплеерный движок и SaaS-платформа для GTA V',
+    default: 'FloV:MP — Автономный мультиплеер для GTA V',
     template: '%s — FloV:MP',
   },
   description:
-    'SaaS-платформа и автономный C# .NET 8 движок мультиплеера для GTA V. Встроенный 3D Voice, синхронизация NPC и трафика, FastDL CDN, криптографическая верификация лицензий и архитектура под 1500+ игроков без зависимости от Take-Two, RAGE:MP и alt:V backend.',
+    'Автономный C# .NET 8 движок мультиплеера для GTA V с собственным лаунчером и веб-панелью. Встроенный 3D Voice, синхронизация NPC и трафика, FastDL CDN и криптографическая верификация лицензий.',
   keywords: [
     'FloV:MP',
     'мультиплеер GTA V',
     'альтернатива alt:V',
     'альтернатива RAGE:MP',
     'RP сервер',
-    'SaaS движок',
+    'движок GTA V',
     'FastDL CDN',
   ],
   openGraph: {
