@@ -72,6 +72,11 @@ public class AdminBootstrapManager
     // SocialClubId, а память — быстрый кэш для проверки при входе игрока.
     private IAdminStore? _store;
 
+    // Владелец из FLOVMP_OWNER_SC. Задан окружением сервера, поэтому действует
+    // всегда: сверка с базой не должна отбирать у него права, даже если в
+    // таблице admins его нет (установщик выдаёт права именно так).
+    private string? _envOwnerSc;
+
     /// <summary>Подключено ли хранилище прав в базе.</summary>
     public bool HasStore { get { lock (_lock) return _store != null; } }
 
@@ -174,6 +179,9 @@ public class AdminBootstrapManager
             }
 
             var envOwnerSc = Environment.GetEnvironmentVariable("FLOVMP_OWNER_SC");
+            _envOwnerSc = !string.IsNullOrWhiteSpace(envOwnerSc) && IsSocialClubKey(envOwnerSc.Trim())
+                ? envOwnerSc.Trim()
+                : null;
             if (!string.IsNullOrWhiteSpace(envOwnerSc))
             {
                 _config.Admins[envOwnerSc.Trim()] = 8;
@@ -328,6 +336,12 @@ public class AdminBootstrapManager
                 _config.Admins[r.SocialClub] = Math.Clamp(r.Level, 1, 8);
                 if ((r.IsFounder || r.Level == 8) && !_config.Founders.Contains(r.SocialClub))
                     _config.Founders.Add(r.SocialClub);
+            }
+
+            if (_envOwnerSc != null)
+            {
+                _config.Admins[_envOwnerSc] = 8;
+                if (!_config.Founders.Contains(_envOwnerSc)) _config.Founders.Add(_envOwnerSc);
             }
 
             // Появился хотя бы один администратор — авто-выдача первому

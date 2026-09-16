@@ -11,6 +11,9 @@ namespace FloVMP.Core.Tests;
 /// должно отобрать права у существующих администраторов. Недоступная база не
 /// должна отобрать права ни у кого.
 /// </summary>
+// Одна коллекция со всеми тестами, трогающими FLOVMP_OWNER_SC / FLOVMP_SETUP_TOKEN:
+// переменные окружения общие на процесс, параллельный запуск давал бы гонку.
+[Collection("AdminEnvironment")]
 public sealed class AdminStoreTests : IDisposable
 {
     private readonly string _dir;
@@ -241,6 +244,29 @@ public sealed class AdminStoreTests : IDisposable
         mgr.AttachStore(store);
 
         Assert.Equal(0, mgr.GetAssignedRank(0UL, "Admin"));
+    }
+
+    [Fact]
+    public void OwnerFromEnvironment_SurvivesDatabaseRefresh()
+    {
+        // Установщик выдаёт владельца через FLOVMP_OWNER_SC. Фоновая сверка с
+        // базой, где владельца нет, не должна отбирать у него права.
+        Environment.SetEnvironmentVariable("FLOVMP_OWNER_SC", "505050");
+        try
+        {
+            var store = new FakeStore();
+            store.Rows["606060"] = (5, false);
+            var mgr = NewManager();
+            mgr.AttachStore(store);
+            mgr.RefreshFromStore();
+
+            Assert.Equal(8, mgr.GetAssignedRank(505050UL, "Owner"));
+            Assert.Equal(5, mgr.GetAssignedRank(606060UL, "Admin"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FLOVMP_OWNER_SC", null);
+        }
     }
 
     [Fact]

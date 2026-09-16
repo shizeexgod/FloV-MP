@@ -4,6 +4,7 @@ using Xunit;
 
 namespace FloVMP.Core.Tests;
 
+[Collection("AdminEnvironment")]
 public class AdminTests
 {
     [Theory]

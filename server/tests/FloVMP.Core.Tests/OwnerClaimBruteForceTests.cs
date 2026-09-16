@@ -11,6 +11,7 @@ namespace FloVMP.Core.Tests;
 /// перебор открыто предлагается любому посетителю. Раньше токен был 32-битным
 /// и ни одной блокировки после неудач не было.
 /// </summary>
+[Collection("AdminEnvironment")]
 public sealed class OwnerClaimBruteForceTests : IDisposable
 {
     private readonly string _dir;
