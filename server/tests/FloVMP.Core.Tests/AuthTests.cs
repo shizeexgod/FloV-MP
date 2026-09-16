@@ -50,6 +50,34 @@ public sealed class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public void Login_with_oversized_password_is_rejected_and_counts_as_failure()
+    {
+        // Пароль длиннее допустимого заведомо не регистрировался — отбрасываем
+        // его до PBKDF2. Но отказ обязан считаться неудачей: иначе мусорные
+        // пароли были бы способом перебирать мимо ограничения частоты.
+        Assert.True(_svc.Register("Player_9", "secret6").Ok);
+
+        var huge = new string('x', 5000);
+        var r1 = _svc.Login("Player_9", huge, "ip:9");
+        Assert.False(r1.Ok);
+        Assert.Equal(AuthOutcome.WrongPassword, r1.Outcome);
+
+        _svc.Login("Player_9", huge, "ip:9");
+        _svc.Login("Player_9", huge, "ip:9");
+
+        // maxAttempts = 3 в этом наборе тестов: четвёртая попытка — ограничение.
+        var blocked = _svc.Login("Player_9", "secret6", "ip:9");
+        Assert.Equal(AuthOutcome.RateLimited, blocked.Outcome);
+    }
+
+    [Fact]
+    public void Login_with_too_short_password_is_rejected()
+    {
+        Assert.True(_svc.Register("Player_8", "secret6").Ok);
+        Assert.False(_svc.Login("Player_8", "12", "ip:8").Ok);
+    }
+
+    [Fact]
     public void Register_then_Login_succeeds()
     {
         Assert.True(_svc.Register("Player_1", "secret6").Ok);

@@ -79,6 +79,15 @@ public sealed class AuthService
         if (acc is null)
             return Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока");
 
+        // Пароль вне допустимой длины заведомо никогда не был зарегистрирован
+        // (регистрация пропускает только 6..100), поэтому отбрасываем его ДО
+        // проверки хэша: PBKDF2 — это 120 000 итераций, и тратить их на мусор
+        // при переборе незачем. Отказ считается неудачной попыткой, как и
+        // обычный неверный пароль, — иначе это был бы способ перебирать без
+        // срабатывания ограничения частоты.
+        if (!Account.IsValidPassword(password))
+            return Fail(throttleKey, AuthOutcome.WrongPassword, "неверный пароль");
+
         if (!PasswordHasher.Verify(password, acc.PasswordHash))
             return Fail(throttleKey, AuthOutcome.WrongPassword, "неверный пароль");
 
