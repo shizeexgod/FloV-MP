@@ -67,6 +67,14 @@ public class AdminBootstrapManager
     private DateTime _claimLockedUntilUtc = DateTime.MinValue;
     private readonly Func<DateTime> _clock;
 
+    // Хранилище прав в базе. Необязательное: без него всё работает как раньше,
+    // по config/admins.json. С ним база — источник правды для прав по
+    // SocialClubId, а память — быстрый кэш для проверки при входе игрока.
+    private IAdminStore? _store;
+
+    /// <summary>Подключено ли хранилище прав в базе.</summary>
+    public bool HasStore { get { lock (_lock) return _store != null; } }
+
     /// <summary>Сколько неудачных попыток накоплено к текущему моменту.</summary>
     public int ClaimFailures { get { lock (_lock) return _claimFailures; } }
 
@@ -212,7 +220,146 @@ public class AdminBootstrapManager
         }
     }
 
-    public void Reload() => LoadOrCreate();
+    /// <summary>
+    /// Перечитать права. С подключённой базой — заново из неё: так владелец,
+    /// поправивший таблицу admins руками, получает права сразу, командой
+    /// reloadadmins в консоли, не дожидаясь фоновой синхронизации.
+    /// </summary>
+    public void Reload()
+    {
+        LoadOrCreate();
+        RefreshFromStore();
+    }
+
+    /// <summary>
+    /// Подключить хранилище прав в базе.
+    ///
+    /// При первом подключении права из admins.json переносятся в базу, если в
+    /// ней ещё пусто. Без этого обновление сервера до версии с базой молча
+    /// отобрало бы права у всех существующих администраторов.
+    /// </summary>
+    public void AttachStore(IAdminStore store)
+    {
+        if (store is null) throw new ArgumentNullException(nameof(store));
+
+        IReadOnlyList<AdminRecord> existing;
+        try
+        {
+            existing = store.LoadAll();
+        }
+        catch (Exception ex)
+        {
+            // База недоступна — остаёмся на admins.json и честно об этом говорим.
+            CoreConsole.Warning($"[FloV:MP Admin] Права в базе недоступны ({ex.Message}). " +
+                                "Используется config/admins.json.");
+            return;
+        }
+
+        // Что переносить — снимаем под блокировкой, а пишем в базу без неё.
+        List<(string Key, int Level, bool Founder)> toImport;
+        lock (_lock)
+        {
+            _store = store;
+            toImport = existing.Count == 0
+                ? _config.Admins
+                    .Where(kv => kv.Value > 0 && IsSocialClubKey(kv.Key))
+                    .Select(kv => (kv.Key, kv.Value, _config.Founders.Contains(kv.Key)))
+                    .ToList()
+                : new List<(string, int, bool)>();
+        }
+
+        var imported = 0;
+        foreach (var (key, level, founder) in toImport)
+        {
+            try
+            {
+                store.Upsert(key, level, founder, "import:admins.json");
+                imported++;
+            }
+            catch (Exception ex)
+            {
+                CoreConsole.Warning($"[FloV:MP Admin] Не удалось перенести права {key} в базу: {ex.Message}");
+            }
+        }
+
+        if (imported > 0)
+            CoreConsole.Write($"[FloV:MP Admin] Перенесено в базу администраторов из admins.json: {imported}");
+
+        RefreshFromStore();
+        CoreConsole.Write("[FloV:MP Admin] Права администраторов берутся из базы (таблица admins).");
+    }
+
+    /// <summary>
+    /// Подтянуть права из базы. Возвращает число администраторов по
+    /// SocialClubId после синхронизации, либо -1, если хранилища нет или база
+    /// недоступна (тогда память остаётся как была).
+    ///
+    /// Для ключей SocialClubId база авторитетна: снятие прав в базе снимает их
+    /// и на сервере. Записи по нику (они и так отключены по умолчанию) живут
+    /// только в admins.json и здесь не трогаются.
+    /// </summary>
+    public int RefreshFromStore()
+    {
+        IAdminStore? store;
+        lock (_lock) store = _store;
+        if (store is null) return -1;
+
+        IReadOnlyList<AdminRecord> records;
+        try
+        {
+            records = store.LoadAll();
+        }
+        catch (Exception ex)
+        {
+            // Сбой чтения не должен отбирать права у всех: память не трогаем.
+            CoreConsole.Warning($"[FloV:MP Admin] Синхронизация прав с базой не удалась: {ex.Message}");
+            return -1;
+        }
+
+        lock (_lock)
+        {
+            foreach (var key in _config.Admins.Keys.Where(IsSocialClubKey).ToList())
+                _config.Admins.Remove(key);
+            _config.Founders.RemoveAll(IsSocialClubKey);
+
+            foreach (var r in records)
+            {
+                if (r.Level <= 0 || !IsSocialClubKey(r.SocialClub)) continue;
+                _config.Admins[r.SocialClub] = Math.Clamp(r.Level, 1, 8);
+                if ((r.IsFounder || r.Level == 8) && !_config.Founders.Contains(r.SocialClub))
+                    _config.Founders.Add(r.SocialClub);
+            }
+
+            // Появился хотя бы один администратор — авто-выдача первому
+            // зашедшему больше неуместна.
+            if (_config.Admins.Count > 0) _config.AutoClaimFirstPlayer = false;
+
+            return _config.Admins.Keys.Count(IsSocialClubKey);
+        }
+    }
+
+    /// <summary>Ключ прав — SocialClubId (только цифры), а не ник.</summary>
+    private static bool IsSocialClubKey(string key) =>
+        !string.IsNullOrEmpty(key) && key.All(char.IsDigit);
+
+    /// <summary>Записать права в базу, если она подключена. Ошибка не роняет вызов.</summary>
+    private void PersistToStore(string socialClub, int level, bool isFounder, string? grantedBy)
+    {
+        IAdminStore? store;
+        lock (_lock) store = _store;
+        if (store is null || !IsSocialClubKey(socialClub)) return;
+        try
+        {
+            store.Upsert(socialClub, level, isFounder, grantedBy);
+        }
+        catch (Exception ex)
+        {
+            // Права уже действуют в памяти этого сервера. Администратор должен
+            // знать, что после перезапуска они пропадут.
+            CoreConsole.Warning($"[FloV:MP Admin] ВНИМАНИЕ: права {socialClub} не сохранены в базу " +
+                                $"({ex.Message}). Они действуют до перезапуска сервера.");
+        }
+    }
 
     public int GetAssignedRank(ulong socialClubId, string playerName, string? ip = null)
     {
@@ -260,6 +407,21 @@ public class AdminBootstrapManager
     }
 
     public bool TryClaimOwner(string inputToken, string playerName, ulong socialClubId, out string message)
+    {
+        string? claimedSocialClub = null;
+        try
+        {
+            return TryClaimOwnerLocked(inputToken, playerName, socialClubId, out message, ref claimedSocialClub);
+        }
+        finally
+        {
+            if (claimedSocialClub != null)
+                PersistToStore(claimedSocialClub, 8, true, "claimowner");
+        }
+    }
+
+    private bool TryClaimOwnerLocked(string inputToken, string playerName, ulong socialClubId,
+                                     out string message, ref string? claimedSocialClub)
     {
         lock (_lock)
         {
@@ -327,6 +489,10 @@ public class AdminBootstrapManager
             _config.AutoClaimFirstPlayer = false;
             SaveInternal();
 
+            // Запись владельца в базу откладывается до выхода из блокировки
+            // (см. finally ниже) — по той же причине, что и в SetAdmin.
+            claimedSocialClub = socialClubId > 0 ? socialClubId.ToString() : null;
+
             message = $"Владение сервером успешно подтверждено! Игроку {playerName} присвоен статус Основателя (Уровень 8).";
             return true;
         }
@@ -360,8 +526,13 @@ public class AdminBootstrapManager
 
             _config.AutoClaimFirstPlayer = false;
             SaveInternal();
-            return true;
         }
+
+        // В базу пишем ПОСЛЕ снятия блокировки. Проверка прав при входе игрока
+        // берёт ту же блокировку на главном потоке: медленная или зависшая база
+        // под блокировкой заморозила бы вход всех игроков.
+        PersistToStore(identifier, level, level == 8, "console:setadmin");
+        return true;
     }
 
     public IReadOnlyDictionary<string, int> GetAllAdmins()

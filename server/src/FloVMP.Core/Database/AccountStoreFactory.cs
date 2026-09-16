@@ -1,4 +1,4 @@
-﻿using FloVMP.Core.Auth;
+using FloVMP.Core.Auth;
 using FloVMP.Core.Logging;
 using MySqlConnector;
 
@@ -38,6 +38,30 @@ public static class AccountStoreFactory
         }
 
         return new JsonAccountStore(jsonFallbackPath);
+    }
+
+    /// <summary>
+    /// Подготовка базы для режима без аккаунтов (базовая платформа): накат
+    /// миграций и проверка соединения. true — база доступна и таблицы на месте.
+    /// Никогда не бросает: недоступная база — штатный режим «на файлах».
+    /// </summary>
+    public static bool TryPrepareDatabase(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return false;
+        try
+        {
+            RunMigrations(connectionString);
+            using var conn = new MySqlConnection(connectionString);
+            conn.Open();
+            CoreConsole.Write($"[FloV:MP] [DB] Успешное подключение к MariaDB ({conn.Database})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CoreConsole.Warning($"[FloV:MP] [DB] MariaDB недоступна ({ex.Message}). " +
+                                "Права и баны хранятся в файлах (config/admins.json, flovmp-data/bans.json).");
+            return false;
+        }
     }
 
     /// <summary>

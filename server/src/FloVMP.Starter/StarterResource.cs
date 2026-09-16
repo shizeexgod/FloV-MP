@@ -29,8 +29,17 @@ public class StarterResource : Resource
     // ОТКЛЮЧЁН (вход по назначенному рангу/токену остаётся).
     private static readonly string? AdminPassword = Environment.GetEnvironmentVariable("FLOVMP_ADMIN_PASSWORD");
     private readonly ConcurrentDictionary<uint, int> _adminLevels = new();
-    private readonly ConcurrentDictionary<ulong, int> _assignedAdminRanks = new();
-    private readonly ConcurrentDictionary<string, int> _assignedAdminNames = new(StringComparer.OrdinalIgnoreCase);
+    // Права игрока без SocialClubId (0) — только на эту сессию, по ID
+    // подключения; очищаются при выходе. Раньше здесь был словарь по НИКУ:
+    // ник задаёт клиент, и любой, взявший ник администратора, получал его
+    // уровень в обход AllowNameBasedAdmin=false.
+    private readonly ConcurrentDictionary<uint, int> _sessionAdminRanks = new();
+
+    // Фоновая сверка прав и банов с базой: правка таблицы admins/bans
+    // применяется на работающем сервере без перезапуска.
+    private const long StoreSyncIntervalMs = 30_000;
+    private long _nextStoreSyncMs = StoreSyncIntervalMs;
+    private int _storeSyncRunning;
 
     private IVoiceChannel? _spatialVoiceChannel;
     private AdminBootstrapManager _adminManager = null!;
@@ -123,14 +132,14 @@ public class StarterResource : Resource
 
     public int GetAssignedAdminRank(IPlayer player)
     {
+        // Источник правды — AdminBootstrapManager (admins.json или таблица
+        // admins). Отдельного кэша по SocialClubId здесь нет: он пережил бы
+        // снятие прав в базе.
         var fileRank = _adminManager.GetAssignedRank(player.SocialClubId, player.Name, player.Ip);
         if (fileRank > 0) return fileRank;
 
-        if (_assignedAdminRanks.TryGetValue(player.SocialClubId, out var rank) && rank > 0)
-            return rank;
-
-        if (_assignedAdminNames.TryGetValue(player.Name, out var nameRank) && nameRank > 0)
-            return nameRank;
+        if (player.SocialClubId == 0 && _sessionAdminRanks.TryGetValue(player.Id, out var sessionRank) && sessionRank > 0)
+            return sessionRank;
 
         return 0;
     }
@@ -140,11 +149,13 @@ public class StarterResource : Resource
         rank = Math.Clamp(rank, 0, 8);
         if (player.SocialClubId > 0)
         {
-            _assignedAdminRanks[player.SocialClubId] = rank;
             _adminManager.SetAdmin(player.SocialClubId.ToString(), rank);
+            return;
         }
-        _assignedAdminNames[player.Name] = rank;
-        _adminManager.SetAdmin(player.Name, rank);
+
+        // Без SocialClubId сохранить права надёжно не к чему — только сессия.
+        if (rank > 0) _sessionAdminRanks[player.Id] = rank;
+        else _sessionAdminRanks.TryRemove(player.Id, out _);
     }
 
     public override void OnStart()
@@ -171,9 +182,20 @@ public class StarterResource : Resource
         var starterDataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
         var starterDbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
                             new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
+        // Миграции до обращения к таблицам: на свежей установке bans и admins
+        // ещё не существуют. Раньше их накатывал только RP-режим (Core), а
+        // базовая платформа молча работала без таблиц.
+        var dbReachable = FloVMP.Core.Database.AccountStoreFactory.TryPrepareDatabase(starterDbConn);
+
         _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
             starterDbConn, Path.Combine(starterDataDir, "bans.json"));
         _bans = new FloVMP.Core.Security.MultiTierBanService(_banStore);
+
+        // Права администраторов в базе: владелец выдаёт себе уровень в таблице
+        // admins, сервер подхватывает без перезапуска (фоновая сверка в OnTick
+        // или reloadadmins в консоли).
+        if (dbReachable)
+            _adminManager.AttachStore(new FloVMP.Core.Admin.MySqlAdminStore(starterDbConn));
 
         Alt.Log("[FloV:MP Starter] Dedicated server initialized successfully!");
         Alt.Log("[FloV:MP Starter] Security: Server-Side RBAC active. Regular players isolated from admin actions.");
@@ -407,7 +429,7 @@ public class StarterResource : Resource
 
     private void OnPlayerConnect(IPlayer player, string reason)
     {
-        Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) подключается...");
+        Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}, SocialClub: {player.SocialClubId}) подключается...");
 
         // Блокировка проверяется ДО спавна: забаненный не должен появляться в
         // мире даже на мгновение, иначе остальные игроки видят «призрака», а
@@ -546,8 +568,19 @@ public class StarterResource : Resource
                 }
                 else
                 {
+                    if (!targetArg.All(char.IsDigit))
+                    {
+                        // Игрок с таким ником не в сети, а права по нику отключены
+                        // (ник подделывается). Раньше запись молча сохранялась и
+                        // не действовала — владелец думал, что выдал права.
+                        Alt.Log($"[Console] Игрок '{targetArg}' не в сети. Права выдаются по SocialClubId: setadmin <SocialClubId> {newLvl}");
+                        return;
+                    }
                     _adminManager.SetAdmin(targetArg, newLvl);
-                    Alt.Log($"[Console] Идентификатор '{targetArg}' сохранен с уровнем {newLvl} в config/admins.json.");
+                    ApplyRevokedAdminRights();
+                    Alt.Log(_adminManager.HasStore
+                        ? $"[Console] SocialClubId {targetArg}: уровень {newLvl} сохранён в базу (таблица admins) и config/admins.json."
+                        : $"[Console] SocialClubId {targetArg}: уровень {newLvl} сохранён в config/admins.json.");
                 }
                 break;
 
@@ -591,7 +624,10 @@ public class StarterResource : Resource
 
             case "reloadadmins":
                 _adminManager.Reload();
-                Alt.Log("[Console] config/admins.json успешно перезагружен.");
+                ApplyRevokedAdminRights();
+                Alt.Log(_adminManager.HasStore
+                    ? "[Console] Права перечитаны из базы (таблица admins) и config/admins.json."
+                    : "[Console] config/admins.json успешно перезагружен.");
                 break;
 
             case "claimtoken":
@@ -767,6 +803,7 @@ public class StarterResource : Resource
         _adminAuthed.TryRemove(player.Id, out _);
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
+        _sessionAdminRanks.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
 
@@ -786,8 +823,86 @@ public class StarterResource : Resource
         _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
     }
 
+    /// <summary>
+    /// Снять дежурство с тех, у кого права отозваны или понижены (в базе или
+    /// консолью). Только главный поток: трогает сущности игроков.
+    /// </summary>
+    private void ApplyRevokedAdminRights()
+    {
+        foreach (var (playerId, onDuty) in _adminLevels.ToArray())
+        {
+            var p = Alt.GetPlayerById(playerId);
+            if (p is null || !p.Exists) { _adminLevels.TryRemove(playerId, out _); continue; }
+
+            var assigned = GetAssignedAdminRank(p);
+            if (assigned >= onDuty) continue;
+
+            if (assigned <= 0)
+            {
+                _adminLevels.TryRemove(playerId, out _);
+
+                _adminAuthed.TryRemove(playerId, out _);
+                DestroyAdminVehicle(playerId);
+                if (_godModes.TryRemove(playerId, out var hadGod) && hadGod) p.Emit("starter:setGodMode", false);
+                p.Emit("flovmp:console:setAdmin", 0);
+                p.SetStreamSyncedMetaData("adminLevel", 0);
+                SendChatMessage(p, "{ef4444}[Admin] Ваши права администратора отозваны.");
+                Alt.Log($"[FloV:MP Admin] Права отозваны: [{p.Id}] {p.Name} (SC {p.SocialClubId}).");
+            }
+            else
+            {
+                _adminLevels[playerId] = assigned;
+                p.Emit("flovmp:console:setAdmin", assigned);
+                p.SetStreamSyncedMetaData("adminLevel", assigned);
+                SendChatMessage(p, $"{{f59e0b}}[Admin] Ваш уровень прав изменён: {assigned}.");
+                Alt.Log($"[FloV:MP Admin] Уровень понижен до {assigned}: [{p.Id}] {p.Name}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Раз в 30 с сверяет права и баны с базой в фоне (сеть не на главном
+    /// потоке), а применение к игрокам возвращает на главный поток.
+    /// </summary>
+    private void TickStoreSync()
+    {
+        var now = _clock.ElapsedMilliseconds;
+        if (now < _nextStoreSyncMs) return;
+        _nextStoreSyncMs = now + StoreSyncIntervalMs;
+
+        if (!_adminManager.HasStore && _bans is null) return;
+        if (System.Threading.Interlocked.CompareExchange(ref _storeSyncRunning, 1, 0) != 0) return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                _adminManager.RefreshFromStore();
+                _bans?.RefreshFromStore();
+            }
+            catch (Exception ex)
+            {
+                Alt.LogWarning($"[FloV:MP] Фоновая сверка с базой: {ex.Message}");
+            }
+            finally
+            {
+                System.Threading.Interlocked.Exchange(ref _storeSyncRunning, 0);
+                _pendingAdminRecheck = 1;
+            }
+        });
+    }
+
+    private int _pendingAdminRecheck;
+
     public override void OnTick()
     {
+        TickStoreSync();
+        if (System.Threading.Interlocked.Exchange(ref _pendingAdminRecheck, 0) == 1)
+        {
+            try { ApplyRevokedAdminRights(); }
+            catch (Exception ex) { Alt.LogWarning($"[FloV:MP Admin] Проверка отозванных прав: {ex.Message}"); }
+        }
+
         if (_pendingRespawns.Count > 0)
         {
             var now = _clock.ElapsedMilliseconds;
