@@ -49,6 +49,21 @@ let authView = null;
 let loadingView = null;
 let authVisible = false;
 
+// Сколько максимум может висеть загрузочный экран. Он обязан закрываться по
+// событию (вход показан или спавн завершён), но если какое-то событие не придёт
+// — сервер другого режима, сбой скрипта, медленный диск — экран не имеет права
+// запереть игрока в игре навсегда. После этого срока он снимается принудительно.
+const LOADING_HARD_TIMEOUT_MS = 30000;
+let loadingSafetyTimer = null;
+
+// Сообщения чата, пришедшие ДО того, как окно чата создано. Чат теперь
+// открывается после загрузочного экрана (иначе его лента рисовалась поверх
+// загрузки), а сервер пишет в чат уже при подключении — например, подсказку
+// владельцу с токеном настройки. Без буфера такие сообщения терялись бы молча.
+// Размер ограничен: подключение не должно копить память бесконечно.
+const PENDING_CHAT_LIMIT = 50;
+const pendingChat = [];
+
 // Голосовой чат
 let isVoiceTalking = false;
 let voiceReleaseTimeout = null;
@@ -93,6 +108,14 @@ function openLoading(serverName) {
         // Курсор здесь НЕ показываем: на загрузочном экране нечего нажимать,
         // а лишний курсор поверх игры выглядит как зависший интерфейс.
         try { alt.toggleGameControls(false); } catch (e) { }
+
+        if (loadingSafetyTimer) alt.clearTimeout(loadingSafetyTimer);
+        loadingSafetyTimer = alt.setTimeout(() => {
+            loadingSafetyTimer = null;
+            if (!loadingView) return;
+            alt.log('[FloV:MP] Загрузочный экран снят по таймауту — событие завершения не пришло');
+            closeLoading();
+        }, LOADING_HARD_TIMEOUT_MS);
     } catch (e) {
         alt.log(`[FloV:MP] Не удалось открыть загрузочный экран: ${e}`);
         loadingView = null;
@@ -105,10 +128,25 @@ function setLoadingStep(text, percent) {
 }
 
 function closeLoading() {
+    if (loadingSafetyTimer) {
+        alt.clearTimeout(loadingSafetyTimer);
+        loadingSafetyTimer = null;
+    }
     if (!loadingView) return;
     try { loadingView.emit('flovmp:loading:hide'); } catch (e) { }
     try { loadingView.destroy(); } catch (e) { }
     loadingView = null;
+
+    // Чат открывается ПОСЛЕ загрузки: окна alt:V рисуются в порядке создания,
+    // и созданный раньше чат лёг бы лентой сообщений поверх загрузочного
+    // экрана. Накопленные за время загрузки сообщения выдадутся из буфера.
+    if (inGame) openChat();
+
+    // Управление возвращаем, только если поверх не открыта форма входа:
+    // иначе игрок начал бы бегать, пока печатает пароль.
+    if (!authView) {
+        try { alt.toggleGameControls(true); } catch (e) { }
+    }
 }
 
 /**
@@ -708,6 +746,15 @@ alt.everyTick(() => {
 export function openChat() {
     if (chatView) return;
     chatView = new alt.WebView('http://resource/client/html/chat/index.html');
+
+    // Выдаём накопленное, когда страница чата реально загрузилась: emit до
+    // загрузки страницы уходит в никуда.
+    chatView.on('load', () => {
+        while (pendingChat.length > 0) {
+            const m = pendingChat.shift();
+            try { chatView.emit('flovmp:chat:msg', m.kind, m.author, m.text); } catch (e) { }
+        }
+    });
     chatView.on('flovmp:chat:say', (text) => {
         const s = String(text);
         alt.emitServer('flovmp:chat:say', s);
@@ -1049,6 +1096,8 @@ function loadCollisionAndUnfreeze(targetPos) {
 
     try { native.doScreenFadeOut(0); } catch (e) { }
 
+    setLoadingStep('Загружаем окрестности…', null);
+
     native.freezeEntityPosition(player.scriptID, true);
     native.loadScene(targetPos.x, targetPos.y, targetPos.z);
     native.requestCollisionAtCoord(targetPos.x, targetPos.y, targetPos.z);
@@ -1064,6 +1113,7 @@ function loadCollisionAndUnfreeze(targetPos) {
             }
             native.clearFocus();
             try { native.doScreenFadeIn(500); } catch (e) { }
+            closeLoading();
             return;
         }
 
@@ -1093,6 +1143,12 @@ function loadCollisionAndUnfreeze(targetPos) {
             });
             try { native.doScreenFadeIn(600); } catch (e) { }
             alt.log(`[FloV:MP] Спавн завершен. Коллизия загружена (попыток: ${attempts}, spawnZ: ${spawnZ.toFixed(2)})`);
+
+            // Загрузка закончена по факту: игрок стоит на земле. Закрываем здесь,
+            // а не по событию сервера — в базовой платформе нет формы входа, и
+            // закрыть загрузочный экран было бы нечем: он висел бы навсегда.
+            setLoadingStep('Готово', 100);
+            closeLoading();
         }
     }, 100);
 }
@@ -1240,7 +1296,8 @@ alt.on('connectionComplete', () => {
     openLoading('');
     setLoadingStep('Готовим интерфейс…', null);
 
-    openChat();
+    // Чат НЕ открываем здесь — он откроется при закрытии загрузки, иначе его
+    // лента рисовалась бы поверх загрузочного экрана.
     getOrCreateDevConsole(); // Прогрев WebView консоли для мгновенного отклика (0мс)
 
     setLoadingStep('Ждём ответа сервера…', null);
@@ -1280,7 +1337,9 @@ alt.onServer('starter:initClient', (x, y, z) => {
     inGame = true;
     native.displayRadar(true);
     native.displayHud(true);
-    openChat();
+    // Если загрузочного экрана нет (переподключение, сбой его открытия) —
+    // чат нужен сразу. Если есть — откроется при его закрытии.
+    if (!loadingView) openChat();
     getOrCreateDevConsole();
 
     if (x !== undefined && y !== undefined && z !== undefined && Number.isFinite(Number(x))) {
@@ -1516,7 +1575,12 @@ alt.on('gameEntityCreate', (entity) => {
 
 // Сообщения чата
 alt.onServer('flovmp:chat:msg', (kind, author, text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', kind, author, text);
+    if (chatView) {
+        chatView.emit('flovmp:chat:msg', kind, author, text);
+    } else {
+        pendingChat.push({ kind, author, text });
+        if (pendingChat.length > PENDING_CHAT_LIMIT) pendingChat.shift();
+    }
     if (consoleView) {
         const prefix = author ? `[${author}] ` : '';
         consoleView.emit('flovmp:console:log', 'CHAT', `${prefix}${text}`);
@@ -1529,7 +1593,12 @@ alt.onServer('chat:addMessage', (text) => {
 });
 
 alt.onServer('chat:message', (author, text) => {
-    if (chatView) chatView.emit('flovmp:chat:msg', 'player', author, text);
+    if (chatView) {
+        chatView.emit('flovmp:chat:msg', 'player', author, text);
+    } else {
+        pendingChat.push({ kind: 'player', author, text });
+        if (pendingChat.length > PENDING_CHAT_LIMIT) pendingChat.shift();
+    }
     if (consoleView) consoleView.emit('flovmp:console:log', 'CHAT', `[${author}] ${text}`);
 });
 
