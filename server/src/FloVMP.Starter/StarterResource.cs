@@ -93,6 +93,15 @@ public class StarterResource : Resource
         "CLEARING", "RAIN", "THUNDER", "SNOW", "BLIZZARD", "SNOWLIGHT", "XMAS", "HALLOWEEN",
     };
 
+    /// <summary>
+    /// Администраторы, подтвердившие пароль командой /alogin в этой сессии.
+    ///
+    /// Раньше /aduty ставила на дежурство БЕЗ пароля — то есть второй фактор
+    /// /alogin обходился одной командой, хотя сервер при каждом входе прямо
+    /// говорил админу «для входа на дежурство введите /alogin &lt;пароль&gt;».
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _adminAuthed = new();
+
     /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _clientReady = new();
 
@@ -752,6 +761,10 @@ public class StarterResource : Resource
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         _clientReady.TryRemove(player.Id, out _);
         _chatRate.TryRemove(player.Id, out _);
+        // Подтверждение пароля живёт одну сессию: после переподключения —
+        // заново /alogin. Иначе тот, кто занял освободившийся ID, унаследовал бы
+        // чужое подтверждение.
+        _adminAuthed.TryRemove(player.Id, out _);
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
@@ -995,6 +1008,7 @@ public class StarterResource : Resource
                             && string.Equals(parts[1], AdminPassword, StringComparison.Ordinal);
                 if (assignedRank == 8 || pwdOk)
                 {
+                    _adminAuthed[player.Id] = true;
                     _adminLevels[player.Id] = assignedRank;
                     player.Emit("flovmp:console:setAdmin", assignedRank);
                     player.SetStreamSyncedMetaData("adminLevel", assignedRank);
@@ -1025,6 +1039,22 @@ public class StarterResource : Resource
                 }
                 else
                 {
+                    // Выйти с дежурства можно всегда, а ЗАСТУПИТЬ — только после
+                    // /alogin, если пароль администратора настроен. Исключения:
+                    //   * владелец (уровень 8) — /alogin и сам пускает его без пароля;
+                    //   * пароль не задан вовсе — тогда второго фактора нет, и
+                    //     закрыть /aduty значило бы запереть младших админов.
+                    var passwordConfigured = !string.IsNullOrEmpty(AdminPassword);
+                    var mayGoOnDuty = !passwordConfigured
+                                      || dRank == 8
+                                      || _adminAuthed.ContainsKey(player.Id);
+                    if (!mayGoOnDuty)
+                    {
+                        SendChatMessage(player, "{fde047}[Admin]{ffffff} Сначала подтвердите пароль: {fde047}/alogin <пароль>");
+                        Alt.LogWarning($"[Security Alert] Попытка заступить на дежурство без пароля: {player.Name} (ID: {player.Id})");
+                        return;
+                    }
+
                     _adminLevels[player.Id] = dRank;
                     player.Emit("flovmp:console:setAdmin", dRank);
                     player.SetStreamSyncedMetaData("adminLevel", dRank);
