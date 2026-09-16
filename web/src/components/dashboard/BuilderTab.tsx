@@ -117,7 +117,7 @@ export function BuilderTab() {
                   return (
                     <div
                       key={s}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-xs transition-all ${
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-xs transition-[border-color,background-color,color,transform] ${
                         state === 'done'
                           ? 'border-emeraldx/20 bg-emeraldx/[0.06] text-emeraldx'
                           : state === 'active'

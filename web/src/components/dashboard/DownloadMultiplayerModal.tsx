@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { Modal, FieldLabel, Spinner } from '@/components/ui';
-import { Archive, Terminal, FileCode, Copy, Check, Download, Upload, Server, ShieldCheck, Sparkles } from 'lucide-react';
-import type { Project } from './_ctx';
+import { Archive, Terminal, FileCode, Copy, Check, Download, Upload, Sparkles } from 'lucide-react';
+import { useDashboard, type Project } from './_ctx';
 
 interface DownloadMultiplayerModalProps {
   open: boolean;
@@ -12,24 +12,17 @@ interface DownloadMultiplayerModalProps {
 }
 
 export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMultiplayerModalProps) {
+  const { D } = useDashboard();
+  const m = D.download;
   const [activeTab, setActiveTab] = useState<'archive' | 'oneline' | 'manual'>('archive');
-  const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [manualKey, setManualKey] = useState(project?.license_key || '');
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [downloading, setDownloading] = useState(false);
 
-  const licenseKey = project?.license_key || manualKey || 'FLV-DEMO-XXXX-XXXX';
-  const installCommand = `curl -sSL https://flov-mp.ru/install.sh | bash -s -- --key ${licenseKey}`;
-
-  const copyCommand = () => {
-    navigator.clipboard.writeText(installCommand);
-    setCopiedCmd(true);
-    setTimeout(() => setCopiedCmd(false), 2000);
-  };
-
+  const licenseKey = project?.license_key || manualKey || '—';
   const copyKey = () => {
-    navigator.clipboard.writeText(licenseKey);
+    navigator.clipboard.writeText(licenseKey).catch(() => {});
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
@@ -40,7 +33,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
     try {
       // 1. Скачиваем официальный подписанный license.flv
       const res = await fetch(`/api/v1/projects/${project.id}/license-flv`);
-      if (!res.ok) throw new Error('Ошибка генерации лицензии');
+      if (!res.ok) throw new Error(m.generateError);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -51,7 +44,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e.message || 'Ошибка скачивания');
+      alert(e.message || m.downloadError);
     } finally {
       setDownloading(false);
     }
@@ -67,8 +60,8 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
     <Modal
       open={open}
       onClose={onClose}
-      title="Получить файлы мультиплеера FloV:MP"
-      description="Выберите удобный вариант установки и автоматической активации игрового сервера"
+      title={m.title}
+      description={m.description}
     >
       <div className="space-y-6">
         {/* Вкладки 3 вариантов */}
@@ -76,38 +69,38 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
           <button
             type="button"
             onClick={() => setActiveTab('archive')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-[border-color,background-color,color,transform] ${
               activeTab === 'archive'
                 ? 'bg-brand text-white shadow-neon-pink'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Archive className="h-3.5 w-3.5" />
-            <span>Архив с лицензией</span>
+            <span>{m.tabArchive}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('oneline')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-[border-color,background-color,color,transform] ${
               activeTab === 'oneline'
                 ? 'bg-cyber text-ink-950 font-black shadow-neon-cyan'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Terminal className="h-3.5 w-3.5" />
-            <span>В 1 команду (Curl)</span>
+            <span>{m.tabOneLine}</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('manual')}
-            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold transition-[border-color,background-color,color,transform] ${
               activeTab === 'manual'
                 ? 'bg-white/20 text-white'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <FileCode className="h-3.5 w-3.5" />
-            <span>Ключ / Файл</span>
+            <span>{m.tabManual}</span>
           </button>
         </div>
 
@@ -119,25 +112,25 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Пакет с авто-активацией</h4>
+                <h4 className="text-sm font-bold text-white">{m.signedTitle}</h4>
                 <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                  Файлы сервера, куда уже автоматически вшита ваша лицензия <span className="font-mono text-brand font-bold">{licenseKey}</span>. Достаточно распаковать на сервере.
+                  {m.signedBefore} <span className="font-mono text-white">license.flv</span> {m.signedFor} <span className="font-mono text-brand font-bold">{licenseKey}</span> {m.signedAfter}
                 </p>
               </div>
             </div>
 
             <div className="rounded-xl border border-white/5 bg-ink-950/60 p-3.5 font-mono text-xs text-slate-300 space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-slate-500">Проект:</span>
-                <span className="text-white font-bold">{project?.name || 'Мой RP Сервер'}</span>
+                <span className="text-slate-500">{m.project}:</span>
+                <span className="text-white font-bold">{project?.name || m.defaultProject}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">План:</span>
-                <span className="text-cyber uppercase font-bold">{project?.plan || 'Enterprise'}</span>
+                <span className="text-slate-500">{m.plan}:</span>
+                <span className="text-cyber uppercase font-bold">{project?.plan || 'Lifetime'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Лимит слотов:</span>
-                <span className="text-emeraldx font-bold">{project?.max_players || 5000} слотов</span>
+                <span className="text-slate-500">{m.slotLimit}:</span>
+                <span className="text-emeraldx font-bold">{project?.max_players || '—'} {m.slots}</span>
               </div>
             </div>
 
@@ -147,57 +140,30 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
               className="btn btn-primary h-11 w-full text-xs font-bold flex items-center justify-center gap-2 shadow-neon-pink"
             >
               {downloading ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
-              Скачать официальный license.flv
+              {m.downloadButton}
             </button>
             <p className="text-[11px] text-slate-500 text-center">
-              Поместите скачанный файл license.flv в корневую папку сервера рядом с flovmp-server
+              {m.rootHint}
             </p>
           </div>
         )}
 
         {/* ВАРИАНТ 2: Установка в 1 команду */}
         {activeTab === 'oneline' && (
-          <div className="space-y-4 rounded-2xl border border-cyber/30 bg-cyber/[0.03] p-5">
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
             <div className="flex items-start gap-3">
-              <div className="rounded-xl border border-cyber/40 bg-cyber/10 p-2 text-cyber">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/45">
                 <Terminal className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Автоматическая установка в 1 строку</h4>
+                <h4 className="text-sm font-bold text-white">{m.autoTitle}</h4>
                 <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                  Выполните команду на чистом сервере Ubuntu 22.04 / 24.04. Скрипт сам установит зависимости, подтянет лицензию, настроит MariaDB и голосовой сервер с авто-перезапуском.
+                  {m.autoText}
                 </p>
               </div>
             </div>
-
-            <div className="relative rounded-xl border border-cyber/30 bg-ink-950 p-3.5 font-mono text-xs text-cyber break-all">
-              {installCommand}
-              <button
-                onClick={copyCommand}
-                className="absolute right-2 top-2 rounded-lg border border-white/10 bg-white/5 p-1.5 text-slate-300 hover:text-white transition"
-                title="Скопировать команду"
-              >
-                {copiedCmd ? <Check className="h-4 w-4 text-emeraldx" /> : <Copy className="h-4 w-4" />}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
-                Авто-настройка MariaDB
-              </div>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
-                Голосовой сервер (PartOf=)
-              </div>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
-                .NET 8 CoreCLR runtime
-              </div>
-              <div className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emeraldx" />
-                Лицензия вшивается сама
-              </div>
+            <div className="rounded-xl border border-dashed border-white/10 bg-black/15 p-4 text-center text-[11px] text-white/35">
+              {m.autoPlaceholder}
             </div>
           </div>
         )}
@@ -206,7 +172,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
         {activeTab === 'manual' && (
           <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
             <div>
-              <FieldLabel>Ключ лицензии (FLV-XXXX-XXXX-XXXX)</FieldLabel>
+              <FieldLabel>{m.keyLabel}</FieldLabel>
               <div className="flex gap-2">
                 <input
                   value={manualKey}
@@ -218,7 +184,8 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
                   type="button"
                   onClick={copyKey}
                   className="btn btn-ghost h-11 px-3 border border-white/10 text-slate-300 hover:text-white"
-                  title="Скопировать ключ"
+                  title={m.copyKey}
+                  aria-label={m.copyKey}
                 >
                   {copiedKey ? <Check className="h-4 w-4 text-emeraldx" /> : <Copy className="h-4 w-4" />}
                 </button>
@@ -227,18 +194,18 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
 
             <div className="relative flex py-1 items-center">
               <div className="flex-grow border-t border-white/10" />
-              <span className="flex-shrink mx-3 text-[11px] text-slate-500 uppercase font-mono">или прикрепите файл</span>
+              <span className="flex-shrink mx-3 text-[11px] text-slate-500 uppercase font-mono">{m.orAttach}</span>
               <div className="flex-grow border-t border-white/10" />
             </div>
 
             <div>
-              <FieldLabel>Файл лицензии (license.flv)</FieldLabel>
+              <FieldLabel>{m.fileLabel}</FieldLabel>
               <label className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/20 bg-ink-950/50 p-4 text-center cursor-pointer hover:border-brand/50 transition">
                 <Upload className="h-6 w-6 text-slate-400 mb-1" />
                 <span className="text-xs text-slate-300 font-semibold">
-                  {attachedFile ? attachedFile.name : 'Нажмите для выбора license.flv'}
+                  {attachedFile ? attachedFile.name : m.chooseFile}
                 </span>
-                <span className="text-[10px] text-slate-500 mt-0.5">RSA-2048 криптографический файл</span>
+                <span className="text-[10px] text-slate-500 mt-0.5">{m.cryptoFile}</span>
                 <input
                   type="file"
                   accept=".flv,.json"
@@ -250,7 +217,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
 
             {attachedFile && (
               <div className="rounded-xl border border-emeraldx/30 bg-emeraldx/10 p-3 text-xs text-emeraldx flex items-center justify-between">
-                <span>Файл {attachedFile.name} готов к установке</span>
+                <span>{m.fileReady} {attachedFile.name}</span>
                 <Check className="h-4 w-4" />
               </div>
             )}
@@ -264,7 +231,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
             onClick={onClose}
             className="btn btn-ghost h-9 px-4 text-xs text-slate-300 hover:text-white"
           >
-            Закрыть
+            {m.close}
           </button>
         </div>
       </div>

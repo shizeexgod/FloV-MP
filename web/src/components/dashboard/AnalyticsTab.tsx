@@ -52,14 +52,6 @@ export function AnalyticsTab() {
 
   return (
     <div className="relative space-y-7 animate-fade-in">
-      <div>
-        <h2 className="flex items-center gap-2 text-xl font-extrabold text-white">
-          <BarChart3 className="h-5 w-5 text-brand" />
-          {a.title}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">{a.sub}</p>
-      </div>
-
       {samples.length === 0 ? (
         <div className="card no-lift grid min-h-[280px] place-items-center p-8 text-center">
           <div>

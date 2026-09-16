@@ -24,17 +24,17 @@ export function SettingsTab() {
         <h3 className="text-[13px] font-semibold text-white">{s.accountTitle}</h3>
         <div className="mt-3 space-y-3">
           {[
-            [s.name, user?.username ?? ''],
-            [s.email, user?.email ?? ''],
-            [s.telegram, user?.telegram ?? '@'],
-          ].map(([l, v]) => (
+            [s.name, user?.username ?? '', 'username'],
+            [s.email, user?.email ?? '', 'email'],
+            [s.telegram, user?.telegram ?? '', 'telegram'],
+          ].map(([l, v, name]) => (
             <label key={l}>
               <span className={label}>{l}</span>
-              <input defaultValue={v} className="field h-10 px-3" />
+              <input name={name} value={v} readOnly className="field h-10 cursor-default px-3 text-white/65" />
             </label>
           ))}
         </div>
-        <button className="btn btn-primary mt-4 h-10 px-4 text-xs">{s.save}</button>
+        <p className="mt-3 text-[11px] leading-relaxed text-white/35">{s.accountHint}</p>
       </div>
 
       {/* 2FA */}
@@ -55,7 +55,7 @@ export function SettingsTab() {
                 <code className="flex-1 break-all rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[12px] text-brand">
                   {twoFa.setup.secret}
                 </code>
-                <button onClick={() => copy(twoFa.setup!.secret)} className="btn btn-ghost h-9 w-9 p-0">
+                <button onClick={() => copy(twoFa.setup!.secret)} aria-label={s.copySecret} title={s.copySecret} className="btn btn-ghost h-9 w-9 p-0">
                   {copied === twoFa.setup.secret ? <Check className="h-4 w-4 text-ok" /> : <Copy className="h-4 w-4" />}
                 </button>
               </div>
@@ -72,6 +72,8 @@ export function SettingsTab() {
                 value={twoFa.code}
                 onChange={(e) => setTwoFa((st) => ({ ...st, code: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
                 placeholder="000000"
+                name="totp-setup-code"
+                autoComplete="one-time-code"
                 inputMode="numeric"
                 className="field h-10 px-3 font-mono tracking-[0.3em]"
               />
@@ -102,6 +104,8 @@ export function SettingsTab() {
                 value={twoFa.code}
                 onChange={(e) => setTwoFa((st) => ({ ...st, code: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
                 placeholder="000000"
+                name="totp-disable-code"
+                autoComplete="one-time-code"
                 inputMode="numeric"
                 className="field h-10 px-3 font-mono tracking-[0.3em]"
               />
@@ -145,8 +149,8 @@ export function SettingsTab() {
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">
           {[
-            [s.refInvited, '0'],
-            [s.refEarned, '0 ₽'],
+            [s.refInvited, '—'],
+            [s.refEarned, '—'],
             [s.refShare, '20%'],
           ].map(([l, v]) => (
             <div key={l} className="rounded-lg border border-white/[0.07] bg-white/[0.02] py-2">

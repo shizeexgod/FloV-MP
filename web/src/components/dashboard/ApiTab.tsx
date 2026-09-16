@@ -25,7 +25,7 @@ export function ApiTab() {
     );
   }
 
-  const base = `https://api.flovmp.dev/v1/projects/${selectedProject.slug}`;
+  const base = `https://flovmp.ru/api/v1/public/${selectedProject.slug}`;
   const key: string = selectedProject.api_key;
   const endpoints: [string, string, string][] = [
     ['GET', `${base}/status`, a.epStatus],
@@ -35,14 +35,6 @@ export function ApiTab() {
 
   return (
     <div className="relative space-y-4 animate-fade-in">
-      <div>
-        <h2 className="flex items-center gap-2 text-lg font-black text-white">
-          <Plug className="h-5 w-5 text-brand" />
-          {a.title}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">{a.sub}</p>
-      </div>
-
       {/* Base URL */}
       <div className="glass card-edge rounded-2xl p-5">
         <div className="mb-2 flex items-center gap-2 text-[12px] text-white/50">
@@ -52,7 +44,7 @@ export function ApiTab() {
           <code className="flex-1 truncate rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[12px] text-white/80">
             {base}
           </code>
-          <button onClick={() => copy(base)} className="btn btn-ghost h-9 px-3 text-[11px]">
+          <button onClick={() => copy(base)} aria-label={a.copy} title={a.copy} className="btn btn-ghost h-9 px-3 text-[11px]">
             {copied === base ? <Check className="h-3.5 w-3.5 text-ok" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
         </div>

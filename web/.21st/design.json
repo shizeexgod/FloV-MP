@@ -20,14 +20,19 @@
   },
   "design": {
     "colorMode": "dark",
-    "colors": {},
+    "colors": {
+      "background": "#09090b",
+      "surface": "#111114",
+      "border": "rgba(255,255,255,0.075)",
+      "accent": "#ff3d8a"
+    },
     "typography": {
       "--text": {
-        "value": "#16171d",
+        "value": "#f0f0f2",
         "source": "src/app/globals.css"
       },
       "--text-dim": {
-        "value": "#565a68",
+        "value": "#9a9aa4",
         "source": "src/app/globals.css"
       }
     },
@@ -69,6 +74,10 @@
     {
       "date": "2026-09-16",
       "decision": "Public positioning focuses on an independent GTA V multiplayer platform, not SaaS terminology. Header navigation uses subtle typographic scale and contrast on hover without background fills. Feature grids use complete equal-width rows without empty bento cells."
+    },
+    {
+      "date": "2026-09-16",
+      "decision": "Dashboard direction 01 Precision selected. The production workspace uses a permanent 248px grouped sidebar, project-first hierarchy, compact flat surfaces, URL-synced sections, a mobile drawer, and honest empty states instead of invented metrics."
     }
   ],
   "evidence": [

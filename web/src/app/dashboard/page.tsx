@@ -1,10 +1,33 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Activity, AlertTriangle, BarChart3, Download, KeyRound, Layers, Percent, Plug, Plus, ScrollText, Server, Settings, Terminal } from 'lucide-react';
-import { Badge, FieldLabel, Modal, Spinner, useToast } from '@/components/ui';
+import Image from 'next/image';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  ChevronDown,
+  CreditCard,
+  Download,
+  KeyRound,
+  Layers,
+  LogOut,
+  Menu,
+  Percent,
+  Plug,
+  Plus,
+  RefreshCw,
+  ScrollText,
+  Server,
+  Settings,
+  Terminal,
+  X,
+} from 'lucide-react';
+import { Spinner, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
+import LangSwitch from '@/components/LangSwitch';
 
 import {
   DashboardProvider,
@@ -23,10 +46,12 @@ import { WatchdogTab } from '@/components/dashboard/WatchdogTab';
 import { LogsTab } from '@/components/dashboard/LogsTab';
 import { ApiTab } from '@/components/dashboard/ApiTab';
 import { SettingsTab } from '@/components/dashboard/SettingsTab';
+import { BillingTab } from '@/components/dashboard/BillingTab';
 import { IpBindModal } from '@/components/dashboard/IpBindModal';
 import { NewLicenseModal } from '@/components/dashboard/NewLicenseModal';
 import { NewProjectModal } from '@/components/dashboard/NewProjectModal';
 import { ProjectSettingsModal } from '@/components/dashboard/ProjectSettingsModal';
+import { InvoiceModal } from '@/components/dashboard/InvoiceModal';
 import type { TwoFaState } from '@/components/dashboard/_ctx';
 
 const TAB_ICONS: Partial<Record<TabKey, React.ElementType>> = {
@@ -40,29 +65,36 @@ const TAB_ICONS: Partial<Record<TabKey, React.ElementType>> = {
   api: Plug,
   sdk: Download,
   builder: Layers,
+  billing: CreditCard,
   affiliate: Percent,
   settings: Settings,
 };
 
-type NavGroupId = 'manage' | 'monitor' | 'tools' | 'account';
+type NavGroupId = 'manage' | 'monitor' | 'tools' | 'finance' | 'account';
 const NAV_GROUPS: { id: NavGroupId; keys: TabKey[] }[] = [
   { id: 'manage', keys: ['projects', 'overview'] },
   { id: 'monitor', keys: ['telemetry', 'analytics', 'watchdog', 'logs'] },
   { id: 'tools', keys: ['console', 'api', 'sdk', 'builder'] },
-  { id: 'account', keys: ['affiliate', 'settings'] },
+  { id: 'finance', keys: ['billing', 'affiliate'] },
+  { id: 'account', keys: ['settings'] },
 ];
+
+const VALID_TABS = new Set<TabKey>(NAV_GROUPS.flatMap((group) => group.keys));
 
 /* =============================================================== */
 export default function DashboardPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const { show, node } = useToast();
-  const D = useT().dash;
+  const t = useT();
+  const D = t.dash;
   const BUILD_STAGES = D.buildStages;
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [licenses, setLicenses] = useState<License[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>('projects');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   /* Projects & Servers state */
   const [projects, setProjects] = useState<Project[]>([]);
@@ -125,7 +157,7 @@ export default function DashboardPage() {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [payingId, setPayingId] = useState<number | null>(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
-  const [invPlan, setInvPlan] = useState('business');
+  const [invPlan, setInvPlan] = useState('lifetime');
   const [invPeriod, setInvPeriod] = useState<'monthly' | 'halfYear' | 'year'>('monthly');
   const [invMethod, setInvMethod] = useState<'card' | 'sbp' | 'crypto'>('card');
   const [creatingInvoice, setCreatingInvoice] = useState(false);
@@ -136,9 +168,9 @@ export default function DashboardPage() {
   const [sendingHb, setSendingHb] = useState(false);
 
   /* builder */
-  const [bProject, setBProject] = useState('Florida V');
+  const [bProject, setBProject] = useState('');
   const [bColor, setBColor] = useState('#ff3d8a');
-  const [bIp, setBIp] = useState('188.127.229.224');
+  const [bIp, setBIp] = useState('');
   const [bPort, setBPort] = useState('7788');
   const [building, setBuilding] = useState(false);
   const [buildStage, setBuildStage] = useState(0);
@@ -222,8 +254,24 @@ export default function DashboardPage() {
     }
   };
 
+  const selectTab = (nextTab: TabKey) => {
+    setTab(nextTab);
+    setMobileNavOpen(false);
+    const params = new URLSearchParams(window.location.search);
+    params.set('section', nextTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const logout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    router.replace('/');
+    router.refresh();
+  };
+
   /* ------------------------------------------------------------- */
   useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get('section') as TabKey | null;
+    if (requestedTab && VALID_TABS.has(requestedTab)) setTab(requestedTab);
     void load2fa();
     void loadDashboard();
     return () => {
@@ -231,6 +279,13 @@ export default function DashboardPage() {
       eventSourceRef.current?.close();
     };
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileNavOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     if (tab === 'billing') void loadInvoices();
@@ -264,6 +319,7 @@ export default function DashboardPage() {
         setProjects(projs);
         if (projs.length > 0) {
           setSelectedProject(projs[0]);
+          setBProject((current) => current || projs[0].name);
           void loadServers(projs[0].id);
         }
       }
@@ -650,8 +706,7 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           licenseId: licenses[0]?.id,
-          plan: invPlan,
-          period: invPeriod,
+          plan: 'lifetime',
           paymentMethod: invMethod,
         }),
       });
@@ -756,16 +811,20 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 text-brand">
-        <Spinner className="h-8 w-8" />
-        <p className="text-sm text-slate-400">{D.loading}</p>
+      <div className="precision-dashboard grid min-h-dvh place-items-center bg-[#09090b] text-brand">
+        <div className="flex flex-col items-center gap-3" role="status" aria-live="polite">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl border border-brand/20 bg-brand/[0.06]">
+            <Spinner className="h-5 w-5" />
+          </span>
+          <p className="text-xs font-semibold text-white/40">{D.loading}</p>
+        </div>
       </div>
     );
   }
 
   const ctx = {
     D, BUILD_STAGES, primaryLic, isIpBound, promoCode, latest, onboarding,
-    user, licenses, tab, setTab,
+    user, licenses, tab, setTab: selectTab,
     projects, selectedProject, servers, loadingServers, dispatchingAction,
     consoleInput, setConsoleInput, consoleLogs, setConsoleLogs,
     showKeyId, setShowKeyId, copied,
@@ -792,130 +851,190 @@ export default function DashboardPage() {
     copy, openIpModal, saveIp, createLicense, payInvoice, createInvoice, sendHeartbeat, buildLauncher,
   };
 
+  const ActiveIcon = TAB_ICONS[tab] ?? Layers;
+  const currentProjectName = selectedProject?.name || D.workspace.noProject;
+
+  const renderNavigation = () => (
+    <>
+      <div className="border-b border-white/[0.07] px-3 pb-4 pt-3">
+        <label className="mb-2 block px-1 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25" htmlFor="dashboard-project">
+          {D.workspace.currentProject}
+        </label>
+        <div className="relative">
+          <select
+            id="dashboard-project"
+            value={selectedProject?.id ?? ''}
+            onChange={(event) => {
+              const project = projects.find((item) => item.id === Number(event.target.value));
+              if (project) handleSelectProject(project);
+            }}
+            className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 pr-9 text-xs font-bold text-white/75 transition-[border-color,background-color] hover:border-white/[0.14] hover:bg-white/[0.04]"
+          >
+            {projects.length === 0 ? <option value="">{D.workspace.noProject}</option> : null}
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </select>
+          <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+        </div>
+      </div>
+
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label={D.workspace.sections}>
+        {NAV_GROUPS.map((group, groupIndex) => (
+          <div key={group.id} className={groupIndex > 0 ? 'mt-5' : ''}>
+            <div className="mb-1.5 px-2 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
+              {D.navGroups[group.id]}
+            </div>
+            <div className="space-y-1">
+              {group.keys.map((key) => {
+                const Icon = TAB_ICONS[key] ?? Layers;
+                const selected = tab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    data-section={key}
+                    onClick={() => selectTab(key)}
+                    aria-current={selected ? 'page' : undefined}
+                    className={`group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left text-[11px] font-bold transition-[color,background-color,transform] duration-200 active:scale-[0.99] ${
+                      selected ? 'bg-white/[0.07] text-white' : 'text-white/38 hover:bg-white/[0.035] hover:text-white/75'
+                    }`}
+                  >
+                    {selected ? <span aria-hidden="true" className="absolute -left-3 h-5 w-0.5 rounded-r-full bg-brand" /> : null}
+                    <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 transition-colors ${selected ? 'text-brand' : 'text-white/25 group-hover:text-white/50'}`} />
+                    <span className="min-w-0 truncate">{D.tabs[key]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+    </>
+  );
+
   return (
     <DashboardProvider value={ctx}>
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      {node}
+      <div className="precision-dashboard h-dvh overflow-hidden bg-[#09090b] text-white">
+        {node}
+        <div className="flex h-full min-w-0">
+          <aside className="hidden w-[248px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0d0d10] lg:flex">
+            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+              <Link href="/" className="group flex items-center gap-2.5" aria-label="FloV:MP">
+                <Image src="/branding/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain transition-transform duration-200 group-hover:scale-105" />
+                <span translate="no" className="text-sm font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
+              </Link>
+              <LangSwitch className="scale-[0.82] origin-right" />
+            </div>
 
-      {/* Header */}
-      <div className="card card-edge mb-6 flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
-        <div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl"><span className="h-grad">{D.hello}, {user?.username}</span></h1>
-            <Badge tone={user?.role === 'admin' ? 'red' : 'brand'}>
-              {user?.role === 'admin' ? D.roleAdmin : D.roleClient}
-            </Badge>
-          </div>
-          <p className="mt-1.5 text-[13px] text-white/45">
-            {D.headerSub}
-          </p>
-        </div>
-        <button onClick={() => setNewLicOpen(true)} className="btn btn-primary h-10 px-4 text-xs">
-          <Plus className="h-4 w-4" />
-          {D.newLicense}
-        </button>
-      </div>
+            {renderNavigation()}
 
-      {/* Sidebar + content */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[248px_1fr]">
-        {/* Left sidebar — sections grouped by category */}
-        <aside className="lg:sticky lg:top-6 lg:h-max">
-          <label className="sr-only" htmlFor="dashboard-section">{D.navGroups.manage}</label>
-          <select
-            id="dashboard-section"
-            value={tab}
-            onChange={(e) => setTab(e.target.value as TabKey)}
-            className="field h-11 px-3 lg:hidden"
-          >
-            {NAV_GROUPS.map((g) => (
-              <optgroup key={g.id} label={D.navGroups[g.id]}>
-                {g.keys.map((k) => <option key={k} value={k}>{D.tabs[k]}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          <nav className="glass no-lift hidden p-2.5 lg:block">
-            {NAV_GROUPS.map((g, gi) => (
-              <div key={g.id} className={gi > 0 ? 'mt-1.5' : ''}>
-                {gi > 0 && <hr className="rule-soft my-2" />}
-                <div className="px-2.5 pb-1 pt-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
-                  {D.navGroups[g.id]}
-                </div>
-                <div className="space-y-0.5">
-                  {g.keys.map((k) => {
-                    const Icon = TAB_ICONS[k] ?? Layers;
-                    const on = tab === k;
-                    return (
-                      <button
-                        key={k}
-                        onClick={() => setTab(k)}
-                        className={`group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-[9px] text-left text-[12.5px] font-semibold transition-all duration-200 active:scale-[0.98] ${
-                          on
-                            ? 'bg-brand/[0.12] text-brand shadow-[inset_0_0_0_1px_rgba(255,61,138,0.25)]'
-                            : 'text-white/45 hover:bg-white/[0.05] hover:text-white/85'
-                        }`}
-                      >
-                        <Icon className={`h-4 w-4 flex-none transition-colors ${on ? 'text-brand' : 'text-white/35 group-hover:text-white/60'}`} />
-                        <span className="truncate">{D.tabs[k]}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            <div className="shrink-0 border-t border-white/[0.07] p-3">
+              <div className="flex items-center gap-3 rounded-lg p-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/10 text-[10px] font-extrabold uppercase text-brand">
+                  {(user?.username || 'F').slice(0, 2)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11px] font-bold text-white/65">{user?.username}</span>
+                  <span className="block truncate text-[9px] text-white/25">{user?.email}</span>
+                </span>
+                <button type="button" onClick={logout} aria-label={t.common.logout} title={t.common.logout} className="grid h-8 w-8 place-items-center rounded-lg text-white/25 transition-colors hover:bg-white/[0.05] hover:text-white/70">
+                  <LogOut aria-hidden="true" className="h-4 w-4" />
+                </button>
               </div>
-            ))}
-          </nav>
-        </aside>
+            </div>
+          </aside>
 
-        {/* Active section */}
-        <main key={tab} className="min-w-0 animate-view-in">
-      {/* ============ PROJECTS & SERVERS ============ */}
-      {tab === 'projects' && <ProjectsTab />}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.07] bg-[#0c0c0f] px-4 lg:hidden">
+              <button type="button" onClick={() => setMobileNavOpen(true)} aria-label={D.workspace.openMenu} aria-expanded={mobileNavOpen} className="grid h-9 w-9 place-items-center rounded-lg border border-white/[0.08] text-white/55 transition-colors hover:border-white/[0.15] hover:text-white">
+                <Menu aria-hidden="true" className="h-4 w-4" />
+              </button>
+              <Link href="/" className="flex items-center gap-2" aria-label="FloV:MP">
+                <Image src="/branding/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
+                <span translate="no" className="text-xs font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
+              </Link>
+              <div className="ml-auto"><LangSwitch className="scale-[0.88] origin-right" /></div>
+            </header>
 
-      {/* ============ txAdmin CONSOLE ============ */}
-      {tab === 'console' && <ConsoleTab />}
+            <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#0b0b0d]">
+              <div className="mx-auto w-full max-w-[1240px] p-4 sm:p-6 xl:p-8">
+                <header className="mb-6 flex flex-col gap-4 border-b border-white/[0.07] pb-6 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-brand">
+                      <span className="truncate">{currentProjectName}</span>
+                      <span aria-hidden="true" className="text-white/15">/</span>
+                      <span className="truncate text-white/35">{D.tabs[tab]}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-brand/20 bg-brand/[0.07] text-brand">
+                        <ActiveIcon aria-hidden="true" className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <h1 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">{D.tabs[tab]}</h1>
+                        <p className="mt-1 text-xs leading-relaxed text-white/40">{D.tabDescriptions[tab]}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" onClick={() => void loadDashboard()} className="btn btn-ghost h-9 flex-1 px-3.5 text-xs sm:flex-none">
+                      <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
+                      {D.refresh}
+                    </button>
+                    <button type="button" onClick={() => setNewLicOpen(true)} className="btn btn-primary h-9 flex-1 px-3.5 text-xs sm:flex-none">
+                      <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+                      {D.newLicense}
+                    </button>
+                  </div>
+                </header>
 
-      {/* ============ OVERVIEW ============ */}
-      {tab === 'overview' && <OverviewTab />}
+                <section key={tab} data-dashboard-tab={tab} className="dashboard-section min-w-0 animate-view-in">
+                  {tab === 'projects' && <ProjectsTab />}
+                  {tab === 'console' && <ConsoleTab />}
+                  {tab === 'overview' && <OverviewTab />}
+                  {tab === 'telemetry' && <TelemetryTab />}
+                  {tab === 'analytics' && <AnalyticsTab />}
+                  {tab === 'watchdog' && <WatchdogTab />}
+                  {tab === 'logs' && <LogsTab />}
+                  {tab === 'api' && <ApiTab />}
+                  {tab === 'sdk' && <SdkTab />}
+                  {tab === 'builder' && <BuilderTab />}
+                  {tab === 'billing' && <BillingTab />}
+                  {tab === 'affiliate' && <AffiliateTab />}
+                  {tab === 'settings' && <SettingsTab />}
+                </section>
+              </div>
+            </main>
+          </div>
+        </div>
 
-      {/* ============ TELEMETRY ============ */}
-      {tab === 'telemetry' && <TelemetryTab />}
+        {mobileNavOpen ? (
+          <div className="fixed inset-0 z-[90] lg:hidden">
+            <button type="button" onClick={() => setMobileNavOpen(false)} aria-label={D.workspace.closeMenu} className="absolute inset-0 bg-black/70" />
+            <aside className="relative z-10 flex h-full w-[min(88vw,320px)] flex-col border-r border-white/[0.08] bg-[#0d0d10] shadow-2xl" role="dialog" aria-modal="true" aria-label={D.workspace.sections}>
+              <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+                <span className="flex items-center gap-2.5">
+                  <Image src="/branding/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
+                  <span translate="no" className="text-sm font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
+                </span>
+                <button type="button" onClick={() => setMobileNavOpen(false)} aria-label={D.workspace.closeMenu} className="grid h-9 w-9 place-items-center rounded-lg text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white">
+                  <X aria-hidden="true" className="h-4 w-4" />
+                </button>
+              </div>
+              {renderNavigation()}
+              <div className="shrink-0 border-t border-white/[0.07] p-3">
+                <button type="button" onClick={logout} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] text-xs font-bold text-white/55 transition-colors hover:border-white/[0.15] hover:text-white">
+                  <LogOut aria-hidden="true" className="h-4 w-4" /> {t.common.logout}
+                </button>
+              </div>
+            </aside>
+          </div>
+        ) : null}
 
-      {/* ============ ANALYTICS ============ */}
-      {tab === 'analytics' && <AnalyticsTab />}
-
-      {/* ============ WATCHDOG & CRASHES ============ */}
-      {tab === 'watchdog' && <WatchdogTab />}
-
-      {/* ============ LOGS ============ */}
-      {tab === 'logs' && <LogsTab />}
-
-      {/* ============ API & WEBHOOKS ============ */}
-      {tab === 'api' && <ApiTab />}
-
-      {/* ============ DOWNLOADS & SDK ============ */}
-      {tab === 'sdk' && <SdkTab />}
-
-      {/* ============ BUILDER ============ */}
-      {tab === 'builder' && <BuilderTab />}
-
-      {/* ============ AFFILIATE ============ */}
-      {tab === 'affiliate' && <AffiliateTab />}
-
-      {/* ============ SETTINGS ============ */}
-      {tab === 'settings' && <SettingsTab />}
-        </main>
+        <IpBindModal />
+        <NewLicenseModal />
+        <NewProjectModal />
+        <ProjectSettingsModal />
+        <InvoiceModal />
       </div>
-
-      {/* ============ MODALS ============ */}
-      <IpBindModal />
-
-      <NewLicenseModal />
-
-      <NewProjectModal />
-
-      {/* Project Settings & Webhook Modal */}
-      <ProjectSettingsModal />
-
-    </div>
     </DashboardProvider>
   );
 }

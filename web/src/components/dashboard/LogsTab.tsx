@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ScrollText, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useDashboard } from './_ctx';
 
 const LEVELS = ['ALL', 'INFO', 'OK', 'WARN', 'ERROR', 'CRASH'] as const;
@@ -28,22 +28,15 @@ export function LogsTab() {
 
   return (
     <div className="relative space-y-4 animate-fade-in">
-      <div>
-        <h2 className="flex items-center gap-2 text-lg font-black text-white">
-          <ScrollText className="h-5 w-5 text-brand" />
-          {D.logs.title}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">{D.logs.sub}</p>
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3">
+        <div className="flex h-10 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 focus-within:border-brand/50 focus-within:ring-2 focus-within:ring-brand/10">
           <Search className="h-3.5 w-3.5 text-white/35" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={D.logs.search}
-            className="flex-1 bg-transparent text-[12.5px] text-white outline-none placeholder:text-white/25"
+            aria-label={D.logs.search}
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-white placeholder:text-white/25 focus-visible:outline-none"
           />
         </div>
         {LEVELS.map((l) => (

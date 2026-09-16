@@ -124,13 +124,14 @@ export function ConsoleTab() {
             </div>
 
             {/* Input Bar */}
-            <form onSubmit={sendConsoleCommand} className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4">
+            <form onSubmit={sendConsoleCommand} className="mt-4 flex items-center gap-2 border-t border-white/10 pt-4 focus-within:border-brand/40">
               <span className="font-mono text-xs font-bold text-brand">txAdmin@flovmp:~$</span>
               <input
                 value={consoleInput}
                 onChange={(e) => setConsoleInput(e.target.value)}
                 placeholder={D.console.placeholder}
-                className="flex-1 bg-transparent font-mono text-xs text-white placeholder-slate-600 focus:outline-none"
+                aria-label={D.console.placeholder}
+                className="min-w-0 flex-1 bg-transparent font-mono text-xs text-white placeholder-slate-600 focus-visible:outline-none"
               />
               <button type="submit" className="btn btn-primary h-8 px-4 text-xs">
                 <Send className="h-3.5 w-3.5" />

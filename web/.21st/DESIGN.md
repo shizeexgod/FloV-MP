@@ -56,3 +56,5 @@ Generated from project sources at 2026-09-16T12:02:25.265Z.
 - Public positioning focuses on an independent GTA V multiplayer platform.
 - Header navigation uses subtle typographic scale and contrast without background fills.
 - Feature grids use complete equal-width rows without empty bento cells.
+- Dashboard uses the selected 01 Precision direction: a 248 px grouped sidebar, project-first hierarchy, compact flat surfaces, URL-synced sections and a mobile drawer.
+- Dashboard metrics use only API data; unavailable values render explicit empty states instead of fabricated numbers.

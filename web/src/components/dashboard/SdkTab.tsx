@@ -11,18 +11,6 @@ export function SdkTab() {
   } = useDashboard();
   return (
         <div className="relative space-y-8 animate-fade-in">
-          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between sm:p-8">
-            <div>
-              <div className="flex items-center gap-2">
-                <Download className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">{D.sdk.title}</h2>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">
-                {D.sdk.sub}
-              </p>
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[
               { badge: 'Linux x64 · 85 MB', badgeTone: 'cyber', link: '/cdn/FloVMP-Server-x64-Linux.tar.gz' },
@@ -45,14 +33,13 @@ export function SdkTab() {
                   <p className="mt-2 text-xs leading-relaxed text-slate-400">{D.sdk.items[idx][1]}</p>
                 </div>
                 <div className="mt-6 border-t border-white/[0.08] pt-4">
-                  <a
-                    href={item.link}
-                    download
-                    className="btn btn-ghost h-10 w-full text-xs font-semibold text-brand hover:bg-brand/10"
+                  <span
+                    aria-disabled="true"
+                    className="btn btn-ghost h-10 w-full cursor-not-allowed text-xs font-semibold text-white/35"
                   >
                     <Download className="h-4 w-4" />
-                    {D.sdk.items[idx][2]}
-                  </a>
+                    {D.sdk.preparing}
+                  </span>
                 </div>
               </div>
             ))}

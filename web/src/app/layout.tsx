@@ -2,8 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { I18nProvider } from '@/lib/i18n';
 import { ThemeProvider, THEME_BOOT_SCRIPT } from '@/lib/theme';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
+import SiteChrome from '@/components/SiteChrome';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://flovmp.ru'),
@@ -41,9 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <I18nProvider>
             <div className="page-aura" aria-hidden />
-            <Navbar />
-            <main className="flex-1">{children}</main>
-            <Footer />
+            <SiteChrome>{children}</SiteChrome>
           </I18nProvider>
         </ThemeProvider>
       </body>

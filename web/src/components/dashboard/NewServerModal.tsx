@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Modal, FieldLabel, Spinner } from '@/components/ui';
 import { Plus, Tag } from 'lucide-react';
+import { useDashboard } from './_ctx';
 
 interface NewServerModalProps {
   open: boolean;
@@ -19,6 +20,8 @@ const ENVIRONMENTS = [
 ] as const;
 
 export function NewServerModal({ open, onClose, projectId, onCreated }: NewServerModalProps) {
+  const { D } = useDashboard();
+  const s = D.server;
   const [name, setName] = useState('');
   const [label, setLabel] = useState('DEV');
   const [environment, setEnvironment] = useState<'production' | 'development' | 'test' | 'staging'>('development');
@@ -53,7 +56,7 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Ошибка добавления сервера');
+        throw new Error(data.error || s.addError);
       }
 
       onCreated();
@@ -63,7 +66,7 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
       setLabel('DEV');
       setEnvironment('development');
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка при создании сервера');
+      setError(err.message || s.createError);
     } finally {
       setLoading(false);
     }
@@ -73,8 +76,8 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
     <Modal
       open={open}
       onClose={onClose}
-      title="Добавить сервер проекта"
-      description="Подключение нового игрового сервера (Production, Dev или Test) к проекту"
+      title={s.newTitle}
+      description={s.newDescription}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -84,12 +87,13 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
         )}
 
         <div>
-          <FieldLabel>Название инстанса сервера</FieldLabel>
+          <FieldLabel>{s.name}</FieldLabel>
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Например: Тестовый стенд разработки #1"
+            placeholder={s.namePlaceholder}
+            name="server-name"
             className="field h-11 px-4 text-sm"
           />
         </div>
@@ -99,30 +103,32 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
             <FieldLabel>
               <span className="flex items-center gap-1">
                 <Tag className="h-3 w-3 text-brand" />
-                Визуальный префикс
+                {s.visualPrefix}
               </span>
             </FieldLabel>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value.toUpperCase())}
               placeholder="DEV, TEST, PROD"
+              name="server-label"
               className="field h-11 px-4 font-mono text-sm uppercase"
             />
           </div>
           <div>
-            <FieldLabel>Порт UDP</FieldLabel>
+            <FieldLabel>{s.udpPort}</FieldLabel>
             <input
               type="number"
               value={port}
               onChange={(e) => setPort(Number(e.target.value))}
               placeholder="7788"
+              name="server-port"
               className="field h-11 px-4 font-mono text-sm"
             />
           </div>
         </div>
 
         <div>
-          <FieldLabel>Окружение (Environment)</FieldLabel>
+          <FieldLabel>{s.environment}</FieldLabel>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {ENVIRONMENTS.map((env) => (
               <button
@@ -134,14 +140,14 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
                     setLabel(env.badge);
                   }
                 }}
-                className={`rounded-xl border p-2.5 text-center transition-all ${
+                className={`rounded-xl border p-2.5 text-center transition-[border-color,background-color,color,transform] ${
                   environment === env.id
                     ? `${env.color} ring-1 ring-white/20`
                     : 'border-white/10 bg-white/[0.02] text-slate-400 hover:bg-white/[0.05]'
                 }`}
               >
                 <div className="font-mono text-xs font-bold">[{env.badge}]</div>
-                <div className="mt-0.5 text-[10px] truncate">{env.label}</div>
+                <div className="mt-0.5 text-[10px] truncate">{s.environments[env.id]}</div>
               </button>
             ))}
           </div>
@@ -149,19 +155,21 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel>IP адрес (Bind)</FieldLabel>
+            <FieldLabel>{s.ipAddress}</FieldLabel>
             <input
               value={ip}
               onChange={(e) => setIp(e.target.value)}
               placeholder="127.0.0.1"
+              name="server-ip"
               className="field h-11 px-4 font-mono text-sm"
             />
           </div>
           <div>
-            <FieldLabel>Лимит слотов</FieldLabel>
+            <FieldLabel>{s.slotLimit}</FieldLabel>
             <div className="flex items-center gap-2 mt-1">
               <input
                 type="number"
+                name="server-slot-limit"
                 disabled={unlimitedSlots}
                 value={slotLimit}
                 onChange={(e) => setSlotLimit(Number(e.target.value))}
@@ -176,7 +184,7 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
                     : 'border-white/10 bg-white/5 text-slate-400'
                 }`}
               >
-                {unlimitedSlots ? 'Безлимит (до 5000+)' : 'Ограничен'}
+                {unlimitedSlots ? s.unlimitedShort : s.limited}
               </button>
             </div>
           </div>
@@ -188,7 +196,7 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
             onClick={onClose}
             className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
           >
-            Отмена
+            {D.cancel}
           </button>
           <button
             type="submit"
@@ -196,7 +204,7 @@ export function NewServerModal({ open, onClose, projectId, onCreated }: NewServe
             className="btn btn-primary h-10 px-5 text-xs font-bold disabled:opacity-50"
           >
             {loading ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4 mr-1.5" />}
-            Создать сервер
+            {s.create}
           </button>
         </div>
       </form>

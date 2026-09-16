@@ -43,12 +43,12 @@ export function AffiliateTab() {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <div className="glass card-edge rounded-2xl p-6">
               <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{D.aff.invited}</div>
-              <div className="mt-2 font-mono text-3xl font-black text-white">0</div>
+              <div className="mt-2 font-mono text-3xl font-black text-white">—</div>
               <div className="mt-2 font-mono text-[11px] text-slate-500">{D.aff.activeRefs}</div>
             </div>
             <div className="glass card-edge rounded-2xl p-6">
               <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{D.aff.earned}</div>
-              <div className="mt-2 font-mono text-3xl font-black text-emeraldx">0 ₽</div>
+              <div className="mt-2 font-mono text-3xl font-black text-emeraldx">—</div>
               <div className="mt-2 font-mono text-[11px] text-slate-500">{D.aff.available}</div>
             </div>
             <div className="glass card-edge rounded-2xl p-6">

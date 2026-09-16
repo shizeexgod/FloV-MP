@@ -107,6 +107,7 @@ export function OverviewTab() {
                                 onClick={() => setShowKeyId(revealed ? null : lic.id)}
                                 className="text-slate-500 transition hover:text-white"
                                 title={revealed ? D.overview.hideKey : D.overview.showKey}
+                                aria-label={revealed ? D.overview.hideKey : D.overview.showKey}
                               >
                                 {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
@@ -115,6 +116,7 @@ export function OverviewTab() {
                               onClick={() => copy(lic.license_key)}
                               className="btn btn-ghost h-[42px] w-[42px] shrink-0 p-0"
                               title={D.overview.copyKey}
+                              aria-label={D.overview.copyKey}
                             >
                               {copied === lic.license_key ? (
                                 <Check className="h-4 w-4 text-emeraldx" />

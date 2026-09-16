@@ -646,6 +646,90 @@
 }
 :root[data-theme='light'] .glass-panel { background: rgba(255, 255, 255, 0.86); }
 
+/* =====================================================================
+   Dashboard / Precision — плотное рабочее пространство без тяжёлого glass.
+   Отдельный scope не меняет визуальный язык публичных страниц.
+   ===================================================================== */
+.precision-dashboard {
+  color-scheme: dark;
+  font-family: 'Manrope', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background: #09090b;
+}
+.precision-dashboard h1,
+.precision-dashboard h2 {
+  font-family: 'Manrope', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.025em;
+}
+.precision-dashboard select,
+.precision-dashboard option {
+  color-scheme: dark;
+  background-color: #111114;
+  color: #e9eaee;
+}
+.precision-dashboard .glass,
+.precision-dashboard .glass-panel,
+.precision-dashboard .card {
+  border-color: rgba(255, 255, 255, 0.075);
+  border-radius: 0.875rem;
+  background: #111114;
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s var(--ease);
+}
+.precision-dashboard .glass:hover,
+.precision-dashboard .glass-panel:hover,
+.precision-dashboard .card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.13);
+  background: #141418;
+  box-shadow: none;
+}
+.precision-dashboard .no-lift:hover { transform: none; }
+.precision-dashboard .card-edge::before { opacity: 0.45; }
+.precision-dashboard .shadow-glass { box-shadow: none; }
+.precision-dashboard .rounded-3xl { border-radius: 1rem; }
+.precision-dashboard .dashboard-section > .space-y-8 > :not([hidden]) ~ :not([hidden]),
+.precision-dashboard .dashboard-section .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.25rem;
+}
+.precision-dashboard .dashboard-section .gap-8 { gap: 1.25rem; }
+.precision-dashboard .dashboard-section .gap-6 { gap: 1rem; }
+.precision-dashboard .dashboard-section .gap-5 { gap: 0.875rem; }
+.precision-dashboard .dashboard-section .glass-panel.p-8,
+.precision-dashboard .dashboard-section .glass-panel.sm\:p-8,
+.precision-dashboard .dashboard-section .glass.p-8,
+.precision-dashboard .dashboard-section .card.p-8 {
+  padding: 1.25rem;
+}
+.precision-dashboard .btn::before { display: none; }
+.precision-dashboard .btn:hover svg:last-child { transform: none; }
+.precision-dashboard .btn { border-radius: 0.55rem; }
+.precision-dashboard .field { border-radius: 0.6rem; background: rgba(255, 255, 255, 0.025); }
+:root[data-theme='light'] .precision-dashboard,
+:root[data-theme='light'] .precision-dashboard .bg-\[\#09090b\],
+:root[data-theme='light'] .precision-dashboard .bg-\[\#0b0b0d\],
+:root[data-theme='light'] .precision-dashboard .bg-\[\#0c0c0f\],
+:root[data-theme='light'] .precision-dashboard .bg-\[\#0d0d10\] {
+  background-color: #09090b;
+}
+:root[data-theme='light'] .precision-dashboard .text-white,
+:root[data-theme='light'] .precision-dashboard .text-white\/80,
+:root[data-theme='light'] .precision-dashboard .text-white\/75,
+:root[data-theme='light'] .precision-dashboard .text-white\/70,
+:root[data-theme='light'] .precision-dashboard .text-white\/65,
+:root[data-theme='light'] .precision-dashboard .text-white\/60,
+:root[data-theme='light'] .precision-dashboard .text-white\/55,
+:root[data-theme='light'] .precision-dashboard .text-white\/50,
+:root[data-theme='light'] .precision-dashboard .text-white\/45,
+:root[data-theme='light'] .precision-dashboard .text-white\/40,
+:root[data-theme='light'] .precision-dashboard .text-white\/35,
+:root[data-theme='light'] .precision-dashboard .text-white\/30,
+:root[data-theme='light'] .precision-dashboard .text-white\/25 {
+  color: revert-layer;
+}
+:root[data-theme='light'] .precision-dashboard .glass,
+:root[data-theme='light'] .precision-dashboard .glass-panel,
+:root[data-theme='light'] .precision-dashboard .card { background: #111114; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

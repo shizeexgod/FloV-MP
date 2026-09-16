@@ -21,6 +21,23 @@ export interface PlanDetails {
 }
 
 export const PLANS: Record<string, PlanDetails> = {
+  lifetime: {
+    id: 'lifetime',
+    name: 'FloV:MP Lifetime',
+    priceMonthly: 25000,
+    priceHalfYear: 25000,
+    priceYearly: 25000,
+    maxPlayers: 1500,
+    features: {
+      voice3D: true,
+      antiCheat: true,
+      customDlcStreaming: true,
+      fastDlCdn: true,
+      unlimitedEntities: true,
+      customLauncherBranding: true,
+      prioritySupport: true,
+    },
+  },
   indie: {
     id: 'indie',
     name: 'Инди (Разработка)',

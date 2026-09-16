@@ -38,7 +38,7 @@ export function ProjectsTab() {
     try {
       setDownloadingFlv(true);
       const res = await fetch(`/api/v1/projects/${proj.id}/license-flv`);
-      if (!res.ok) throw new Error('Ошибка скачивания файла лицензии');
+      if (!res.ok) throw new Error(D.proj.downloadError);
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -49,7 +49,7 @@ export function ProjectsTab() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert(e.message || 'Ошибка скачивания license.flv');
+      alert(e.message || D.proj.downloadError);
     } finally {
       setDownloadingFlv(false);
     }
@@ -85,7 +85,7 @@ export function ProjectsTab() {
                 <button
                   key={p.id}
                   onClick={() => handleSelectProject(p)}
-                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-all ${
+                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-[border-color,background-color,box-shadow,transform] ${
                     active
                       ? 'border-brand bg-brand/10 shadow-neon-pink'
                       : 'border-white/10 bg-white/[0.02] hover:border-white/20'
@@ -133,6 +133,7 @@ export function ProjectsTab() {
                     onClick={() => copy(selectedProject.license_key)}
                     className="btn btn-ghost h-9 w-9 p-0"
                     title={D.proj.copyLicenseKey}
+                    aria-label={D.proj.copyLicenseKey}
                   >
                     {copied === selectedProject.license_key ? (
                       <Check className="h-4 w-4 text-emeraldx" />
@@ -145,7 +146,7 @@ export function ProjectsTab() {
                     onClick={() => handleDownloadFlv(selectedProject)}
                     disabled={downloadingFlv}
                     className="btn h-9 border border-cyber/40 bg-cyber/10 px-3 text-xs font-semibold text-cyber transition hover:bg-cyber/20 flex items-center gap-1.5"
-                    title="Скачать криптографически подписанный файл license.flv для сервера"
+                    title={D.proj.downloadFlvTitle}
                   >
                     {downloadingFlv ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
                     license.flv
@@ -154,10 +155,10 @@ export function ProjectsTab() {
                   <button
                     onClick={() => setDownloadModalOpen(true)}
                     className="btn btn-primary h-9 px-3.5 text-xs font-bold flex items-center gap-1.5 shadow-neon-pink"
-                    title="Получить дистрибутив и варианты авто-установки (в 1 команду или готовый архив)"
+                    title={D.proj.downloadFilesTitle}
                   >
                     <Download className="h-3.5 w-3.5" />
-                    Файлы мультиплеера
+                    {D.proj.filesButton}
                   </button>
 
                   <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
@@ -168,6 +169,7 @@ export function ProjectsTab() {
                     onClick={() => copy(selectedProject.api_key)}
                     className="btn btn-ghost h-9 w-9 p-0"
                     title={D.proj.copyAgentKey}
+                    aria-label={D.proj.copyAgentKey}
                   >
                     {copied === selectedProject.api_key ? (
                       <Check className="h-4 w-4 text-emeraldx" />
@@ -209,7 +211,7 @@ export function ProjectsTab() {
                     className="btn btn-primary h-8 px-3 text-xs font-semibold flex items-center gap-1.5 shadow-neon-pink"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Добавить сервер
+                    {D.proj.addServer}
                   </button>
                 )}
               </div>
@@ -276,9 +278,9 @@ export function ProjectsTab() {
                           <div>
                             <span className="text-slate-500">{D.proj.slotsShort}:</span>{' '}
                             {srv.slot_limit ? (
-                              <strong className="text-amber-300" title="Установлен лимит слотов">{srv.slot_limit} (лимит)</strong>
+                              <strong className="text-amber-300" title={D.proj.limitSet}>{srv.slot_limit} ({D.proj.limited})</strong>
                             ) : (
-                              <strong className="text-emeraldx" title="Безлимит">{srv.max_players} (безлимит)</strong>
+                              <strong className="text-emeraldx" title={D.proj.unlimited}>{srv.max_players} ({D.proj.unlimited.toLowerCase()})</strong>
                             )}
                           </div>
                           <div>
@@ -306,7 +308,7 @@ export function ProjectsTab() {
                           className="btn btn-ghost h-8 w-full border border-white/10 text-[11px] font-semibold text-slate-300 hover:border-brand/40 hover:text-white flex items-center justify-center gap-1.5 transition"
                         >
                           <Settings2 className="h-3.5 w-3.5 text-brand" />
-                          Префикс & Лимит слотов
+                          {D.proj.prefixSlots}
                         </button>
                         <div className="grid grid-cols-2 gap-2">
                           <button

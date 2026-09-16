@@ -10,20 +10,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
     }
 
-    const { licenseId, plan, period, paymentMethod } = await req.json();
-
-    const planConfig = PLANS[plan || 'business'] || PLANS.business;
-
-    let amount = planConfig.priceMonthly;
-    let days = 30;
-
-    if (period === 'halfYear') {
-      amount = planConfig.priceHalfYear * 6;
-      days = 180;
-    } else if (period === 'year') {
-      amount = planConfig.priceYearly * 12;
-      days = 365;
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Некорректный формат запроса' }, { status: 400 });
     }
+    const { licenseId, paymentMethod } = body || {};
+    const planConfig = PLANS.lifetime;
+    const amount = planConfig.priceMonthly;
 
     const paymentId = `pay_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
@@ -33,7 +28,7 @@ export async function POST(req: NextRequest) {
         session.userId,
         licenseId ? Number(licenseId) : null,
         amount,
-        planConfig.id,
+        'lifetime',
         paymentMethod || 'card',
         paymentId,
         'pending',

@@ -49,8 +49,9 @@ export async function POST(req: NextRequest) {
     // Mark paid
     await query('UPDATE portal_invoices SET status = ? WHERE id = ?', ['paid', inv.id]);
 
-    const planConfig = PLANS[inv.plan] || PLANS.business;
-    const extensionDays = inv.amount_rub >= 36000 ? 365 : 30;
+    const planConfig = PLANS[inv.plan] || PLANS.lifetime;
+    const isLifetime = inv.plan === 'lifetime';
+    const extensionDays = isLifetime ? 36500 : inv.amount_rub >= 36000 ? 365 : 30;
 
     if (inv.license_id) {
       // Extend existing license
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Оплата успешно подтверждена! Лицензия продлена на ${extensionDays} дней.`,
+      message: isLifetime
+        ? 'Оплата подтверждена. Бессрочная лицензия Lifetime активирована.'
+        : `Оплата успешно подтверждена! Лицензия продлена на ${extensionDays} дней.`,
     });
   } catch (err: any) {
     console.error('Pay invoice error:', err);

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, FieldLabel, Spinner } from '@/components/ui';
 import { Sliders, Check, Shield, Cpu, Tag } from 'lucide-react';
-import type { ServerInstance } from './_ctx';
+import { useDashboard, type ServerInstance } from './_ctx';
 
 interface ServerSettingsModalProps {
   open: boolean;
@@ -22,6 +22,8 @@ const ENVIRONMENTS = [
 const PRESET_PREFIXES = ['PROD', 'DEV', 'TEST', 'DEV-1', 'TEST-PVP', 'STAGE', 'EVENT'];
 
 export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSettingsModalProps) {
+  const { D } = useDashboard();
+  const s = D.server;
   const [name, setName] = useState('');
   const [label, setLabel] = useState('');
   const [environment, setEnvironment] = useState<'production' | 'development' | 'test' | 'staging'>('production');
@@ -64,7 +66,7 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
       });
       const metaData = await metaRes.json();
       if (!metaRes.ok || !metaData.success) {
-        throw new Error(metaData.error || 'Ошибка сохранения настроек сервера');
+        throw new Error(metaData.error || s.saveError);
       }
 
       // 2. Обновление лимита слотов
@@ -77,13 +79,13 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
       });
       const slotsData = await slotsRes.json();
       if (!slotsRes.ok || !slotsData.success) {
-        throw new Error(slotsData.error || 'Ошибка обновления слотов');
+        throw new Error(slotsData.error || s.slotsError);
       }
 
       onSaved();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Произошла ошибка при сохранении');
+      setError(err.message || s.saveError);
     } finally {
       setSaving(false);
     }
@@ -93,8 +95,8 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
     <Modal
       open={open}
       onClose={onClose}
-      title="Настройка сервера & слотов"
-      description={`Управление префиксами и лимитом онлайна для сервера #${server.id}`}
+      title={s.settingsTitle}
+      description={`${s.settingsDescription} #${server.id}`}
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
@@ -105,12 +107,13 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
 
         {/* Название сервера */}
         <div>
-          <FieldLabel>Название сервера</FieldLabel>
+          <FieldLabel>{s.name}</FieldLabel>
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Основной сервер RP"
+            placeholder={s.settingsNamePlaceholder}
+            name="server-name"
             className="field h-11 px-4 text-sm"
           />
         </div>
@@ -120,18 +123,19 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
           <FieldLabel>
             <span className="flex items-center gap-1.5">
               <Tag className="h-3.5 w-3.5 text-brand" />
-              Префикс / Визуальная метка в ЛК
+              {s.prefixLabel}
             </span>
           </FieldLabel>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value.toUpperCase())}
             placeholder="DEV, TEST, PROD-1, EVENT"
+            name="server-label"
             maxLength={32}
             className="field h-11 px-4 font-mono text-sm uppercase tracking-wider"
           />
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="text-[11px] text-slate-500 self-center mr-1">Быстрый выбор:</span>
+            <span className="text-[11px] text-slate-500 self-center mr-1">{s.quickSelect}:</span>
             {PRESET_PREFIXES.map((p) => (
               <button
                 type="button"
@@ -151,7 +155,7 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
 
         {/* Тип окружения */}
         <div>
-          <FieldLabel>Тип окружения (Environment)</FieldLabel>
+          <FieldLabel>{s.environment}</FieldLabel>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {ENVIRONMENTS.map((env) => {
               const selected = environment === env.id;
@@ -160,12 +164,12 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
                   type="button"
                   key={env.id}
                   onClick={() => setEnvironment(env.id as any)}
-                  className={`rounded-xl border p-2.5 text-center transition-all ${
+                  className={`rounded-xl border p-2.5 text-center transition-[border-color,background-color,color,transform] ${
                     selected ? `${env.color} ring-1 ring-white/20` : 'border-white/10 bg-white/[0.02] text-slate-400 hover:bg-white/[0.05]'
                   }`}
                 >
                   <div className="font-mono text-xs font-bold">[{env.badge}]</div>
-                  <div className="mt-0.5 text-[10px] truncate">{env.label}</div>
+                  <div className="mt-0.5 text-[10px] truncate">{s.environments[env.id]}</div>
                 </button>
               );
             })}
@@ -176,16 +180,18 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
         <div className="rounded-2xl border border-white/10 bg-ink-950/60 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-bold text-white">Режим лимита онлайна</span>
+              <span className="text-xs font-bold text-white">{s.limitMode}</span>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 {unlimitedSlots
-                  ? 'Без искусственного ограничения — сервер примет до 5000+ игроков'
-                  : `Фиксированный лимит: не более ${slotLimit} одновременно`}
+                  ? s.unlimitedDescription
+                  : `${s.fixedLimit} ${slotLimit}`}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setUnlimitedSlots(!unlimitedSlots)}
+              aria-label={s.limitMode}
+              aria-pressed={!unlimitedSlots}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 unlimitedSlots ? 'bg-emeraldx' : 'bg-slate-700'
               }`}
@@ -200,10 +206,11 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
 
           {!unlimitedSlots && (
             <div className="mt-4 border-t border-white/10 pt-4">
-              <FieldLabel>Максимум слотов для этого сервера</FieldLabel>
+              <FieldLabel>{s.maxSlots}</FieldLabel>
               <div className="flex items-center gap-3">
                 <input
                   type="number"
+                  name="server-slot-limit"
                   min={1}
                   max={10000}
                   value={slotLimit}
@@ -233,11 +240,12 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
 
         {/* Заметки */}
         <div>
-          <FieldLabel>Заметки по серверу (только для вас)</FieldLabel>
+          <FieldLabel>{s.notes}</FieldLabel>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Назначение, конфигурация порта, тестовые ветки..."
+            placeholder={s.notesPlaceholder}
+            name="server-notes"
             rows={2}
             className="field w-full p-3 text-xs"
           />
@@ -250,7 +258,7 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
             onClick={onClose}
             className="px-4 py-2 text-xs text-slate-400 transition hover:text-white"
           >
-            Отмена
+            {D.cancel}
           </button>
           <button
             type="submit"
@@ -258,7 +266,7 @@ export function ServerSettingsModal({ open, onClose, server, onSaved }: ServerSe
             className="btn btn-primary h-10 px-5 text-xs font-bold disabled:opacity-50"
           >
             {saving ? <Spinner className="h-4 w-4" /> : <Check className="h-4 w-4 mr-1.5" />}
-            Сохранить настройки
+            {s.save}
           </button>
         </div>
       </form>
