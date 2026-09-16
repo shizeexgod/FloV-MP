@@ -42,6 +42,17 @@ public class StarterResource : Resource
     /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _clientReady = new();
 
+    /// <summary>
+    /// Машина, заспавненная администратором командой /car. По одной на админа.
+    ///
+    /// Раньше каждый /car создавал новую машину и не удалял прежнюю. Проверка
+    /// спавна тридцать раз оставляла в мире тридцать машин, число сущностей
+    /// росло без предела и тянуло за собой стриминг и синхронизацию для всех
+    /// игроков. Теперь новый /car убирает прежнюю машину этого же админа, а
+    /// при отключении админа его машина удаляется.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, IVehicle> _adminVehicles = new();
+
     private FloVMP.Core.Security.IBanStore? _banStore;
     private FloVMP.Core.Security.MultiTierBanService? _bans;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
@@ -668,10 +679,25 @@ public class StarterResource : Resource
         }
     }
 
+    /// <summary>Удалить машину, заспавненную этим администратором, если она есть.</summary>
+    private void DestroyAdminVehicle(uint playerId)
+    {
+        if (!_adminVehicles.TryRemove(playerId, out var old)) return;
+        try
+        {
+            if (old != null && old.Exists) old.Destroy();
+        }
+        catch (Exception ex)
+        {
+            Alt.LogWarning($"[FloV:MP] Не удалось удалить машину администратора: {ex.Message}");
+        }
+    }
+
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         _clientReady.TryRemove(player.Id, out _);
+        DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
@@ -1022,11 +1048,21 @@ public class StarterResource : Resource
                     return;
                 }
                 var gotoTarget = Alt.GetPlayerById(gotoId);
-                if (gotoTarget == null)
+                if (gotoTarget == null || !gotoTarget.Exists)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
                     return;
                 }
+                if (gotoTarget.Id == player.Id)
+                {
+                    SendChatMessage(player, "{fde047}Это вы.");
+                    return;
+                }
+                // Измерение переносится вместе с координатами. Раньше менялась
+                // только позиция: если игрок был в интерьере (своё измерение),
+                // администратор прилетал в те же координаты, но в общий мир —
+                // в пустоту, и цели не видел.
+                player.Dimension = gotoTarget.Dimension;
                 player.Position = new Position(gotoTarget.Position.X, gotoTarget.Position.Y + 1.0f, gotoTarget.Position.Z);
                 SendChatMessage(player, $"{{34d399}}Вы телепортировались к {gotoTarget.Name} (ID: {gotoTarget.Id})");
                 break;
@@ -1043,11 +1079,20 @@ public class StarterResource : Resource
                     return;
                 }
                 var gethereTarget = Alt.GetPlayerById(gethereId);
-                if (gethereTarget == null)
+                if (gethereTarget == null || !gethereTarget.Exists)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
                     return;
                 }
+                if (gethereTarget.Id == player.Id)
+                {
+                    SendChatMessage(player, "{fde047}Это вы.");
+                    return;
+                }
+                // Измерение администратора переносится на игрока — иначе игрок
+                // из интерьера оказывался бы рядом по координатам, но в другом
+                // мире, и они друг друга не видели.
+                gethereTarget.Dimension = player.Dimension;
                 gethereTarget.Position = new Position(player.Position.X + 1.0f, player.Position.Y, player.Position.Z);
                 SendChatMessage(player, $"{{34d399}}Игрок {gethereTarget.Name} телепортирован к вам.");
                 SendChatMessage(gethereTarget, $"{{34d399}}Администратор {player.Name} телепортировал вас к себе.");
@@ -1085,14 +1130,28 @@ public class StarterResource : Resource
                     return;
                 }
                 var modelName = parts.Length > 1 ? parts[1] : "adder";
+
+                // Имя модели уходит и в Alt.Hash, и обратно в чат. Фигурные
+                // скобки в чате — это цветовые коды, поэтому их из ввода убираем:
+                // иначе «/car {ff0000}…» раскрашивал бы сообщение.
+                modelName = new string(modelName.Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
+                if (modelName.Length == 0 || modelName.Length > 32)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /car <модель, например adder>");
+                    return;
+                }
+
                 try
                 {
+                    DestroyAdminVehicle(player.Id);
+
                     var spawnPos = new Position(player.Position.X + 2f, player.Position.Y + 2f, player.Position.Z);
                     var veh = Alt.CreateVehicle(Alt.Hash(modelName), spawnPos, player.Rotation);
                     veh.Dimension = player.Dimension;
                     veh.NumberplateText = "FLOVMP";
                     veh.EngineOn = true;
-                    SendChatMessage(player, $"{{34d399}}Создан транспорт: {modelName} (Гос. номер: FLOVMP)");
+                    _adminVehicles[player.Id] = veh;
+                    SendChatMessage(player, $"{{34d399}}Создан транспорт: {modelName} (Гос. номер: FLOVMP). Прежняя ваша машина убрана.");
                 }
                 catch (Exception ex)
                 {
