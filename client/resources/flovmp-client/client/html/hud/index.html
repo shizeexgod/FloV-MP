@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#09090b">
+<title>HUD — FloV:MP</title>
+<style>
+  /*
+    Игровой HUD.
+
+    Сервер считал и отправлял flovmp:hud:tick каждые несколько сотен
+    миллисекунд, а клиент это событие не слушал вовсе — данные уходили в
+    никуда. Здесь появляется получатель.
+
+    Контракт с сервером (HudSystem):
+      flovmp:hud:init(serverName)
+      flovmp:hud:tick(health, armor, cash, online, hour, minute)
+
+    HUD НЕ перехватывает ввод: это оверлей поверх игры, курсора здесь нет и
+    кликать не по чему. Всё, что он делает, — показывает.
+  */
+
+  :root {
+    color-scheme: dark;
+
+    --text:   #f4f4f5;
+    --muted:  #a1a1aa;
+    --dim:    #71717a;
+    --accent: #fbbf24;
+    --hp:     #34d399;
+    --hp-low: #f87171;
+    --armor:  #60a5fa;
+    --money:  #34d399;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    /* Оверлей: клики проходят сквозь него в игру. Без этого HUD съедал бы
+       выстрелы и повороты камеры в своей области. */
+    pointer-events: none;
+    background: transparent;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  .hud {
+    position: absolute;
+    left: max(18px, env(safe-area-inset-left));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Скрыт, пока не пришёл первый кадр: пустые нули на экране выглядят как
+       поломка, а не как «данных ещё нет». */
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .hud[data-ready="true"] { opacity: 1; }
+
+  /* --- полоски --- */
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bar-label {
+    width: 14px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    text-align: center;
+    flex: none;
+  }
+
+  .bar {
+    width: 168px;
+    height: 7px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    overflow: hidden;
+    flex: none;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 2px;
+    /* Только width и background-color — без transition: all. */
+    transition: width 180ms ease-out, background-color 240ms ease;
+  }
+
+  #hp-fill    { background: var(--hp); }
+  #armor-fill { background: var(--armor); }
+
+  /* Мало здоровья — цвет меняется. Это единственный намёк, который игрок
+     ловит боковым зрением во время боя. */
+  #hp-fill[data-low="true"] { background: var(--hp-low); }
+
+  .bar-value {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    min-width: 26px;
+  }
+
+  /* --- деньги --- */
+  .money {
+    font-size: 19px;
+    font-weight: 650;
+    color: var(--money);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+    letter-spacing: -0.01em;
+  }
+
+  /* --- правый верх: время и онлайн --- */
+  .topright {
+    position: absolute;
+    right: max(18px, env(safe-area-inset-right));
+    top: max(18px, env(safe-area-inset-top));
+    text-align: right;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .topright[data-ready="true"] { opacity: 1; }
+
+  .clock {
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  }
+
+  .online {
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  }
+
+  .server {
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    max-width: 260px;
+    /* Имя сервера задаёт владелец — оно бывает и в три слова. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* --- уведомления --- */
+  .notices {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: max(84px, env(safe-area-inset-top));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: min(460px, calc(100vw - 48px));
+  }
+
+  .notice {
+    padding: 9px 14px;
+    border-radius: 7px;
+    background: rgba(9, 9, 11, 0.92);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    animation: pop 180ms ease-out;
+  }
+
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="hud" id="hud" data-ready="false">
+  <div class="bars">
+    <div class="bar-row">
+      <span class="bar-label" aria-hidden="true">HP</span>
+      <div class="bar" role="progressbar" aria-label="Здоровье"
+           aria-valuemin="0" aria-valuemax="100" id="hp-bar">
+        <div class="bar-fill" id="hp-fill"></div>
+      </div>
+      <span class="bar-value" id="hp-value">—</span>
+    </div>
+
+    <div class="bar-row">
+      <span class="bar-label" aria-hidden="true">AR</span>
+      <div class="bar" role="progressbar" aria-label="Броня"
+           aria-valuemin="0" aria-valuemax="100" id="armor-bar">
+        <div class="bar-fill" id="armor-fill"></div>
+      </div>
+      <span class="bar-value" id="armor-value">—</span>
+    </div>
+  </div>
+
+  <div class="money" id="money" aria-label="Наличные">—</div>
+</div>
+
+<div class="topright" id="topright" data-ready="false">
+  <div class="clock" id="clock">—:—</div>
+  <div class="online" id="online">—</div>
+  <div class="server" id="server"></div>
+</div>
+
+<div class="notices" id="notices" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var hud      = document.getElementById('hud');
+  var topright = document.getElementById('topright');
+  var hpBar    = document.getElementById('hp-bar');
+  var hpFill   = document.getElementById('hp-fill');
+  var hpValue  = document.getElementById('hp-value');
+  var arBar    = document.getElementById('armor-bar');
+  var arFill   = document.getElementById('armor-fill');
+  var arValue  = document.getElementById('armor-value');
+  var moneyEl  = document.getElementById('money');
+  var clockEl  = document.getElementById('clock');
+  var onlineEl = document.getElementById('online');
+  var serverEl = document.getElementById('server');
+  var notices  = document.getElementById('notices');
+
+  var bridge = (typeof alt !== 'undefined' && alt)
+    ? alt
+    : { emit: function () {}, on: function () {} };
+
+  /* Форматирование через Intl, а не склейкой строк: разделители разрядов и
+     валюта зависят от локали, и «1000000» без пробелов нечитаемо. */
+  var moneyFmt = new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 0
+  });
+  var plainFmt = new Intl.NumberFormat('ru-RU');
+
+  function setBar(bar, fill, valueEl, value, lowAt) {
+    var v = Math.max(0, Math.min(100, Number(value) || 0));
+    fill.style.width = v + '%';
+    bar.setAttribute('aria-valuenow', String(v));
+    valueEl.textContent = plainFmt.format(v);
+    if (typeof lowAt === 'number') {
+      fill.setAttribute('data-low', String(v <= lowAt));
+    }
+  }
+
+  function pad2(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  bridge.on('flovmp:hud:init', function (serverName) {
+    if (serverName) serverEl.textContent = String(serverName);
+  });
+
+  bridge.on('flovmp:hud:tick', function (health, armor, cash, online, hour, minute) {
+    setBar(hpBar, hpFill, hpValue, health, 25);
+    setBar(arBar, arFill, arValue, armor);
+
+    moneyEl.textContent = moneyFmt.format(Number(cash) || 0);
+    onlineEl.textContent = plainFmt.format(Number(online) || 0) + ' в сети';
+
+    /* Игровое время — не системное, поэтому Intl.DateTimeFormat тут не
+       подходит: он отформатировал бы реальные часы игрока. */
+    var h = Math.max(0, Math.min(23, Number(hour) || 0));
+    var m = Math.max(0, Math.min(59, Number(minute) || 0));
+    clockEl.textContent = pad2(h) + ':' + pad2(m);
+
+    hud.setAttribute('data-ready', 'true');
+    topright.setAttribute('data-ready', 'true');
+  });
+
+  /* Уведомления инвентаря и сервера. Держим максимум три: больше — и игрок
+     перестаёт их читать, а экран закрывается плашками. */
+  bridge.on('flovmp:hud:notice', function (text) {
+    if (!text) return;
+
+    var el = document.createElement('div');
+    el.className = 'notice';
+    el.textContent = String(text);
+    notices.appendChild(el);
+
+    while (notices.children.length > 3) {
+      notices.removeChild(notices.firstChild);
+    }
+
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 4500);
+  });
+
+  bridge.on('flovmp:hud:hide', function () {
+    hud.setAttribute('data-ready', 'false');
+    topright.setAttribute('data-ready', 'false');
+  });
+}());
+</script>
+
+</body>
+</html>

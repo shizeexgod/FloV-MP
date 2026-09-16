@@ -64,6 +64,15 @@ let loadingSafetyTimer = null;
 const PENDING_CHAT_LIMIT = 50;
 const pendingChat = [];
 
+// HUD (здоровье, броня, деньги, время, онлайн). Сервер (HudSystem, полный
+// RP-режим) считал и слал flovmp:hud:tick каждые несколько сотен миллисекунд,
+// а клиент это событие не слушал — данные уходили в никуда, и у игрока не было
+// ни здоровья, ни денег на экране.
+let hudView = null;
+let hudReady = false;
+let hudPendingInit = null;
+let hudPendingTick = null;
+
 // Голосовой чат
 let isVoiceTalking = false;
 let voiceReleaseTimeout = null;
@@ -202,6 +211,79 @@ function closeAuth() {
     }
     try { alt.toggleGameControls(true); } catch (e) { }
 }
+
+/**
+ * HUD — оверлей поверх игры. Фокус ему не даётся и курсор не показывается:
+ * это не интерфейс, по которому кликают, а табло. Взять фокус значило бы
+ * перехватить клавиатуру у игрока.
+ */
+function openHud() {
+    if (hudView) return;
+    try {
+        hudView = new alt.WebView('http://resource/client/html/hud/index.html');
+        hudReady = false;
+        hudView.on('load', () => {
+            hudReady = true;
+            // Кадры, пришедшие до загрузки страницы, иначе потерялись бы:
+            // emit в незагруженную страницу уходит в никуда.
+            if (hudPendingInit !== null) {
+                try { hudView.emit('flovmp:hud:init', hudPendingInit); } catch (e) { }
+            }
+            if (hudPendingTick) {
+                try { hudView.emit('flovmp:hud:tick', ...hudPendingTick); } catch (e) { }
+            }
+        });
+    } catch (e) {
+        alt.log(`[FloV:MP] Не удалось открыть HUD: ${e}`);
+        hudView = null;
+        hudReady = false;
+    }
+}
+
+function closeHud() {
+    if (!hudView) return;
+    try { hudView.destroy(); } catch (e) { }
+    hudView = null;
+    hudReady = false;
+    hudPendingInit = null;
+    hudPendingTick = null;
+}
+
+function hudNotice(text) {
+    if (!text) return;
+    if (hudView && hudReady) {
+        try { hudView.emit('flovmp:hud:notice', String(text)); } catch (e) { }
+        return;
+    }
+    // Без HUD (базовая платформа) уведомление не должно пропадать — в чат.
+    if (chatView) {
+        try { chatView.emit('flovmp:chat:msg', 'system', '', String(text)); } catch (e) { }
+    }
+}
+
+alt.onServer('flovmp:hud:init', (serverName) => {
+    hudPendingInit = serverName || '';
+    openHud();
+    if (hudView && hudReady) {
+        try { hudView.emit('flovmp:hud:init', hudPendingInit); } catch (e) { }
+    }
+});
+
+alt.onServer('flovmp:hud:tick', (health, armor, cash, online, hour, minute) => {
+    // Храним последний кадр: если страница ещё грузится, покажем его сразу
+    // после загрузки, а не нули до следующего кадра сервера.
+    hudPendingTick = [health, armor, cash, online, hour, minute];
+    if (!hudView) openHud();
+    if (hudView && hudReady) {
+        try { hudView.emit('flovmp:hud:tick', health, armor, cash, online, hour, minute); } catch (e) { }
+    }
+});
+
+// Отказ в действии с инвентарём («вы скованы наручниками…»). Раньше клиент
+// это событие не слушал, и игрок просто не понимал, почему предмет не двигается.
+alt.onServer('flovmp:inv:notice', (text) => {
+    hudNotice(text);
+});
 
 alt.onServer('flovmp:auth:show', (serverName) => {
     // Загрузка закончилась ровно тогда, когда есть что показать игроку.
@@ -1321,6 +1403,8 @@ alt.on('disconnect', () => {
     // а обнуление после него гарантирует, что курсор не останется висеть.
     closeAuth();
     closeLoading();
+    closeHud();
+    pendingChat.length = 0;
 
     cursorDepth = 0;
     try { alt.showCursor(false); } catch (e) { }
