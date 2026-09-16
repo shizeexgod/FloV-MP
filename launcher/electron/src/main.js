@@ -14,6 +14,49 @@ let quitting = false;      // true во время реального выход
 // сервер при входе в игре — лаунчер его читает для хэндоффа аккаунта.
 const SHARED_DIR = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'FloridaV');
 const SESSION_FILE = path.join(SHARED_DIR, 'session.json');
+
+// ─── Конфиг сборки под конкретный проект ───────────────────────────────────
+// Адрес сервера и CDN раньше были зашиты в код: 188.127.229.224. Для
+// продаваемой платформы это значит, что лаунчер КАЖДОГО покупателя по
+// умолчанию отправлял бы его игроков на чужой сервер. Перебить можно было
+// только переменной окружения (игроки её не выставят) или руками в настройках.
+//
+// Теперь рядом с лаунчером кладётся launcher.config.json:
+//   { "serverHost": "1.2.3.4", "serverPort": 7788,
+//     "cdnUrl": "http://1.2.3.4/cdn", "serverName": "Мой RP" }
+// Файла нет — поведение прежнее. Сохранённый выбор игрока в настройках всегда
+// важнее конфига: конфиг задаёт только значение для свежей установки.
+const FALLBACK_SERVER_HOST = '188.127.229.224';
+
+function loadBuildConfig() {
+  const candidates = [
+    process.resourcesPath && path.join(process.resourcesPath, 'launcher.config.json'),
+    path.join(path.dirname(process.execPath), 'launcher.config.json'),
+    path.join(__dirname, '..', 'launcher.config.json'),
+  ].filter(Boolean);
+
+  for (const file of candidates) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const cfg = {};
+      // Каждое поле проверяется: битый конфиг не должен ломать запуск лаунчера.
+      if (typeof raw.serverHost === 'string' && /^[A-Za-z0-9.-]{1,253}$/.test(raw.serverHost)) {
+        cfg.serverHost = raw.serverHost;
+      }
+      const port = parseInt(raw.serverPort, 10);
+      if (Number.isInteger(port) && port > 0 && port < 65536) cfg.serverPort = port;
+      if (typeof raw.cdnUrl === 'string' && /^https?:\/\//.test(raw.cdnUrl)) cfg.cdnUrl = raw.cdnUrl;
+      if (typeof raw.serverName === 'string' && raw.serverName.length <= 64) cfg.serverName = raw.serverName;
+      return cfg;
+    } catch (e) {
+      console.warn(`launcher.config.json повреждён (${file}): ${e.message}`);
+    }
+  }
+  return {};
+}
+
+const BUILD_CONFIG = loadBuildConfig();
 const AUTH_API = 'http://127.0.0.1:7799/api/auth';
 
 // mode лаунчера → путь эндпоинта ServerLauncher. Пока сервер знает только
@@ -155,6 +198,7 @@ ipcMain.handle('window:setTrayOnClose', (_e, enabled) => {
 
 // ─── Мост к нативной логике (реестр / запуск игры) ─────────────────────────
 ipcMain.handle('native:getSettings', () => native.call('getSettings'));
+ipcMain.handle('native:buildConfig', () => ({ ...BUILD_CONFIG }));
 ipcMain.handle('native:saveSettings', (_e, data) => native.call('saveSettings', { data }));
 ipcMain.handle('native:detectGta', () => native.call('detectGta'));
 ipcMain.handle('native:validateGta', (_e, gtaPath) => native.call('validateGta', { path: gtaPath }));
@@ -176,11 +220,17 @@ ipcMain.handle('native:cleanupUpscaler', (_e, gtaPath) => native.call('cleanupUp
 ipcMain.handle('native:auth', async (_e, mode, payload) => {
   const route = AUTH_ROUTES[mode];
   if (!route) return { ok: false, message: 'неизвестная операция' };
-  const host = (payload && payload.serverHost) || process.env.FLOVMP_SERVER_HOST || '188.127.229.224';
+  const host = (payload && payload.serverHost) || process.env.FLOVMP_SERVER_HOST
+    || BUILD_CONFIG.serverHost || FALLBACK_SERVER_HOST;
 
-  const targets = (host === '127.0.0.1' || host === 'localhost')
+  // Для удалённого сервера localhost больше НЕ пробуется. Раньше при
+  // недоступном сервере лаунчер отправлял логин и пароль игрока на
+  // 127.0.0.1:7799 — то есть любому приложению, которое слушает этот порт на
+  // машине игрока. Пароль уходит только на тот сервер, в который игрок входит.
+  const isLocal = host === '127.0.0.1' || host === 'localhost';
+  const targets = isLocal
     ? ['http://127.0.0.1:7799/api/auth']
-    : [`http://${host}:7799/api/auth`, `http://${host}/api/auth`, 'http://127.0.0.1:7799/api/auth'];
+    : [`http://${host}:7799/api/auth`, `http://${host}/api/auth`];
 
   for (const apiBase of targets) {
     try {
@@ -198,29 +248,21 @@ ipcMain.handle('native:auth', async (_e, mode, payload) => {
     } catch {}
   }
 
-  // Офлайн-фоллбэк: если сервер сейчас недоступен по сети, создаем локальный
-  // профиль игрока и пишем session.json для коннектора в игру.
-  const username = (payload && payload.username) || 'Игрок';
-  const offlineSession = {
-    username,
-    createdUtc: new Date().toISOString(),
-    email: `${username.toLowerCase()}@offline.local`,
-    twoFa: false,
-    offline: true,
-  };
-  try {
-    fs.mkdirSync(SHARED_DIR, { recursive: true });
-    fs.writeFileSync(SESSION_FILE, JSON.stringify(offlineSession, null, 2));
-  } catch {}
-
+  // Сервер не ответил. Раньше здесь лаунчер отвечал «Вход выполнен» и
+  // записывал сессию с введённым ником — для ЛЮБОГО пароля. Порт API у
+  // боевого сервера снаружи часто закрыт, так что на деле любой пароль
+  // подходил к любому логину у всех игроков. Хуже того, ответ ok: true
+  // уходил и для смены пароля и 2FA: игроку сообщалось «пароль изменён»,
+  // хотя ничего не менялось.
+  //
+  // Теперь честный отказ. Играть это не мешает: кнопка «Играть» вход не
+  // требует, гость заходит под ником «Игрок», а войти можно и в самой игре.
   return {
-    ok: true,
+    ok: false,
     offline: true,
-    message: 'Вход выполнен (офлайн-режим)',
-    username,
-    createdUtc: offlineSession.createdUtc,
-    email: offlineSession.email,
-    twoFa: false,
+    message: mode === 'login' || mode === 'register'
+      ? 'Сервер авторизации сейчас недоступен. Играть можно и без входа — войдите в самой игре.'
+      : 'Сервер авторизации сейчас недоступен — изменения не сохранены. Попробуйте позже.',
   };
 });
 
@@ -250,7 +292,7 @@ native.on?.('download', (data) => {
 // FloVMP.Connect подхватывает его оттуда (см. PlayService.FindClientDir).
 const ENGINE_DIR = path.join(SHARED_DIR, 'engine');
 const ENGINE_MARKER = path.join(ENGINE_DIR, '.flovmp-engine.json');
-const DEFAULT_CDN = process.env.FLOVMP_CDN || 'http://188.127.229.224/cdn';
+const DEFAULT_CDN = process.env.FLOVMP_CDN || BUILD_CONFIG.cdnUrl || `http://${FALLBACK_SERVER_HOST}/cdn`;
 
 function findLocalClientDir() {
   const candidates = [

@@ -12,6 +12,7 @@ const api = {
 
   // Настройки / данные лаунчера (через нативный C#-помощник)
   getSettings: () => ipcRenderer.invoke('native:getSettings'),
+  buildConfig: () => ipcRenderer.invoke('native:buildConfig'),
   saveSettings: (data) => ipcRenderer.invoke('native:saveSettings', data),
   detectGta: () => ipcRenderer.invoke('native:detectGta'),
   validateGta: (gtaPath) => ipcRenderer.invoke('native:validateGta', gtaPath),

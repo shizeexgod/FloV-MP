@@ -1735,6 +1735,14 @@ async function initGpuInfo() {
 
 // ─── Инициализация ──────────────────────────────────────────────────────────
 (async function init() {
+  // Порядок важен: встроенные значения < конфиг сборки проекта < сохранённый
+  // выбор игрока. Свежая установка берёт сервер проекта, а если игрок сам
+  // сменил сервер в настройках — его выбор не перетирается.
+  const build = await window.floridaV.buildConfig?.().catch(() => null);
+  if (build) {
+    if (build.serverHost) settings.serverHost = build.serverHost;
+    if (build.serverPort) settings.serverPort = build.serverPort;
+  }
   const loaded = await window.floridaV.getSettings().catch(() => null);
   if (loaded) settings = { ...settings, ...loaded };
   settings.uiScale = 100;
