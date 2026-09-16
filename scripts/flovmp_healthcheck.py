@@ -606,6 +606,22 @@ def check_build_and_tests(rep):
         ("юнит-тесты сервера", "server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj"),
         ("юнит-тесты лаунчера", "launcher/tests/FloVMP.Launcher.Tests/FloVMP.Launcher.Tests.csproj"),
     ]
+    # JS-сценарии: процесс захода в игру (клиентский скрипт) и безопасность
+    # авторизации лаунчера. Оба грузят НАСТОЯЩИЙ код с подменёнными модулями
+    # alt:V / Electron и сетью.
+    js_suites = [
+        ("симуляция входа в игру", "scripts/client-sim/entry_flow.test.mjs"),
+        ("безопасность входа в лаунчере", "launcher/electron/tests/auth-security.test.cjs"),
+    ]
+    for label, script in js_suites:
+        if not (ROOT / script).exists():
+            rep.add(SKIP, label, "не найден")
+            continue
+        code, out = run_cmd(["node", script], timeout=180)
+        m = re.search(r"Пройдено:\s*(\d+),\s*провалов:\s*(\d+)", out)
+        detail = "пройдено {}, провалов {}".format(m.group(1), m.group(2)) if m else out.strip()[-160:]
+        rep.add(PASS if code == 0 else FAIL, label, detail)
+
     for label, proj in suites:
         if not (ROOT / proj).exists():
             rep.add(SKIP, label, "проект не найден")
