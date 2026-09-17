@@ -78,6 +78,10 @@
     {
       "date": "2026-09-16",
       "decision": "Dashboard direction 01 Precision selected. The production workspace uses a permanent 248px grouped sidebar, project-first hierarchy, compact flat surfaces, URL-synced sections, a mobile drawer, and honest empty states instead of invented metrics."
+    },
+    {
+      "date": "2026-09-17",
+      "decision": "Primary navigation keeps fixed text geometry and animates only color and a transform-only underline. Language changes use a short root crossfade rather than replaying every page reveal. The home hero is a product-led runtime scene with no fake metrics or stock GTA artwork. Dashboard tools remain absent until an active license exists; the pre-purchase state is an honest product shelf with only Lifetime checkout wired and fixed-term/source access routed to discussion."
     }
   ],
   "evidence": [

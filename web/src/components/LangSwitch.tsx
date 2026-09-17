@@ -13,7 +13,7 @@ export default function LangSwitch({ className = '' }: { className?: string }) {
     >
       <span
         aria-hidden="true"
-        className={`pointer-events-none absolute left-1 top-1 h-7 w-[34px] rounded-lg bg-brand shadow-[0_4px_14px_-7px_rgba(255,61,138,0.9)] transition-transform duration-300 ease-[cubic-bezier(.16,1,.3,1)] ${
+        className={`pointer-events-none absolute left-1 top-1 h-7 w-[34px] rounded-lg bg-brand transition-transform duration-200 ease-[cubic-bezier(.2,.8,.2,1)] ${
           lang === 'en' ? 'translate-x-[34px]' : 'translate-x-0'
         }`}
       />

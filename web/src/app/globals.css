@@ -224,15 +224,31 @@
   }
   .hover-text:hover { transform: scale(1.035); }
 
-  /* Навигация реагирует типографикой, без фоновых плашек. */
+  /* Навигация лаунчера: геометрия текста всегда неподвижна. */
   .nav-link {
-    transform-origin: center;
-    transition: color 0.18s ease, transform 0.2s var(--ease), text-shadow 0.2s ease;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+    transition: color 0.16s ease;
   }
-  .nav-link:hover {
-    color: #fff;
-    transform: scale(1.045);
-    text-shadow: 0 0 18px rgba(255, 255, 255, 0.16);
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.18rem;
+    left: 0.75rem;
+    height: 1px;
+    background: var(--brand);
+    transform: scaleX(0);
+    transform-origin: right center;
+    opacity: 0;
+    transition: transform 0.18s ease-out, opacity 0.16s ease;
+  }
+  .nav-link:hover { color: rgba(255, 255, 255, 0.92); }
+  .nav-link:hover::after,
+  .nav-link.is-active::after {
+    transform: scaleX(1);
+    transform-origin: left center;
+    opacity: 1;
   }
 
   .card-edge {
@@ -463,16 +479,11 @@
   }
   .btn-link:hover { transform: none; text-decoration: underline; text-underline-offset: 3px; }
 
-  /* Язык меняется мягко: контент успевает перестроиться без резкого скачка. */
-  @keyframes language-switch {
-    from { opacity: 0.72; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  html[data-language-switching='true'] main,
-  html[data-language-switching='true'] footer,
-  html[data-language-switching='true'] header nav {
-    animation: language-switch 0.28s var(--ease) both;
-  }
+  /* Перевод меняется коротким crossfade через View Transitions API. */
+  ::view-transition-old(root) { animation: language-out 0.1s ease-in both; }
+  ::view-transition-new(root) { animation: language-in 0.16s ease-out both; }
+  @keyframes language-out { to { opacity: 0.82; } }
+  @keyframes language-in { from { opacity: 0.82; } }
 
   /* ---------- Inputs ---------- */
   .field {
@@ -523,11 +534,92 @@
   /* ---------- Scroll-reveal ---------- */
   .reveal {
     opacity: 0;
-    transform: translateY(14px);
-    transition: opacity 0.62s var(--ease), transform 0.62s var(--ease);
-    will-change: opacity, transform;
+    transition: opacity 0.48s ease-out, transform 0.52s var(--ease);
   }
-  .reveal.is-visible { opacity: 1; transform: none; will-change: auto; }
+  .reveal--fade { transform: none; }
+  .reveal--rise { transform: translate3d(0, 12px, 0); }
+  .reveal--left { transform: translate3d(-16px, 0, 0); }
+  .reveal--right { transform: translate3d(16px, 0, 0); }
+  .reveal--scale { transform: scale(0.985); transform-origin: center; }
+  .reveal.is-visible { opacity: 1; transform: none; }
+
+  /* Главный экран: продуктовая сцена вместо пустого двухколоночного hero. */
+  .home-hero {
+    position: relative;
+    min-height: calc(100svh - 5rem);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .home-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    opacity: 0.42;
+    background-image:
+      linear-gradient(rgba(255,255,255,.038) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.038) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: linear-gradient(to bottom, transparent 3%, #000 32%, transparent 92%);
+  }
+  .home-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(52% 68% at 74% 44%, rgba(255, 61, 138, 0.13), transparent 68%),
+      linear-gradient(90deg, var(--bg) 4%, transparent 48%, var(--bg) 100%);
+  }
+  .hero-system {
+    position: relative;
+    padding: 1rem 0 1.25rem;
+  }
+  .hero-system::before {
+    content: 'FLOV:MP';
+    position: absolute;
+    right: -0.03em;
+    top: -0.35em;
+    z-index: -1;
+    color: rgba(255,255,255,.022);
+    font-family: 'Unbounded', 'Manrope', sans-serif;
+    font-size: clamp(4.5rem, 9vw, 8.5rem);
+    font-weight: 800;
+    letter-spacing: -0.07em;
+    white-space: nowrap;
+  }
+  .hero-system__frame {
+    transform: perspective(1400px) rotateY(-3deg) rotateX(1deg);
+    transform-origin: right center;
+    transition: transform .45s var(--ease), border-color .2s ease;
+  }
+  .hero-system:hover .hero-system__frame {
+    transform: perspective(1400px) rotateY(-1deg) rotateX(0deg) translateY(-2px);
+  }
+  .hero-system__rail {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .55rem;
+    margin-top: .75rem;
+  }
+  .hero-system__node {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: .5rem;
+    border-top: 1px solid rgba(255,255,255,.1);
+    padding: .7rem .15rem 0;
+    color: rgba(255,255,255,.42);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .65rem;
+    white-space: nowrap;
+  }
+  .hero-system__node svg { color: var(--brand); }
+  @media (max-width: 1023px) {
+    .home-hero { min-height: auto; }
+    .hero-system__frame { transform: none; }
+    .hero-system:hover .hero-system__frame { transform: translateY(-2px); }
+  }
 }
 
 @layer utilities {

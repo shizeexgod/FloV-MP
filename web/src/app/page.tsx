@@ -5,16 +5,19 @@ import {
   ArrowRight,
   Boxes,
   Cloud,
+  Cpu,
   KeyRound,
   Gauge,
   Layers,
   Mic,
   Plug,
+  RadioTower,
   Rocket,
   ScrollText,
   ServerCog,
   ShieldCheck,
   Terminal,
+  Workflow,
 } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { BtnLink, Container, Reveal, Section, SectionHeading } from '@/components/site';
@@ -77,29 +80,48 @@ function ProductPreview({ labels, mode = 'projects' }: { labels: any; mode?: 'pr
   );
 }
 
+function HeroSystem({ labels }: { labels: any }) {
+  return (
+    <div className="hero-system">
+      <div className="hero-system__frame">
+        <ProductPreview labels={labels} />
+      </div>
+      <div className="hero-system__rail" aria-label="FloV:MP runtime stack">
+        <div className="hero-system__node"><Cpu aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /> CoreCLR · .NET 8</div>
+        <div className="hero-system__node"><RadioTower aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /> UDP 7788 · 60 Hz</div>
+        <div className="hero-system__node"><Workflow aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /> FastDL · Launcher</div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const t = useT();
 
   return (
     <div>
       {/* ---------------- HERO ---------------- */}
-      <div className="relative overflow-hidden">
-        <Container className="py-20 sm:py-28">
-          <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
+      <div className="home-hero">
+        <Container className="flex min-h-[calc(100svh-5rem)] items-center py-16 sm:py-20">
+          <div className="grid w-full grid-cols-1 items-center gap-14 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16">
             <div>
-              <Reveal>
-                <h1 className="max-w-xl text-[1.9rem] font-extrabold leading-[1.12] tracking-tight sm:text-[2.9rem] sm:leading-[1.08]">
+              <Reveal variant="left">
+                <div className="mb-5 flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+                  <span className="h-px w-8 bg-brand" aria-hidden="true" />
+                  {t.home.heroKicker}
+                </div>
+                <h1 className="max-w-[650px] text-[2.15rem] font-extrabold leading-[1.07] tracking-[-0.045em] sm:text-[3.45rem] sm:leading-[1.02]">
                   <span className="h-grad">{t.home.h1a} </span>
                   <span className="text-brand">{t.home.h1accent}</span>
                   <span className="h-grad"> {t.home.h1b}</span>
                 </h1>
               </Reveal>
 
-              <Reveal delay={80}>
+              <Reveal delay={70} variant="fade">
                 <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-white/55 sm:text-lg">{t.home.sub}</p>
               </Reveal>
 
-              <Reveal delay={160}>
+              <Reveal delay={120} variant="rise">
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <BtnLink href="/pricing" variant="primary" arrow className="h-12 px-6 text-sm sm:min-w-[220px]">
                     {t.home.ctaPrimary}
@@ -111,15 +133,13 @@ export default function HomePage() {
                 </div>
               </Reveal>
 
-              <Reveal delay={240}>
+              <Reveal delay={170} variant="fade">
                 <p className="mt-6 font-mono text-[11px] text-white/35">{t.home.trustLine}</p>
               </Reveal>
             </div>
 
-            <Reveal delay={200}>
-              <div>
-                <ProductPreview labels={t.home.preview} />
-              </div>
+            <Reveal delay={110} variant="scale">
+              <HeroSystem labels={t.home.preview} />
             </Reveal>
           </div>
         </Container>
@@ -130,7 +150,7 @@ export default function HomePage() {
         <SectionHeading title={t.home.flowTitle} sub={t.home.flowSub} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {t.home.flow.map((f, i) => (
-            <Reveal key={f.n} delay={i * 90}>
+            <Reveal key={f.n} delay={i * 70} variant={i === 0 ? 'left' : 'right'}>
               <div className="card group flex h-full min-h-[230px] flex-col p-6 sm:p-7">
                 <div className="flex items-center justify-between">
                   <span className="section-num">0{i + 1}</span>
@@ -162,7 +182,7 @@ export default function HomePage() {
                 i % 2 === 1 ? 'lg:[&>*:first-child]:order-2' : ''
               }`}
             >
-              <Reveal>
+              <Reveal variant={i % 2 === 0 ? 'left' : 'right'}>
                 <div className="mx-auto w-full max-w-[430px]">
                   <h3 className="text-[1.3rem] font-extrabold leading-tight text-white sm:text-[1.55rem]">
                     {p.t}
@@ -170,7 +190,7 @@ export default function HomePage() {
                   <p className="mt-3.5 text-[14px] leading-relaxed text-white/55">{p.d}</p>
                 </div>
               </Reveal>
-              <Reveal delay={100}>
+              <Reveal delay={80} variant="scale">
                 <div>
                   <ProductPreview labels={t.home.preview} mode={i === 0 ? 'projects' : i === 1 ? 'console' : 'security'} />
                 </div>
@@ -187,7 +207,7 @@ export default function HomePage() {
           {t.home.features.map((f, i) => {
             const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
             return (
-              <Reveal key={f.t} delay={(i % 4) * 60} className="h-full">
+              <Reveal key={f.t} delay={(i % 4) * 45} className="h-full" variant="scale">
                 <div className="card card-hover flex h-full min-h-[210px] flex-col p-5">
                   <Icon aria-hidden="true" className="icon-pop h-5 w-5 text-brand" />
                   <h3 className="mt-4 text-[14px] font-semibold text-white">{f.t}</h3>

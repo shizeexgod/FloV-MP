@@ -90,11 +90,10 @@ export default function Navbar() {
               href={l.href}
               prefetch
               className={`nav-link relative whitespace-nowrap px-3 py-2 text-[13px] font-semibold ${
-                isActive(l.href) ? 'text-white' : 'text-white/55'
+                isActive(l.href) ? 'is-active text-white' : 'text-white/55'
               }`}
             >
               {l.label}
-              {isActive(l.href) && <span className="absolute inset-x-3 -bottom-0.5 h-0.5 rounded-full bg-brand" />}
             </Link>
           ))}
         </div>

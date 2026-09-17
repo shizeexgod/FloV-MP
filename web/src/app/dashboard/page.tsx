@@ -12,7 +12,6 @@ import {
   Download,
   KeyRound,
   Layers,
-  Lock,
   LogOut,
   Menu,
   Percent,
@@ -804,6 +803,7 @@ export default function DashboardPage() {
 
   /* ------------------------------------------------------------- */
   const primaryLic = licenses[0];
+  const hasWorkspaceAccess = licenses.some((license) => Number(license.is_active) === 1);
   const isIpBound = primaryLic && primaryLic.bound_ip !== '0.0.0.0';
   const promoCode = `FLOV-${(user?.username || 'REF20').toUpperCase()}`;
   const latest = telemetry.length ? telemetry[telemetry.length - 1] : null;
@@ -830,6 +830,14 @@ export default function DashboardPage() {
     },
     [D, user, primaryLic, isIpBound, servers]
   );
+
+  useEffect(() => {
+    if (loading || hasWorkspaceAccess || UNGATED_TABS.has(tab)) return;
+    setTab('projects');
+    const params = new URLSearchParams(window.location.search);
+    params.set('section', 'projects');
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [hasWorkspaceAccess, loading, pathname, router, tab]);
 
   if (loading) {
     return (
@@ -898,16 +906,20 @@ export default function DashboardPage() {
       <hr className="rule-soft mx-3" />
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label={D.workspace.sections}>
-        {NAV_GROUPS.map((group, groupIndex) => (
-          <div key={group.id} className={groupIndex > 0 ? 'mt-5' : ''}>
+        {NAV_GROUPS.map((group) => {
+          const visibleKeys = hasWorkspaceAccess
+            ? group.keys
+            : group.keys.filter((key) => UNGATED_TABS.has(key));
+          if (visibleKeys.length === 0) return null;
+          return (
+          <div key={group.id} className="mt-5 first:mt-0">
             <div className="mb-1.5 px-2 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
               {D.navGroups[group.id]}
             </div>
             <div className="space-y-0.5">
-              {group.keys.map((key) => {
+              {visibleKeys.map((key) => {
                 const Icon = TAB_ICONS[key] ?? Layers;
                 const selected = tab === key;
-                const locked = !UNGATED_TABS.has(key) && projects.length === 0;
                 return (
                   <button
                     key={key}
@@ -918,20 +930,18 @@ export default function DashboardPage() {
                     className={`group flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[11.5px] font-bold transition-colors duration-150 active:scale-[0.99] ${
                       selected
                         ? 'bg-brand/[0.12] text-white'
-                        : locked
-                        ? 'text-white/25 hover:bg-white/[0.03] hover:text-white/40'
                         : 'text-white/45 hover:bg-white/[0.04] hover:text-white/80'
                     }`}
                   >
                     <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 transition-colors ${selected ? 'text-brand' : 'text-white/25 group-hover:text-white/45'}`} />
                     <span className="min-w-0 flex-1 truncate">{D.tabs[key]}</span>
-                    {locked ? <Lock aria-hidden="true" className="h-3 w-3 shrink-0 text-white/15" /> : null}
                   </button>
                 );
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </nav>
     </>
   );
