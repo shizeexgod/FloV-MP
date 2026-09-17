@@ -197,6 +197,27 @@ if [ "$UNINSTALL" -eq 1 ]; then
       ENV_DB_NAME="$(sed -n 's/^FLOVMP_DB_NAME=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_NAME="${ENV_DB_NAME:-$DB_NAME}"
       ENV_DB_USER="$(sed -n 's/^FLOVMP_DB_USER=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_USER="${ENV_DB_USER:-$DB_USER}"
     fi
+    # Перед удалением — архив всего, что принадлежит владельцу: код своего
+    # сервера (gamemode), настройки, лицензия, данные и дамп базы. Потерять
+    # их одной командой слишком дорого.
+    SAVE_DIR="$(mktemp -d)"
+    SAVE_ARCHIVE="$(dirname "$INSTALL_DIR")/flovmp-removed-$SERVICE-$(date +%Y%m%d-%H%M%S).tar.gz"
+    for keep in gamemode config license.flv server/server.toml voice/voice.toml server/config server/flovmp-data server/resources/gamemode; do
+      [ -e "$INSTALL_DIR/$keep" ] && mkdir -p "$SAVE_DIR/$(dirname "$keep")" && cp -a "$INSTALL_DIR/$keep" "$SAVE_DIR/$keep"
+    done
+    find "$INSTALL_DIR/sql/migrations" -maxdepth 1 -name '[1-9][0-9][0-9]_*.sql' -exec sh -c 'mkdir -p "$1/sql/migrations" && cp -a "$2" "$1/sql/migrations/"' _ "$SAVE_DIR" {} \; 2>/dev/null || true
+    if command -v mysqldump >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
+      mysqldump -u root --single-transaction --routines --triggers "$ENV_DB_NAME" 2>/dev/null | gzip > "$SAVE_DIR/database-$ENV_DB_NAME.sql.gz" || true
+    fi
+    if tar -czf "$SAVE_ARCHIVE" -C "$SAVE_DIR" . 2>/dev/null; then
+      chmod 600 "$SAVE_ARCHIVE"
+      ok "копия ваших файлов и базы: $SAVE_ARCHIVE"
+    else
+      rm -rf "$SAVE_DIR"
+      die "не удалось сохранить копию ваших файлов перед удалением — ничего не удалено"
+    fi
+    rm -rf "$SAVE_DIR"
+
     if command -v mysql >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] && [[ "$ENV_DB_USER" =~ ^[A-Za-z0-9_]+$ ]]; then
       mysql -u root <<SQL >/dev/null 2>&1 && ok "база $ENV_DB_NAME и пользователь $ENV_DB_USER удалены" || warn "базу удалить не удалось — удалите вручную"
 DROP DATABASE IF EXISTS \`$ENV_DB_NAME\`;
