@@ -1705,7 +1705,7 @@ public sealed class ChatSystem
         // tp, tpm, weather, time — без цели-игрока: первый аргумент у них число
         // или название, и раньше «/time 8» блокировалось, если в сети был старший
         // администратор с ID 8.
-        "speed", "skin", "promote", "setadmin",
+        "speed", "skin", "promote", "setadmin", "sp",
     };
 
     private void HandleAdminCommand(IPlayer player, Account acc, string cmd, string[] args, AdminCommandDef def)
@@ -1830,6 +1830,9 @@ public sealed class ChatSystem
                 if (args.Length == 0) { SendSystem(player, "Использование: /goto <ID/ник>"); return; }
                 var gotoTarget = FindPlayer(args[0]);
                 if (gotoTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                // Измерение — вместе с координатами: иначе администратор оказывался в
+                // тех же координатах, но в другом мире (интерьер, деморган) и цели не видел.
+                player.Dimension = gotoTarget.Dimension;
                 player.Position = gotoTarget.Position + new Position(0, 1.0f, 0.5f);
                 _notifyTeleport?.Invoke(player, player.Position);
                 SendSystem(player, $"Вы телепортировались к {gotoTarget.Name}.");
@@ -1839,6 +1842,7 @@ public sealed class ChatSystem
                 if (args.Length == 0) { SendSystem(player, "Использование: /gethere <ID/ник>"); return; }
                 var gethereTarget = FindPlayer(args[0]);
                 if (gethereTarget == null) { SendSystem(player, "Игрок не найден."); return; }
+                gethereTarget.Dimension = player.Dimension;
                 gethereTarget.Position = player.Position + new Position(0, 1.0f, 0.5f);
                 _notifyTeleport?.Invoke(gethereTarget, gethereTarget.Position);
                 SendSystem(player, $"Вы телепортировали к себе {gethereTarget.Name}.");
