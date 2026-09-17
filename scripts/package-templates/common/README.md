@@ -153,6 +153,7 @@ Windows: остановите сервер, распакуйте новый ар
 - Лог: `server/server.log`, голос: `voice/voice.log`.
 - Службы (Linux): `systemctl status|restart flovmp`, `systemctl status flovmp-voice`.
 - Консоль сервера (Windows, окно `FloVMP-Server.exe`): `online`, `kick`, `ban`,
-  `unban`, `bans`, `setadmin`, `reloadadmins`, `license`.
+  `unban`, `bans`, `setadmin`, `reloadadmins`, `license`, `perf` (замер тика).
+  Заблокировать того, кого нет в сети: `ban sc:<SocialClubId> <дней> [причина]`.
 - Копия базы: `scripts/backup-db.sh` (или `scripts\backup-db.cmd`).
 - Удаление: `sudo ./install.sh --uninstall` (файлы и база остаются).

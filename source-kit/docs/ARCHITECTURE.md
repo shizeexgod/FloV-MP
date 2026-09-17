@@ -32,7 +32,9 @@
 - блокировки по Social Club, IP, HWID, MAC — с синхронизацией между инстансами;
 - голосовой канал (пространственный, 25 м) и мут голоса;
 - проверка лицензии и лимит игроков;
-- консоль сервера: `setadmin`, `reloadadmins`, `ban`, `unban`, `bans`, `kick`, `online`, `license`;
+- консоль сервера: `setadmin` (в том числе `sc:<SocialClubId>` для офлайн),
+  `reloadadmins`, `ban` (и `ban sc:<SocialClubId>`), `unban`, `bans`, `kick`,
+  `online`, `license`, `perf` — замер времени внутри игрового тика;
 - API для своих ресурсов: команды, точка появления, возрождение, события
   готовности и смерти игрока (см. `DEVELOPMENT.md`).
 
