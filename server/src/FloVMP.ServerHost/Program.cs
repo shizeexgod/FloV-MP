@@ -159,16 +159,11 @@ bool PreflightOk()
         TryKill(stale);
     }
 
-    try
+    // Занятость — по списку слушающих портов системы: движок открывает сокет
+    // так, что пробная привязка в Windows проходит даже при работающем сервере.
+    if (IsPortListening(port, udp: true) || IsPortListening(port, udp: false))
     {
-        using var udp = new UdpClient(new IPEndPoint(IPAddress.Any, port));
-        var tcp = new TcpListener(IPAddress.Any, port);
-        tcp.Start();
-        tcp.Stop();
-    }
-    catch (SocketException)
-    {
-        Error($"Порт {port} занят другой программой (возможно, запущен другой сервер). Смените port в server\\server.toml или закройте её.");
+        Error($@"Порт {port} занят другой программой (возможно, запущен другой сервер). Смените port в server\server.toml или закройте её.");
         return false;
     }
 
@@ -176,14 +171,8 @@ bool PreflightOk()
     foreach (var (key, label) in new[] { ("externalPublicPort", "для игроков"), ("externalPort", "внутренний") })
     {
         if (!int.TryParse(ServerConfig.ReadToml(serverToml, key, "voice"), out var vp) || vp <= 0 || vp > 65535) continue;
-        try
-        {
-            using var probe = new UdpClient(new IPEndPoint(IPAddress.Any, vp));
-        }
-        catch (SocketException)
-        {
-            Info($"Голосовой порт {vp} ({label}) занят другой программой — голосовой чат не заработает. Смените порт в server\\server.toml и voice\\voice.toml.");
-        }
+        if (IsPortListening(vp, udp: true))
+            Info($@"Голосовой порт {vp} ({label}) занят другой программой — голосовой чат не заработает. Смените порт в server\server.toml и voice\voice.toml.");
     }
     return true;
 }
@@ -289,6 +278,17 @@ void StopVoice()
     TryKill(voice);
     voice.Dispose();
     voice = null;
+}
+
+static bool IsPortListening(int port, bool udp)
+{
+    try
+    {
+        var props = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
+        var endpoints = udp ? props.GetActiveUdpListeners() : props.GetActiveTcpListeners();
+        return endpoints.Any(e => e.Port == port);
+    }
+    catch { return false; }
 }
 
 static void TryKill(Process proc)
