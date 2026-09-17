@@ -174,7 +174,7 @@ def make_server_toml_example():
             "# --- Голосовой чат ----------------------------------------------------\n"
             "# externalSecret совпадает с secret в voice/voice.toml.\n"
             "# externalPublicHost — адрес, который получают ИГРОКИ: внешний IP или домен.\n"
-            "# externalPublicPort откройте в файрволе (UDP+TCP); externalPort — внутренний.\n"
+            "# externalPublicPort откройте в файрволе (UDP); externalPort — внутренний.\n"
             + text[voice_table.start():])
 
     rules = [

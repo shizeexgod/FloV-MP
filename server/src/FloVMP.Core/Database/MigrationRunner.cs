@@ -64,7 +64,7 @@ public static class MigrationRunner
 
     /// <summary>
     /// Ищет каталог миграций относительно рабочей папки сервера. Сервер
-    /// запускается из <c>runtime/</c>, а репозиторий лежит выше — поэтому
+    /// запускается из подпапки (<c>server/</c>), а sql/migrations лежит выше — поэтому
     /// проверяем несколько уровней вверх, а не один жёстко заданный путь.
     /// </summary>
     public static string? LocateMigrationsDirectory(string? startDir = null)
