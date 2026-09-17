@@ -186,6 +186,26 @@ public sealed class ChatSystem
         Alt.OnPlayerDisconnect -= OnDisconnect;
     }
 
+    /// <summary>
+    /// Выдать уровень администратора аккаунту (консоль сервера): сохранение,
+    /// освобождение от античита и — если игрок в сети — уровень ему и список
+    /// администрации. Сторонний код не обходит этот путь.
+    /// </summary>
+    public void ApplyAdminLevel(Account account, IPlayer? online, int level)
+    {
+        level = Math.Clamp(level, 0, 8);
+        account.AdminLevel = level;
+        _saveAccount?.Invoke(account);
+        _setAdminExempt?.Invoke(account.Id, level > 0);
+        if (online is not null && online.Exists)
+        {
+            PushAdminLevel(online, level);
+            SendSystem(online, level > 0
+                ? $"[Администрация] Консоль сервера назначила вам уровень {level}: {AdminTitles.GetTitle(level)}."
+                : "[Администрация] Консоль сервера сняла с вас права администратора.");
+        }
+    }
+
     /// <summary>Системное сообщение всем игрокам онлайн.</summary>
     public void Broadcast(string text)
     {

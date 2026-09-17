@@ -232,7 +232,21 @@ public class GamemodeResource : Resource
         _console = new ConsoleCommands(
             saveAll: () => _inv?.SaveAll(),
             broadcast: text => _chat?.Broadcast(text),
-            nameOf: p => _auth?.AccountOf(p)?.Username);
+            nameOf: p => _auth?.AccountOf(p)?.Username,
+            setAdmin: (query, level) =>
+            {
+                if (_auth is null || _chat is null) return "системы авторизации не запущены";
+                var online = uint.TryParse(query, out var pid) ? Alt.GetPlayerById(pid) : null;
+                online ??= Alt.GetAllPlayers().FirstOrDefault(p =>
+                    string.Equals(_auth.AccountOf(p)?.Username, query, StringComparison.OrdinalIgnoreCase));
+                var account = online is not null ? _auth.AccountOf(online) : _auth.FindByName(query);
+                if (account is null)
+                    return online is not null
+                        ? $"игрок [{online.Id}] ещё не вошёл в аккаунт"
+                        : $"аккаунт «{query}» не найден";
+                _chat.ApplyAdminLevel(account, online, level);
+                return $"аккаунт {account.Username}: уровень администратора {level}" + (online is null ? " (игрок не в сети)" : "");
+            });
         _console.Attach();
         Alt.Log($"[FloV:MP] core: data dir -> {dataDir}");
 
