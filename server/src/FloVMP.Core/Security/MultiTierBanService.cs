@@ -135,6 +135,23 @@ public class MultiTierBanService
         }
     }
 
+    /// <summary>
+    /// Идентификатор, который ничего не идентифицирует: пусто, «0» (игрок без
+    /// SocialClub) или хэш из одних нулей (железо не определилось). Раньше такие
+    /// значения сравнивались как обычные — бан одного игрока с SocialClubId 0
+    /// блокировал всех игроков без SocialClub, а /unban 0 снимал их баны разом.
+    /// </summary>
+    public static bool IsBlankIdentifier(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        var v = value.Trim();
+        foreach (var ch in v)
+            if (ch != '0' && ch != ':' && ch != '-' && ch != '.') return false;
+        return true;
+    }
+
+    private static string? Identifier(string? value) => IsBlankIdentifier(value) ? null : value!.Trim();
+
     public static BanFlags TierToFlags(BanTier tier) => tier switch
     {
         BanTier.StandardBan => BanFlags.Account,
@@ -165,10 +182,10 @@ public class MultiTierBanService
             id,
             accountId,
             username,
-            ip,
-            socialClubId,
-            hwidHash,
-            macAddress,
+            Identifier(ip),
+            Identifier(socialClubId),
+            Identifier(hwidHash),
+            Identifier(macAddress),
             flags,
             adminUsername,
             reason,
@@ -198,10 +215,10 @@ public class MultiTierBanService
             id,
             accountId,
             username,
-            ip,
-            socialClubId,
-            hwidHash,
-            macAddress,
+            Identifier(ip),
+            Identifier(socialClubId),
+            Identifier(hwidHash),
+            Identifier(macAddress),
             flags,
             adminUsername,
             reason,
@@ -232,8 +249,11 @@ public class MultiTierBanService
 
         foreach (var ban in activeBans)
         {
-            // 1. Проверка прямого бана аккаунта (действует ВСЕГДА, при любой политике)
-            if (ban.Flags.HasFlag(BanFlags.Account) && ban.AccountId == accountId)
+            // 1. Проверка прямого бана аккаунта (действует ВСЕГДА, при любой политике).
+            // accountId 0 — аккаунт неизвестен (вход ещё не выполнен или режим без
+            // аккаунтов). Раньше 0 == 0 совпадало: один бан в базовой платформе
+            // (там аккаунтов нет, баны пишутся с accountId 0) закрывал вход ВСЕМ.
+            if (accountId > 0 && ban.Flags.HasFlag(BanFlags.Account) && ban.AccountId == accountId)
             {
                 return new BanCheckResult(true, ban.Reason, BanFlags.Account, ban.AdminUsername, ban.ExpiresAtUtc, false);
             }
@@ -241,10 +261,10 @@ public class MultiTierBanService
             // Если политика отключена — проверка аппаратных банов пропускается
             if (policy == HwidPolicyMode.Disabled) continue;
 
-            bool hwidMatch = ban.Flags.HasFlag(BanFlags.Hwid) && !string.IsNullOrEmpty(hwidHash) && string.Equals(ban.HwidHash, hwidHash, StringComparison.OrdinalIgnoreCase);
-            bool macMatch = ban.Flags.HasFlag(BanFlags.Mac) && !string.IsNullOrEmpty(macAddress) && string.Equals(ban.MacAddress, macAddress, StringComparison.OrdinalIgnoreCase);
-            bool scMatch = ban.Flags.HasFlag(BanFlags.SocialClub) && !string.IsNullOrEmpty(socialClubId) && string.Equals(ban.SocialClubId, socialClubId, StringComparison.OrdinalIgnoreCase);
-            bool ipMatch = ban.Flags.HasFlag(BanFlags.Ip) && !string.IsNullOrEmpty(ip) && string.Equals(ban.Ip, ip, StringComparison.OrdinalIgnoreCase);
+            bool hwidMatch = ban.Flags.HasFlag(BanFlags.Hwid) && !IsBlankIdentifier(hwidHash) && string.Equals(ban.HwidHash, hwidHash, StringComparison.OrdinalIgnoreCase);
+            bool macMatch = ban.Flags.HasFlag(BanFlags.Mac) && !IsBlankIdentifier(macAddress) && string.Equals(ban.MacAddress, macAddress, StringComparison.OrdinalIgnoreCase);
+            bool scMatch = ban.Flags.HasFlag(BanFlags.SocialClub) && !IsBlankIdentifier(socialClubId) && string.Equals(ban.SocialClubId, socialClubId, StringComparison.OrdinalIgnoreCase);
+            bool ipMatch = ban.Flags.HasFlag(BanFlags.Ip) && !IsBlankIdentifier(ip) && string.Equals(ban.Ip, ip, StringComparison.OrdinalIgnoreCase);
             // BUGFIX: флаг Subnet ставился в /hardban, но НЕ проверялся — забаненный
             // заходил с того же /24 с другим IP. Теперь матчим подсеть /24.
             bool subnetMatch = ban.Flags.HasFlag(BanFlags.Subnet) && SameSubnet24(ban.Ip, ip);
@@ -278,7 +298,7 @@ public class MultiTierBanService
     /// </summary>
     public int Unban(string query)
     {
-        if (string.IsNullOrWhiteSpace(query)) return 0;
+        if (IsBlankIdentifier(query)) return 0;
         int unbanned = 0;
 
         foreach (var (key, ban) in _bans)

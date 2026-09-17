@@ -7,6 +7,47 @@ namespace FloVMP.Core.Tests
     public class MultiTierBanServiceTests
     {
         [Fact]
+        public void BanWithoutAccount_DoesNotLockOutEveryone()
+        {
+            // Базовая платформа: аккаунтов нет, бан пишется с accountId 0, и
+            // проверка входа тоже идёт с accountId 0. Раньше это совпадало —
+            // после одного /ban на сервер не мог зайти никто.
+            var service = new MultiTierBanService();
+            service.CreateBan(0, "Cheater", "10.0.0.5", "111222333", "HWID_BAD", "MAC_BAD",
+                BanTier.SocialClubBan, "admin", "cheats", 7);
+
+            Assert.False(service.CheckConnection(0, "10.0.0.9", "444555666", "HWID_OK", "MAC_OK", HwidPolicyMode.Strict).IsBlocked);
+            Assert.True(service.CheckConnection(0, "10.0.0.9", "111222333", "HWID_OK", "MAC_OK", HwidPolicyMode.Strict).IsBlocked);
+        }
+
+        [Fact]
+        public void ZeroIdentifiers_DoNotMatchOtherPlayers()
+        {
+            // Игрок без SocialClub (0) и с неопределившимся железом (нули).
+            var service = new MultiTierBanService();
+            service.CreateBan(0, "NoSc", "10.0.0.5", "0", "0000000000000000", "0000000000000000",
+                BanTier.HardBan, "admin", "x", 0);
+
+            // другой игрок без SocialClub и с нулевым железом, с другого IP и подсети
+            var other = service.CheckConnection(0, "172.16.3.4", "0", "0000000000000000", "0000000000000000", HwidPolicyMode.Strict);
+            Assert.False(other.IsBlocked);
+            // тот же IP по-прежнему заблокирован
+            Assert.True(service.CheckConnection(0, "10.0.0.5", "0", "0000000000000000", "0000000000000000", HwidPolicyMode.Strict).IsBlocked);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("0000000000000000")]
+        [InlineData(" ")]
+        public void Unban_WithBlankQuery_LiftsNothing(string query)
+        {
+            var service = new MultiTierBanService();
+            service.CreateBan(0, "A", "10.0.0.1", "0", "0000000000000000", null, BanTier.HardBan, "admin", "x", 0);
+            Assert.Equal(0, service.Unban(query));
+            Assert.True(service.CheckConnection(0, "10.0.0.1", null, null, null, HwidPolicyMode.Strict).IsBlocked);
+        }
+
+        [Fact]
         public void StandardBan_OnlyBlocksMatchingAccount()
         {
             var service = new MultiTierBanService();

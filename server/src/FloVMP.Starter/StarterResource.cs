@@ -544,12 +544,17 @@ public class StarterResource : Resource
             ? string.Join(' ', parts[reasonFrom..])
             : "Нарушение правил сервера";
 
+        // В базовой платформе нет аккаунтов, поэтому обычный бан — по SocialClub
+        // (а если его нет — по железу). Раньше /ban создавал бан «аккаунта» без
+        // аккаунта: нарушителя он не держал.
         var tier = cmd switch
         {
             "hardban" => FloVMP.Core.Security.BanTier.HardBan,
             "hwidban" => FloVMP.Core.Security.BanTier.HardwareBan,
             "banip" => FloVMP.Core.Security.BanTier.IpBan,
-            _ => FloVMP.Core.Security.BanTier.StandardBan,
+            _ => target.SocialClubId > 0
+                ? FloVMP.Core.Security.BanTier.SocialClubBan
+                : FloVMP.Core.Security.BanTier.HardwareBan,
         };
 
         FloVMP.Core.Security.BanRecord record;
@@ -898,7 +903,9 @@ public class StarterResource : Resource
                         macAddress: banTarget.HardwareIdExHash.ToString("X16"),
                         tier: consolePermanent
                             ? FloVMP.Core.Security.BanTier.HardBan
-                            : FloVMP.Core.Security.BanTier.StandardBan,
+                            : banTarget.SocialClubId > 0
+                                ? FloVMP.Core.Security.BanTier.SocialClubBan
+                                : FloVMP.Core.Security.BanTier.HardwareBan,
                         adminUsername: "console",
                         reason: consoleReason,
                         durationDays: consoleDays);
