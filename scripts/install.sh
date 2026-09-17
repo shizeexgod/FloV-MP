@@ -185,7 +185,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
   if [ "$HAS_SYSTEMD" -eq 1 ]; then
     systemctl stop "$SERVICE.service" "$SERVICE-voice.service" >/dev/null 2>&1 || true
     systemctl disable "$SERVICE.service" "$SERVICE-voice.service" >/dev/null 2>&1 || true
-    rm -f "/etc/systemd/system/$SERVICE.service" "/etc/systemd/system/$SERVICE-voice.service"
+    systemctl disable --now "$SERVICE-backup.timer" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$SERVICE.service" "/etc/systemd/system/$SERVICE-voice.service" \
+          "/etc/systemd/system/$SERVICE-backup.service" "/etc/systemd/system/$SERVICE-backup.timer"
     reload_units
     ok "службы $SERVICE и $SERVICE-voice удалены"
   fi
@@ -614,6 +616,38 @@ UNIT
   systemctl enable "$SERVICE-voice.service" >/dev/null 2>&1 || warn "не удалось включить автозапуск $SERVICE-voice"
   systemctl enable "$SERVICE.service" >/dev/null 2>&1 || warn "не удалось включить автозапуск $SERVICE"
   ok "службы: $SERVICE, $SERVICE-voice (автозапуск включён)"
+
+  # Ежедневная копия базы. Без неё копий на сервере нет, пока о них не вспомнят.
+  if [ "$DB_OK" -eq 1 ]; then
+    cat > "/etc/systemd/system/$SERVICE-backup.service" <<UNIT
+[Unit]
+Description=FloV:MP database backup ($SERVICE)
+After=mariadb.service
+
+[Service]
+Type=oneshot
+User=$RUN_AS
+ExecStart=$INSTALL_DIR/scripts/backup-db.sh
+UNIT
+    cat > "/etc/systemd/system/$SERVICE-backup.timer" <<UNIT
+[Unit]
+Description=FloV:MP daily database backup ($SERVICE)
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+    reload_units
+    if systemctl enable "$SERVICE-backup.timer" >/dev/null 2>&1 && systemctl start "$SERVICE-backup.timer" >/dev/null 2>&1; then
+      ok "ежедневная копия базы: 04:30, хранится 14 дней ($INSTALL_DIR/backups)"
+    else
+      warn "таймер копий базы не включён — запускайте $INSTALL_DIR/scripts/backup-db.sh вручную или из cron"
+    fi
+  fi
 else
   warn "systemd не найден — службы не созданы. Запуск вручную: $INSTALL_DIR/start-voice.sh & $INSTALL_DIR/start.sh"
 fi
