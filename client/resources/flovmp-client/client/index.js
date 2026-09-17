@@ -20,9 +20,8 @@ export const KEYBINDS = {
     noclip: 115,     // F4 — Режим свободного админ-полёта (NoClip)
     tpm: 116,        // F5 — Быстрый телепорт по фиолетовой метке (WayPoint)
     esp: 114,        // F3 — Режим админского видения (ESP Wallhack)
-    voice: 78,       // N — Голосовой чат (Push-to-Talk)
-    voiceAlt: 66,    // B — Альтернативная клавиша Push-to-Talk
-    voiceTailMs: 400,// Задержка отпускания микрофона (мс), чтобы не обрывать слова
+    // Голос: push-to-talk делает сам движок, клавиша — в настройках alt:V
+    // (alt.Voice.activationKey). Отдельной клавиши здесь нет.
     engine: 50,      // 2 — Завести / заглушить двигатель транспорта
     lock: 76,        // L — Закрыть / открыть двери транспорта
     seatbelt: 75     // K — Пристегнуть / отстегнуть ремень безопасности в авто
@@ -82,9 +81,15 @@ let hudReady = false;
 let hudPendingInit = null;
 let hudPendingTick = null;
 
-// Голосовой чат
-let isVoiceTalking = false;
-let voiceReleaseTimeout = null;
+// Голосовой чат. Микрофон глушится, пока игрок печатает (чат, консоль, форма
+// входа): клавиша push-to-talk — обычная буква (по умолчанию N), и раньше при
+// наборе текста с ней включался микрофон. Функции alt.setMicGain, которую
+// вызывал прежний код, в API alt:V нет — те вызовы ничего не делали.
+function updateMicMute() {
+    try {
+        alt.Voice.muteInput = !!(chatTyping || consoleOpen || authView);
+    } catch (e) { }
+}
 
 // Состояние транспорта
 let seatbeltOn = false;
@@ -183,6 +188,7 @@ function openAuth(serverName) {
     try {
         authView = new alt.WebView('http://resource/client/html/auth/index.html');
         authVisible = true;
+        updateMicMute();
 
         authView.on('load', () => {
             try { authView.emit('flovmp:auth:server', serverName || ''); } catch (e) { }
@@ -211,6 +217,7 @@ function closeAuth() {
     try { authView.unfocus(); } catch (e) { }
     try { authView.destroy(); } catch (e) { }
     authView = null;
+    updateMicMute();
 
     // popCursor только если мы его действительно поднимали, иначе счётчик
     // вложенности уйдёт в минус и курсор пропадёт у чата.
@@ -865,6 +872,7 @@ export function openChat() {
     chatView.on('flovmp:chat:done', () => {
         if (chatTyping) {
             chatTyping = false;
+            updateMicMute();
             popCursor();
             try { chatView.unfocus(); } catch (e) { }
             if (!consoleOpen) {
@@ -878,6 +886,7 @@ export function closeChat() {
     if (!chatView) return;
     if (chatTyping) {
         chatTyping = false;
+        updateMicMute();
         popCursor();
         if (!consoleOpen) {
             alt.toggleGameControls(true);
@@ -889,18 +898,8 @@ export function closeChat() {
 
 export function startTyping(initialText = '') {
     if (!chatView || chatTyping || !inGame || consoleOpen) return;
-    if (isVoiceTalking) {
-        isVoiceTalking = false;
-        if (voiceReleaseTimeout) {
-            alt.clearTimeout(voiceReleaseTimeout);
-            voiceReleaseTimeout = null;
-        }
-        try {
-            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
-            alt.emit('flovmp:voice:active', false);
-        } catch (e) { }
-    }
     chatTyping = true;
+    updateMicMute();
     chatView.focus();
     pushCursor();
     alt.toggleGameControls(false);
@@ -1046,17 +1045,6 @@ function startConsoleStats() {
 
 export function openDevConsole() {
     if (consoleOpen) return;
-    if (isVoiceTalking) {
-        isVoiceTalking = false;
-        if (voiceReleaseTimeout) {
-            alt.clearTimeout(voiceReleaseTimeout);
-            voiceReleaseTimeout = null;
-        }
-        try {
-            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
-            alt.emit('flovmp:voice:active', false);
-        } catch (e) { }
-    }
     if (chatTyping && chatView) {
         chatView.emit('flovmp:chat:closeinput');
         chatTyping = false;
@@ -1065,6 +1053,7 @@ export function openDevConsole() {
     }
     const cv = getOrCreateDevConsole();
     consoleOpen = true;
+    updateMicMute();
     cv.emit('flovmp:console:open');
     cv.emit('flovmp:console:permissions', currentAdminLevel);
     cv.focus();
@@ -1076,6 +1065,7 @@ export function openDevConsole() {
 export function closeDevConsole() {
     if (!consoleOpen) return;
     consoleOpen = false;
+    updateMicMute();
     if (consoleStatsInterval) {
         alt.clearInterval(consoleStatsInterval);
         consoleStatsInterval = null;
@@ -1256,46 +1246,8 @@ function loadCollisionAndUnfreeze(targetPos) {
 }
 
 // =============================================================================
-// 6. ГОЛОСОВОЙ ЧАТ PUSH-TO-TALK (B с задержкой отпускания 400 мс)
-// =============================================================================
-function handleVoiceKeyDown() {
-    if (voiceReleaseTimeout) {
-        alt.clearTimeout(voiceReleaseTimeout);
-        voiceReleaseTimeout = null;
-    }
-    if (!isVoiceTalking) {
-        isVoiceTalking = true;
-        try {
-            if (typeof alt.setMicGain === 'function') alt.setMicGain(1.0);
-            alt.emit('flovmp:voice:active', true);
-        } catch (e) { }
-    }
-}
-
-function handleVoiceKeyUp() {
-    if (!isVoiceTalking) return;
-    // Задержка отпускания (hangover tail) предотвращает обрезание окончаний слов
-    voiceReleaseTimeout = alt.setTimeout(() => {
-        isVoiceTalking = false;
-        voiceReleaseTimeout = null;
-        try {
-            if (typeof alt.setMicGain === 'function') alt.setMicGain(0.0);
-            alt.emit('flovmp:voice:active', false);
-        } catch (e) { }
-    }, KEYBINDS.voiceTailMs);
-}
-
-// =============================================================================
 // 7. ОБРАБОТЧИКИ КЛАВИАТУРЫ
 // =============================================================================
-alt.on('keydown', (key) => {
-    if (key === KEYBINDS.voice || key === KEYBINDS.voiceAlt) {
-        if (!chatTyping && !consoleOpen && !authView) {
-            handleVoiceKeyDown();
-        }
-    }
-});
-
 alt.on('keyup', (key) => {
     // F1 / F8 / F11 — Консоль / Меню управления и выхода
     if (key === KEYBINDS.help || key === KEYBINDS.console || key === KEYBINDS.consoleAlt) {
@@ -1347,12 +1299,6 @@ alt.on('keyup', (key) => {
             }
             return;
         }
-    }
-
-    // N / B — Микрофон (отпускание)
-    if (key === KEYBINDS.voice || key === KEYBINDS.voiceAlt) {
-        handleVoiceKeyUp();
-        return;
     }
 
     // 2 — Двигатель транспорта
@@ -1416,11 +1362,6 @@ alt.on('disconnect', () => {
         alt.clearInterval(activeSpawnInterval);
         activeSpawnInterval = null;
     }
-    if (voiceReleaseTimeout) {
-        alt.clearTimeout(voiceReleaseTimeout);
-        voiceReleaseTimeout = null;
-    }
-    isVoiceTalking = false;
     if (noClip) toggleNoClip();
     espMode = 0;
 
