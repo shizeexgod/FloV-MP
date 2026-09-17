@@ -993,17 +993,32 @@ public class StarterResource : Resource
                 if (_bans is null) { Alt.Log("[Console] Сервис блокировок не подключён."); return; }
                 if (args.Length == 0)
                 {
-                    Alt.Log("[Console] Использование: ban <ID|Ник> <дней> [причина]  |  hardban <ID|Ник> [причина]");
+                    Alt.Log("[Console] Использование: ban <ID|Ник|sc:SocialClubId> <дней> [причина]  |  hardban <...> [причина]");
                     return;
                 }
+
+                // «sc:<SocialClubId>» — блокировка того, кого нет в сети.
+                // Раньше офлайн-игрока можно было заблокировать только правкой
+                // базы руками: нарушитель вышел — и наказать его нечем.
+                var banOfflineSc = args[0].StartsWith("sc:", StringComparison.OrdinalIgnoreCase)
+                    ? args[0][3..]
+                    : null;
                 IPlayer? banTarget = null;
-                if (uint.TryParse(args[0], out var bId)) banTarget = Alt.GetPlayerById(bId);
-                banTarget ??= Alt.GetAllPlayers().FirstOrDefault(
-                    p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
-                if (banTarget == null)
+                if (banOfflineSc is null)
                 {
-                    Alt.Log($"[Console] Игрок '{args[0]}' не найден онлайн " +
-                            "(заблокировать офлайн-игрока пока можно только по записи в БД).");
+                    if (uint.TryParse(args[0], out var bId)) banTarget = Alt.GetPlayerById(bId);
+                    banTarget ??= Alt.GetAllPlayers().FirstOrDefault(
+                        p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
+                    if (banTarget == null)
+                    {
+                        Alt.Log($"[Console] Игрок '{args[0]}' не найден в сети. " +
+                                "Офлайн — по Social Club: ban sc:<SocialClubId> <дней> [причина]");
+                        return;
+                    }
+                }
+                else if (!banOfflineSc.All(char.IsDigit) || banOfflineSc.Length == 0)
+                {
+                    Alt.Log("[Console] SocialClubId — только цифры: ban sc:123456789 <дней> [причина]");
                     return;
                 }
 
@@ -1026,9 +1041,29 @@ public class StarterResource : Resource
 
                 try
                 {
+                    var howLong = consolePermanent ? "навсегда" : $"на {consoleDays} дн.";
+                    if (banOfflineSc is not null)
+                    {
+                        // У офлайн-игрока известен только Social Club: ни IP, ни
+                        // железа сервер не помнит. Блокировка по нему и ставится.
+                        var offlineRec = _bans.CreateBan(
+                            accountId: 0,
+                            username: "sc:" + banOfflineSc,
+                            ip: null,
+                            socialClubId: banOfflineSc,
+                            hwidHash: null,
+                            macAddress: null,
+                            tier: FloVMP.Core.Security.BanTier.SocialClubBan,
+                            adminUsername: "console",
+                            reason: consoleReason,
+                            durationDays: consoleDays);
+                        Alt.Log($"[Console] Блокировка {offlineRec.Id}: SocialClubId {banOfflineSc} ({howLong}) — {consoleReason}");
+                        break;
+                    }
+
                     var rec = _bans.CreateBan(
                         accountId: 0,
-                        username: banTarget.Name,
+                        username: banTarget!.Name,
                         ip: banTarget.Ip,
                         socialClubId: banTarget.SocialClubId.ToString(),
                         hwidHash: banTarget.HardwareIdHash.ToString("X16"),
@@ -1042,7 +1077,6 @@ public class StarterResource : Resource
                         reason: consoleReason,
                         durationDays: consoleDays);
 
-                    var howLong = consolePermanent ? "навсегда" : $"на {consoleDays} дн.";
                     BroadcastChatMessage($"{{ef4444}}[Бан] {banTarget.Name} заблокирован {howLong}. Причина: {consoleReason}");
                     Alt.Log($"[Console] Блокировка {rec.Id}: {banTarget.Name} ({rec.Flags}, {howLong}) — {consoleReason}");
                     banTarget.Kick($"Вы заблокированы {howLong}. Причина: {consoleReason}");
