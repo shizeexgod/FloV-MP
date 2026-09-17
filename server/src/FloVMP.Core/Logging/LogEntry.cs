@@ -5,17 +5,7 @@ public static class LogCategory
 {
     public const string Admin = "admin";          // действия администрации
     public const string Account = "account";      // регистрация/вход/смена данных
-    public const string Character = "character";  // создание/удаление/переименование
-    public const string Punishment = "punishment";// баны/муты/арест/штрафы
-    public const string Money = "money";          // все дельты денег с источником
-    public const string Item = "item";            // предметы/склад
-    public const string Vehicle = "vehicle";      // транспорт
-    public const string Org = "org";              // фракции/бизнесы/семьи/дома
-    public const string Identity = "identity";    // смена связок ID/имён
-    public const string Event = "event";          // мероприятия
-    public const string Kill = "kill";            // убийства
-    public const string Qa = "qa";                // вопросы игроков
-    public const string Promo = "promo";          // промо/бонус-коды
+    public const string Punishment = "punishment";// баны, муты, кики
     public const string System = "system";        // служебное (старт/стоп и т.п.)
 }
 

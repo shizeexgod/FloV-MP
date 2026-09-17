@@ -1,5 +1,0 @@
-# FloV:MP — серверный C#-геймод (coreclr-module).
-# main указывает на сборку; AltV.Net.*.dll и .deps.json должны лежать рядом
-# (dotnet publish server/src/FloVMP.Gamemode -c Release -o <папка ресурса>).
-type = "csharp"
-main = "FloVMP.Gamemode.dll"

@@ -2,9 +2,9 @@
 
   <!--
     Чистая гейм-логика без привязки к alt:V (AltV.Net не подключается).
-    Отсюда её можно юнит-тестировать (FloVMP.Core.Tests). FloVMP.Gamemode
+    Отсюда её можно юнит-тестировать (FloVMP.Core.Tests). FloVMP.Starter
     ссылается на этот проект; dotnet publish кладёт FloVMP.Core.dll рядом
-    с геймодом в папку ресурса.
+    со сборкой ресурса.
   -->
   <PropertyGroup>
     <AssemblyName>FloVMP.Core</AssemblyName>

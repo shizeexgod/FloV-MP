@@ -69,7 +69,6 @@ def section(title):
 
 REQUIRED_PATHS = [
     "server/src/FloVMP.Core/FloVMP.Core.csproj",
-    "server/src/FloVMP.Gamemode/FloVMP.Gamemode.csproj",
     "server/src/FloVMP.Starter/FloVMP.Starter.csproj",
     "server/tests/FloVMP.Core.Tests/FloVMP.Core.Tests.csproj",
     "launcher/src/FloVMP.Connect/FloVMP.Connect.csproj",
@@ -160,37 +159,6 @@ def check_security_regressions(rep):
                 "" if ok else "есть дефолт - /alogin открыт всем, кто знает строку")
 
 
-# ------------- 2b. Согласованность админ-команд -------------
-
-def check_admin_commands(rep):
-    """Обработчик без регистрации = команда мертва ('неизвестная команда').
-    Регистрация без обработчика = админ вводит, молча ничего не происходит.
-    И то, и другое всплывает в бою, когда админ пытается снять нарушителя."""
-    section("2b. Согласованность админ-команд")
-    chat_p = ROOT / "server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs"
-    reg_p = ROOT / "server/src/FloVMP.Core/Admin/AdminCommandRegistry.cs"
-    if not (chat_p.exists() and reg_p.exists()):
-        rep.add(SKIP, "реестр команд", "файлы не найдены")
-        return
-
-    chat = chat_p.read_text(encoding="utf-8", errors="ignore")
-    reg = reg_p.read_text(encoding="utf-8", errors="ignore")
-    registered = set(re.findall(r'^\s*Register\("([^"]+)"', reg, re.M))
-    marker = "private void HandleAdminCommand"
-    if marker not in chat:
-        rep.add(WARN, "HandleAdminCommand", "не найден - структура изменилась")
-        return
-    cases = set(re.findall(r'case\s+"([a-z0-9_]+)"\s*:', chat[chat.find(marker):]))
-
-    dead = sorted(cases - registered)
-    noimpl = sorted(registered - cases)
-    rep.add(PASS if not dead else FAIL, "нет мёртвых команд (обработчик без регистрации)",
-            ", ".join(dead) if dead else "чисто")
-    rep.add(PASS if not noimpl else FAIL, "нет команд без обработчика (реклама в /ahelp впустую)",
-            ", ".join(noimpl) if noimpl else "чисто")
-    rep.add(PASS, "всего админ-команд", str(len(registered)))
-
-
 # ------------------- 3. Горячий путь (блокировка тика) -------------------
 
 def check_hot_path(rep):
@@ -207,43 +175,11 @@ def check_hot_path(rep):
     rep.add(PASS if has_flush else FAIL, "есть Flush/Dispose (нет потери данных)",
             "" if has_flush else "фоновая запись без гарантии сброса на остановке")
 
-    # Вход/регистрация: чтение БД + PBKDF2 (120k итераций) не должны считаться
-    # на главном потоке - это почти целый тик на каждый вход.
-    auth = ROOT / "server/src/FloVMP.Gamemode/Systems/Auth/AuthSystem.cs"
-    if auth.exists():
-        a = auth.read_text(encoding="utf-8", errors="ignore")
-        offloaded = "Task.Run" in a and "_completed" in a and "public void Pump()" in a
-        rep.add(PASS if offloaded else FAIL, "вход/регистрация не на главном потоке",
-                "" if offloaded else "PBKDF2+БД считаются в обработчике alt:V -> фриз тика на каждый вход")
-        gm = ROOT / "server/src/FloVMP.Gamemode/GamemodeResource.cs"
-        pumped = gm.exists() and "_auth?.Pump()" in gm.read_text(encoding="utf-8", errors="ignore")
-        rep.add(PASS if pumped else FAIL, "Pump() подключён к OnTick",
-                "" if pumped else "результаты входа никогда не применятся - игроки зависнут на авторизации")
-
     # Регистрация не должна переписывать accounts.json целиком: стоимость
     # растёт с числом учёток (замерено 9.21 мс при 1500, 0.16 мс с журналом).
     journal = "AppendToJournalLocked" in txt and "_journalPath" in txt
     rep.add(PASS if journal else FAIL, "регистрация не переписывает весь файл",
             "" if journal else "Create() делает полный сброс -> O(n) на каждую регистрацию")
-
-    # Поиск по номеру счёта идёт на каждый перевод денег, в игровом потоке.
-    indexed = "_bankToName" in txt
-    rep.add(PASS if indexed else FAIL, "поиск по номеру счёта по индексу",
-            "" if indexed else "FindByBankAccount перебирает все аккаунты на каждый /transfer")
-
-    # Инвентари: Save() переписывал СЛОВАРЬ ЦЕЛИКОМ (все аккаунты) на каждое
-    # сохранение, а автосейв зовёт Save() на каждого игрока онлайн - O(n^2)
-    # прямо в тике. На боевом сервере это дало resourceManager.Update()
-    # took: 240988 ms, то есть четыре минуты заморозки.
-    inv = ROOT / "server/src/FloVMP.Core/Inventory/JsonInventoryStore.cs"
-    if inv.exists():
-        iv = inv.read_text(encoding="utf-8", errors="ignore")
-        deferred = "_dirty" in iv and "public void Flush()" in iv
-        rep.add(PASS if deferred else FAIL, "запись инвентарей отложенная",
-                "" if deferred else "Save() переписывает весь файл -> автосейв замораживает сервер")
-        safe = "IDisposable" in iv
-        rep.add(PASS if safe else FAIL, "инвентари сбрасываются на остановке",
-                "" if safe else "фоновая запись без Dispose -> потеря данных при рестарте")
 
     # Вывод Core мимо Alt.Log. В server.log alt:V попадает только то, что
     # прошло через Alt.Log, а обычный Console.WriteLine из ресурса теряется
@@ -292,7 +228,6 @@ def check_bans(rep):
     # Главное обещание: команды с идентификаторами обязаны создавать запись
     # с этими идентификаторами, а не только ставить флаг на аккаунте.
     for path, label in (
-        ("server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs", "RP-геймод"),
         ("server/src/FloVMP.Starter/StarterResource.cs", "базовая платформа"),
     ):
         f = ROOT / path
@@ -313,23 +248,15 @@ def check_bans(rep):
 
 # События, которые сервер шлёт, но клиент намеренно не обрабатывает. Каждое
 # обязано иметь причину: иначе это та самая молчаливая дыра.
-KNOWN_UNHANDLED_SERVER_EVENTS = {
-    # Инвентарь полного RP-режима: интерфейса инвентаря в клиенте пока нет.
-    "flovmp:inv:sync": "интерфейс инвентаря ещё не сделан (RP-режим)",
-}
+KNOWN_UNHANDLED_SERVER_EVENTS = {}
 
 
 def check_event_contract(rep):
     """
     Сверка «что шлёт одна сторона» против «что слушает другая».
 
-    Этот класс ошибок дал пять находок подряд и все — молчаливые:
-      * flovmp:auth:show — сервер показывал форму входа, клиент её не слушал,
-        и в RP-режиме игрок висел в чёрном экране навсегда;
-      * flovmp:hud:init / hud:tick — здоровье и деньги уходили в никуда;
-      * flovmp:inv:notice — отказы инвентаря не показывались;
-      * flovmp:inv:sync — инвентарь не отображается.
-    Ни одна из них не даёт ошибки ни в логе сервера, ни в логе клиента.
+    Событие, которое одна сторона шлёт, а другая не слушает, не даёт ошибки
+    ни в логе сервера, ни в логе клиента — функция просто молча не работает.
     """
     section("3f. Контракт событий клиент <-> сервер")
 
@@ -469,11 +396,9 @@ def check_voice(rep):
     else:
         rep.add(SKIP, "AltvToml.cs", "файл не найден")
 
-    # 3. Сервер обязан создавать канал и в базовой платформе, и в RP-режиме:
-    # раньше канал был только в платформе, и в полном режиме голос пропадал.
+    # 3. Сервер обязан создавать голосовой канал.
     for path, label in (
         ("server/src/FloVMP.Starter/StarterResource.cs", "базовая платформа"),
-        ("server/src/FloVMP.Gamemode/GamemodeResource.cs", "RP-режим"),
     ):
         f = ROOT / path
         if not f.exists():
@@ -490,9 +415,7 @@ def check_voice(rep):
     # 4. Мут голоса. Без него замученный за оскорбления игрок спокойно
     # продолжает кричать в микрофон, и мут выглядит нерабочим.
     starter = ROOT / "server/src/FloVMP.Starter/StarterResource.cs"
-    chat = ROOT / "server/src/FloVMP.Gamemode/Systems/Chat/ChatSystem.cs"
-    muted = (starter.exists() and "MutePlayer" in starter.read_text(encoding="utf-8", errors="ignore")) or \
-            (chat.exists() and "MutePlayer" in chat.read_text(encoding="utf-8", errors="ignore"))
+    muted = starter.exists() and "MutePlayer" in starter.read_text(encoding="utf-8", errors="ignore")
     rep.add(PASS if muted else FAIL, "голос можно заглушить",
             "" if muted else "мут глушит только текст - нарушитель продолжает говорить")
 
@@ -607,7 +530,7 @@ def check_migrations(rep):
     # а на уже заполненной CREATE TABLE IF NOT EXISTS её не выполняет — так
     # ошибка прожила до первой настоящей установки у клиента.
     dup_cols = []
-    for f in files + [ROOT / "sql/schema.sql"]:
+    for f in files:
         if not f.exists():
             continue
         t = f.read_text(encoding="utf-8", errors="ignore")
@@ -666,8 +589,7 @@ def check_build_and_tests(rep):
     section("4. Сборка и юнит-тесты")
     projects = [
         "server/src/FloVMP.Core/FloVMP.Core.csproj",
-        "server/src/FloVMP.Gamemode/FloVMP.Gamemode.csproj",
-        "server/src/FloVMP.Starter/FloVMP.Starter.csproj",
+            "server/src/FloVMP.Starter/FloVMP.Starter.csproj",
     ]
     for proj in projects:
         code, out = run_cmd(["dotnet", "build", proj, "-c", "Release", "--nologo", "-v", "q"])
@@ -826,7 +748,6 @@ def main():
     rep = Report()
     check_structure(rep)
     check_security_regressions(rep)
-    check_admin_commands(rep)
     check_hot_path(rep)
     check_bans(rep)
     check_voice(rep)

@@ -108,8 +108,6 @@ public class RageCompatibilityTests
         Assert.Equal(142, account.Id);
         Assert.Equal("Ivan_Petrov", account.Username);
         Assert.Equal(8, account.AdminLevel);
-        Assert.Equal(50000, account.Cash);
-        Assert.Equal(1200000, account.Bank);
     }
 
     [Fact]

@@ -150,7 +150,7 @@ Get-ChildItem "$dataSrc\*.bin" | ForEach-Object {
     Copy-Required $_.FullName "$server\data\$($_.Name)"
 }
 
-# --- 6. C# starter & gamemode: dotnet publish -> resources\flovmp-starter ---
+# --- 6. C# starter: dotnet publish -> resources\flovmp-starter ---
 Write-Host "[flovmp-starter: dotnet publish]" -ForegroundColor Yellow
 $starterProj = Join-Path $repo "server\src\FloVMP.Starter\FloVMP.Starter.csproj"
 $starterOut  = Join-Path $server "resources\flovmp-starter"
@@ -159,17 +159,6 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish FloVMP.Starter failed with exit
 Copy-Item (Join-Path $repo "server\resources\flovmp-starter\resource.toml") (Join-Path $starterOut "resource.toml") -Force
 Remove-Item (Join-Path $starterOut "*.pdb") -Force -ErrorAction SilentlyContinue
 Write-Host "  -> resources\flovmp-starter"
-
-if (Test-Path (Join-Path $repo "server\src\FloVMP.Gamemode\FloVMP.Gamemode.csproj")) {
-    Write-Host "[flovmp-core: dotnet publish]" -ForegroundColor Yellow
-    $coreProj = Join-Path $repo "server\src\FloVMP.Gamemode\FloVMP.Gamemode.csproj"
-    $coreOut  = Join-Path $server "resources\flovmp-core"
-    & dotnet publish $coreProj -c $Configuration -o $coreOut --nologo
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
-    Copy-Item (Join-Path $repo "server\resources\flovmp-core\resource.toml") (Join-Path $coreOut "resource.toml") -Force
-    Remove-Item (Join-Path $coreOut "*.pdb") -Force -ErrorAction SilentlyContinue
-    Write-Host "  -> resources\flovmp-core"
-}
 
 # --- 7. client JS resource ------------------------------------
 Write-Host "[flovmp-client: copy]" -ForegroundColor Yellow

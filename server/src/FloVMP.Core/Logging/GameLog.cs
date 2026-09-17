@@ -2,7 +2,7 @@ namespace FloVMP.Core.Logging;
 
 /// <summary>
 /// Единая точка логирования для всех систем. Вызовы
-/// однотипны: <c>GameLog.Money(...)</c>, <c>GameLog.Admin(...)</c> и т.д.
+/// однотипны: <c>GameLog.Admin(...)</c>, <c>GameLog.System(...)</c> и т.д.
 ///
 /// До <see cref="Configure"/> — тихий no-op (безопасно вызывать из тестов
 /// и до инициализации).
@@ -51,21 +51,10 @@ public static class GameLog
         return d;
     }
 
-    // --- категорийные помощники (расширяем по мере переноса систем) ---
+    // --- категорийные помощники ---
 
     public static void Account(string action, LogActor actor, string ip = "", params (string, object?)[] details) =>
         Write(LogCategory.Account, action, actor, actor.AccountId.ToString(), D(details), ip);
-
-    public static void Character(string action, LogActor actor, string target = "", params (string, object?)[] details) =>
-        Write(LogCategory.Character, action, actor, target, D(details));
-
-    public static void Money(LogActor actor, long delta, string source, long balanceAfter, string account = "cash") =>
-        Write(LogCategory.Money, "delta", actor, actor.AccountId.ToString(),
-            D(("delta", delta), ("source", source), ("account", account), ("after", balanceAfter)));
-
-    public static void Item(string action, LogActor actor, string itemId, int qty, string target = "") =>
-        Write(LogCategory.Item, action, actor, target,
-            D(("item", itemId), ("qty", qty)));
 
     public static void Admin(string action, LogActor admin, string target, params (string, object?)[] details) =>
         Write(LogCategory.Admin, action, admin, target, D(details));
@@ -73,16 +62,6 @@ public static class GameLog
     public static void Punishment(string action, LogActor admin, string target, string reason, long? seconds = null) =>
         Write(LogCategory.Punishment, action, admin, target,
             D(("reason", reason), ("seconds", seconds)));
-
-    public static void Kill(LogActor killer, string victim, string weapon, double x, double y, double z) =>
-        Write(LogCategory.Kill, "kill", killer, victim,
-            D(("weapon", weapon), ("x", x), ("y", y), ("z", z)));
-
-    public static void Org(string action, LogActor actor, string orgId, params (string, object?)[] details) =>
-        Write(LogCategory.Org, action, actor, orgId, D(details));
-
-    public static void Faction(string action, LogActor actor, string factionId, params (string, object?)[] details) =>
-        Write(LogCategory.Org, action, actor, factionId, D(details));
 
     public static void System(string action, params (string, object?)[] details) =>
         Write(LogCategory.System, action, LogActor.SystemActor, "", D(details));

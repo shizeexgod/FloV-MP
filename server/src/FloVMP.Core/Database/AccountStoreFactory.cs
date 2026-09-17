@@ -6,42 +6,13 @@ using FloVMP.Core;
 namespace FloVMP.Core.Database;
 
 /// <summary>
-/// Фабрика создания хранилища аккаунтов.
-/// Проверяет доступность MariaDB/MySQL; при сбое или отсутствии строки
-/// прозрачно переключается на надёжное локальное файловое хранилище (JsonAccountStore).
+/// Подготовка MariaDB при старте сервера: накат миграций и проверка соединения.
 /// </summary>
 public static class AccountStoreFactory
 {
-    public static IAccountStore Create(string? connectionString, string jsonFallbackPath)
-    {
-        if (!string.IsNullOrWhiteSpace(connectionString))
-        {
-            // Схема накатывается ДО проверки соединения: MigrationRunner сам
-            // создаёт базу, если её ещё нет. Иначе первый запуск у клиента
-            // спотыкался бы об «Unknown database» и молча уходил в JSON —
-            // с виду сервер работает, а данные не там, где ждут.
-            RunMigrations(connectionString);
-
-            try
-            {
-                using var conn = new MySqlConnection(connectionString);
-                conn.Open();
-                GameLog.System("db_connected", ("provider", "MariaDB/MySQL"), ("database", conn.Database));
-                CoreConsole.Write($"[FloV:MP] [DB] Успешное подключение к MariaDB ({conn.Database})");
-                return new MySqlAccountStore(connectionString);
-            }
-            catch (Exception ex)
-            {
-                GameLog.System("db_fallback", ("error", ex.Message), ("fallback", jsonFallbackPath));
-                CoreConsole.Write($"[FloV:MP] [DB] Внимание: MariaDB недоступна ({ex.Message}). Переход на локальное хранилище: {jsonFallbackPath}");
-            }
-        }
-
-        return new JsonAccountStore(jsonFallbackPath);
-    }
 
     /// <summary>
-    /// Подготовка базы для режима без аккаунтов (базовая платформа): накат
+    /// Подготовка базы: накат
     /// миграций и проверка соединения. true — база доступна и таблицы на месте.
     /// Никогда не бросает: недоступная база — штатный режим «на файлах».
     /// </summary>

@@ -54,17 +54,16 @@ public class StarterResource : Resource
     // который ставят владельцам серверов, отсутствие бана — не «упрощение»,
     // а нерабочая модерация.
     // --- Защита чата ---------------------------------------------------------
-    // Лимит совпадает с RP-режимом (ChatSystem): 4 сообщения за 3 секунды.
-    // В базовой платформе его не было вовсе — один игрок со скриптом мог
+    // Лимит: 4 сообщения за 3 секунды.
+    // Раньше его не было вовсе — один игрок со скриптом мог
     // заваливать чат без предела, а каждое сообщение уходит ВСЕМ игрокам, то
     // есть это был DoS одним подключением.
     private const int ChatMaxPerWindow = 4;
     private static readonly TimeSpan ChatWindow = TimeSpan.FromSeconds(3);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, (int Count, DateTime Start)> _chatRate = new();
 
-    // Радиусы отыгровок — те же, что в RP-режиме, чтобы поведение не
-    // расходилось между режимами. /me и /do — действие персонажа, их видят
-    // рядом стоящие; крик слышно дальше.
+    // Радиусы отыгровок. /me и /do — действие персонажа, их видят рядом
+    // стоящие; крик слышно дальше.
     private const float RpActionRadius = 25.0f;
     private const float ShoutRadius = 55.0f;
 
@@ -372,8 +371,7 @@ public class StarterResource : Resource
         var starterDbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
                             new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         // Миграции до обращения к таблицам: на свежей установке bans и admins
-        // ещё не существуют. Раньше их накатывал только RP-режим (Core), а
-        // базовая платформа молча работала без таблиц.
+        // ещё не существуют.
         var dbReachable = FloVMP.Core.Database.AccountStoreFactory.TryPrepareDatabase(starterDbConn);
 
         _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
@@ -1232,8 +1230,8 @@ public class StarterResource : Resource
             message = message[..256];
 
         // Раньше здесь стоял комментарий «удаление управляющих символов», но сам
-        // код их не удалял — только обрезал длину. Очистка общая с RP-режимом
-        // (FloVMP.Core.Chat.ChatSanitizer) и покрыта тестами.
+        // код их не удалял — только обрезал длину. Очистка вынесена в
+        // FloVMP.Core.Chat.ChatSanitizer и покрыта тестами.
         var cleaned = FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(message);
         if (cleaned is null) return;
         message = cleaned;

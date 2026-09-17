@@ -37,13 +37,12 @@ python scripts/pack_server.py --os all
 
 | Путь | Что это |
 |---|---|
-| `server/src/FloVMP.Core` | библиотека платформы: аккаунты, база и миграции, администраторы, баны, лицензия, экономика, фракции, инвентарь, античит |
-| `server/src/FloVMP.Starter` | ресурс `flovmp-starter` — базовая платформа: вход, администрирование, баны, голос, чат, API для модов |
-| `server/src/FloVMP.Gamemode` | ресурс `flovmp-core` — пример полного RP-режима на Core (авторизация, HUD, инвентарь, фракции, экономика) |
+| `server/src/FloVMP.Core` | библиотека платформы: база и миграции, администраторы, баны, лицензия, очистка чата |
+| `server/src/FloVMP.Starter` | ресурс `flovmp-starter` — базовая платформа: спавн, администрирование, баны, голос, чат, API для своих ресурсов |
 | `server/src/FloVMP.ServerHost` | `FloVMP-Server.exe` — запуск сервера на Windows |
 | `server/tests` | юнит-тесты Core |
 | `server/tools/FloVMP.LoadTest` | нагрузочный стенд |
-| `client/resources/flovmp-client` | клиентский ресурс: чат, консоль F8, экраны входа и загрузки, HUD, админ-инструменты |
+| `client/resources/flovmp-client` | клиентский ресурс: чат, консоль F8, экран загрузки, админ-инструменты |
 | `sql/migrations` | схема базы; сервер применяет миграции сам при старте |
 | `config/server.toml` | эталонная конфигурация сервера (из неё собирается `server.toml.example`) |
 | `scripts/pack_server.py` | сборка пакетов |

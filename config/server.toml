@@ -34,7 +34,7 @@ debug = true
 duplicatePlayers = 4
 
 # --- Модули движка --------------------------------------------------
-# csharp-module — серверный геймод на C# (flovmp-starter / flovmp-core)
+# csharp-module — серверные ресурсы на C# (flovmp-starter и ресурсы владельца)
 # js-module     — клиентские скрипты (flovmp-client)
 modules = [
     "csharp-module",

@@ -1,5 +1,4 @@
 using FloVMP.Core.Database;
-using FloVMP.Core.Auth;
 using Xunit;
 
 namespace FloVMP.Core.Tests;
@@ -26,7 +25,7 @@ public sealed class DatabaseTests : IDisposable
         {
             Host = "188.127.229.224",
             Port = 3306,
-            Database = "flovmp_rp",
+            Database = "flovmp_server",
             User = "flovmp",
             Password = "MySecretPassword123"
         };
@@ -34,34 +33,22 @@ public sealed class DatabaseTests : IDisposable
         var cs = cfg.BuildConnectionString();
         Assert.Contains("Server=188.127.229.224", cs);
         Assert.Contains("Port=3306", cs);
-        Assert.Contains("Database=flovmp_rp", cs);
+        Assert.Contains("Database=flovmp_server", cs);
         Assert.Contains("User ID=flovmp", cs);
         Assert.Contains("Password=MySecretPassword123", cs);
     }
 
     [Fact]
-    public void Factory_falls_back_to_json_when_mysql_unreachable()
+    public void PrepareDatabase_returns_false_when_mysql_unreachable()
     {
-        var jsonPath = Path.Combine(_testDir, "fallback_accounts.json");
         var badConnectionString = "Server=127.0.0.1;Port=59999;Database=fake_db;User ID=nobody;Password=bad;ConnectionTimeout=1;";
-
-        var store = AccountStoreFactory.Create(badConnectionString, jsonPath);
-
-        Assert.NotNull(store);
-        Assert.IsType<JsonAccountStore>(store);
-
-        var acc = store.Create("FallbackUser", "secret123");
-        Assert.Equal("FallbackUser", acc.Username);
-        Assert.True(store.Exists("FallbackUser"));
+        Assert.False(AccountStoreFactory.TryPrepareDatabase(badConnectionString));
     }
 
     [Fact]
-    public void Factory_uses_json_when_connection_string_empty()
+    public void PrepareDatabase_returns_false_when_connection_string_empty()
     {
-        var jsonPath = Path.Combine(_testDir, "empty_cs_accounts.json");
-        var store = AccountStoreFactory.Create("", jsonPath);
-
-        Assert.NotNull(store);
-        Assert.IsType<JsonAccountStore>(store);
+        Assert.False(AccountStoreFactory.TryPrepareDatabase(""));
+        Assert.False(AccountStoreFactory.TryPrepareDatabase(null));
     }
 }

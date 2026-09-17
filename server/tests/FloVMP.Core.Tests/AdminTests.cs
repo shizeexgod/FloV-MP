@@ -138,19 +138,6 @@ public class AdminTests
     }
 
     [Fact]
-    public void Account_MuteChecks_WorkProperly()
-    {
-        var acc = new Account { Username = "TestUser" };
-        var now = DateTime.UtcNow;
-
-        Assert.False(acc.IsMuted(now));
-
-        acc.MuteUntilUtc = now.AddMinutes(15).ToString("O");
-        Assert.True(acc.IsMuted(now));
-        Assert.False(acc.IsMuted(now.AddMinutes(16)));
-    }
-
-    [Fact]
     public void Account_BanChecks_WorkProperly()
     {
         var acc = new Account { Username = "BannedUser" };
@@ -174,20 +161,6 @@ public class AdminTests
         // Снятие бана
         acc.IsBanned = false;
         Assert.False(acc.IsBanActive(now));
-    }
-
-    [Fact]
-    public void Account_JailChecks_WorkProperly()
-    {
-        var acc = new Account { Username = "JailedUser" };
-        var now = DateTime.UtcNow;
-
-        Assert.False(acc.IsJailed(now));
-
-        acc.JailUntilUtc = now.AddMinutes(30).ToString("O");
-        Assert.True(acc.IsJailed(now));
-        Assert.True(acc.IsJailed(now.AddMinutes(15)));
-        Assert.False(acc.IsJailed(now.AddMinutes(35)));
     }
 
     [Fact]

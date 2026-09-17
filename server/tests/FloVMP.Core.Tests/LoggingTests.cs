@@ -27,21 +27,21 @@ public sealed class FileLogSinkTests : IDisposable
         sink.Write(new LogEntry
         {
             TsUtc = fixedNow.ToString("O"),
-            Category = LogCategory.Money,
-            Action = "delta",
-            Actor = LogActor.Player(7, "Nick"),
-            Target = "7",
-            Details = new Dictionary<string, object?> { ["delta"] = -500, ["source"] = "shop" },
+            Category = LogCategory.Admin,
+            Action = "kick",
+            Actor = LogActor.Admin(7, "Nick"),
+            Target = "12",
+            Details = new Dictionary<string, object?> { ["reason"] = "afk" },
         });
         await sink.FlushAsync();
 
-        var file = Path.Combine(_dir, "money", "2026-03-04.jsonl");
+        var file = Path.Combine(_dir, "admin", "2026-03-04.jsonl");
         Assert.True(File.Exists(file));
 
         var line = File.ReadAllLines(file).Single();
         using var doc = JsonDocument.Parse(line);
-        Assert.Equal("delta", doc.RootElement.GetProperty("Action").GetString());
-        Assert.Equal("shop", doc.RootElement.GetProperty("Details").GetProperty("source").GetString());
+        Assert.Equal("kick", doc.RootElement.GetProperty("Action").GetString());
+        Assert.Equal("afk", doc.RootElement.GetProperty("Details").GetProperty("reason").GetString());
     }
 
     [Fact]
@@ -49,11 +49,11 @@ public sealed class FileLogSinkTests : IDisposable
     {
         await using var sink = new FileLogSink(_dir);
         for (var i = 0; i < 500; i++)
-            sink.Write(new LogEntry { Category = LogCategory.Item, Action = "add", Target = i.ToString() });
+            sink.Write(new LogEntry { Category = LogCategory.Admin, Action = "kick", Target = i.ToString() });
 
         await sink.FlushAsync();
 
-        var files = Directory.GetFiles(Path.Combine(_dir, "item"));
+        var files = Directory.GetFiles(Path.Combine(_dir, "admin"));
         var total = files.Sum(f => File.ReadAllLines(f).Length);
         Assert.Equal(500, total);
     }
@@ -89,7 +89,7 @@ public sealed class GameLogTests : IDisposable
     public void No_sink_configured_is_silent_noop()
     {
         // не должно бросать
-        GameLog.Money(LogActor.Player(1, "x"), 100, "test", 100);
+        GameLog.System("boot");
         GameLog.Admin("kick", LogActor.Admin(2, "root"), "1", ("reason", "afk"));
     }
 
@@ -99,20 +99,18 @@ public sealed class GameLogTests : IDisposable
         GameLog.Configure(new FileLogSink(_dir));
 
         GameLog.Account("login", LogActor.Player(10, "Nick"), "1.2.3.4");
-        GameLog.Money(LogActor.Player(10, "Nick"), 250, "job:taxi", 1250);
-        GameLog.Item("use", LogActor.Player(10, "Nick"), "bandage", 1);
+        GameLog.Admin("tp", LogActor.Admin(1, "root"), "10", ("x", 250));
         GameLog.Punishment("ban", LogActor.Admin(1, "root"), "10", "cheat", 86400);
 
         await GameLog.FlushAsync();
 
         Assert.True(Directory.Exists(Path.Combine(_dir, "account")));
-        Assert.True(Directory.Exists(Path.Combine(_dir, "money")));
-        Assert.True(Directory.Exists(Path.Combine(_dir, "item")));
+        Assert.True(Directory.Exists(Path.Combine(_dir, "admin")));
         Assert.True(Directory.Exists(Path.Combine(_dir, "punishment")));
 
-        var money = Directory.GetFiles(Path.Combine(_dir, "money")).Single();
-        using var doc = JsonDocument.Parse(File.ReadAllLines(money).Single());
-        Assert.Equal("job:taxi", doc.RootElement.GetProperty("Details").GetProperty("source").GetString());
-        Assert.Equal(1250, doc.RootElement.GetProperty("Details").GetProperty("after").GetInt64());
+        var admin = Directory.GetFiles(Path.Combine(_dir, "admin")).Single();
+        using var doc = JsonDocument.Parse(File.ReadAllLines(admin).Single());
+        Assert.Equal("tp", doc.RootElement.GetProperty("Action").GetString());
+        Assert.Equal(250, doc.RootElement.GetProperty("Details").GetProperty("x").GetInt32());
     }
 }

@@ -1,5 +1,5 @@
 # FloV:MP — клиентский ресурс (js-module).
-# Чистый client-side: серверной логики нет (она в flovmp-core на C#).
+# Чистый client-side: серверной логики нет (она в flovmp-starter и ресурсах владельца на C#).
 type = "js"
 client-main = "client/index.js"
 client-files = [

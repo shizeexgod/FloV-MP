@@ -34,7 +34,7 @@ namespace FloVMP.Core.Tests
             var manager = new DynamicResourceManager();
             manager.RegisterResource(new ResourceInfo
             {
-                Name = "flovmp-core",
+                Name = "flovmp-starter",
                 Type = ResourceType.Gamemode,
                 State = ResourceState.Stopped
             });
@@ -44,7 +44,7 @@ namespace FloVMP.Core.Tests
                 Name = "flovmp-inventory",
                 Type = ResourceType.Script,
                 State = ResourceState.Stopped,
-                Dependencies = new List<string> { "flovmp-core" }
+                Dependencies = new List<string> { "flovmp-starter" }
             });
 
             // Trying to start inventory when core is stopped should fail
@@ -53,7 +53,7 @@ namespace FloVMP.Core.Tests
             Assert.Contains("must be running before starting", msg);
 
             // Start core first
-            Assert.True(manager.StartResource("flovmp-core", out _));
+            Assert.True(manager.StartResource("flovmp-starter", out _));
 
             // Now inventory starts cleanly
             Assert.True(manager.StartResource("flovmp-inventory", out _));

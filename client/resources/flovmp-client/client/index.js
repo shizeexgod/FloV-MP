@@ -22,9 +22,6 @@ export const KEYBINDS = {
     esp: 114,        // F3 — Режим админского видения (ESP Wallhack)
     // Голос: push-to-talk делает сам движок, клавиша — в настройках alt:V
     // (alt.Voice.activationKey). Отдельной клавиши здесь нет.
-    engine: 50,      // 2 — Завести / заглушить двигатель транспорта
-    lock: 76,        // L — Закрыть / открыть двери транспорта
-    seatbelt: 75     // K — Пристегнуть / отстегнуть ремень безопасности в авто
 };
 
 // =============================================================================
@@ -41,15 +38,11 @@ let currentAdminLevel = 0;
 let godMode = false;
 let cursorDepth = 0;
 
-// Экраны входа и загрузки. Раньше их не было вовсе: сервер слал
-// flovmp:auth:show, а клиент это событие игнорировал — то есть в RP-режиме
-// игрок подключался и оставался в чёрном экране без формы входа навсегда.
-let authView = null;
+// Загрузочный экран между подключением и спавном.
 let loadingView = null;
-let authVisible = false;
 
 // Сколько максимум может висеть загрузочный экран. Он обязан закрываться по
-// событию (вход показан или спавн завершён), но если какое-то событие не придёт
+// событию (спавн завершён), но если какое-то событие не придёт
 // — сервер другого режима, сбой скрипта, медленный диск — экран не имеет права
 // запереть игрока в игре навсегда. После этого срока он снимается принудительно.
 const LOADING_HARD_TIMEOUT_MS = 30000;
@@ -72,27 +65,14 @@ alt.onServer('flovmp:chat:commands', (json) => {
 });
 const pendingChat = [];
 
-// HUD (здоровье, броня, деньги, время, онлайн). Сервер (HudSystem, полный
-// RP-режим) считал и слал flovmp:hud:tick каждые несколько сотен миллисекунд,
-// а клиент это событие не слушал — данные уходили в никуда, и у игрока не было
-// ни здоровья, ни денег на экране.
-let hudView = null;
-let hudReady = false;
-let hudPendingInit = null;
-let hudPendingTick = null;
-
-// Голосовой чат. Микрофон глушится, пока игрок печатает (чат, консоль, форма
-// входа): клавиша push-to-talk — обычная буква (по умолчанию N), и раньше при
+// Голосовой чат. Микрофон глушится, пока игрок печатает (чат, консоль): клавиша push-to-talk — обычная буква (по умолчанию N), и раньше при
 // наборе текста с ней включался микрофон. Функции alt.setMicGain, которую
 // вызывал прежний код, в API alt:V нет — те вызовы ничего не делали.
 function updateMicMute() {
     try {
-        alt.Voice.muteInput = !!(chatTyping || consoleOpen || authView);
+        alt.Voice.muteInput = !!(chatTyping || consoleOpen);
     } catch (e) { }
 }
-
-// Состояние транспорта
-let seatbeltOn = false;
 
 // --- Менеджер вложенности курсора (Cursor Nesting Manager) ---
 function pushCursor() {
@@ -110,14 +90,14 @@ function popCursor() {
 }
 
 // =============================================================================
-// 0. ЭКРАНЫ ВХОДА И ЗАГРУЗКИ
+// 0. ЗАГРУЗОЧНЫЙ ЭКРАН
 // =============================================================================
 
 /**
- * Загрузочный экран. Показывается сразу после подключения и снимается, когда
- * игрок вошёл в аккаунт.
+ * Загрузочный экран. Показывается сразу после подключения и снимается после
+ * спавна.
  *
- * Зачем: между подключением и появлением формы входа у игрока был чёрный экран
+ * Зачем: между подключением и спавном у игрока был чёрный экран
  * без единого слова. Дольше нескольких секунд это неотличимо от зависшей игры —
  * человек закрывает клиент и пишет в поддержку, что сервер не работает.
  */
@@ -165,158 +145,8 @@ function closeLoading() {
     // экрана. Накопленные за время загрузки сообщения выдадутся из буфера.
     if (inGame) openChat();
 
-    // Управление возвращаем, только если поверх не открыта форма входа:
-    // иначе игрок начал бы бегать, пока печатает пароль.
-    if (!authView) {
-        try { alt.toggleGameControls(true); } catch (e) { }
-    }
-}
-
-/**
- * Экран входа. Открывается по команде сервера (flovmp:auth:show).
- *
- * Управление игрой глушится, курсор показывается через общий менеджер
- * вложенности — иначе закрытие чата «съело» бы курсор у формы входа.
- */
-function openAuth(serverName) {
-    if (authView) {
-        // Сервер мог прислать show повторно (страховочная отправка через 2 с).
-        try { authView.emit('flovmp:auth:server', serverName || ''); } catch (e) { }
-        return;
-    }
-
-    try {
-        authView = new alt.WebView('http://resource/client/html/auth/index.html');
-        authVisible = true;
-        updateMicMute();
-
-        authView.on('load', () => {
-            try { authView.emit('flovmp:auth:server', serverName || ''); } catch (e) { }
-        });
-
-        authView.on('flovmp:auth:login', (user, pass) => {
-            alt.emitServer('flovmp:auth:login', String(user || ''), String(pass || ''));
-        });
-
-        authView.on('flovmp:auth:register', (user, pass) => {
-            alt.emitServer('flovmp:auth:register', String(user || ''), String(pass || ''));
-        });
-
-        authView.focus();
-        pushCursor();
-        try { alt.toggleGameControls(false); } catch (e) { }
-    } catch (e) {
-        alt.log(`[FloV:MP] Не удалось открыть экран входа: ${e}`);
-        authView = null;
-        authVisible = false;
-    }
-}
-
-function closeAuth() {
-    if (!authView) return;
-    try { authView.unfocus(); } catch (e) { }
-    try { authView.destroy(); } catch (e) { }
-    authView = null;
-    updateMicMute();
-
-    // popCursor только если мы его действительно поднимали, иначе счётчик
-    // вложенности уйдёт в минус и курсор пропадёт у чата.
-    if (authVisible) {
-        authVisible = false;
-        popCursor();
-    }
     try { alt.toggleGameControls(true); } catch (e) { }
 }
-
-/**
- * HUD — оверлей поверх игры. Фокус ему не даётся и курсор не показывается:
- * это не интерфейс, по которому кликают, а табло. Взять фокус значило бы
- * перехватить клавиатуру у игрока.
- */
-function openHud() {
-    if (hudView) return;
-    try {
-        hudView = new alt.WebView('http://resource/client/html/hud/index.html');
-        hudReady = false;
-        hudView.on('load', () => {
-            hudReady = true;
-            // Кадры, пришедшие до загрузки страницы, иначе потерялись бы:
-            // emit в незагруженную страницу уходит в никуда.
-            if (hudPendingInit !== null) {
-                try { hudView.emit('flovmp:hud:init', hudPendingInit); } catch (e) { }
-            }
-            if (hudPendingTick) {
-                try { hudView.emit('flovmp:hud:tick', ...hudPendingTick); } catch (e) { }
-            }
-        });
-    } catch (e) {
-        alt.log(`[FloV:MP] Не удалось открыть HUD: ${e}`);
-        hudView = null;
-        hudReady = false;
-    }
-}
-
-function closeHud() {
-    if (!hudView) return;
-    try { hudView.destroy(); } catch (e) { }
-    hudView = null;
-    hudReady = false;
-    hudPendingInit = null;
-    hudPendingTick = null;
-}
-
-function hudNotice(text) {
-    if (!text) return;
-    if (hudView && hudReady) {
-        try { hudView.emit('flovmp:hud:notice', String(text)); } catch (e) { }
-        return;
-    }
-    // Без HUD (базовая платформа) уведомление не должно пропадать — в чат.
-    if (chatView) {
-        try { chatView.emit('flovmp:chat:msg', 'system', '', String(text)); } catch (e) { }
-    }
-}
-
-alt.onServer('flovmp:hud:init', (serverName) => {
-    hudPendingInit = serverName || '';
-    openHud();
-    if (hudView && hudReady) {
-        try { hudView.emit('flovmp:hud:init', hudPendingInit); } catch (e) { }
-    }
-});
-
-alt.onServer('flovmp:hud:tick', (health, armor, cash, online, hour, minute) => {
-    // Храним последний кадр: если страница ещё грузится, покажем его сразу
-    // после загрузки, а не нули до следующего кадра сервера.
-    hudPendingTick = [health, armor, cash, online, hour, minute];
-    if (!hudView) openHud();
-    if (hudView && hudReady) {
-        try { hudView.emit('flovmp:hud:tick', health, armor, cash, online, hour, minute); } catch (e) { }
-    }
-});
-
-// Отказ в действии с инвентарём («вы скованы наручниками…»). Раньше клиент
-// это событие не слушал, и игрок просто не понимал, почему предмет не двигается.
-alt.onServer('flovmp:inv:notice', (text) => {
-    hudNotice(text);
-});
-
-alt.onServer('flovmp:auth:show', (serverName) => {
-    // Загрузка закончилась ровно тогда, когда есть что показать игроку.
-    setLoadingStep('Готово. Открываем вход…', 100);
-    closeLoading();
-    openAuth(serverName);
-});
-
-alt.onServer('flovmp:auth:hide', () => {
-    closeAuth();
-    closeLoading();
-});
-
-alt.onServer('flovmp:auth:result', (ok, message) => {
-    if (!authView) return;
-    try { authView.emit('flovmp:auth:result', !!ok, String(message || '')); } catch (e) { }
-});
 
 // =============================================================================
 // 1. СВОБОДНЫЙ ПОЛЁТ АДМИНИСТРАТОРА (NoClip)
@@ -581,30 +411,7 @@ alt.everyTick(() => {
         const pid = native.playerId();
         native.setPlayerWantedLevel(pid, 0, false);
         native.setPlayerWantedLevelNow(pid, false);
-
-        // Контроль работы двигателя транспорта (синхронизация с сервером FloV:MP)
-        if (player.vehicle && native.getPedInVehicleSeat(player.vehicle.scriptID, -1, false) === player.scriptID) {
-            if (!player.vehicle.engineOn) {
-                native.setVehicleEngineOn(player.vehicle.scriptID, false, false, true);
-                native.setVehicleUndriveable(player.vehicle.scriptID, true);
-            } else {
-                native.setVehicleUndriveable(player.vehicle.scriptID, false);
-            }
-        }
     }
-
-    // Блокировка колеса оружия
-    native.disableControlAction(0, 37, true);
-    for (let c = 157; c <= 165; c++) native.disableControlAction(0, c, true);
-
-    // Скрытие стандартных элементов GTA V HUD
-    native.hideHudComponentThisFrame(6);  // Vehicle Name
-    native.hideHudComponentThisFrame(7);  // Area Name
-    native.hideHudComponentThisFrame(8);  // Vehicle Class
-    native.hideHudComponentThisFrame(9);  // Street Name
-    native.hideHudComponentThisFrame(19); // Weapon Wheel
-    native.hideHudComponentThisFrame(20); // Weapon Wheel Stats
-    native.hideHudComponentThisFrame(22); // Weapons HUD
 
     // Блокировка Escape в меню паузы при открытом вводе или консоли
     // Именно consoleOpen: окно консоли создаётся заранее при входе и живёт всю
@@ -1265,11 +1072,6 @@ alt.on('keyup', (key) => {
     }
     if (consoleOpen) return;
 
-    // Форма входа: игрок печатает логин и пароль, keyup приходит и сюда.
-    // Без этой проверки буква «t» в пароле открывала чат и уводила фокус
-    // из поля, «b»/«n» включали микрофон, «l» слала /lock.
-    if (authView) return;
-
     // F4 — NoClip
     if (key === KEYBINDS.noclip) {
         toggleNoClip();
@@ -1286,44 +1088,6 @@ alt.on('keyup', (key) => {
     if (key === KEYBINDS.esp) {
         toggleEsp();
         return;
-    }
-
-    // K — Ремень безопасности в авто
-    if (key === KEYBINDS.seatbelt && !chatTyping) {
-        const player = alt.Player.local;
-        if (player && player.valid && player.vehicle) {
-            seatbeltOn = !seatbeltOn;
-            try {
-                native.setPedConfigFlag(player.scriptID, 32, !seatbeltOn);
-            } catch (e) { }
-            if (chatView) {
-                const status = seatbeltOn ? 'пристёгнут' : 'отстёгнут';
-                chatView.emit('flovmp:chat:msg', 'system', 'Транспорт', `Ремень безопасности ${status}.`);
-            }
-            return;
-        }
-    }
-
-    // 2 — Двигатель транспорта
-    if (key === KEYBINDS.engine) {
-        if (inGame && !chatTyping) {
-            const player = alt.Player.local;
-            if (player && player.valid && player.vehicle) {
-                alt.emitServer('flovmp:chat:say', '/engine');
-                return;
-            }
-        }
-    }
-
-    // L — Замок дверей транспорта
-    if (key === KEYBINDS.lock) {
-        if (inGame && !chatTyping) {
-            const player = alt.Player.local;
-            if (player && player.valid) {
-                alt.emitServer('flovmp:chat:say', '/lock');
-                return;
-            }
-        }
     }
 
     if (chatTyping) return;
@@ -1368,11 +1132,7 @@ alt.on('disconnect', () => {
     if (noClip) toggleNoClip();
     espMode = 0;
 
-    // Экраны снимаем ДО сброса cursorDepth: closeAuth сам уменьшает счётчик,
-    // а обнуление после него гарантирует, что курсор не останется висеть.
-    closeAuth();
     closeLoading();
-    closeHud();
     pendingChat.length = 0;
 
     cursorDepth = 0;
@@ -1426,7 +1186,7 @@ alt.onServer('flovmp:console:setAdmin', (lvl) => {
     }
 });
 
-// Реанимация (/revive, больница, госпиталь)
+// Реанимация (/revive)
 function handlePlayerRevived() {
     const local = alt.Player.local;
     if (local && local.valid) {
@@ -1445,16 +1205,6 @@ function handlePlayerRevived() {
     }
 }
 alt.onServer('starter:revive', handlePlayerRevived);
-alt.onServer('flovmp:hud:respawned', handlePlayerRevived);
-
-alt.onServer('flovmp:hud:dead', (seconds) => {
-    try {
-        native.doScreenFadeOut(1000);
-        if (chatView) {
-            chatView.emit('flovmp:chat:msg', 'system', '', '{ef4444}[Скорая помощь] Вы потеряли сознание. Ожидайте доставки в больницу...');
-        }
-    } catch (e) { }
-});
 
 alt.onServer('starter:requestWaypointTp', () => {
     triggerWaypointTeleport();
@@ -1487,9 +1237,6 @@ alt.onServer('starter:setTime', (hour, minute) => {
 alt.onServer('starter:toggleNoClip', () => {
     toggleNoClip();
 });
-alt.onServer('flovmp:admin:toggleNoClip', () => {
-    toggleNoClip();
-});
 
 alt.onServer('flovmp:admin:toggleEsp', (targetMode) => {
     toggleEsp(targetMode !== undefined ? targetMode : null);
@@ -1506,7 +1253,6 @@ function applyGodMode(enabled) {
     }
 }
 alt.onServer('starter:setGodMode', applyGodMode);
-alt.onServer('flovmp:admin:godMode', applyGodMode);
 
 alt.onServer('starter:setSpeed', (multiplier) => {
     const local = alt.Player.local;
@@ -1525,40 +1271,6 @@ alt.onServer('starter:setFrozen', (frozen) => {
             native.freezeEntityPosition(local.scriptID, !!frozen);
         } catch (e) { }
     }
-});
-
-// Синхронизация замков дверей авто (аудио-сигнал + двойная вспышка габаритов)
-alt.onServer('flovmp:veh:lock', (vehId, isLocked) => {
-    const veh = alt.Vehicle.getByID(vehId);
-    if (!veh || !veh.valid) return;
-    try {
-        const scriptId = veh.scriptID;
-        native.setVehicleDoorsLocked(scriptId, isLocked ? 2 : 1);
-        native.setVehicleDoorsLockedForAllPlayers(scriptId, !!isLocked);
-        native.playSoundFromEntity(-1, "Remote_Click", scriptId, "PI_Menu_Sounds", true, 0);
-        native.setVehicleLights(scriptId, 2);
-        alt.setTimeout(() => {
-            if (veh.valid) native.setVehicleLights(scriptId, 0);
-            alt.setTimeout(() => {
-                if (veh.valid) native.setVehicleLights(scriptId, 2);
-                alt.setTimeout(() => {
-                    if (veh.valid) native.setVehicleLights(scriptId, 0);
-                }, 150);
-            }, 150);
-        }, 150);
-    } catch (_) { }
-});
-
-// Полный визуальный ремонт геометрии и кузова авто
-alt.onServer('flovmp:veh:repair', (vehId) => {
-    const veh = alt.Vehicle.getByID(vehId);
-    if (!veh || !veh.valid) return;
-    try {
-        native.setVehicleFixed(veh.scriptID);
-        native.setVehicleDeformationFixed(veh.scriptID);
-        native.setVehicleDirtLevel(veh.scriptID, 0.0);
-        native.setVehicleUndriveable(veh.scriptID, false);
-    } catch (_) { }
 });
 
 // Режим спектатора (/sp) с безопасным следованием без падения
@@ -1588,44 +1300,6 @@ alt.onServer('flovmp:admin:spectate', (targetPlayerId, enabled) => {
             native.setEntityInvincible(local.scriptID, godMode);
         }
     } catch (_) { }
-});
-
-// События транспорта: защита от рассинхрона двигателя и сброс ремня безопасности
-alt.on('enteredVehicle', (vehicle, seat) => {
-    try {
-        native.setVehicleNeedsToBeHotwired(vehicle.scriptID, false);
-        if (seat === 1 || native.getPedInVehicleSeat(vehicle.scriptID, -1, false) === alt.Player.local.scriptID) {
-            if (!vehicle.engineOn) {
-                native.setVehicleEngineOn(vehicle.scriptID, false, false, true);
-                native.setVehicleUndriveable(vehicle.scriptID, true);
-            } else {
-                native.setVehicleUndriveable(vehicle.scriptID, false);
-            }
-        }
-    } catch (_) { }
-});
-
-alt.on('leftVehicle', (vehicle, seat) => {
-    try {
-        seatbeltOn = false;
-        const player = alt.Player.local;
-        if (player && player.valid) {
-            native.setPedConfigFlag(player.scriptID, 32, true);
-        }
-    } catch (_) { }
-});
-
-alt.on('gameEntityCreate', (entity) => {
-    if (entity instanceof alt.Vehicle) {
-        try {
-            const isLocked = (entity.lockState === 2);
-            native.setVehicleDoorsLocked(entity.scriptID, isLocked ? 2 : 1);
-            native.setVehicleDoorsLockedForAllPlayers(entity.scriptID, isLocked);
-            if (!entity.engineOn) {
-                native.setVehicleEngineOn(entity.scriptID, false, false, true);
-            }
-        } catch (_) { }
-    }
 });
 
 // Сообщения чата

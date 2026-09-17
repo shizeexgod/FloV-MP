@@ -19,13 +19,13 @@ public class AccountStorePersistenceTests
         {
             var store = new JsonAccountStore(tempFile);
             var acc = store.Create("TestPlayer", "pbkdf2$sha256$1$c2FsdA==$aGFzaA==");
-            acc.Cash = 12345;
+            acc.AdminLevel = 5;
             store.Update(acc);
 
             store.Flush();
 
             var reloaded = new JsonAccountStore(tempFile);
-            Assert.Equal(12345, reloaded.FindByUsername("TestPlayer")!.Cash);
+            Assert.Equal(5, reloaded.FindByUsername("TestPlayer")!.AdminLevel);
             reloaded.Dispose();
             store.Dispose();
         }
@@ -40,12 +40,12 @@ public class AccountStorePersistenceTests
         {
             var store = new JsonAccountStore(tempFile);
             var acc = store.Create("ShutdownPlayer", "pbkdf2$sha256$1$c2FsdA==$aGFzaA==");
-            acc.Bank = 777;
+            acc.Email = "shutdown@example.com";
             store.Update(acc);
             store.Dispose(); // остановка сервера обязана дописать данные
 
             var reloaded = new JsonAccountStore(tempFile);
-            Assert.Equal(777, reloaded.FindByUsername("ShutdownPlayer")!.Bank);
+            Assert.Equal("shutdown@example.com", reloaded.FindByUsername("ShutdownPlayer")!.Email);
             reloaded.Dispose();
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
@@ -64,7 +64,7 @@ public class AccountStorePersistenceTests
             var acc = store.Create("HotPath", "pbkdf2$sha256$1$c2FsdA==$aGFzaA==");
 
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            for (var i = 0; i < 1000; i++) { acc.Cash = i; store.Update(acc); }
+            for (var i = 0; i < 1000; i++) { acc.LastLoginUtc = i.ToString(); store.Update(acc); }
             sw.Stop();
 
             Assert.True(sw.ElapsedMilliseconds < 500,
@@ -72,7 +72,7 @@ public class AccountStorePersistenceTests
 
             store.Dispose();
             var reloaded = new JsonAccountStore(tempFile);
-            Assert.Equal(999, reloaded.FindByUsername("HotPath")!.Cash);
+            Assert.Equal("999", reloaded.FindByUsername("HotPath")!.LastLoginUtc);
             reloaded.Dispose();
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }

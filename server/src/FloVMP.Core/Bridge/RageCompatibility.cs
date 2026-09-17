@@ -277,8 +277,6 @@ public sealed class RedAgeCharacterAdapter
             Id = Uuid,
             Username = fullName,
             AdminLevel = Math.Clamp(AdminLevel, 0, 8),
-            Cash = Money,
-            Bank = Bank,
             IsBanned = false,
             CreatedUtc = DateTime.UtcNow.ToString("O"),
             LastLoginUtc = DateTime.UtcNow.ToString("O")

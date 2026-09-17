@@ -62,11 +62,11 @@ public class AccountJournalTests : IDisposable
     {
         // Сброс сначала пишет полный файл, потом удаляет журнал. Если сервер
         // умрёт между этими шагами, журнал переживёт файл. Применение старой
-        // записи поверх свежей откатило бы деньги и уровень админа — поэтому
+        // записи поверх свежей откатило бы уровень админа и пароль — поэтому
         // из журнала берутся только отсутствующие учётки.
         var store = new JsonAccountStore(_path);
         var acc = store.Create("Богач", "h");
-        acc.Cash = 999_999;
+        acc.PasswordHash = "new";
         acc.AdminLevel = 7;
         store.Update(acc);
         store.Flush(); // полный файл записан, журнал удалён
@@ -79,14 +79,13 @@ public class AccountJournalTests : IDisposable
                 Id = acc.Id,
                 Username = "Богач",
                 PasswordHash = "h",
-                Cash = Account.StartingCash,
                 AdminLevel = 0,
             }) + "\n");
 
         var reopened = new JsonAccountStore(_path);
         var loaded = reopened.FindByUsername("Богач");
         Assert.NotNull(loaded);
-        Assert.Equal(999_999, loaded!.Cash);
+        Assert.Equal("new", loaded!.PasswordHash);
         Assert.Equal(7, loaded.AdminLevel);
         reopened.Dispose();
         store.Dispose();
@@ -111,52 +110,6 @@ public class AccountJournalTests : IDisposable
         var reopened = new JsonAccountStore(_path);
         Assert.NotNull(reopened.FindByUsername("Целый"));
         reopened.Dispose();
-    }
-
-    [Fact]
-    public void FindByBankAccount_UsesIndex_AndFollowsRenumbering()
-    {
-        var store = new JsonAccountStore(_path);
-        var acc = store.Create("Клиент", "h");
-        var original = acc.BankAccountNumber;
-
-        Assert.NotNull(store.FindByBankAccount(original!));
-        Assert.Equal("Клиент", store.FindByBankAccount(original!)!.Username);
-
-        // Перевыпуск счёта: старый номер обязан перестать находиться, иначе
-        // перевод продолжит уходить по номеру, которого у учётки уже нет.
-        acc.BankAccountNumber = "40817810" + "99999999";
-        store.Update(acc);
-
-        Assert.Null(store.FindByBankAccount(original!));
-        Assert.Equal("Клиент", store.FindByBankAccount("4081781099999999")!.Username);
-
-        store.Dispose();
-    }
-
-    [Fact]
-    public void FindByBankAccount_IndexSurvivesReload()
-    {
-        var store = new JsonAccountStore(_path);
-        var acc = store.Create("Вкладчик", "h");
-        var number = acc.BankAccountNumber!;
-        store.Flush();
-        store.Dispose();
-
-        var reopened = new JsonAccountStore(_path);
-        Assert.Equal("Вкладчик", reopened.FindByBankAccount(number)!.Username);
-        reopened.Dispose();
-    }
-
-    [Fact]
-    public void FindByBankAccount_UnknownNumber_ReturnsNull()
-    {
-        var store = new JsonAccountStore(_path);
-        store.Create("Кто-то", "h");
-        Assert.Null(store.FindByBankAccount("4081781000000000"));
-        Assert.Null(store.FindByBankAccount(""));
-        Assert.Null(store.FindByBankAccount("   "));
-        store.Dispose();
     }
 
     [Fact]

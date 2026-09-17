@@ -1,5 +1,4 @@
 using FloVMP.Core.Auth;
-using FloVMP.Core.Items;
 using Xunit;
 
 namespace FloVMP.Core.Tests;
@@ -44,19 +43,6 @@ public sealed class StoreRobustnessTests : IDisposable
         store.Flush();
         Assert.True(File.Exists(path));
         Assert.NotNull(new JsonAccountStore(path).FindByUsername("Fresh"));
-    }
-
-    [Fact]
-    public void Inventory_store_quarantines_corrupt_file_and_starts_empty()
-    {
-        var path = Path.Combine(_dir, "inventories.json");
-        File.WriteAllText(path, "not json at all");
-
-        var store = new JsonInventoryStore(path); // не бросает
-        var inv = store.Load(1);
-        Assert.All(inv.Slots, s => Assert.Null(s));
-
-        Assert.Single(Directory.GetFiles(_dir, "inventories.json.corrupt-*"));
     }
 
     [Fact]

@@ -13,11 +13,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
     private readonly object _lock = new();
     private readonly Dictionary<string, Account> _byName = new(StringComparer.OrdinalIgnoreCase);
 
-    // Индекс по номеру счёта. Без него FindByBankAccount делал линейный перебор
-    // всех аккаунтов на КАЖДЫЙ перевод денег, прямо в игровом потоке: на
-    // десятках тысяч учёток это заметный фриз на ровном месте.
-    private readonly Dictionary<string, string> _bankToName = new(StringComparer.OrdinalIgnoreCase);
-
     private int _nextId = 1;
 
     // ПРОИЗВОДИТЕЛЬНОСТЬ: раньше Save() вызывался синхронно на КАЖДОЕ изменение
@@ -79,17 +74,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         }
     }
 
-    public Account? FindByBankAccount(string bankAccountNumber)
-    {
-        if (string.IsNullOrWhiteSpace(bankAccountNumber)) return null;
-        var trimmed = bankAccountNumber.Trim();
-        lock (_lock)
-        {
-            if (!_bankToName.TryGetValue(trimmed, out var name)) return null;
-            return _byName.TryGetValue(name, out var acc) ? Clone(acc) : null;
-        }
-    }
-
     public bool Exists(string username)
     {
         lock (_lock) { return _byName.ContainsKey(username); }
@@ -108,12 +92,8 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
                 Username = username,
                 PasswordHash = passwordHash,
                 CreatedUtc = DateTime.UtcNow.ToString("O"),
-                Cash = Account.StartingCash,
-                Bank = Account.StartingBank,
-                BankAccountNumber = $"40817810{_nextId:D8}",
             };
             _byName[username] = acc;
-            Index(acc);
 
             // Терять только что зарегистрированный аккаунт нельзя, поэтому
             // запись немедленная — но НЕ переписыванием всего файла.
@@ -134,15 +114,8 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
             if (!_byName.TryGetValue(account.Username, out var existing))
                 throw new InvalidOperationException($"нет учётки: {account.Username}");
 
-            // Номер счёта может смениться (выдача/перевыпуск) — старый ключ
-            // обязан уйти из индекса, иначе перевод продолжит находить учётку
-            // по номеру, которого у неё уже нет.
-            if (!string.IsNullOrWhiteSpace(existing.BankAccountNumber))
-                _bankToName.Remove(existing.BankAccountNumber.Trim());
-
             var clone = Clone(account);
             _byName[account.Username] = clone;
-            Index(clone);
             Save();
         }
     }
@@ -157,7 +130,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
             foreach (var a in list)
             {
                 _byName[a.Username] = a;
-                Index(a);
                 _nextId = Math.Max(_nextId, a.Id + 1);
             }
         }
@@ -168,7 +140,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
             CoreConsole.Warning(
                 $"[FloV:MP] accounts.json повреждён ({ex.Message}); карантин: {quarantined ?? "не удалось"}");
             _byName.Clear();
-            _bankToName.Clear();
         }
         }
 
@@ -182,7 +153,7 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
     /// Порядок сброса — сначала полный файл, потом удаление журнала; если
     /// сервер умрёт между этими шагами, журнал переживёт файл. Перезапись им
     /// уже сохранённой учётки откатила бы её к состоянию на момент регистрации
-    /// (деньги, уровень админа). Добавление недостающих — безопасно.
+    /// (уровень админа). Добавление недостающих — безопасно.
     /// </summary>
     private void LoadJournal()
     {
@@ -203,7 +174,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
                 if (_byName.ContainsKey(acc.Username)) continue;
 
                 _byName[acc.Username] = acc;
-                Index(acc);
                 _nextId = Math.Max(_nextId, acc.Id + 1);
                 restored++;
             }
@@ -235,13 +205,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
             // уйдёт на диск фоновым сбросом. Регистрацию из-за этого не рушим.
             CoreConsole.Warning($"[FloV:MP] accounts.json.journal: ошибка записи: {ex.Message}");
         }
-    }
-
-    /// <summary>Поддержание индекса по номеру банковского счёта.</summary>
-    private void Index(Account acc)
-    {
-        if (!string.IsNullOrWhiteSpace(acc.BankAccountNumber))
-            _bankToName[acc.BankAccountNumber.Trim()] = acc.Username;
     }
 
     /// <summary>Пометить, что состояние изменилось. Запись выполнит фоновый флаш.</summary>
@@ -280,9 +243,6 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         PasswordHash = a.PasswordHash,
         CreatedUtc = a.CreatedUtc,
         LastLoginUtc = a.LastLoginUtc,
-        Cash = a.Cash,
-        Bank = a.Bank,
-        BankAccountNumber = a.BankAccountNumber,
         Email = a.Email,
         TotpSecret = a.TotpSecret,
         TwoFaEnabled = a.TwoFaEnabled,
@@ -290,6 +250,5 @@ public sealed class JsonAccountStore : IAccountStore, IDisposable
         IsBanned = a.IsBanned,
         BanReason = a.BanReason,
         BanUntilUtc = a.BanUntilUtc,
-        MuteUntilUtc = a.MuteUntilUtc,
     };
 }
