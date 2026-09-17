@@ -182,7 +182,12 @@ void PrintBanner()
     Console.ResetColor();
     Console.WriteLine($"  Название:      {name}");
     Console.WriteLine($"  Подключение:   127.0.0.1:{port}  (игроки из интернета — ваш внешний IP:{port})");
-    if (voicePort is not null) Console.WriteLine($"  Голос:         {voiceHost}:{voicePort}");
+    if (voicePort is not null)
+    {
+        Console.WriteLine($"  Голос:         {voiceHost}:{voicePort}");
+        if (voiceHost is "127.0.0.1" or "localhost")
+            Console.WriteLine(@"                 (голос слышно только игрокам с этого ПК; для интернета — ваш внешний IP в externalPublicHost, server\server.toml)");
+    }
 
     var dbPassword = env.GetValueOrDefault("FLOVMP_DB_PASSWORD", "");
     Console.WriteLine(string.IsNullOrEmpty(dbPassword) && !env.ContainsKey("FLOVMP_DB_CONNECTION")
@@ -194,7 +199,7 @@ void PrintBanner()
     if (!string.IsNullOrEmpty(owner))
         Console.WriteLine($"  Владелец:      SocialClubId {owner}");
     else if (!string.IsNullOrEmpty(token))
-        Console.WriteLine($"  Стать владельцем: в игре введите /claimowner {token}");
+        Console.WriteLine($"  Владелец:      в игре /claimowner {token} (пока нет ни одного администратора)");
 
     Console.WriteLine($"  Лог:           {Rel(Path.Combine(serverDir, "server.log"))}");
     Console.WriteLine("  Остановка:     Ctrl+C или закрыть окно");
