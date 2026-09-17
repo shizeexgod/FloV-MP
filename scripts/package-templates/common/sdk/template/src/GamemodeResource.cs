@@ -49,7 +49,10 @@ public sealed class GamemodeResource : Resource
 
     private static void RegisterCommands()
     {
-        // имя, описание для /help, минимальный уровень администратора (0 — всем)
+        // имя, описание для /help, минимальный уровень администратора (0 — всем).
+        // Уровень своих команд выбираете вы; уровни команд самой платформы
+        // лежат в server/config/admin-commands.cfg (по умолчанию все — 8,
+        // то есть только у создателя сервера).
         Alt.Emit("flovmp:commands:register", "hello", "приветствие от сервера", 0);
         Alt.Emit("flovmp:commands:register", "sethp", "здоровье игроку: /sethp <id> <100-200>", 1);
     }
