@@ -1860,7 +1860,7 @@ public sealed class ChatSystem
                 break;
 
             case "mute":
-                if (args.Length < 2 || !int.TryParse(args[1], out var muteMins) || muteMins <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var muteMins) || muteMins <= 0 || muteMins > 525600)
                 {
                     SendSystem(player, "Использование: /mute <ID/ник> <минут> [причина]");
                     return;
@@ -1899,7 +1899,7 @@ public sealed class ChatSystem
                 break;
 
             case "jail":
-                if (args.Length < 2 || !int.TryParse(args[1], out var jailMins) || jailMins <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var jailMins) || jailMins <= 0 || jailMins > 525600)
                 {
                     SendSystem(player, "Использование: /jail <ID/ник> <минут> [причина]");
                     return;
@@ -1989,7 +1989,7 @@ public sealed class ChatSystem
 
             // ── Уровень 3: Старший Модератор ──────────
             case "ban":
-                if (args.Length < 2 || !int.TryParse(args[1], out var banDays) || banDays <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var banDays) || banDays <= 0 || banDays > 3650)
                 {
                     SendSystem(player, "Использование: /ban <ID/ник> <дней> [причина]");
                     return;
@@ -2009,7 +2009,7 @@ public sealed class ChatSystem
                 break;
 
             case "banip":
-                if (args.Length < 2 || !int.TryParse(args[1], out var banipDays) || banipDays <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var banipDays) || banipDays <= 0 || banipDays > 3650)
                 {
                     SendSystem(player, "Использование: /banip <ID/ник> <дней> [причина]");
                     return;
@@ -2131,7 +2131,7 @@ public sealed class ChatSystem
 
             // ── Уровень 4: Администратор ──────────────
             case "bansc":
-                if (args.Length < 2 || !int.TryParse(args[1], out var banscDays) || banscDays <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var banscDays) || banscDays <= 0 || banscDays > 3650)
                 {
                     SendSystem(player, "Использование: /bansc <ID/ник> <дней> [причина]");
                     return;
@@ -2303,7 +2303,7 @@ public sealed class ChatSystem
             // ── Уровень 5: Старший Администратор ──────
             case "hwidban":
             case "macban":
-                if (args.Length < 2 || !int.TryParse(args[1], out var hwidDays) || hwidDays <= 0)
+                if (args.Length < 2 || !int.TryParse(args[1], out var hwidDays) || hwidDays <= 0 || hwidDays > 3650)
                 {
                     SendSystem(player, "Использование: /hwidban <ID/ник> <дней> [причина]");
                     return;

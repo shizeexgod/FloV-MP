@@ -573,7 +573,7 @@ public class StarterResource : Resource
         var reasonFrom = 2;
         if (!permanent)
         {
-            if (!int.TryParse(parts[2], out days) || days <= 0)
+            if (!int.TryParse(parts[2], out days) || days <= 0 || days > 3650)
             {
                 SendChatMessage(admin, $"{{fde047}}Использование: /{cmd} <ID> <дней> [причина]");
                 return;
@@ -927,7 +927,7 @@ public class StarterResource : Resource
                 var consoleReasonFrom = 1;
                 if (!consolePermanent)
                 {
-                    if (args.Length < 2 || !int.TryParse(args[1], out consoleDays) || consoleDays <= 0)
+                    if (args.Length < 2 || !int.TryParse(args[1], out consoleDays) || consoleDays <= 0 || consoleDays > 3650)
                     {
                         Alt.Log("[Console] Использование: ban <ID|Ник> <дней> [причина]");
                         return;
