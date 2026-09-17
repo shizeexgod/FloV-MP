@@ -618,6 +618,7 @@ def check_build_and_tests(rep):
     # alt:V / Electron и сетью.
     js_suites = [
         ("симуляция входа в игру", "scripts/client-sim/entry_flow.test.mjs"),
+        ("клавиши администратора в клиенте", "scripts/client-sim/admin_keys.test.mjs"),
         ("безопасность входа в лаунчере", "launcher/electron/tests/auth-security.test.cjs"),
     ]
     for label, script in js_suites:

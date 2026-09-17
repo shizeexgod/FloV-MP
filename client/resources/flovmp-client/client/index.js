@@ -57,10 +57,39 @@ const PENDING_CHAT_LIMIT = 50;
 
 // Список команд для подсказок в чате (присылает сервер по уровню прав игрока).
 let chatCommandsJson = null;
+
+// Те же команды — множеством имён. Клавиши админа (F3 ESP, F4 NoClip,
+// F5 телепорт) спрашивают именно его, а не «уровень больше нуля»: уровень
+// каждой команды владелец задаёт в server/config/admin-commands.cfg, и
+// проверка по уровню разъезжалась бы с настройкой сервера.
+let allowedCommands = null;
+
+function canUse(name) {
+    // Список ещё не пришёл — опираемся на уровень: иначе первые секунды
+    // после входа админ не мог бы ничем пользоваться.
+    if (!allowedCommands) return currentAdminLevel > 0;
+    return allowedCommands.has(name);
+}
+
+function setAllowedCommands(json) {
+    try {
+        const list = JSON.parse(String(json || '[]'));
+        allowedCommands = new Set(
+            Array.isArray(list) ? list.map(c => String(c.cmd || '').toLowerCase()) : []);
+    } catch (e) {
+        allowedCommands = null;
+    }
+}
 alt.onServer('flovmp:chat:commands', (json) => {
     chatCommandsJson = String(json || '[]');
+    setAllowedCommands(chatCommandsJson);
     if (chatView) {
         try { chatView.emit('flovmp:chat:commands', chatCommandsJson); } catch (e) { }
+    }
+    // Консоль F8 показывает тот же список: иначе она обещает игроку команды,
+    // которых на сервере нет, и молчит о тех, что появились.
+    if (consoleView) {
+        try { consoleView.emit('flovmp:chat:commands', chatCommandsJson); } catch (e) { }
     }
 });
 const pendingChat = [];
@@ -209,9 +238,14 @@ function setPlayerToGround() {
     return false;
 }
 
+/// Включён ли NoClip. Нужен проверкам клиента (scripts/client-sim).
+export function isNoClipActive() {
+    return noClip;
+}
+
 export function toggleNoClip() {
     if (!inGame || chatTyping) return;
-    if (currentAdminLevel < 1) {
+    if (!canUse('noclip')) {
         alt.log('[FloV:MP] Попытка вызова NoClip отклонена (нет прав администратора)');
         return;
     }
@@ -359,7 +393,7 @@ alt.onServer('flovmp:admin:roster', (json) => {
 });
 
 export function toggleEsp(targetMode = null) {
-    if (currentAdminLevel < 1) {
+    if (!canUse('esp')) {
         alt.log('[FloV:MP] Доступ к ESP отклонен (нет прав администратора)');
         return;
     }
@@ -866,6 +900,9 @@ export function openDevConsole() {
     updateMicMute();
     cv.emit('flovmp:console:open');
     cv.emit('flovmp:console:permissions', currentAdminLevel);
+    if (chatCommandsJson) {
+        try { cv.emit('flovmp:chat:commands', chatCommandsJson); } catch (e) { }
+    }
     cv.focus();
     pushCursor();
     alt.toggleGameControls(false);
@@ -907,7 +944,7 @@ export function destroyDevConsole() {
 // 4. ТЕЛЕПОРТАЦИЯ НА МЕТКУ (TPM / F5)
 // =============================================================================
 export function triggerWaypointTeleport() {
-    if (currentAdminLevel < 1) {
+    if (!canUse('tpm')) {
         if (chatView) chatView.emit('flovmp:chat:msg', 'system', '', '{ef4444}[FloV:MP Security] Доступ запрещен (требуются права администратора).');
         return;
     }

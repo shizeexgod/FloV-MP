@@ -872,6 +872,19 @@
       alt.on('flovmp:console:close', () => {
         win.classList.add('hidden');
       });
+      // Список команд игрока: тот же, что в подсказках чата.
+      alt.on('flovmp:chat:commands', (json) => {
+        try {
+          const list = JSON.parse(String(json || '[]'));
+          serverCommands = Array.isArray(list)
+            ? list.map(c => ({ cmd: String(c.cmd || ''), desc: String(c.desc || '') }))
+                  .filter(c => c.cmd)
+            : [];
+        } catch (e) {
+          serverCommands = [];
+        }
+      });
+
       alt.on('flovmp:console:permissions', (lvl) => {
         applyPermissions(lvl);
       });
@@ -926,24 +939,19 @@
       { cmd: 'reconnect', desc: 'Переподключиться к серверу' }
     ];
 
-    // Админские команды (только adminLevel >= 1)
-    const adminCommands = [
-      { cmd: 'tpm', desc: 'Телепорт к фиолетовой метке (F5 Waypoint)' },
-      { cmd: 'noclip', desc: 'Свободный полет камеры (F4 NoClip)' },
-      { cmd: 'esp [0-3]', desc: 'Админ-видение ESP Wallhack (F3)' },
-      { cmd: 'revive [id]', desc: 'Реанимировать игрока' },
-      { cmd: 'setdim [dim]', desc: 'Установить виртуальный мир (измерение)' },
-      { cmd: 'car [model]', desc: 'Заспавнить автомобиль (напр. car adder)' },
-      { cmd: 'heal', desc: 'Восстановить 100% HP и брони' },
-      { cmd: 'god', desc: 'Режим бессмертия' },
-      { cmd: 'weather [type]', desc: 'Смена погоды (EXTRASUNNY, RAIN, THUNDER)' },
-      { cmd: 'time [h] [m]', desc: 'Установить игровое время' },
+    // Команды сервера. Список присылает сам сервер (flovmp:chat:commands) —
+    // ровно те, что доступны этому игроку по его правам. Раньше он был зашит
+    // здесь и расходился с сервером: консоль обещала команды, которых на
+    // сервере уже нет, и отказывала в тех, что есть.
+    let serverCommands = [];
+
+    // Команды, которые выполняет сам клиент: серверу они неизвестны.
+    const clientCommands = [
       { cmd: 'hotreload', desc: 'Перезагрузить NUI-интерфейсы' },
-      { cmd: 'setadmin [id] [lvl]', desc: 'Выдать админ-права игроку (Ур. 8)' }
     ];
 
     function getAvailableCommands() {
-      return adminLevel >= 1 ? [...publicCommands, ...adminCommands] : publicCommands;
+      return [...publicCommands, ...serverCommands, ...clientCommands];
     }
 
     // ─── ЛОГИ ──────────────────────────────────────────────────
@@ -1278,13 +1286,6 @@
 
       const parts = text.split(' ');
       const cmd = parts[0].toLowerCase();
-
-      // Проверка прав на клиенте перед отправкой
-      const isAdminCmd = adminCommands.some(ac => ac.cmd.split(' ')[0] === cmd);
-      if (isAdminCmd && adminLevel < 1) {
-        addLog('ERR', `Доступ запрещен: команда /${cmd} доступна только администраторам.`);
-        return;
-      }
 
       if (cmd === 'clear' || cmd === 'cls') {
         clearLogs();
