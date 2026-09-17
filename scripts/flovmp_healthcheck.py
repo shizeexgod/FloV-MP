@@ -495,15 +495,52 @@ def check_voice(rep):
 
     # 5. Установщик обязан связать оба конца: одинаковый секрет в server.toml и
     # voice.toml, и ПУБЛИЧНЫЙ адрес для клиента (с 127.0.0.1 голоса не будет).
-    dep = ROOT / "scripts/deploy-licensee.sh"
+    dep = ROOT / "scripts/install.sh"
     if dep.exists():
         d = dep.read_text(encoding="utf-8", errors="ignore")
-        wired = "voice.toml" in d and "externalSecret" in d
+        tpl = ROOT / "scripts/package-templates/common/voice/voice.toml.example"
+        t = tpl.read_text(encoding="utf-8", errors="ignore") if tpl.exists() else ""
+        wired = "voice.toml" in d and "__FLOVMP_VOICE_SECRET__" in d and "secret = __FLOVMP_VOICE_SECRET__" in t
         rep.add(PASS if wired else FAIL, "установщик связывает игровой и голосовой серверы",
                 "" if wired else "голосовой сервер ставится, но не подключается к игровому")
-        public = "externalPublicHost" in d
+        public = "__FLOVMP_VOICE_PUBLIC_HOST__" in d and "api.ipify.org" in d
         rep.add(PASS if public else WARN, "клиенту отдаётся публичный адрес голоса",
                 "" if public else "с 127.0.0.1 игроки молча останутся без голоса")
+
+
+# ------------- 3d. Пакет и установщик -------------
+
+def check_installer(rep):
+    section("3d. Пакет и установщик")
+    shell = [ROOT / "scripts/install.sh"] + sorted((ROOT / "scripts/package-templates").rglob("*.sh"))
+    crlf = [str(p.relative_to(ROOT)) for p in shell if p.exists() and b"\r\n" in p.read_bytes()]
+    rep.add(PASS if not crlf else FAIL, "sh-скрипты без CRLF",
+            "" if not crlf else "на Linux не запустятся: " + ", ".join(crlf))
+
+    inst = ROOT / "scripts/install.sh"
+    if not inst.exists():
+        rep.add(FAIL, "scripts/install.sh", "установщик не найден")
+        return
+    t = inst.read_text(encoding="utf-8", errors="ignore")
+    rep.add(PASS if "Uid=root" not in t and "Pwd=;" not in t else FAIL,
+            "установщик не подключает сервер к базе как root без пароля",
+            "" if "Uid=root" not in t else "root по TCP с пустым паролем не пускается - сервер уходит на файлы")
+    rep.add(PASS if "IDENTIFIED BY" in t and "random_hex" in t else FAIL,
+            "установщик создаёт отдельного пользователя базы со случайным паролем")
+    rep.add(PASS if "sha256sum --quiet -c manifest.txt" in t else FAIL,
+            "установщик проверяет целостность пакета")
+    rep.add(PASS if "Миграции не выполнены" in t else FAIL,
+            "установщик ловит упавшие миграции",
+            "" if "Миграции не выполнены" in t else "«база подключена» при несозданных таблицах")
+    rep.add(PASS if "RSA2048_OFFLINE_VERIFIED" not in t else FAIL, "нет поддельной лицензии в установщике")
+
+    pack = ROOT / "scripts/pack_server.py"
+    if pack.exists():
+        pt = pack.read_text(encoding="utf-8", errors="ignore")
+        guard = "FORBIDDEN_IN_PACKAGE" in pt and "admins.json" in pt
+        rep.add(PASS if guard else FAIL, "admins.json и настройки владельца не попадают в пакет")
+    else:
+        rep.add(FAIL, "scripts/pack_server.py", "сборщик пакета не найден")
 
 
 # ------------- 3c. Миграции схемы БД -------------
@@ -542,6 +579,21 @@ def check_migrations(rep):
     rep.add(PASS if not bad else FAIL, "нет CREATE DATABASE/USE в миграциях",
             "" if not bad else "увели бы накат в чужую базу: " + ", ".join(bad))
 
+    # Дубль колонки в CREATE TABLE валит миграцию на ЧИСТОЙ базе (код 1060),
+    # а на уже заполненной CREATE TABLE IF NOT EXISTS её не выполняет — так
+    # ошибка прожила до первой настоящей установки у клиента.
+    dup_cols = []
+    for f in files + [ROOT / "sql/schema.sql"]:
+        if not f.exists():
+            continue
+        t = f.read_text(encoding="utf-8", errors="ignore")
+        for m in re.finditer(r"CREATE TABLE IF NOT EXISTS `(\w+)` \((.*?)\n\)\s*ENGINE", t, re.S):
+            cols = re.findall(r"(?m)^\s*`(\w+)`\s+[A-Za-z]", m.group(2))
+            for c in sorted({c for c in cols if cols.count(c) > 1}):
+                dup_cols.append("{}: {}.{}".format(f.name, m.group(1), c))
+    rep.add(PASS if not dup_cols else FAIL, "нет повторяющихся колонок в CREATE TABLE",
+            "" if not dup_cols else "миграция упадёт на чистой базе: " + ", ".join(dup_cols))
+
     dupes = [v for v, names in versions.items() if len(names) > 1]
     rep.add(PASS if not dupes else FAIL, "номера миграций уникальны",
             "" if not dupes else "дубли номеров: " + ", ".join(dupes))
@@ -561,8 +613,8 @@ def check_migrations(rep):
 
     # Миграции обязаны доезжать до сервера: раннер ищет sql/migrations рядом
     # с рабочей папкой, и без копии в сборочном скрипте схема не накатится.
-    for script, label in (("scripts/assemble-runtime.ps1", "Windows"),
-                          ("scripts/assemble-linux-server.ps1", "Linux")):
+    for script, label in (("scripts/assemble-runtime.ps1", "локальный runtime"),
+                          ("scripts/pack_server.py", "пакет для клиента")):
         sc = ROOT / script
         if not sc.exists():
             rep.add(SKIP, "миграции в пакете ({})".format(label), "скрипт не найден")
@@ -747,6 +799,7 @@ def main():
     check_server_toml_order(rep)
     check_event_contract(rep)
     check_migrations(rep)
+    check_installer(rep)
     check_version_consistency(rep)
 
     if args.build or args.all:

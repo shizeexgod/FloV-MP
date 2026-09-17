@@ -1,203 +1,715 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# FloV:MP — Официальный автоматический установщик сервера (One-Line Installer)
-# Использование:
-#   curl -sSL https://flov-mp.ru/install.sh | bash -s -- --key FLV-XXXX-XXXX-XXXX
-# ==============================================================================
+# =====================================================================
+#  FloV:MP — установщик игрового сервера (Linux: Ubuntu / Debian)
+#
+#  Из распакованного пакета (рекомендуется):
+#     tar -xzf flovmp-server-<версия>-linux.tar.gz
+#     cd flovmp-server-<версия>
+#     sudo ./install.sh --public-host <ваш IP> --owner-sc <ваш SocialClubId>
+#
+#  Одной командой (скачает пакет с портала):
+#     curl -fsSL https://<портал>/install.sh | sudo bash -s -- --owner-sc <SocialClubId>
+#
+#  Повторный запуск из пакета новой версии = обновление: файлы платформы
+#  заменяются (с резервной копией и откатом при неудачном старте), а ваши
+#  файлы — server.toml, config/flovmp.env, права, данные, свои ресурсы —
+#  не трогаются никогда.
+#
+#  Полный список параметров: ./install.sh --help
+# =====================================================================
 set -euo pipefail
+shopt -u patsub_replacement 2>/dev/null || true
 
-RED='\033[031m'
-GREEN='\033[032m'
-CYAN='\033[036m'
-YELLOW='\033[033m'
-BOLD='\033[1m'
-NC='\033[0m'
+ORIG_ARGS=("$@")
 
-PORTAL_URL="${FLOVMP_PORTAL_URL:-https://flov-mp.ru}"
-INSTALL_DIR="${FLOVMP_DIR:-/opt/flovmp}"
-VOICE_DIR="${INSTALL_DIR}/voice"
+# ---------------------------------------------------------------------
+# Вывод
+# ---------------------------------------------------------------------
+if [ -t 1 ]; then
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'; C_BOLD=$'\033[1m'; C_OFF=$'\033[0m'
+else
+  C_RED=""; C_GREEN=""; C_YELLOW=""; C_CYAN=""; C_BOLD=""; C_OFF=""
+fi
+step() { echo; echo "${C_CYAN}${C_BOLD}==> $*${C_OFF}"; }
+ok()   { echo "${C_GREEN}  ✓ $*${C_OFF}"; }
+info() { echo "    $*"; }
+warn() { echo "${C_YELLOW}  ! $*${C_OFF}"; }
+die()  { echo; echo "${C_RED}${C_BOLD}ОШИБКА: $*${C_OFF}" >&2; exit 1; }
+
+usage() {
+  cat <<'USAGE'
+FloV:MP — установщик игрового сервера
+
+Использование: sudo ./install.sh [параметры]
+
+Основное:
+  --dir <путь>              Папка установки (по умолчанию /opt/flovmp)
+  --name "<название>"       Название сервера (только при первой установке)
+  --slots <число>           Максимум игроков (по умолчанию 1000)
+  --port <порт>             Игровой порт, UDP+TCP (по умолчанию 7788)
+  --public-host <IP|домен>  Внешний адрес для голосового чата (определяется сам)
+  --voice-port <порт>       Публичный порт голоса, UDP+TCP (по умолчанию 7895)
+  --voice-internal-port <п> Внутренний порт голоса (по умолчанию 7896)
+
+Администратор:
+  --owner-sc <SocialClubId> Выдать уровень 8 (основатель) этому SocialClubId
+
+База данных (MariaDB ставится и настраивается автоматически):
+  --db-name <имя>           Имя базы (по умолчанию flovmp_server)
+  --db-user <имя>           Пользователь базы (по умолчанию flovmp)
+  --no-db                   Без базы: права, баны и аккаунты в файлах
+
+Службы:
+  --service <имя>           Имя службы systemd (по умолчанию flovmp)
+  --run-as <пользователь>   От чьего имени работает сервер (по умолчанию flovmp)
+  --no-start                Не запускать сервер после установки
+  --no-firewall             Не открывать порты в ufw/firewalld
+
+Лицензия и пакет:
+  --key <ключ>              Ключ лицензии (сохраняется в config/flovmp.env)
+  --portal <URL>            Адрес портала (для скачивания пакета/лицензии)
+  --package <файл.tar.gz>   Установить из указанного архива
+  --package-url <URL>       Скачать архив по ссылке
+  --sha256 <хэш>            Проверить хэш скачанного архива
+
+Прочее:
+  --uninstall               Удалить службы (файлы и база остаются)
+  --purge                   Вместе с --uninstall: удалить также файлы и базу
+  --force                   Установить поверх папки, не похожей на установку FloV:MP
+  -y, --yes                 Не задавать вопросов (нужно для --purge)
+  -h, --help                Эта справка
+USAGE
+}
+
+# ---------------------------------------------------------------------
+# Параметры
+# ---------------------------------------------------------------------
+INSTALL_DIR="/opt/flovmp"
+SERVER_NAME="FloV:MP Server"
+SLOTS="1000"
+GAME_PORT="7788"
+VOICE_PUBLIC_PORT="7895"
+VOICE_INTERNAL_PORT="7896"
+PUBLIC_HOST=""
+OWNER_SC=""
+DB_NAME="flovmp_server"
+DB_USER="flovmp"
+USE_DB=1
+SERVICE="flovmp"
+RUN_AS="flovmp"
+DO_START=1
+DO_FIREWALL=1
 LICENSE_KEY=""
-SERVER_PORT="${PORT:-7788}"
+PORTAL_URL="${FLOVMP_PORTAL_URL:-https://flov-mp.ru}"
+PACKAGE_FILE=""
+PACKAGE_URL=""
+PACKAGE_SHA256=""
+UNINSTALL=0
+PURGE=0
+FORCE=0
+ASSUME_YES=0
 
-echo -e "${CYAN}${BOLD}"
-echo "  ███████╗██╗      ██████╗ ██╗   ██╗   ███╗   ███╗██████╗ "
-echo "  ██╔════╝██║     ██╔═══██╗██║   ██║   ████╗ ████║██╔══██╗"
-echo "  █████╗  ██║     ██║   ██║██║   ██║   ██╔████╔██║██████╔╝"
-echo "  ██╔══╝  ██║     ██║   ██║╚██╗ ██╔╝   ██║╚██╔╝██║██╔═══╝ "
-echo "  ██║     ███████╗╚██████╔╝ ╚████╔╝    ██║ ╚═╝ ██║██║     "
-echo "  ╚═╝     ╚══════╝ ╚═════╝   ╚═══╝     ╚═╝     ╚═╝╚═╝     "
-echo -e "  Автоматический установщик игрового сервера FloV:MP${NC}\n"
+need_value() { [ $# -ge 2 ] && [ -n "$2" ] || die "параметру $1 нужно значение (см. --help)"; }
 
-# ------------------------------------------------------------------------------
-# 1. Разбор аргументов
-# ------------------------------------------------------------------------------
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
-    --key|-k)
-      LICENSE_KEY="$2"
-      shift 2
-      ;;
-    --dir|-d)
-      INSTALL_DIR="$2"
-      VOICE_DIR="${INSTALL_DIR}/voice"
-      shift 2
-      ;;
-    --portal|-p)
-      PORTAL_URL="$2"
-      shift 2
-      ;;
-    --port)
-      SERVER_PORT="$2"
-      shift 2
-      ;;
-    *)
-      echo -e "${YELLOW}Неизвестный параметр: $1${NC}"
-      shift
-      ;;
+    --dir)                 need_value "$@"; INSTALL_DIR="$2"; shift 2 ;;
+    --name)                need_value "$@"; SERVER_NAME="$2"; shift 2 ;;
+    --slots)               need_value "$@"; SLOTS="$2"; shift 2 ;;
+    --port)                need_value "$@"; GAME_PORT="$2"; shift 2 ;;
+    --public-host)         need_value "$@"; PUBLIC_HOST="$2"; shift 2 ;;
+    --voice-port)          need_value "$@"; VOICE_PUBLIC_PORT="$2"; shift 2 ;;
+    --voice-internal-port) need_value "$@"; VOICE_INTERNAL_PORT="$2"; shift 2 ;;
+    --owner-sc)            need_value "$@"; OWNER_SC="$2"; shift 2 ;;
+    --db-name)             need_value "$@"; DB_NAME="$2"; shift 2 ;;
+    --db-user)             need_value "$@"; DB_USER="$2"; shift 2 ;;
+    --no-db)               USE_DB=0; shift ;;
+    --service)             need_value "$@"; SERVICE="$2"; shift 2 ;;
+    --run-as)              need_value "$@"; RUN_AS="$2"; shift 2 ;;
+    --no-start)            DO_START=0; shift ;;
+    --no-firewall)         DO_FIREWALL=0; shift ;;
+    --key|-k)              need_value "$@"; LICENSE_KEY="$2"; shift 2 ;;
+    --portal|-p)           need_value "$@"; PORTAL_URL="${2%/}"; shift 2 ;;
+    --package)             need_value "$@"; PACKAGE_FILE="$2"; shift 2 ;;
+    --package-url)         need_value "$@"; PACKAGE_URL="$2"; shift 2 ;;
+    --sha256)              need_value "$@"; PACKAGE_SHA256="$2"; shift 2 ;;
+    --uninstall)           UNINSTALL=1; shift ;;
+    --purge)               PURGE=1; shift ;;
+    --force)               FORCE=1; shift ;;
+    -y|--yes)              ASSUME_YES=1; shift ;;
+    -h|--help)             usage; exit 0 ;;
+    *)                     die "неизвестный параметр: $1 (см. --help)" ;;
   esac
 done
 
-if [ -z "$LICENSE_KEY" ]; then
-  echo -e "${RED}[Ошибка] Ключ лицензии не указан!${NC}"
-  echo -e "Использование: curl -sSL $PORTAL_URL/install.sh | bash -s -- --key ${BOLD}FLV-XXXX-XXXX-XXXX${NC}"
-  exit 1
+is_port() { [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge 1024 ] && [ "$1" -le 65535 ]; }
+is_port "$GAME_PORT"           || die "--port: нужен порт 1024..65535, получено «$GAME_PORT»"
+is_port "$VOICE_PUBLIC_PORT"   || die "--voice-port: нужен порт 1024..65535, получено «$VOICE_PUBLIC_PORT»"
+is_port "$VOICE_INTERNAL_PORT" || die "--voice-internal-port: нужен порт 1024..65535, получено «$VOICE_INTERNAL_PORT»"
+[ "$GAME_PORT" != "$VOICE_PUBLIC_PORT" ] && [ "$GAME_PORT" != "$VOICE_INTERNAL_PORT" ] && \
+  [ "$VOICE_PUBLIC_PORT" != "$VOICE_INTERNAL_PORT" ] || die "игровой и голосовые порты должны различаться"
+[[ "$SLOTS" =~ ^[0-9]+$ ]] && [ "$SLOTS" -ge 1 ] && [ "$SLOTS" -le 4096 ] || die "--slots: нужно число 1..4096"
+[ -z "$OWNER_SC" ] || [[ "$OWNER_SC" =~ ^[0-9]{1,20}$ ]] || \
+  die "--owner-sc: SocialClubId — только цифры (ник не подходит: его подделывает клиент)"
+[[ "$DB_NAME" =~ ^[A-Za-z0-9_]{1,48}$ ]] || die "--db-name: только латиница, цифры и _"
+[[ "$DB_USER" =~ ^[A-Za-z0-9_]{1,32}$ ]] || die "--db-user: только латиница, цифры и _"
+[[ "$SERVICE" =~ ^[A-Za-z0-9_-]{1,40}$ ]] || die "--service: только латиница, цифры, _ и -"
+[[ "$RUN_AS" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "--run-as: недопустимое имя пользователя"
+[ -z "$PUBLIC_HOST" ] || [[ "$PUBLIC_HOST" =~ ^[A-Za-z0-9.:-]{1,253}$ ]] || die "--public-host: недопустимый адрес"
+[[ "$INSTALL_DIR" == /* ]] || die "--dir: нужен абсолютный путь"
+INSTALL_DIR="${INSTALL_DIR%/}"
+case "$INSTALL_DIR" in
+  ""|/|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/proc|/root|/run|/sbin|/sys|/tmp|/usr|/var)
+    die "--dir: нельзя устанавливать в $INSTALL_DIR" ;;
+esac
+# Название уходит в TOML-строку: кавычки, обратные слеши и управляющие символы убираем.
+SERVER_NAME="$(printf '%s' "$SERVER_NAME" | tr -d '"\\' | tr -d '[:cntrl:]' | cut -c1-64)"
+[ -n "$SERVER_NAME" ] || SERVER_NAME="FloV:MP Server"
+
+[ "$(id -u)" -eq 0 ] || die "запустите установщик от root: sudo ./install.sh"
+
+# Службы: настоящий systemd или совместимая замена systemctl, которую ставят
+# некоторые хостинги в контейнерных VDS (там нет /run/systemd/system и части
+# команд, например daemon-reload). Поэтому признак — отвечает ли systemctl.
+HAS_SYSTEMD=0
+if command -v systemctl >/dev/null 2>&1 &&    { [ -d /run/systemd/system ] || systemctl list-units >/dev/null 2>&1; }; then
+  HAS_SYSTEMD=1
 fi
+reload_units() { systemctl daemon-reload >/dev/null 2>&1 || true; }
 
-echo -e "${CYAN}[1/6] Проверка окружения и зависимостей...${NC}"
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}[Ошибка] Скрипт должен запускаться с правами root (sudo)!${NC}"
-  exit 1
-fi
-
-# Установка системных зависимостей
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq >/dev/null
-apt-get install -y -qq curl wget jq tar libatomic1 ca-certificates mariadb-server >/dev/null 2>&1 || true
-
-# Установка .NET 8 Runtime (если не установлен)
-if ! command -v dotnet >/dev/null 2>&1; then
-  echo -e "${CYAN}--> Установка .NET 8 CoreCLR runtime...${NC}"
-  wget -q https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs 2>/dev/null || echo "22.04")/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb 2>/dev/null || true
-  if [ -f /tmp/packages-microsoft-prod.deb ]; then
-    dpkg -i /tmp/packages-microsoft-prod.deb >/dev/null 2>&1 || true
-    rm -f /tmp/packages-microsoft-prod.deb
+# ---------------------------------------------------------------------
+# Удаление
+# ---------------------------------------------------------------------
+if [ "$UNINSTALL" -eq 1 ]; then
+  step "Удаление FloV:MP ($SERVICE)"
+  if [ "$HAS_SYSTEMD" -eq 1 ]; then
+    systemctl stop "$SERVICE.service" "$SERVICE-voice.service" >/dev/null 2>&1 || true
+    systemctl disable "$SERVICE.service" "$SERVICE-voice.service" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$SERVICE.service" "/etc/systemd/system/$SERVICE-voice.service"
+    reload_units
+    ok "службы $SERVICE и $SERVICE-voice удалены"
   fi
-  apt-get update -qq >/dev/null
-  apt-get install -y -qq dotnet-runtime-8.0 aspnetcore-runtime-8.0 >/dev/null 2>&1 || true
+  if [ "$PURGE" -eq 1 ]; then
+    [ "$ASSUME_YES" -eq 1 ] || die "--purge удаляет файлы и базу безвозвратно; повторите с --yes"
+    [ -f "$INSTALL_DIR/manifest.txt" ] || die "$INSTALL_DIR не похож на установку FloV:MP — файлы не удалены"
+    ENV_DB_NAME="$DB_NAME"; ENV_DB_USER="$DB_USER"
+    if [ -f "$INSTALL_DIR/config/flovmp.env" ]; then
+      ENV_DB_NAME="$(sed -n 's/^FLOVMP_DB_NAME=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_NAME="${ENV_DB_NAME:-$DB_NAME}"
+      ENV_DB_USER="$(sed -n 's/^FLOVMP_DB_USER=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_USER="${ENV_DB_USER:-$DB_USER}"
+    fi
+    if command -v mysql >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] && [[ "$ENV_DB_USER" =~ ^[A-Za-z0-9_]+$ ]]; then
+      mysql -u root <<SQL >/dev/null 2>&1 && ok "база $ENV_DB_NAME и пользователь $ENV_DB_USER удалены" || warn "базу удалить не удалось — удалите вручную"
+DROP DATABASE IF EXISTS \`$ENV_DB_NAME\`;
+DROP USER IF EXISTS '$ENV_DB_USER'@'localhost';
+DROP USER IF EXISTS '$ENV_DB_USER'@'127.0.0.1';
+SQL
+    fi
+    rm -rf "$INSTALL_DIR"
+    ok "папка $INSTALL_DIR удалена"
+  else
+    info "Файлы в $INSTALL_DIR и база данных сохранены (полное удаление: --uninstall --purge --yes)."
+  fi
+  exit 0
 fi
 
-echo -e "${CYAN}[2/6] Запрос лицензии с портала (${LICENSE_KEY})...${NC}"
-mkdir -p "$INSTALL_DIR" "$VOICE_DIR"
+# ---------------------------------------------------------------------
+# Где пакет
+# ---------------------------------------------------------------------
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+SRC_DIR=""
+if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+  CANDIDATE="$(cd "$(dirname "$(readlink -f "$SCRIPT_PATH")")" && pwd)"
+  if [ -f "$CANDIDATE/manifest.txt" ] && [ -f "$CANDIDATE/server/flovmp-server" ]; then
+    SRC_DIR="$CANDIDATE"
+  fi
+fi
 
-# Скачивание криптографически подписанного license.flv
-TMP_LIC="/tmp/license_resp_$$.json"
-HTTP_CODE=$(curl -sSL -w "%{http_code}" -o "$TMP_LIC" "${PORTAL_URL}/api/v1/licenses/download-by-key?key=${LICENSE_KEY}" 2>/dev/null || echo "000")
+if [ -z "$SRC_DIR" ] || [ -n "$PACKAGE_FILE" ] || [ -n "$PACKAGE_URL" ]; then
+  # Режим «одной командой»: скачать пакет, распаковать и запустить его
+  # собственный install.sh. Установщик и пакет всегда одной версии.
+  step "Получение пакета FloV:MP"
+  command -v tar >/dev/null 2>&1 || die "нужен tar (apt-get install tar)"
+  WORK="$(mktemp -d /tmp/flovmp-install.XXXXXX)"
+  trap 'rm -rf "$WORK"' EXIT
+  if [ -n "$PACKAGE_FILE" ]; then
+    [ -f "$PACKAGE_FILE" ] || die "архив не найден: $PACKAGE_FILE"
+    cp "$PACKAGE_FILE" "$WORK/package.tar.gz"
+  else
+    command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null; } || die "нужен curl"
+    URL="${PACKAGE_URL:-$PORTAL_URL/api/v1/distribution/download-latest?os=linux}"
+    info "Скачивание: $URL"
+    curl -fL --retry 3 --connect-timeout 15 -o "$WORK/package.tar.gz" "$URL" || \
+      die "не удалось скачать пакет. Скачайте архив сервера из личного кабинета, распакуйте и запустите ./install.sh из распакованной папки"
+  fi
+  if [ -n "$PACKAGE_SHA256" ]; then
+    GOT="$(sha256sum "$WORK/package.tar.gz" | cut -d' ' -f1)"
+    [ "$GOT" = "${PACKAGE_SHA256,,}" ] || die "хэш архива не совпал (ожидали $PACKAGE_SHA256, получили $GOT) — архив повреждён или подменён"
+    ok "хэш архива совпал"
+  fi
+  tar -xzf "$WORK/package.tar.gz" -C "$WORK" || die "архив повреждён — не распаковывается"
+  INNER="$(find "$WORK" -maxdepth 2 -name manifest.txt -printf '%h\n' | head -1)"
+  [ -n "$INNER" ] && [ -f "$INNER/install.sh" ] || die "в архиве нет пакета сервера FloV:MP (manifest.txt/install.sh)"
+  # Без --package/--package-url, иначе вложенный установщик снова уйдёт качать.
+  PASS_ARGS=()
+  skip=0
+  for a in "${ORIG_ARGS[@]}"; do
+    if [ "$skip" -eq 1 ]; then skip=0; continue; fi
+    case "$a" in --package|--package-url|--sha256) skip=1; continue ;; esac
+    PASS_ARGS+=("$a")
+  done
+  bash "$INNER/install.sh" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"}
+  exit $?
+fi
 
-if [ "$HTTP_CODE" -eq 200 ] && [ -s "$TMP_LIC" ]; then
-  cp "$TMP_LIC" "${INSTALL_DIR}/license.flv"
-  echo -e "${GREEN}✓ Лицензия успешно получена и верифицирована!${NC}"
+PKG_VERSION="$(cat "$SRC_DIR/VERSION" 2>/dev/null || echo unknown)"
+echo "${C_CYAN}${C_BOLD}"
+echo "  FloV:MP — установка игрового сервера, версия $PKG_VERSION"
+echo "${C_OFF}"
+
+# ---------------------------------------------------------------------
+# 1. Целостность пакета
+# ---------------------------------------------------------------------
+step "1/8 Проверка целостности пакета"
+command -v sha256sum >/dev/null 2>&1 || die "нужен sha256sum (coreutils)"
+if ! (cd "$SRC_DIR" && sha256sum --quiet -c manifest.txt); then
+  die "файлы пакета повреждены или неполные (см. список выше). Распакуйте архив заново"
+fi
+ok "все файлы платформы на месте ($(wc -l < "$SRC_DIR/manifest.txt") шт.)"
+
+# ---------------------------------------------------------------------
+# 2. Режим: новая установка или обновление
+# ---------------------------------------------------------------------
+UPGRADE=0
+OLD_VERSION=""
+SAME_DIR=0
+[ "$(readlink -f "$SRC_DIR")" = "$(readlink -f "$INSTALL_DIR" 2>/dev/null || echo "$INSTALL_DIR")" ] && SAME_DIR=1
+
+if [ -f "$INSTALL_DIR/manifest.txt" ] && [ "$SAME_DIR" -eq 0 ]; then
+  UPGRADE=1
+  OLD_VERSION="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo unknown)"
+elif [ -d "$INSTALL_DIR" ] && [ "$SAME_DIR" -eq 0 ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ] && [ "$FORCE" -eq 0 ]; then
+  die "папка $INSTALL_DIR не пуста и не похожа на установку этого пакета (нет manifest.txt).
+       Это может быть сервер, установленный вручную. Чтобы ничего не сломать, установка остановлена.
+       Выберите другую папку (--dir) или подтвердите установку поверх (--force)"
+fi
+
+if [ "$UPGRADE" -eq 1 ]; then
+  step "2/8 Обновление $OLD_VERSION → $PKG_VERSION"
 else
-  echo -e "${YELLOW}! Предупреждение: Портал недоступен или ключ не найден (HTTP $HTTP_CODE).${NC}"
-  echo -e "${YELLOW}  Сервер будет запущен в автономном/демо-режиме, ключ сохранён в flovmp.env.${NC}"
+  step "2/8 Новая установка в $INSTALL_DIR"
 fi
-rm -f "$TMP_LIC"
 
-echo -e "${CYAN}[3/6] Загрузка файлов платформы мультиплеера...${NC}"
-DIST_URL="${PORTAL_URL}/api/v1/distribution/download-latest"
-if curl --head --silent --fail "$DIST_URL" >/dev/null 2>&1; then
-  echo -e "--> Скачивание дистрибутива с портала..."
-  curl -sSL "$DIST_URL" | tar -xz -C "$INSTALL_DIR" --strip-components=1 2>/dev/null || true
+# ---------------------------------------------------------------------
+# 3. Системные зависимости
+# ---------------------------------------------------------------------
+step "3/8 Системные зависимости"
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  PKGS=(ca-certificates curl tar gzip libatomic1 coreutils)
+  ICU="$(apt-cache pkgnames 2>/dev/null | grep -E '^libicu[0-9]+$' | sort -V | tail -1 || true)"
+  [ -n "$ICU" ] && PKGS+=("$ICU")
+  [ "$USE_DB" -eq 1 ] && PKGS+=(mariadb-server mariadb-client)
+  apt-get update -qq >/dev/null 2>&1 || warn "apt-get update завершился с ошибкой — пробую ставить из кэша"
+  if apt-get install -y -qq "${PKGS[@]}" >/dev/null 2>&1; then
+    ok "пакеты: ${PKGS[*]}"
+  else
+    die "не удалось установить пакеты: ${PKGS[*]}. Проверьте apt и повторите"
+  fi
 else
-  echo -e "${YELLOW}--> Используется локальный/резервный пакет поставки.${NC}"
+  warn "не Debian/Ubuntu: установите вручную libatomic, libicu, curl$([ "$USE_DB" -eq 1 ] && echo ", MariaDB")"
 fi
 
-DB_NAME="${FLOVMP_DB_NAME:-flovmp_server}"
-
-# Настройка flovmp.env
-cat > "${INSTALL_DIR}/flovmp.env" <<ENV
-# FloV:MP Server Configuration
-FLOVMP_LICENSE_KEY=${LICENSE_KEY}
-FLOVMP_API_PORT=7799
-FLOVMP_PORTAL_URL=${PORTAL_URL}
-FLOVMP_DB_CONNECTION=Server=127.0.0.1;Port=3306;Database=${DB_NAME};Uid=root;Pwd=;
-ENV
-chmod 600 "${INSTALL_DIR}/flovmp.env"
-
-echo -e "${CYAN}[4/6] Настройка локальной БД MariaDB...${NC}"
-systemctl enable --now mariadb >/dev/null 2>&1 || true
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null || true
-if [ -f "${INSTALL_DIR}/schema.sql" ]; then
-  mysql -u root "${DB_NAME}" < "${INSTALL_DIR}/schema.sql" 2>/dev/null || true
+find_dotnet() {
+  local d
+  for d in "${DOTNET_ROOT:-}" /usr/share/dotnet /usr/lib/dotnet /opt/dotnet /usr/local/share/dotnet; do
+    [ -n "$d" ] || continue
+    ls -d "$d"/shared/Microsoft.NETCore.App/8.* >/dev/null 2>&1 && { echo "$d"; return 0; }
+  done
+  return 1
+}
+if DOTNET_DIR="$(find_dotnet)"; then
+  ok ".NET 8 Runtime: $DOTNET_DIR"
+else
+  info "Установка .NET 8 Runtime (официальный скрипт Microsoft)..."
+  curl -fsSL --retry 3 https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh || die "не удалось скачать dotnet-install.sh"
+  bash /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir /usr/share/dotnet >/dev/null || die "не удалось установить .NET 8"
+  rm -f /tmp/dotnet-install.sh
+  ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet 2>/dev/null || true
+  DOTNET_DIR="$(find_dotnet)" || die ".NET 8 установлен, но не найден — проверьте /usr/share/dotnet"
+  ok ".NET 8 Runtime: $DOTNET_DIR"
 fi
 
-echo -e "${CYAN}[5/6] Регистрация системных служб (Systemd с PartOf= для голоса)...${NC}"
+# ---------------------------------------------------------------------
+# 4. Файлы платформы
+# ---------------------------------------------------------------------
+step "4/8 Файлы платформы"
+BACKUP_ARCHIVE=""
+if [ "$HAS_SYSTEMD" -eq 1 ] && [ "$UPGRADE" -eq 1 ]; then
+  systemctl stop "$SERVICE.service" >/dev/null 2>&1 || true
+fi
 
-# 1. Голосовой сервер (PartOf=flovmp-game гарантирует перезапуск при рестарте игры)
-cat > /etc/systemd/system/flovmp-voice.service <<EOF
+mkdir -p "$INSTALL_DIR"
+if [ "$SAME_DIR" -eq 0 ]; then
+  NEW_LIST="$(mktemp)"; OLD_LIST="$(mktemp)"
+  cut -d' ' -f3- "$SRC_DIR/manifest.txt" | sort > "$NEW_LIST"
+  if [ "$UPGRADE" -eq 1 ]; then
+    cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | sort > "$OLD_LIST"
+    mkdir -p "$INSTALL_DIR/backups"
+    chmod 700 "$INSTALL_DIR/backups"
+    BACKUP_ARCHIVE="$INSTALL_DIR/backups/platform-${OLD_VERSION}-$(date +%Y%m%d-%H%M%S).tar.gz"
+    EXISTING="$(mktemp)"
+    (cd "$INSTALL_DIR" && while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done < "$OLD_LIST") > "$EXISTING"
+    [ -f "$INSTALL_DIR/manifest.json" ] && echo manifest.json >> "$EXISTING"
+    tar -czf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR" -T "$EXISTING" manifest.txt || die "не удалось сделать резервную копию — обновление отменено, ничего не изменено"
+    rm -f "$EXISTING"
+    ok "резервная копия прежней версии: $BACKUP_ARCHIVE"
+    # Файлы, которые были в прежней версии платформы и исчезли в новой.
+    comm -23 "$OLD_LIST" "$NEW_LIST" | while IFS= read -r f; do
+      [ -n "$f" ] && rm -f "$INSTALL_DIR/$f"
+    done
+  fi
+  (cd "$SRC_DIR" && tar -cf - -T "$NEW_LIST" manifest.txt manifest.json) | tar -xpf - -C "$INSTALL_DIR" || die "не удалось скопировать файлы в $INSTALL_DIR"
+  rm -f "$NEW_LIST" "$OLD_LIST"
+fi
+(cd "$INSTALL_DIR" && sha256sum --quiet -c manifest.txt) || die "после копирования файлы не совпали с пакетом — проверьте место на диске"
+chmod +x "$INSTALL_DIR/install.sh" "$INSTALL_DIR/start.sh" "$INSTALL_DIR/start-voice.sh" \
+         "$INSTALL_DIR/server/flovmp-server" "$INSTALL_DIR/server/flovmp-crash-handler" \
+         "$INSTALL_DIR/voice/altv-voice-server" "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true
+[ ! -f "$INSTALL_DIR/voice/altv-crash-handler" ] || chmod +x "$INSTALL_DIR/voice/altv-crash-handler"
+ok "платформа $PKG_VERSION в $INSTALL_DIR"
+
+# ---------------------------------------------------------------------
+# 5. Ваши настройки (создаются один раз, дальше не трогаются)
+# ---------------------------------------------------------------------
+step "5/8 Настройки сервера"
+. "$INSTALL_DIR/scripts/lib-env.sh"
+ENV_FILE="$INSTALL_DIR/config/flovmp.env"
+mkdir -p "$INSTALL_DIR/config" "$INSTALL_DIR/server/config" "$INSTALL_DIR/server/flovmp-data"
+
+set_env_var() {
+  # Заменить КЛЮЧ=... или дописать в конец. Значение без перевода строки.
+  local key="$1" val="$2" tmp
+  tmp="$(mktemp)"
+  if [ -f "$ENV_FILE" ] && grep -q "^${key}=" "$ENV_FILE"; then
+    awk -v k="$key" -v v="$val" 'BEGIN{FS=OFS="="} $1==k {print k "=" v; next} {print}' "$ENV_FILE" > "$tmp"
+  else
+    { [ -f "$ENV_FILE" ] && cat "$ENV_FILE"; printf '%s=%s\n' "$key" "$val"; } > "$tmp"
+  fi
+  cat "$tmp" > "$ENV_FILE"
+  rm -f "$tmp"
+}
+random_hex() { od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'; }
+
+if [ ! -f "$ENV_FILE" ]; then
+  cp "$INSTALL_DIR/config/flovmp.env.example" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  set_env_var FLOVMP_DB_NAME "$DB_NAME"
+  set_env_var FLOVMP_DB_USER "$DB_USER"
+  if [ "$USE_DB" -eq 1 ]; then
+    set_env_var FLOVMP_DB_PASSWORD "$(random_hex 24)"
+  fi
+  SETUP_TOKEN="FLV-$(random_hex 8 | tr 'a-f' 'A-F' | sed 's/.\{4\}/&-/g; s/-$//')"
+  set_env_var FLOVMP_SETUP_TOKEN "$SETUP_TOKEN"
+  ok "создан config/flovmp.env (пароль базы сгенерирован)"
+else
+  ok "config/flovmp.env уже есть — сохранён"
+fi
+chmod 600 "$ENV_FILE"
+[ -z "$OWNER_SC" ]    || { set_env_var FLOVMP_OWNER_SC "$OWNER_SC"; ok "основатель (уровень 8): SocialClubId $OWNER_SC"; }
+[ -z "$LICENSE_KEY" ] || set_env_var FLOVMP_LICENSE_KEY "$LICENSE_KEY"
+if [ "$USE_DB" -eq 0 ]; then
+  set_env_var FLOVMP_DB_PASSWORD ""
+fi
+
+# Значения из файла — источник правды при повторном запуске.
+( flovmp_load_env "$ENV_FILE"; printf '%s\n%s\n%s\n%s\n' "${FLOVMP_DB_NAME:-$DB_NAME}" "${FLOVMP_DB_USER:-$DB_USER}" "${FLOVMP_DB_PASSWORD:-}" "${FLOVMP_SETUP_TOKEN:-}" ) > "$INSTALL_DIR/.install-env.tmp"
+{ read -r DB_NAME; read -r DB_USER; read -r DB_PASSWORD; read -r SETUP_TOKEN; } < "$INSTALL_DIR/.install-env.tmp"
+rm -f "$INSTALL_DIR/.install-env.tmp"
+
+if [ -n "$LICENSE_KEY" ] && [ ! -s "$INSTALL_DIR/license.flv" ]; then
+  if curl -fsS --max-time 20 -o "$INSTALL_DIR/license.flv.tmp" \
+       "$PORTAL_URL/api/v1/licenses/download-by-key?key=$LICENSE_KEY" 2>/dev/null && [ -s "$INSTALL_DIR/license.flv.tmp" ]; then
+    mv "$INSTALL_DIR/license.flv.tmp" "$INSTALL_DIR/license.flv"
+    ok "файл лицензии получен с портала"
+  else
+    rm -f "$INSTALL_DIR/license.flv.tmp"
+    warn "файл лицензии с портала получить не удалось — ключ сохранён, работе сервера это не мешает"
+  fi
+fi
+
+if [ -z "$PUBLIC_HOST" ]; then
+  PUBLIC_HOST="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  [[ "$PUBLIC_HOST" =~ ^[0-9a-fA-F.:]{3,45}$ ]] || PUBLIC_HOST=""
+  [ -n "$PUBLIC_HOST" ] || PUBLIC_HOST="$(hostname -I 2>/dev/null | awk '{print $1}')"
+fi
+
+SERVER_TOML="$INSTALL_DIR/server/server.toml"
+VOICE_TOML="$INSTALL_DIR/voice/voice.toml"
+if [ ! -f "$SERVER_TOML" ] || [ ! -f "$VOICE_TOML" ]; then
+  if [ -z "$PUBLIC_HOST" ]; then
+    warn "внешний адрес не определён — голос будет работать только локально. Укажите --public-host"
+    PUBLIC_HOST="127.0.0.1"
+  fi
+  VOICE_SECRET=$(( $(od -An -N4 -tu4 /dev/urandom | tr -d ' ') % 2147483646 + 1 ))
+  render() {
+    local src="$1" dst="$2" content
+    content="$(cat "$src")"
+    content="${content//__FLOVMP_NAME__/$SERVER_NAME}"
+    content="${content//__FLOVMP_PORT__/$GAME_PORT}"
+    content="${content//__FLOVMP_PLAYERS__/$SLOTS}"
+    content="${content//__FLOVMP_VOICE_SECRET__/$VOICE_SECRET}"
+    content="${content//__FLOVMP_VOICE_PORT__/$VOICE_INTERNAL_PORT}"
+    content="${content//__FLOVMP_VOICE_PUBLIC_HOST__/$PUBLIC_HOST}"
+    content="${content//__FLOVMP_VOICE_PUBLIC_PORT__/$VOICE_PUBLIC_PORT}"
+    printf '%s\n' "$content" > "$dst"
+    chmod 600 "$dst"
+  }
+  # Оба файла создаются вместе: секрет голоса в них обязан совпадать.
+  render "$INSTALL_DIR/server/server.toml.example" "$SERVER_TOML"
+  render "$INSTALL_DIR/voice/voice.toml.example" "$VOICE_TOML"
+  ok "server.toml: «$SERVER_NAME», порт $GAME_PORT, слотов $SLOTS"
+  ok "голос: игроки подключаются к $PUBLIC_HOST:$VOICE_PUBLIC_PORT"
+else
+  ok "server.toml и voice.toml уже есть — сохранены"
+  GAME_PORT="$(sed -n 's/^port[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$SERVER_TOML" | head -1)"; GAME_PORT="${GAME_PORT:-7788}"
+  VOICE_PUBLIC_PORT="$(sed -n 's/^externalPublicPort[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$SERVER_TOML" | head -1)"; VOICE_PUBLIC_PORT="${VOICE_PUBLIC_PORT:-7895}"
+  PUBLIC_HOST="$(sed -n 's/^externalPublicHost[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$SERVER_TOML" | head -1)"
+fi
+
+# ---------------------------------------------------------------------
+# 6. База данных
+# ---------------------------------------------------------------------
+step "6/8 База данных"
+DB_OK=0
+if [ "$USE_DB" -eq 0 ] || [ -z "$DB_PASSWORD" ]; then
+  warn "без базы данных: права, баны и аккаунты хранятся в файлах"
+else
+  if [ "$HAS_SYSTEMD" -eq 1 ]; then
+    systemctl enable mariadb >/dev/null 2>&1 || systemctl enable mysql >/dev/null 2>&1 || true
+    mysqladmin ping >/dev/null 2>&1 || systemctl start mariadb >/dev/null 2>&1 || systemctl start mysql >/dev/null 2>&1 || true
+  else
+    service mariadb start >/dev/null 2>&1 || service mysql start >/dev/null 2>&1 || true
+  fi
+  for _ in $(seq 1 30); do
+    mysqladmin ping >/dev/null 2>&1 && break
+    sleep 1
+  done
+  if ! mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
+    warn "нет доступа к MariaDB от root через сокет (у root задан пароль?)."
+    warn "Создайте пользователя вручную (см. sql/README.md) — до этого сервер работает на файлах"
+  else
+    # SQL идёт через stdin: пароль в аргументах был бы виден в списке процессов.
+    # ALTER USER — чтобы повторный запуск чинил расхождение пароля с flovmp.env.
+    if mysql -u root <<SQL
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';
+ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+ALTER USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+    then
+      if MYSQL_PWD="$DB_PASSWORD" mysql -h 127.0.0.1 -u "$DB_USER" "$DB_NAME" -e "SELECT 1" >/dev/null 2>&1; then
+        DB_OK=1
+        ok "MariaDB: база $DB_NAME, пользователь $DB_USER — подключение проверено"
+        info "Таблицы (аккаунты, баны, администраторы) создаст сам сервер при старте — sql/migrations"
+      else
+        warn "пользователь создан, но подключиться под ним не удалось — сервер уйдёт на файлы"
+      fi
+    else
+      warn "не удалось создать базу/пользователя — сервер уйдёт на файлы"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------
+# 7. Службы и файрвол
+# ---------------------------------------------------------------------
+step "7/8 Службы"
+if [ "$RUN_AS" != "root" ]; then
+  if ! id "$RUN_AS" >/dev/null 2>&1; then
+    useradd --system --home-dir "$INSTALL_DIR" --no-create-home --shell /usr/sbin/nologin "$RUN_AS" 2>/dev/null || \
+      useradd -r -d "$INSTALL_DIR" -M -s /bin/false "$RUN_AS" || die "не удалось создать пользователя $RUN_AS"
+    ok "создан системный пользователь $RUN_AS"
+  fi
+  chown -R "$RUN_AS:$RUN_AS" "$INSTALL_DIR"
+fi
+chmod 700 "$INSTALL_DIR/config"
+
+if [ "$HAS_SYSTEMD" -eq 1 ]; then
+  cat > "/etc/systemd/system/$SERVICE-voice.service" <<UNIT
 [Unit]
-Description=FloV:MP Voice Server (alt:V 16.4.39 external voice)
-After=network.target
-Before=flovmp-game.service
-PartOf=flovmp-game.service
+Description=FloV:MP Voice Server ($SERVICE)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${VOICE_DIR}
-ExecStart=${VOICE_DIR}/altv-voice-server
+User=$RUN_AS
+WorkingDirectory=$INSTALL_DIR/voice
+ExecStart=$INSTALL_DIR/start-voice.sh
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
-EOF
+UNIT
 
-# 2. Игровой сервер
-cat > /etc/systemd/system/flovmp-game.service <<EOF
+  cat > "/etc/systemd/system/$SERVICE.service" <<UNIT
 [Unit]
-Description=FloV:MP Game Server
-After=network.target mariadb.service flovmp-voice.service
-Wants=flovmp-voice.service
+Description=FloV:MP Game Server ($SERVICE)
+After=network-online.target mariadb.service $SERVICE-voice.service
+Wants=network-online.target $SERVICE-voice.service
+StartLimitIntervalSec=0
 
 [Service]
-EnvironmentFile=-${INSTALL_DIR}/flovmp.env
 Type=simple
-WorkingDirectory=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/start.sh
+User=$RUN_AS
+WorkingDirectory=$INSTALL_DIR/server
+ExecStart=$INSTALL_DIR/start.sh
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
-StartLimitIntervalSec=0
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
-EOF
-
-# Права доступа
-chmod +x "${INSTALL_DIR}/start.sh" 2>/dev/null || true
-chmod +x "${INSTALL_DIR}/flovmp-server" 2>/dev/null || true
-chmod +x "${VOICE_DIR}/altv-voice-server" 2>/dev/null || true
-
-systemctl daemon-reload
-systemctl enable flovmp-voice.service flovmp-game.service >/dev/null 2>&1
-
-echo -e "${CYAN}[6/6] Запуск игрового сервера и голосовой связи...${NC}"
-systemctl restart flovmp-game.service
-
-sleep 2
-if systemctl is-active --quiet flovmp-game.service; then
-  echo -e "\n${GREEN}${BOLD}================================================================${NC}"
-  echo -e "${GREEN}${BOLD}✓ СЕРВЕР FLOV:MP УСПЕШНО УСТАНОВЛЕН И ЗАПУЩЕН!${NC}"
-  echo -e "${GREEN}${BOLD}================================================================${NC}"
-  echo -e "  Директория:     ${BOLD}${INSTALL_DIR}${NC}"
-  echo -e "  Лицензия:       ${BOLD}${LICENSE_KEY}${NC} (файл license.flv активен)"
-  echo -e "  Игровой порт:   ${BOLD}UDP ${SERVER_PORT}${NC}"
-  echo -e "  Голосовой порт: ${BOLD}UDP 7797 / 7798${NC} (служба flovmp-voice)"
-  echo -e "  Статус служб:   systemctl status flovmp-game flovmp-voice"
-  echo -e "  Логи сервера:   journalctl -u flovmp-game -f"
-  echo -e "  Перезапуск:     systemctl restart flovmp-game"
-  echo -e "${GREEN}================================================================${NC}\n"
+UNIT
+  reload_units
+  systemctl enable "$SERVICE-voice.service" >/dev/null 2>&1 || warn "не удалось включить автозапуск $SERVICE-voice"
+  systemctl enable "$SERVICE.service" >/dev/null 2>&1 || warn "не удалось включить автозапуск $SERVICE"
+  ok "службы: $SERVICE, $SERVICE-voice (автозапуск включён)"
 else
-  echo -e "\n${YELLOW}! Сервер установлен, но служба ожидает проверки.${NC}"
-  echo -e "Проверьте логи: ${BOLD}journalctl -u flovmp-game -n 50 --no-pager${NC}"
+  warn "systemd не найден — службы не созданы. Запуск вручную: $INSTALL_DIR/start-voice.sh & $INSTALL_DIR/start.sh"
 fi
+
+if [ "$DO_FIREWALL" -eq 1 ]; then
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do ufw allow "$p/udp" >/dev/null; ufw allow "$p/tcp" >/dev/null; done
+    ok "ufw: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+  elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do
+      firewall-cmd --permanent --add-port="$p/udp" >/dev/null; firewall-cmd --permanent --add-port="$p/tcp" >/dev/null
+    done
+    firewall-cmd --reload >/dev/null
+    ok "firewalld: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+  else
+    info "Файрвол не активен. Если у хостинга есть внешний файрвол — откройте $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+  fi
+fi
+
+# ---------------------------------------------------------------------
+# 8. Запуск и проверка
+# ---------------------------------------------------------------------
+STARTED_OK=0
+LOG="$INSTALL_DIR/server/server.log"
+LOG_FROM=0
+# Только строки этого запуска: если движок дописывает лог, старое «Main thread
+# started» от прошлого запуска не должно сойти за успех.
+new_log() {
+  local total
+  [ -f "$LOG" ] || return 0
+  total="$(wc -l < "$LOG")"
+  [ "$total" -ge "$LOG_FROM" ] || LOG_FROM=0
+  tail -n +"$((LOG_FROM + 1))" "$LOG"
+}
+check_started() {
+  for _ in $(seq 1 90); do
+    if ! systemctl is-active "$SERVICE.service" >/dev/null 2>&1; then
+      sleep 1
+      systemctl is-active "$SERVICE.service" >/dev/null 2>&1 || return 1
+    fi
+    if new_log | grep -q "Main thread started"; then
+      new_log | grep -q "Loaded resource .*flovmp-starter" || return 1
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+if [ "$DO_START" -eq 1 ] && [ "$HAS_SYSTEMD" -eq 1 ]; then
+  step "8/8 Запуск и проверка"
+  LOG_FROM="$( [ -f "$LOG" ] && wc -l < "$LOG" || echo 0 )"
+  systemctl restart "$SERVICE-voice.service"
+  systemctl restart "$SERVICE.service"
+  if check_started; then
+    STARTED_OK=1
+    ok "сервер запущен, ресурсы загружены"
+    sleep 5
+    # Подключения к базе мало: упавшая миграция оставляет её без таблиц, и
+    # баны с правами молча уходят в файлы.
+    if new_log | grep -q "Миграции не выполнены"; then
+      warn "база подключена, но миграция схемы упала — таблицы не созданы:"
+      new_log | grep -a "Миграции не выполнены" | sed 's/\x1b\[[0-9;]*m//g' | head -3 | sed 's/^/      /'
+      warn "пришлите server/server.log в поддержку. Пока права и баны хранятся в файлах"
+    elif new_log | grep -q "Права администраторов берутся из базы"; then
+      ok "база данных подключена, таблицы созданы, права администраторов — из базы"
+    elif [ "$DB_OK" -eq 1 ]; then
+      warn "сервер не подключился к базе — см. строки [DB] в server/server.log"
+    fi
+    if new_log | grep -q "Connected to voice server"; then ok "голосовой сервер подключён"
+    else warn "голосовой сервер пока не подключён — проверьте: systemctl status $SERVICE-voice"
+    fi
+  else
+    echo
+    warn "сервер не запустился. Последние строки лога:"
+    tail -n 30 "$INSTALL_DIR/server/server.log" 2>/dev/null || journalctl -u "$SERVICE" -n 30 --no-pager 2>/dev/null || true
+    if [ "$UPGRADE" -eq 1 ] && [ -n "$BACKUP_ARCHIVE" ]; then
+      echo
+      warn "откат на прежнюю версию $OLD_VERSION..."
+      systemctl stop "$SERVICE.service" >/dev/null 2>&1 || true
+      cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | while IFS= read -r f; do [ -n "$f" ] && rm -f "$INSTALL_DIR/$f"; done
+      tar -xzpf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR"
+      [ "$RUN_AS" = "root" ] || chown -R "$RUN_AS:$RUN_AS" "$INSTALL_DIR"
+      systemctl restart "$SERVICE-voice.service" >/dev/null 2>&1 || true
+      systemctl restart "$SERVICE.service" >/dev/null 2>&1 || true
+      die "обновление до $PKG_VERSION не удалось, сервер возвращён на $OLD_VERSION. Пришлите server/server.log в поддержку"
+    fi
+    die "установка завершена, но сервер не стартовал. Лог: $INSTALL_DIR/server/server.log"
+  fi
+else
+  step "8/8 Запуск пропущен"
+  [ "$HAS_SYSTEMD" -eq 1 ] && info "Запуск: systemctl start $SERVICE-voice $SERVICE"
+fi
+
+# ---------------------------------------------------------------------
+# Итог
+# ---------------------------------------------------------------------
+echo
+echo "${C_GREEN}${C_BOLD}=====================================================================${C_OFF}"
+if [ "$UPGRADE" -eq 1 ]; then
+  echo "${C_GREEN}${C_BOLD}  FloV:MP обновлён: $OLD_VERSION → $PKG_VERSION${C_OFF}"
+else
+  echo "${C_GREEN}${C_BOLD}  FloV:MP $PKG_VERSION установлен${C_OFF}"
+fi
+echo "${C_GREEN}${C_BOLD}=====================================================================${C_OFF}"
+echo "  Адрес для подключения:  ${C_BOLD}${PUBLIC_HOST:-<IP сервера>}:$GAME_PORT${C_OFF}"
+echo "  Порты (UDP+TCP):        $GAME_PORT (игра), $VOICE_PUBLIC_PORT (голос)"
+echo "  Папка:                  $INSTALL_DIR"
+echo "  Настройки:              $INSTALL_DIR/server/server.toml, $INSTALL_DIR/config/flovmp.env"
+echo "  Лог:                    tail -f $INSTALL_DIR/server/server.log"
+if [ "$HAS_SYSTEMD" -eq 1 ]; then
+echo "  Управление:             systemctl restart|stop|status $SERVICE"
+fi
+echo
+echo "  ${C_BOLD}Как стать администратором (любой способ):${C_OFF}"
+if [ -n "$OWNER_SC" ]; then
+echo "   • уже выдано: SocialClubId $OWNER_SC — уровень 8"
+fi
+if [ -n "${SETUP_TOKEN:-}" ] && [ -z "$OWNER_SC" ]; then
+echo "   • в игре: /claimowner $SETUP_TOKEN   (одноразовый токен)"
+fi
+if [ "$DB_OK" -eq 1 ]; then
+echo "   • в базе: mysql $DB_NAME -e \"INSERT INTO admins (social_club, level, is_founder) VALUES ('<SocialClubId>', 8, 1)\""
+echo "     права применяются в течение 30 секунд, без перезапуска"
+fi
+echo "   • повторно: sudo $INSTALL_DIR/install.sh --owner-sc <SocialClubId>"
+echo "   SocialClubId игрока виден в логе при его подключении."
+echo
+echo "  Резервная копия базы:   $INSTALL_DIR/scripts/backup-db.sh"
+echo "  Обновление:             распакуйте новый пакет и запустите его ./install.sh"
+echo "${C_GREEN}=====================================================================${C_OFF}"

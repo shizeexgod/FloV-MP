@@ -1,0 +1,11 @@
+# FloV:MP — голосовой сервер.
+# secret обязан совпадать с externalSecret в server/server.toml.
+# port — внутренний (связь с игровым сервером), playerPort — для игроков
+# (откройте его в файрволе, UDP+TCP). playerHost именно 0.0.0.0: за NAT
+# публичного адреса на сетевом интерфейсе нет.
+secret = __FLOVMP_VOICE_SECRET__
+host = "0.0.0.0"
+port = __FLOVMP_VOICE_PORT__
+playerHost = "0.0.0.0"
+playerPort = __FLOVMP_VOICE_PUBLIC_PORT__
+loopback = 0
