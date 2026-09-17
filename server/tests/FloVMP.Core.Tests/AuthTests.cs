@@ -229,6 +229,9 @@ public sealed class AuthServiceTests : IDisposable
         Assert.Equal(AuthOutcome.TwoFaRequired, _svc.Login("Tfa", "secret6", "ip:t").Outcome);
         Assert.Equal(AuthOutcome.WrongCode, _svc.Login("Tfa", "secret6", "ip:t", "111111").Outcome);
         Assert.True(_svc.Login("Tfa", "secret6", "ip:t", goodCode).Ok);
+
+        // вход в игру второй фактор не спрашивает
+        Assert.True(_svc.Login("Tfa", "secret6", "ip:t", totpCode: null, enforceTwoFa: false).Ok);
     }
 
     [Fact]

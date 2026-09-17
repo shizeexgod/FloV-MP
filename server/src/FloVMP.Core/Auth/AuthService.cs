@@ -79,7 +79,8 @@ public sealed class AuthService
         return new AuthResult(AuthOutcome.Ok, "регистрация успешна", acc);
     }
 
-    public AuthResult Login(string username, string password, string throttleKey, string? totpCode = null)
+    /// <param name="enforceTwoFa">false — вход в игру: второй фактор не спрашивается.</param>
+    public AuthResult Login(string username, string password, string throttleKey, string? totpCode = null, bool enforceTwoFa = true)
     {
         PruneAttempts();
 
@@ -125,7 +126,7 @@ public sealed class AuthService
 
         // Второй фактор: пароль верный, но аккаунт под 2FA — нужен код из
         // приложения. Пустой код → просим ввести; неверный → считаем попыткой.
-        if (acc.TwoFaEnabled && !string.IsNullOrEmpty(acc.TotpSecret))
+        if (enforceTwoFa && acc.TwoFaEnabled && !string.IsNullOrEmpty(acc.TotpSecret))
         {
             if (string.IsNullOrWhiteSpace(totpCode))
                 return new AuthResult(AuthOutcome.TwoFaRequired, "введите код из приложения-аутентификатора", acc);

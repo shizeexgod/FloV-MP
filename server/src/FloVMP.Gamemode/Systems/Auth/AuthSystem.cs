@@ -80,9 +80,6 @@ public sealed class AuthSystem
         Alt.OnPlayerDisconnect += OnDisconnect;
         Alt.OnClient("flovmp:client:ready", OnClientReady);
         Alt.OnClient<string, string>("flovmp:auth:login", OnLogin);
-        // Вход с кодом 2FA. Раньше игрок с включённой 2FA не мог войти в игру
-        // вовсе: сервер требовал код, а в форме входа его некуда было ввести.
-        Alt.OnClient<string, string, string>("flovmp:auth:login2fa", OnLogin2fa);
         Alt.OnClient<string, string>("flovmp:auth:register", OnRegister);
     }
 
@@ -206,12 +203,7 @@ if (_authed.TryRemove(player.Id, out var acc))
         }
     });
 
-    private void OnLogin(IPlayer player, string username, string password) => StartLogin(player, username, password, null);
-
-    private void OnLogin2fa(IPlayer player, string username, string password, string code) =>
-        StartLogin(player, username, password, code);
-
-    private void StartLogin(IPlayer player, string username, string password, string? code) => Safe.Run("auth.OnLogin", () =>
+    private void OnLogin(IPlayer player, string username, string password) => Safe.Run("auth.OnLogin", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
         // Один запрос на игрока за раз: иначе спам кнопкой «Войти» плодит
@@ -224,7 +216,10 @@ if (_authed.TryRemove(player.Id, out var acc))
         Task.Run(() =>
         {
             AuthResult r;
-            try { r = _auth.Login(u, pw, key, code); }
+            // Вход в игру — только логин и пароль, без второго фактора: 2FA
+            // относится к лаунчеру/кабинету, а в игровой форме кода нет, и
+            // игрок с включённой 2FA иначе не мог бы войти вовсе.
+            try { r = _auth.Login(u, pw, key, totpCode: null, enforceTwoFa: false); }
             catch (Exception ex)
             {
                 Alt.Log($"[FloV:MP] auth: сбой входа: {ex.Message}");
@@ -258,8 +253,7 @@ if (_authed.TryRemove(player.Id, out var acc))
         var res = item.Result;
         if (!res.Ok || res.Account is null)
         {
-            var needCode = res.Outcome is AuthOutcome.TwoFaRequired or AuthOutcome.WrongCode;
-            player.Emit("flovmp:auth:result", false, res.Message, needCode);
+            player.Emit("flovmp:auth:result", false, res.Message);
             Alt.Log($"[FloV:MP] auth: вход отклонён для {player.Name}: {res.Outcome}");
             return;
         }
@@ -304,7 +298,7 @@ if (_authed.TryRemove(player.Id, out var acc))
             {
                 var reg = _auth.Register(u, pw, key);
                 // При неуспехе регистрации отдаём её результат как есть.
-                r = reg.Ok ? _auth.Login(u, pw, key) : reg;
+                r = reg.Ok ? _auth.Login(u, pw, key, totpCode: null, enforceTwoFa: false) : reg;
                 if (reg.Ok && !r.Ok)
                 {
                     // Зарегистрировали, но войти не смогли — сообщаем причину входа.
