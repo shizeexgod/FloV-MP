@@ -471,13 +471,9 @@ function getPedWeaponLabel(pedScriptId) {
         const wh = native.getSelectedPedWeapon(pedScriptId);
         // Если кулаки или пусто в руках — возвращаем пустую строку (в ESP ничего не пишется)
         if (!wh || wh === 0 || (wh | 0) === (0xA2719263 | 0)) return '';
-        if (WEAPON_NAMES[wh]) return WEAPON_NAMES[wh];
-        const dn = native.getDisplayNameFromWeaponHash(wh);
-        if (dn && dn !== 'NULL') {
-            const label = native.getLabelText(dn);
-            if (label && label !== 'NULL' && label !== dn) return label;
-            return dn;
-        }
+        // Натив может вернуть хэш знаковым числом, а таблица — беззнаковая.
+        const name = WEAPON_NAMES[wh >>> 0];
+        return name || 'Оружие';
     } catch (_) { }
     return '';
 }
@@ -487,7 +483,8 @@ function getVehModelLabel(veh) {
         const model = veh.model;
         const dn = native.getDisplayNameFromVehicleModel(model);
         if (dn && dn !== 'NULL') {
-            const label = native.getLabelText(dn);
+            // GET_LABEL_TEXT в alt:V называется getFilenameForAudioConversation.
+            const label = native.getFilenameForAudioConversation(dn);
             if (label && label !== 'NULL' && label !== dn) return label;
             return dn;
         }
@@ -1469,7 +1466,9 @@ alt.onServer('starter:copyCoords', (x, y, z, yaw) => {
 
 alt.onServer('starter:setWeather', (weatherType) => {
     try {
-        native.setWeatherTypeOverTimePersist(weatherType, 1.5);
+        // Имена нативов чувствительны к регистру: с «OverTime» вызов падал в catch,
+        // и /weather не менял погоду ни у кого.
+        native.setWeatherTypeOvertimePersist(String(weatherType), 15.0);
     } catch (e) { }
 });
 

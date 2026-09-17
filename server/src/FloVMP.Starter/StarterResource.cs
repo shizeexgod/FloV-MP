@@ -132,6 +132,11 @@ public class StarterResource : Resource
 
     private FloVMP.Core.Security.IBanStore? _banStore;
 
+    // Погода и время, выставленные администратором. Рассылка шла только тем, кто
+    // был онлайн в момент команды: вошедший позже видел свою погоду и время.
+    private string? _worldWeather;
+    private (int Hour, int Minute)? _worldTime;
+
     // --- Команды модов -------------------------------------------------------
     // Свой ресурс владельца (папка gamemode) регистрирует чат-команды событием
     //   Alt.Emit("flovmp:commands:register", "имя", "описание", минУровеньАдмина)
@@ -679,6 +684,9 @@ public class StarterResource : Resource
 
         // Сигнал своим ресурсам (gamemode): клиент загружен, игрок заспавнен —
         // можно показывать свой интерфейс, телепортировать, выдавать данные.
+        if (_worldWeather is not null) player.Emit("starter:setWeather", _worldWeather);
+        if (_worldTime is { } wt) player.Emit("starter:setTime", wt.Hour, wt.Minute);
+
         Alt.Emit("flovmp:player:ready", player);
 
         // Приветствие — здесь, а не в OnPlayerConnect: при подключении
@@ -1900,6 +1908,7 @@ public class StarterResource : Resource
                                                 string.Join(", ", ValidWeatherTypes));
                         return;
                     }
+                    _worldWeather = weatherType;
                     Alt.EmitAllClients("starter:setWeather", weatherType);
                     BroadcastChatMessage($"{{38bdf8}}[Погода] Администратор установил погоду: {weatherType}");
                 }
@@ -1925,6 +1934,7 @@ public class StarterResource : Resource
                         SendChatMessage(player, "{ef4444}Час должен быть от 0 до 23, минута — от 0 до 59.");
                         return;
                     }
+                    _worldTime = (hour, minute);
                     Alt.EmitAllClients("starter:setTime", hour, minute);
                     BroadcastChatMessage($"{{38bdf8}}[Время] Администратор установил время: {hour:D2}:{minute:D2}");
                 }
