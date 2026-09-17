@@ -618,13 +618,19 @@ fi
 STARTED_OK=0
 LOG="$INSTALL_DIR/server/server.log"
 LOG_FROM=0
-# Только строки этого запуска: если движок дописывает лог, старое «Main thread
-# started» от прошлого запуска не должно сойти за успех.
+LOG_HEAD=""
+# Только строки этого запуска: старое «Main thread started» от прошлого запуска
+# не должно сойти за успех. Движок при старте перезаписывает лог с нуля — это
+# видно по первой строке (в ней время старта). Раньше смотрели только на число
+# строк: если новый лог успевал дорасти до длины старого, его строки
+# пропускались, и исправное обновление откатывалось как «не запустилось».
 new_log() {
   local total
   [ -f "$LOG" ] || return 0
   total="$(wc -l < "$LOG")"
-  [ "$total" -ge "$LOG_FROM" ] || LOG_FROM=0
+  if [ "$total" -lt "$LOG_FROM" ] || [ "$(head -n 1 "$LOG")" != "$LOG_HEAD" ]; then
+    LOG_FROM=0
+  fi
   tail -n +"$((LOG_FROM + 1))" "$LOG"
 }
 check_started() {
@@ -645,6 +651,7 @@ check_started() {
 if [ "$DO_START" -eq 1 ] && [ "$HAS_SYSTEMD" -eq 1 ]; then
   step "8/8 Запуск и проверка"
   LOG_FROM="$( [ -f "$LOG" ] && wc -l < "$LOG" || echo 0 )"
+  LOG_HEAD="$( [ -f "$LOG" ] && head -n 1 "$LOG" || true )"
   systemctl restart "$SERVICE-voice.service"
   systemctl restart "$SERVICE.service"
   if check_started; then

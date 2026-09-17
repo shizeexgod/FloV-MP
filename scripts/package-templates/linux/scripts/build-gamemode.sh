@@ -71,12 +71,13 @@ fi
 
 echo "==> Готово: server/resources/gamemode"
 if [ "$RESTART" -eq 1 ]; then
-  SERVICE="$(systemctl list-units --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -E '^flovmp[^-]*\.service$' | head -1 || true)"
+  # Служба именно этой установки: на машине может быть несколько серверов.
+  SERVICE="$(grep -lsx "WorkingDirectory=$ROOT/server" /etc/systemd/system/*.service 2>/dev/null | head -1 | xargs -r basename)"
   if [ -n "$SERVICE" ]; then
     systemctl restart "$SERVICE" && echo "==> Служба $SERVICE перезапущена"
   else
     echo "Служба не найдена — перезапустите сервер вручную." >&2
   fi
 else
-  echo "Перезапустите сервер: sudo systemctl restart flovmp"
+  echo "Перезапустите сервер (или соберите с --restart)."
 fi
