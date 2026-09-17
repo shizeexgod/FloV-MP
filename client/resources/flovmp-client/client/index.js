@@ -983,18 +983,20 @@ function startConsoleStats() {
     if (consoleStatsInterval) alt.clearInterval(consoleStatsInterval);
     consoleStatsInterval = alt.setInterval(() => {
         if (!consoleView || !consoleOpen) return;
-        let fps = 60;
+        // Только измеренные значения; -1 — «нет данных», консоль покажет прочерк.
+        let fps = -1;
         try {
-            const ft = native.getFrameTime();
-            if (ft > 0) fps = Math.min(240, Math.round(1.0 / ft));
-        } catch (e) {
-            fps = 60;
-        }
-        let ping = 14;
-        try {
-            if (typeof alt.getPing === 'function') ping = alt.getPing();
+            if (typeof alt.getFps === 'function') fps = Math.round(alt.getFps());
+            else {
+                const ft = native.getFrameTime();
+                if (ft > 0) fps = Math.min(1000, Math.round(1.0 / ft));
+            }
         } catch (e) { }
-        consoleView.emit('flovmp:console:stats', fps, ping, 60);
+        let ping = -1;
+        try {
+            if (typeof alt.getPing === 'function') ping = Math.round(alt.getPing());
+        } catch (e) { }
+        consoleView.emit('flovmp:console:stats', fps, ping);
 
         try {
             const local = alt.Player.local;
