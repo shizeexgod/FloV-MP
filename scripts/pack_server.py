@@ -496,7 +496,11 @@ def archive(stage, target_os, out_dir):
 def main():
     ap = argparse.ArgumentParser(description="Сборка серверного пакета FloV:MP")
     ap.add_argument("--os", choices=["linux", "windows", "all"], default="all")
-    ap.add_argument("--altv-backup", default=r"C:\ViMP backup\backup-altv")
+    # Движок: папка engine/ рядом с исходниками, иначе локальный бэкап.
+    default_engine = os.path.join(REPO, "engine")
+    if not os.path.isdir(default_engine):
+        default_engine = r"C:\ViMP backup\backup-altv"
+    ap.add_argument("--altv-backup", default=default_engine)
     ap.add_argument("--branch", default="release")
     ap.add_argument("--out", default=os.path.join(REPO, "dist", "server"))
     ap.add_argument("--version", default=None)
@@ -512,6 +516,10 @@ def main():
         fail("не найден бэкап движка: " + args.altv_backup)
 
     targets = ["linux", "windows"] if args.os == "all" else [args.os]
+    connector_project = os.path.join(REPO, "launcher", "src", "FloVMP.Connect", "FloVMP.Connect.csproj")
+    if not args.no_connector and not os.path.isfile(connector_project):
+        log("[build] коннектор игрока (launcher/src/FloVMP.Connect) отсутствует — пакет без tools/connector")
+        args.no_connector = True
     os.makedirs(args.out, exist_ok=True)
     starter, connector, host = publish_dotnet(os.path.join(args.out, ".publish"), args.skip_build,
                                               "windows" in targets and not args.no_connector,
