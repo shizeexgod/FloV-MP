@@ -112,7 +112,7 @@ public static class ServerConfig
         return null;
     }
 
-    internal static string SetEnvValue(string text, string key, string value)
+    public static string SetEnvValue(string text, string key, string value)
     {
         var pattern = new Regex("(?m)^" + Regex.Escape(key) + "=.*$");
         if (pattern.IsMatch(text)) return pattern.Replace(text, key + "=" + value, 1);

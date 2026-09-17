@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FloVMP.Core\FloVMP.Core.csproj" />
+    <ProjectReference Include="..\..\src\FloVMP.ServerHost\FloVMP.ServerHost.csproj" />
   </ItemGroup>
 
 </Project>
