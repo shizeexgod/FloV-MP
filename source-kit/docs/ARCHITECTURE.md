@@ -30,8 +30,8 @@
 - голосовой канал (пространственный, 25 м) и мут голоса;
 - проверка лицензии и лимит игроков;
 - консоль сервера: `setadmin`, `reloadadmins`, `ban`, `unban`, `bans`, `kick`, `online`, `license`;
-- API для своих ресурсов: события `flovmp:commands:register`, `flovmp:command`,
-  `flovmp:player:ready`, `flovmp:platform:ready` (см. `DEVELOPMENT.md`).
+- API для своих ресурсов: команды, точка появления, возрождение, события
+  готовности и смерти игрока (см. `DEVELOPMENT.md`).
 
 ### RP-режим (flovmp-core)
 

@@ -30,6 +30,9 @@ python scripts/pack_server.py --skip-build      # только переклад�
 | `flovmp:command` | платформа → ресурс | `IPlayer`, имя команды, строка аргументов |
 | `flovmp:player:ready` | платформа → ресурс | `IPlayer` |
 | `flovmp:platform:ready` | платформа → ресурсы | — |
+| `flovmp:player:died` | платформа → ресурс | `IPlayer`, убийца (`IEntity`), хэш оружия |
+| `flovmp:settings:spawn` | ресурс → платформа | x, y, z, поворот (`float`) — точка появления |
+| `flovmp:settings:respawn` | ресурс → платформа | `bool`: `false` — возрождение делает ресурс |
 
 Метаданные игрока: `adminLevel` (stream synced) — текущий уровень на дежурстве.
 

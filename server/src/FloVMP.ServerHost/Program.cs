@@ -61,12 +61,23 @@ catch (Exception ex)
     return Pause(2);
 }
 
-var env = ServerConfig.LoadEnv(root);
 var serverToml = Path.Combine(serverDir, "server.toml");
-var name = ServerConfig.ReadToml(serverToml, "name") ?? "FloV:MP Server";
-var port = int.TryParse(ServerConfig.ReadToml(serverToml, "port"), out var p) ? p : 7788;
-var voicePort = ServerConfig.ReadToml(serverToml, "externalPublicPort", "voice");
-var voiceHost = ServerConfig.ReadToml(serverToml, "externalPublicHost", "voice");
+var env = new Dictionary<string, string>();
+var name = "FloV:MP Server";
+var port = 7788;
+string? voicePort = null, voiceHost = null;
+
+// Настройки читаются перед каждым запуском: при перезапуске клавишей R
+// правки flovmp.env и server.toml применяются без закрытия окна.
+void ReadSettings()
+{
+    env = ServerConfig.LoadEnv(root);
+    name = ServerConfig.ReadToml(serverToml, "name") ?? "FloV:MP Server";
+    port = int.TryParse(ServerConfig.ReadToml(serverToml, "port"), out var p) ? p : 7788;
+    voicePort = ServerConfig.ReadToml(serverToml, "externalPublicPort", "voice");
+    voiceHost = ServerConfig.ReadToml(serverToml, "externalPublicHost", "voice");
+}
+ReadSettings();
 
 Console.Title = $"FloV:MP Server — {name} :{port}";
 
@@ -87,6 +98,9 @@ Console.CancelKeyPress += (_, e) =>
 
 while (true)
 {
+    ReadSettings();
+    Workspace.EnsureResourceEnabled(root, "gamemode");
+    Console.Title = $"FloV:MP Server — {name} :{port}";
     if (!PreflightOk()) return Pause(1);
 
     PrintBanner();

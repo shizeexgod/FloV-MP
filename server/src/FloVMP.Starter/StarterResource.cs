@@ -19,8 +19,13 @@ namespace FloVMP.Starter;
 /// </summary>
 public class StarterResource : Resource
 {
-    private static readonly Position DefaultSpawnPosition = new(198.8f, -935.6f, 30.7f); // Легион Сквер
-    private static readonly float DefaultSpawnHeading = 140f;
+    // Точка появления (по умолчанию Легион-сквер). Свой ресурс меняет её событием
+    //   Alt.Emit("flovmp:settings:spawn", x, y, z, heading)
+    private Position _spawnPosition = new(198.8f, -935.6f, 30.7f);
+    private float _spawnHeading = 140f;
+    // false — возрождением после смерти управляет свой ресурс
+    //   (Alt.Emit("flovmp:settings:respawn", false) + событие flovmp:player:died).
+    private bool _platformRespawn = true;
     private static readonly uint DefaultPlayerModel = Alt.Hash("mp_m_freemode_01");
 
     // Пароль админ-дежурства. НЕТ небезопасного дефолта: раньше в исходниках
@@ -389,6 +394,8 @@ public class StarterResource : Resource
         Alt.OnClient<IPlayer, bool>("starter:toggleNoClip", OnToggleNoClip);
         Alt.OnClient<IPlayer, bool>("flovmp:admin:noclip", OnToggleNoClip);
         Alt.OnServer<string, string, int>("flovmp:commands:register", OnRegisterModCommand);
+        Alt.OnServer<float, float, float, float>("flovmp:settings:spawn", OnSpawnSetting);
+        Alt.OnServer<bool>("flovmp:settings:respawn", OnRespawnSetting);
 
         // Ресурсы, стартовавшие раньше платформы, по этому событию повторяют регистрацию команд.
         Alt.Emit("flovmp:platform:ready");
@@ -598,8 +605,8 @@ public class StarterResource : Resource
 
         // Чистый спавн игрока
         player.Model = DefaultPlayerModel;
-        player.Spawn(DefaultSpawnPosition, 0);
-        player.Rotation = new Rotation(0, 0, DefaultSpawnHeading);
+        player.Spawn(_spawnPosition, 0);
+        player.Rotation = new Rotation(0, 0, _spawnHeading);
         player.Health = 200;
         player.MaxHealth = 200;
         player.Armor = 100;
@@ -648,8 +655,8 @@ public class StarterResource : Resource
         // осмысленна ровно один раз за подключение, повторы игнорируем.
         if (!_clientReady.TryAdd(player.Id, true)) return;
 
-        player.Emit("starter:initClient", DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
-        player.Emit("flovmp:client:welcome", player.Name, 0, DefaultSpawnPosition.X, DefaultSpawnPosition.Y, DefaultSpawnPosition.Z);
+        player.Emit("starter:initClient", _spawnPosition.X, _spawnPosition.Y, _spawnPosition.Z);
+        player.Emit("flovmp:client:welcome", player.Name, 0, _spawnPosition.X, _spawnPosition.Y, _spawnPosition.Z);
 
         // БЕЗ БЭКДОРОВ (см. комментарий в OnPlayerConnect): ни захардкоженного
         // ника, ни захардкоженного SocialClubId.
@@ -993,7 +1000,31 @@ public class StarterResource : Resource
     {
         if (player == null || !player.Exists) return;
         Alt.Log($"[FloV:MP Starter] Игрок {player.Name} (ID: {player.Id}) погиб.");
-        _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
+        Alt.Emit("flovmp:player:died", player, killer, weapon);
+        if (_platformRespawn)
+            _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
+    }
+
+    private void OnSpawnSetting(float x, float y, float z, float heading)
+    {
+        if (!float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) || !float.IsFinite(heading) ||
+            Math.Abs(x) > 25000f || Math.Abs(y) > 25000f || Math.Abs(z) > 5000f)
+        {
+            Alt.LogWarning("[FloV:MP] [Mods] flovmp:settings:spawn: недопустимые координаты — точка появления не изменена.");
+            return;
+        }
+        _spawnPosition = new Position(x, y, z);
+        _spawnHeading = heading;
+        Alt.Log(FormattableString.Invariant($"[FloV:MP] [Mods] точка появления: {x:F1}, {y:F1}, {z:F1}"));
+    }
+
+    private void OnRespawnSetting(bool platformRespawn)
+    {
+        _platformRespawn = platformRespawn;
+        if (!platformRespawn) _pendingRespawns.Clear();
+        Alt.Log(platformRespawn
+            ? "[FloV:MP] [Mods] возрождение после смерти — платформой"
+            : "[FloV:MP] [Mods] возрождение после смерти — своим ресурсом (событие flovmp:player:died)");
     }
 
     /// <summary>
@@ -1095,7 +1126,7 @@ public class StarterResource : Resource
 
                     try
                     {
-                        p.Spawn(DefaultSpawnPosition, 0);
+                        p.Spawn(_spawnPosition, 0);
                         p.Health = 200;
                         p.Armor = 100;
                         p.Emit("starter:revive");

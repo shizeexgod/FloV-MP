@@ -21,8 +21,8 @@ public sealed class GamemodeResource : Resource
 
         // Команды регистрируются в платформе. Если платформа стартует позже —
         // она сообщит об этом событием flovmp:platform:ready.
-        Alt.OnServer("flovmp:platform:ready", RegisterCommands);
-        RegisterCommands();
+        Alt.OnServer("flovmp:platform:ready", ConfigurePlatform);
+        ConfigurePlatform();
 
         // Пример события от вашего клиентского скрипта (client/index.js).
         Alt.OnClient<IPlayer, string>("gamemode:hello", (player, text) =>
@@ -34,6 +34,17 @@ public sealed class GamemodeResource : Resource
     public override void OnStop()
     {
         Alt.Log("[Gamemode] ресурс остановлен");
+    }
+
+    private static void ConfigurePlatform()
+    {
+        // Своя точка появления (раскомментируйте и укажите координаты: /pos в игре):
+        // Alt.Emit("flovmp:settings:spawn", -1037.7f, -2737.8f, 20.2f, 330f);
+
+        // Возрождение после смерти своим кодом (событие flovmp:player:died):
+        // Alt.Emit("flovmp:settings:respawn", false);
+
+        RegisterCommands();
     }
 
     private static void RegisterCommands()
