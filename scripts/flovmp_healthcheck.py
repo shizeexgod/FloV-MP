@@ -348,7 +348,8 @@ def check_event_contract(rep):
                 continue
         return found
 
-    server_emits = scan(server_dir, {".cs"}, r'\.Emit\(\s*"([^"]+)"')
+    # Alt.Emit — событие между серверными ресурсами (API для модов), не клиенту.
+    server_emits = scan(server_dir, {".cs"}, r'(?<!Alt)\.Emit\(\s*"([^"]+)"')
     server_listens = scan(server_dir, {".cs"}, r'OnClient(?:<[^>]*>)?\(\s*"([^"]+)"')
     client_emits = scan(client_dir, {".js"}, r"emitServer\(\s*'([^']+)'")
     client_listens = scan(client_dir, {".js"}, r"onServer\(\s*'([^']+)'")
