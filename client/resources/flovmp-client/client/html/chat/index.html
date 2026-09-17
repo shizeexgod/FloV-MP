@@ -525,7 +525,9 @@
   let dimTimer = null;
   let isInputOpen = false;
 
-  const AUTOCOMPLETE_COMMANDS = [
+  // Список по умолчанию (RP-режим). Базовая платформа присылает свой —
+  // событием flovmp:chat:commands: только существующие и доступные игроку команды.
+  let AUTOCOMPLETE_COMMANDS = [
     { cmd: 'help', desc: 'Список всех команд' },
     { cmd: 'pos', desc: 'Текущие координаты игрока' },
     { cmd: 'me', desc: 'Действие от первого лица (/me <действие>)' },
@@ -767,16 +769,25 @@
     let html = '';
     filteredAc.forEach((item, idx) => {
       html += `
-        <div class="ac-item ${idx === 0 ? 'selected' : ''}" onmousedown="event.preventDefault(); applyAcItem('${item.cmd}')">
+        <div class="ac-item ${idx === 0 ? 'selected' : ''}" data-idx="${idx}">
           <div style="display: flex; align-items: center; gap: 6px;">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-            <strong>/${item.cmd}</strong>
+            <strong>/${esc(item.cmd)}</strong>
           </div>
-          <span class="ac-desc">${item.desc}</span>
+          <span class="ac-desc">${esc(item.desc)}</span>
         </div>
       `;
     });
     acPopup.innerHTML = html;
+    // Обработчик по индексу, а не строкой в onmousedown: имя команды не
+    // попадает в HTML-атрибут как код.
+    acPopup.querySelectorAll('.ac-item').forEach(function (el) {
+      el.addEventListener('mousedown', function (ev) {
+        ev.preventDefault();
+        const item = filteredAc[Number(el.dataset.idx)];
+        if (item) applyAcItem(item.cmd);
+      });
+    });
     acPopup.style.display = 'flex';
   }
 
@@ -897,6 +908,17 @@
     });
     alt.on("flovmp:chat:closeinput", function () {
       closeInput(false);
+    });
+    alt.on("flovmp:chat:commands", function (json) {
+      try {
+        const list = JSON.parse(String(json));
+        if (Array.isArray(list)) {
+          AUTOCOMPLETE_COMMANDS = list
+            .filter(function (c) { return c && typeof c.cmd === 'string'; })
+            .map(function (c) { return { cmd: c.cmd, desc: String(c.desc || '') }; });
+          hideAutocomplete();
+        }
+      } catch (e) { }
     });
     alt.on("flovmp:chat:clear", function () {
       clearLogs();

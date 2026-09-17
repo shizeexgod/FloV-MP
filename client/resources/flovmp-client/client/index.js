@@ -62,6 +62,15 @@ let loadingSafetyTimer = null;
 // владельцу с токеном настройки. Без буфера такие сообщения терялись бы молча.
 // Размер ограничен: подключение не должно копить память бесконечно.
 const PENDING_CHAT_LIMIT = 50;
+
+// Список команд для подсказок в чате (присылает сервер по уровню прав игрока).
+let chatCommandsJson = null;
+alt.onServer('flovmp:chat:commands', (json) => {
+    chatCommandsJson = String(json || '[]');
+    if (chatView) {
+        try { chatView.emit('flovmp:chat:commands', chatCommandsJson); } catch (e) { }
+    }
+});
 const pendingChat = [];
 
 // HUD (здоровье, броня, деньги, время, онлайн). Сервер (HudSystem, полный
@@ -838,6 +847,9 @@ export function openChat() {
     // Выдаём накопленное, когда страница чата реально загрузилась: emit до
     // загрузки страницы уходит в никуда.
     chatView.on('load', () => {
+        if (chatCommandsJson !== null) {
+            try { chatView.emit('flovmp:chat:commands', chatCommandsJson); } catch (e) { }
+        }
         while (pendingChat.length > 0) {
             const m = pendingChat.shift();
             try { chatView.emit('flovmp:chat:msg', m.kind, m.author, m.text); } catch (e) { }

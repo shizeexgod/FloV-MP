@@ -159,6 +159,9 @@ public class StarterResource : Resource
         // повтор той же команды не шумит в логе.
         if (_modCommands.TryGetValue(name, out var existing) && existing == entry) return;
         _modCommands[name] = entry;
+        // Уже подключённым игрокам — обновлённые подсказки в чате.
+        foreach (var online in Alt.GetAllPlayers())
+            if (online.Exists && _clientReady.ContainsKey(online.Id)) SendChatCommands(online);
         Alt.Log($"[FloV:MP] [Mods] зарегистрирована команда /{name}" + (minLevel > 0 ? $" (администраторы {minLevel}+)" : ""));
     }
 
@@ -214,6 +217,61 @@ public class StarterResource : Resource
     private readonly ConcurrentDictionary<string, (int Failures, DateTime LockedUntil)> _aloginFailures = new();
 
     private static string AloginKey(IPlayer p) => p.SocialClubId > 0 ? "sc:" + p.SocialClubId : "id:" + p.Id;
+
+    // Команды для подсказок в чате: (имя, описание, мин. уровень на дежурстве).
+    // -1 — показывать тем, у кого есть назначенные права (даже не на дежурстве).
+    private static readonly (string Cmd, string Desc, int Level)[] ChatCommandHints =
+    {
+        ("help", "список команд", 0), ("me", "действие персонажа", 0), ("do", "описание ситуации", 0),
+        ("b", "OOC-сообщение", 0), ("s", "крикнуть", 0), ("w", "шёпот игроку: /w <id> <текст>", 0),
+        ("pos", "координаты", 0), ("engine", "двигатель (2)", 0), ("lock", "замок транспорта (L)", 0),
+        ("clear", "очистить чат", 0),
+        ("alogin", "вход администратора: /alogin <пароль>", -1), ("aduty", "дежурство администратора", -1),
+        ("a", "админ-чат", 1), ("tpm", "телепорт на метку (F5)", 1), ("noclip", "полёт (F4)", 1),
+        ("esp", "админ-видение: /esp [0-3] (F3)", 1), ("car", "транспорт: /car [модель]", 1),
+        ("fix", "починить транспорт", 1), ("dv", "удалить транспорт", 1), ("gun", "оружие: /gun <название> [патроны]", 1),
+        ("disarm", "забрать оружие: /disarm [id]", 1), ("tp", "телепорт: /tp <x> <y> <z>", 1),
+        ("goto", "к игроку: /goto <id>", 1), ("gethere", "игрока к себе: /gethere <id>", 1),
+        ("freeze", "заморозить: /freeze <id>", 1), ("unfreeze", "разморозить: /unfreeze <id>", 1),
+        ("revive", "реанимировать: /revive [id]", 1), ("heal", "здоровье и броня", 1), ("armor", "броня: /armor [0-100]", 1),
+        ("god", "бессмертие", 1), ("kill", "умереть", 1), ("weather", "погода: /weather <тип>", 1),
+        ("time", "время: /time <час> [мин]", 1), ("speed", "скорость бега: /speed <1.0-1.49>", 1),
+        ("setdim", "измерение: /setdim <номер>", 1), ("skin", "скин: /skin <модель>", 1),
+        ("kick", "исключить: /kick <id> [причина]", 2), ("bans", "список блокировок", 2), ("vmute", "голосовой мут: /vmute <id>", 2),
+        ("ban", "блокировка: /ban <id> <дней> [причина]", 3),
+        ("banip", "бан по IP: /banip <id> <дней> [причина]", 4), ("hwidban", "бан по железу: /hwidban <id> <дней> [причина]", 4),
+        ("unban", "снять блокировку: /unban <ник|IP|HWID|ID>", 4),
+        ("hardban", "навсегда: /hardban <id> <причина>", 6),
+        ("setadmin", "права: /setadmin <id> <0-8>", 8),
+    };
+
+    /// <summary>Уровень на дежурстве — клиенту (консоль F8, NoClip/ESP), в метаданные и список подсказок чата.</summary>
+    private void PushAdminLevel(IPlayer player, int level)
+    {
+        if (player is null || !player.Exists) return;
+        player.Emit("flovmp:console:setAdmin", level);
+        player.SetStreamSyncedMetaData("adminLevel", level);
+        SendChatCommands(player);
+    }
+
+    private void SendChatCommands(IPlayer player)
+    {
+        var assigned = GetAssignedAdminRank(player) > 0;
+        var list = new List<object>();
+        foreach (var (cmd, desc, level) in ChatCommandHints)
+        {
+            if (level == -1 ? assigned : level == 0 || IsAdmin(player, level))
+                list.Add(new { cmd, desc });
+        }
+        if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
+            list.Add(new { cmd = "claimowner", desc = "стать владельцем: /claimowner <токен>" });
+        foreach (var (name, info) in _modCommands.OrderBy(kv => kv.Key))
+        {
+            if (info.MinLevel == 0 || IsAdmin(player, info.MinLevel))
+                list.Add(new { cmd = name, desc = info.Description });
+        }
+        player.Emit("flovmp:chat:commands", System.Text.Json.JsonSerializer.Serialize(list));
+    }
 
     public int GetAssignedAdminRank(IPlayer player)
     {
@@ -577,8 +635,7 @@ public class StarterResource : Resource
         }
 
         var initLvl = _adminLevels.TryGetValue(player.Id, out var curLvl) ? curLvl : 0;
-        player.Emit("flovmp:console:setAdmin", initLvl);
-        player.SetStreamSyncedMetaData("adminLevel", initLvl);
+        PushAdminLevel(player, initLvl);
     }
 
     private void OnClientReady(IPlayer player)
@@ -606,8 +663,7 @@ public class StarterResource : Resource
         }
 
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
-        player.Emit("flovmp:console:setAdmin", lvl);
-        player.SetStreamSyncedMetaData("adminLevel", lvl);
+        PushAdminLevel(player, lvl);
 
         // Сигнал своим ресурсам (gamemode): клиент загружен, игрок заспавнен —
         // можно показывать свой интерфейс, телепортировать, выдавать данные.
@@ -674,8 +730,7 @@ public class StarterResource : Resource
                 {
                     SetAssignedAdminRank(matchedPlayer, newLvl);
                     _adminLevels[matchedPlayer.Id] = newLvl;
-                    matchedPlayer.Emit("flovmp:console:setAdmin", newLvl);
-                    matchedPlayer.SetStreamSyncedMetaData("adminLevel", newLvl);
+                    PushAdminLevel(matchedPlayer, newLvl);
                     SendChatMessage(matchedPlayer, $"{{34d399}}[Admin] Консоль сервера назначила вам уровень прав {newLvl}.");
                     Alt.Log($"[Console] Игроку [{matchedPlayer.Id}] {matchedPlayer.Name} успешно назначен уровень {newLvl}.");
                 }
@@ -962,16 +1017,14 @@ public class StarterResource : Resource
                 _adminAuthed.TryRemove(playerId, out _);
                 DestroyAdminVehicle(playerId);
                 if (_godModes.TryRemove(playerId, out var hadGod) && hadGod) p.Emit("starter:setGodMode", false);
-                p.Emit("flovmp:console:setAdmin", 0);
-                p.SetStreamSyncedMetaData("adminLevel", 0);
+                PushAdminLevel(p, 0);
                 SendChatMessage(p, "{ef4444}[Admin] Ваши права администратора отозваны.");
                 Alt.Log($"[FloV:MP Admin] Права отозваны: [{p.Id}] {p.Name} (SC {p.SocialClubId}).");
             }
             else
             {
                 _adminLevels[playerId] = assigned;
-                p.Emit("flovmp:console:setAdmin", assigned);
-                p.SetStreamSyncedMetaData("adminLevel", assigned);
+                PushAdminLevel(p, assigned);
                 SendChatMessage(p, $"{{f59e0b}}[Admin] Ваш уровень прав изменён: {assigned}.");
                 Alt.Log($"[FloV:MP Admin] Уровень понижен до {assigned}: [{p.Id}] {p.Name}.");
             }
@@ -1232,8 +1285,7 @@ public class StarterResource : Resource
                 {
                     SetAssignedAdminRank(player, 8);
                     _adminLevels[player.Id] = 8;
-                    player.Emit("flovmp:console:setAdmin", 8);
-                    player.SetStreamSyncedMetaData("adminLevel", 8);
+                    PushAdminLevel(player, 8);
                     SendChatMessage(player, $"{{34d399}}[FloV:MP Security] {claimMsg}");
                     Alt.Log($"[Security Alert] Игрок {player.Name} (ID: {player.Id}) успешно активировал права Основателя через токен.");
                 }
@@ -1266,8 +1318,7 @@ public class StarterResource : Resource
                     _aloginFailures.TryRemove(aKey, out _);
                     _adminAuthed[player.Id] = true;
                     _adminLevels[player.Id] = assignedRank;
-                    player.Emit("flovmp:console:setAdmin", assignedRank);
-                    player.SetStreamSyncedMetaData("adminLevel", assignedRank);
+                    PushAdminLevel(player, assignedRank);
                     SendChatMessage(player, $"{{34d399}}[FloV:MP Security] Авторизация успешна! Вход на дежурство выполнен (Уровень {assignedRank}). Админ-функции и F8 разблокированы.");
                     Alt.Log($"[Security] Администратор {player.Name} (ID: {player.Id}, Уровень: {assignedRank}) заступил на дежурство.");
                 }
@@ -1296,8 +1347,7 @@ public class StarterResource : Resource
                 if (isDuty)
                 {
                     _adminLevels[player.Id] = 0;
-                    player.Emit("flovmp:console:setAdmin", 0);
-                    player.SetStreamSyncedMetaData("adminLevel", 0);
+                    PushAdminLevel(player, 0);
                     SendChatMessage(player, "{fde047}[Admin]{ffffff} Вы вышли с дежурства администрации.");
                 }
                 else
@@ -1319,8 +1369,7 @@ public class StarterResource : Resource
                     }
 
                     _adminLevels[player.Id] = dRank;
-                    player.Emit("flovmp:console:setAdmin", dRank);
-                    player.SetStreamSyncedMetaData("adminLevel", dRank);
+                    PushAdminLevel(player, dRank);
                     SendChatMessage(player, $"{{34d399}}[Admin]{{ffffff}} Вы заступили на дежурство (Уровень {dRank}).");
                 }
                 break;
@@ -1351,8 +1400,7 @@ public class StarterResource : Resource
                 }
                 SetAssignedAdminRank(target, targetLvl);
                 _adminLevels[target.Id] = targetLvl;
-                target.Emit("flovmp:console:setAdmin", targetLvl);
-                target.SetStreamSyncedMetaData("adminLevel", targetLvl);
+                PushAdminLevel(target, targetLvl);
                 SendChatMessage(target, $"{{34d399}}[Admin] Администратор {player.Name} установил вам уровень доступа {targetLvl}.");
                 SendChatMessage(player, $"{{34d399}}Установлен уровень {targetLvl} для {target.Name}.");
                 break;
