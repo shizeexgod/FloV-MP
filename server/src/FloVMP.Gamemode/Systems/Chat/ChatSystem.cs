@@ -1701,14 +1701,19 @@ public sealed class ChatSystem
     {
         "freeze", "kick", "mute", "jail", "ban", "banip", "slap", "warn", "bansc",
         "hwidban", "macban", "hardban", "takemoney", "sethp", "setarmor", "setskin",
-        "setdim", "gethere", "tp", "tpm", "makeadmin", "clearadmin", "setadminlevel",
-        "speed", "weather", "time", "skin", "promote", "setadmin",
+        "setdim", "gethere", "makeadmin", "clearadmin", "setadminlevel",
+        // tp, tpm, weather, time — без цели-игрока: первый аргумент у них число
+        // или название, и раньше «/time 8» блокировалось, если в сети был старший
+        // администратор с ID 8.
+        "speed", "skin", "promote", "setadmin",
     };
 
     private void HandleAdminCommand(IPlayer player, Account acc, string cmd, string[] args, AdminCommandDef def)
     {
         // Защита иерархии: нельзя трогать равного/старшего админа.
-        if (RankSensitiveCmds.Contains(cmd) && args.Length > 0 && acc.AdminLevel < 8)
+        // У /speed цель — первый аргумент только в форме «/speed <игрок> <множитель>».
+        var targetsPlayer = RankSensitiveCmds.Contains(cmd) && !(cmd == "speed" && args.Length < 2);
+        if (targetsPlayer && args.Length > 0 && acc.AdminLevel < 8)
         {
             var victim = FindPlayer(args[0]) is { } vp ? _accountOf(vp) : _findAccountByName?.Invoke(args[0]);
             if (victim != null && victim.Id != acc.Id && victim.AdminLevel >= acc.AdminLevel)
@@ -2187,7 +2192,7 @@ public sealed class ChatSystem
                 break;
 
             case "sethp":
-                if (args.Length < 2 || !ushort.TryParse(args[1], out var hp))
+                if (args.Length < 2 || !ushort.TryParse(args[1], out var hp) || hp > 200)
                 {
                     SendSystem(player, "Использование: /sethp <ID/ник> <кол-во 0-200>");
                     return;
@@ -2206,7 +2211,7 @@ public sealed class ChatSystem
                 break;
 
             case "setarmor":
-                if (args.Length < 2 || !ushort.TryParse(args[1], out var armor))
+                if (args.Length < 2 || !ushort.TryParse(args[1], out var armor) || armor > 100)
                 {
                     SendSystem(player, "Использование: /setarmor <ID/ник> <кол-во 0-100>");
                     return;
@@ -2316,9 +2321,19 @@ public sealed class ChatSystem
                 break;
 
             case "tp":
-                if (args.Length < 3 || !float.TryParse(args[0], out var x) || !float.TryParse(args[1], out var y) || !float.TryParse(args[2], out var z))
+                // Координаты — всегда с точкой, независимо от языка системы сервера.
+                var inv = System.Globalization.CultureInfo.InvariantCulture;
+                var fs = System.Globalization.NumberStyles.Float;
+                if (args.Length < 3 || !float.TryParse(args[0], fs, inv, out var x) || !float.TryParse(args[1], fs, inv, out var y) ||
+                    !float.TryParse(args[2], fs, inv, out var z))
                 {
                     SendSystem(player, "Использование: /tp <X> <Y> <Z>");
+                    return;
+                }
+                if (!float.IsFinite(x) || !float.IsFinite(y) || !float.IsFinite(z) ||
+                    Math.Abs(x) > 25000f || Math.Abs(y) > 25000f || Math.Abs(z) > 5000f)
+                {
+                    SendSystem(player, "Недопустимые координаты.");
                     return;
                 }
                 player.Position = new Position(x, y, z);
@@ -2350,11 +2365,21 @@ public sealed class ChatSystem
                 uint finalWeatherId = 0;
                 if (uint.TryParse(args[0], out var parsedWId))
                 {
+                    if (parsedWId > 14)
+                    {
+                        SendSystem(player, "Погода: номер 0–14 или название.");
+                        return;
+                    }
                     finalWeatherId = parsedWId;
                 }
                 else
                 {
                     var wName = args[0].ToUpperInvariant();
+                    if (!WeatherIds.ContainsKey(wName))
+                    {
+                        SendSystem(player, "Неизвестная погода. Доступно: " + string.Join(", ", WeatherIds.Keys));
+                        return;
+                    }
                     finalWeatherId = wName switch
                     {
                         "EXTRASUNNY" => 0,
@@ -2375,9 +2400,10 @@ public sealed class ChatSystem
                         _ => 0
                     };
                 }
+                var weatherName = WeatherIds.First(kv => kv.Value == finalWeatherId).Key;
                 Alt.EmitAllClients("flovmp:env:weather", finalWeatherId);
-                Alt.EmitAllClients("starter:setWeather", args[0].ToUpperInvariant());
-                SendSystem(player, $"Погода сервера установлена на: {args[0].ToUpperInvariant()} (ID {finalWeatherId}).");
+                Alt.EmitAllClients("starter:setWeather", weatherName);
+                SendSystem(player, $"Погода сервера установлена на: {weatherName} (ID {finalWeatherId}).");
                 break;
 
             case "settime":
@@ -2388,6 +2414,11 @@ public sealed class ChatSystem
                     return;
                 }
                 var m = args.Length > 1 && int.TryParse(args[1], out var parsedM) ? parsedM : 0;
+                if (h is < 0 or > 23 || m is < 0 or > 59)
+                {
+                    SendSystem(player, "Час должен быть от 0 до 23, минута — от 0 до 59.");
+                    return;
+                }
                 Alt.EmitAllClients("flovmp:env:time", h, m);
                 Alt.EmitAllClients("starter:setTime", h, m);
                 SendSystem(player, $"Время сервера установлено на {h:D2}:{m:D2}.");
@@ -2398,7 +2429,12 @@ public sealed class ChatSystem
                 if (args.Length < 2) { SendSystem(player, "Использование: /skin <ID/ник> <модель_скина>"); return; }
                 var skinTarget = FindPlayer(args[0]);
                 if (skinTarget == null) { SendSystem(player, "Игрок не найден."); return; }
-                var skinModel = args[1];
+                var skinModel = new string(args[1].Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
+                if (skinModel.Length is 0 or > 40)
+                {
+                    SendSystem(player, "Использование: /skin <ID/ник> <модель_скина>");
+                    return;
+                }
                 try
                 {
                     skinTarget.Model = Alt.Hash(skinModel);
@@ -2449,7 +2485,11 @@ public sealed class ChatSystem
                 if (gAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
                 if (_economy != null)
                 {
-                    _economy.TryGiveCash(gAcc, gAmt, $"Выдано админом {acc.Username}", out _);
+                    if (!_economy.TryGiveCash(gAcc, gAmt, $"Выдано админом {acc.Username}", out var giveErr))
+                    {
+                        SendSystem(player, $"Не выдано: {giveErr}");
+                        return;
+                    }
                     _saveAccount?.Invoke(gAcc);
                     SendSystem(player, $"Выдано {gAmt:N0} руб. игроку {gTarget.Name}.");
                     SendSystem(gTarget, $"Администратор {acc.Username} выдал вам {gAmt:N0} руб.");
@@ -2469,7 +2509,11 @@ public sealed class ChatSystem
                 if (takeAcc == null) { SendSystem(player, "Аккаунт игрока не найден."); return; }
                 if (_economy != null)
                 {
-                    _economy.TryTakeCash(takeAcc, tAmt, $"Изъято админом {acc.Username}", out _);
+                    if (!_economy.TryTakeCash(takeAcc, tAmt, $"Изъято админом {acc.Username}", out var takeErr))
+                    {
+                        SendSystem(player, $"Не изъято: {takeErr}");
+                        return;
+                    }
                     _saveAccount?.Invoke(takeAcc);
                     SendSystem(player, $"Изъято {tAmt:N0} руб. у игрока {takeTarget.Name}.");
                     SendSystem(takeTarget, $"Администратор {acc.Username} изъял у вас {tAmt:N0} руб.");
@@ -2600,6 +2644,13 @@ public sealed class ChatSystem
                 break;
         }
     }
+
+    private static readonly Dictionary<string, uint> WeatherIds = new(StringComparer.Ordinal)
+    {
+        ["EXTRASUNNY"] = 0, ["CLEAR"] = 1, ["CLOUDS"] = 2, ["SMOG"] = 3, ["FOGGY"] = 4,
+        ["OVERCAST"] = 5, ["RAIN"] = 6, ["THUNDER"] = 7, ["CLEARING"] = 8, ["NEUTRAL"] = 9,
+        ["SNOW"] = 10, ["BLIZZARD"] = 11, ["SNOWLIGHT"] = 12, ["XMAS"] = 13, ["HALLOWEEN"] = 14,
+    };
 
     private IPlayer? FindPlayer(string query)
     {
