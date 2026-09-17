@@ -265,8 +265,19 @@ public class StarterResource : Resource
         // видел, кто вокруг администратор и кто на дежурстве, даже невидимый в NoClip.
         player.SetLocalMetaData("adminLevel", level);
         SendChatCommands(player);
+
+        // Рассылка — только когда меняется состав администрации. Иначе каждый
+        // вход обычного игрока рассылал бы событие всем: при массовом перезаходе
+        // 2000 игроков это миллионы отправок.
+        var previous = _rosterLevels.TryGetValue(player.Id, out var p) ? p : 0;
+        if (previous == level) return;
+        if (level > 0) _rosterLevels[player.Id] = level;
+        else _rosterLevels.TryRemove(player.Id, out _);
         BroadcastAdminRoster();
     }
+
+    // Уровни, уже разосланные администрации (для определения изменений).
+    private readonly ConcurrentDictionary<uint, int> _rosterLevels = new();
 
     /// <summary>
     /// Кто администратор — только администраторам на дежурстве (для ESP).
@@ -706,6 +717,9 @@ public class StarterResource : Resource
 
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
         PushAdminLevel(player, lvl);
+        // Уровень мог быть выставлен ещё при подключении, до готовности клиента, —
+        // тогда рассылка его пропустила. Администратору досылаем список сейчас.
+        if (lvl > 0) BroadcastAdminRoster();
 
         // Сигнал своим ресурсам (gamemode): клиент загружен, игрок заспавнен —
         // можно показывать свой интерфейс, телепортировать, выдавать данные.
@@ -1015,7 +1029,7 @@ public class StarterResource : Resource
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
-        var wasAdmin = _adminLevels.TryGetValue(player.Id, out var leftLevel) && leftLevel > 0;
+        var wasAdmin = _rosterLevels.TryRemove(player.Id, out _);
         _clientReady.TryRemove(player.Id, out _);
         _chatRate.TryRemove(player.Id, out _);
         // Подтверждение пароля живёт одну сессию: после переподключения —

@@ -223,8 +223,16 @@ public sealed class ChatSystem
         if (player is null || !player.Exists) return;
         player.SetLocalMetaData("adminLevel", level);
         player.Emit("flovmp:console:setAdmin", level);
+
+        // Вход обычного игрока состав администрации не меняет — не рассылаем.
+        var previous = _rosterLevels.TryGetValue(player.Id, out var p) ? p : 0;
+        if (previous == level) return;
+        if (level > 0) _rosterLevels[player.Id] = level;
+        else _rosterLevels.TryRemove(player.Id, out _);
         BroadcastAdminRoster();
     }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, int> _rosterLevels = new();
 
     private void BroadcastAdminRoster()
     {
@@ -260,7 +268,7 @@ public sealed class ChatSystem
 
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("chat.OnDisconnect", () =>
     {
-        if ((_accountOf(player)?.AdminLevel ?? 0) > 0)
+        if (_rosterLevels.TryRemove(player.Id, out _))
             Systems.MainThreadScheduler.RunAfter(0, "chat.roster.disconnect", BroadcastAdminRoster);
         _rate.TryRemove(player.Id, out _);
         _godModeAdmins.TryRemove(player.Id, out _);
