@@ -64,16 +64,39 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
 7788) и голоса (UDP 7895), а в `server\server.toml` в секции `[voice]` впишите
 внешний IP в `externalPublicHost`.
 
+## Свой сервер: папка `gamemode`
+
+При первом запуске (Windows) или установке (Linux) создаётся папка `gamemode` —
+здесь пишется ваш сервер: C# на сервере и JavaScript у игроков. Платформа уже
+даёт вход, администрирование, баны, голос и чат; в `gamemode` — ваша игровая
+логика. Как собрать и как устроено — `gamemode/README.md`.
+
+- Windows: `gamemode\build.cmd`, затем перезапуск `FloVMP-Server.exe`.
+- Linux: `sudo gamemode/build.sh --install-sdk --restart`.
+
+## Лицензия
+
+Файл `license.flv` положите в корень установки (рядом с папками `server` и
+`voice`). Скачать его можно в личном кабинете; установщик Linux скачивает сам:
+`sudo ./install.sh --key FLV-XXXX-XXXX-XXXX`. Проверка идёт на самом сервере,
+интернет не нужен. Без действующей лицензии сервер работает, но пускает не
+больше 32 игроков. Состояние лицензии — в логе при запуске и командой `license`
+в консоли сервера.
+
 ## Структура
 
 | Папка / файл | Чьё | При обновлении |
 |---|---|---|
 | `server/` — движок, модули, ресурсы `flovmp-starter`, `flovmp-client` | платформа | заменяется |
 | `voice/altv-voice-server` | платформа | заменяется |
+| `sdk/` — сборки для компиляции и шаблон `gamemode` | платформа | заменяется |
+| `scripts/`, `FloVMP-Server.exe`, `install.sh`, `start.sh` | платформа | заменяется |
 | `sql/migrations/001–099` | платформа | добавляются новые |
+| `gamemode/` и собранный `server/resources/gamemode/` | **ваше** | не трогается |
 | `server/server.toml` | **ваше** | не трогается |
 | `voice/voice.toml` | **ваше** | не трогается |
 | `config/flovmp.env` | **ваше** | не трогается |
+| `license.flv` | **ваше** | не трогается |
 | `server/config/admins.json`, `server/flovmp-data/` | **ваше** | не трогается |
 | `server/resources/<ваши ресурсы>` | **ваше** | не трогается |
 | `sql/migrations/100+` | **ваше** | не трогается |
@@ -84,10 +107,15 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
 
 ## Как стать администратором
 
-- при установке: `--owner-sc <SocialClubId>`;
-- в игре: `/claimowner <токен>` (токен выводит установщик, он же лежит в
-  `config/flovmp.env`; действует, пока нет ни одного администратора);
+- в `config/flovmp.env`: `FLOVMP_OWNER_SC=<ваш SocialClubId>` и перезапуск —
+  на Linux то же делает `sudo ./install.sh --owner-sc <SocialClubId>`;
+- в игре: `/claimowner <токен>` (токен — в окне сервера / выводе установщика и
+  в `config/flovmp.env`; действует, пока нет ни одного администратора);
+- в консоли сервера (окно `FloVMP-Server.exe`): `setadmin <ID игрока> 8`;
 - в базе данных — см. `sql/README.md`.
+
+На дежурство администратор заступает командой `/aduty`; если в `flovmp.env`
+задан `FLOVMP_ADMIN_PASSWORD`, сначала `/alogin <пароль>`. Список команд — `/help`.
 
 SocialClubId игрока виден в логе сервера при его подключении.
 
@@ -105,12 +133,14 @@ Windows: остановите сервер, распакуйте новый ар
 | Порт | Протокол | Назначение |
 |---|---|---|
 | 7788 | UDP + TCP | игра |
-| 7895 | UDP + TCP | голосовой чат игроков |
+| 7895 | UDP | голосовой чат игроков |
 | 7896 | — | связь игрового и голосового серверов; наружу открывать не нужно |
 
 ## Полезное
 
 - Лог: `server/server.log`, голос: `voice/voice.log`.
-- Службы: `systemctl status|restart flovmp`, `systemctl status flovmp-voice`.
+- Службы (Linux): `systemctl status|restart flovmp`, `systemctl status flovmp-voice`.
+- Консоль сервера (Windows, окно `FloVMP-Server.exe`): `online`, `kick`, `ban`,
+  `unban`, `bans`, `setadmin`, `reloadadmins`, `license`.
 - Копия базы: `scripts/backup-db.sh` (или `scripts\backup-db.cmd`).
 - Удаление: `sudo ./install.sh --uninstall` (файлы и база остаются).
