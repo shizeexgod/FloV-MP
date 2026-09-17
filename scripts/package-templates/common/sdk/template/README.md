@@ -86,4 +86,4 @@ var conn = new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
 `client/index.js` — модуль JavaScript с API `alt-client` и `natives`.
 Свои HTML-интерфейсы кладите в `client/html/` и открывайте через
 `new alt.WebView('http://resource/client/html/имя/index.html')`.
-Клавиши F1, F3, F4, F5, F8, F11, T, N, B, L, K, 2 заняты платформой.
+Клавиши F1, F3, F4, F5, F8, F11, T, L, K, 2 заняты платформой; N — голосовой чат (настраивается в alt:V).
