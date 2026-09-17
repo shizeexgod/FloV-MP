@@ -126,6 +126,35 @@ public class StarterResource : Resource
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, IVehicle> _adminVehicles = new();
 
     private FloVMP.Core.Security.IBanStore? _banStore;
+
+    // Лицензия (license.flv). Перепроверяется раз в час: срок может истечь на
+    // работающем сервере. Без действующей лицензии сервер работает с лимитом игроков.
+    private FloVMP.Core.Licensing.LicenseStatus _license =
+        FloVMP.Core.Licensing.LicenseFile.Evaluate(null, DateTime.UtcNow);
+    private const long LicenseRecheckMs = 60 * 60 * 1000;
+    private long _nextLicenseCheckMs;
+
+    private void CheckLicense(bool logAlways)
+    {
+        var previous = _license.State;
+        try
+        {
+            var path = FloVMP.Core.Licensing.LicenseFile.Locate();
+            _license = FloVMP.Core.Licensing.LicenseFile.Evaluate(
+                path, DateTime.UtcNow, Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY"));
+        }
+        catch (Exception ex)
+        {
+            Alt.LogWarning($"[FloV:MP] [License] ошибка проверки: {ex.Message}");
+            return;
+        }
+        if (!logAlways && previous == _license.State) return;
+
+        if (_license.State == FloVMP.Core.Licensing.LicenseState.Valid)
+            Alt.Log($"[FloV:MP] [License] {_license.Message}");
+        else
+            Alt.LogWarning($"[FloV:MP] [License] {_license.Message}");
+    }
     private FloVMP.Core.Security.MultiTierBanService? _bans;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
@@ -217,6 +246,8 @@ public class StarterResource : Resource
         // или reloadadmins в консоли).
         if (dbReachable)
             _adminManager.AttachStore(new FloVMP.Core.Admin.MySqlAdminStore(starterDbConn));
+
+        CheckLicense(logAlways: true);
 
         Alt.Log("[FloV:MP Starter] Dedicated server initialized successfully!");
         Alt.Log("[FloV:MP Starter] Security: Server-Side RBAC active. Regular players isolated from admin actions.");
@@ -457,6 +488,18 @@ public class StarterResource : Resource
         // сам он успевает выстрелить или задавить кого-то перед киком.
         if (RejectIfBanned(player)) return;
 
+        // Лимит игроков по лицензии. Администраторы проходят всегда: владелец
+        // должен иметь возможность зайти на заполненный сервер.
+        var online = Alt.GetAllPlayers().Count;
+        if (online > _license.PlayerLimit && GetAssignedAdminRank(player) <= 0)
+        {
+            Alt.LogWarning($"[FloV:MP] [License] вход {player.Name} отклонён: достигнут предел {_license.PlayerLimit} игроков ({_license.State}).");
+            player.Kick(_license.IsLicensed
+                ? $"Сервер заполнен ({_license.PlayerLimit} игроков)."
+                : $"Сервер работает без лицензии и пускает не больше {_license.PlayerLimit} игроков.");
+            return;
+        }
+
         // Чистый спавн игрока
         player.Model = DefaultPlayerModel;
         player.Spawn(DefaultSpawnPosition, 0);
@@ -532,6 +575,10 @@ public class StarterResource : Resource
         // клиентский скрипт ещё не загружен, и отправленные туда сообщения
         // (включая подсказку /claimowner владельцу) терялись.
         SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
+        if (!_license.IsLicensed && GetAssignedAdminRank(player) > 0)
+            SendChatMessage(player, $"{{f59e0b}}[Лицензия]{{ffffff}} {_license.Message}");
+        else if (_license.State == FloVMP.Core.Licensing.LicenseState.Grace && GetAssignedAdminRank(player) > 0)
+            SendChatMessage(player, $"{{f59e0b}}[Лицензия]{{ffffff}} {_license.Message}");
 
         var assigned = GetAssignedAdminRank(player);
         if (_adminLevels.TryGetValue(player.Id, out var activeLvl) && activeLvl == 8)
@@ -790,6 +837,11 @@ public class StarterResource : Resource
                 if (allBans.Count == 0) Alt.Log("  (список пуст)");
                 break;
 
+            case "license":
+                CheckLicense(logAlways: true);
+                Alt.Log($"[Console] Лимит игроков: {_license.PlayerLimit}. Файл: {FloVMP.Core.Licensing.LicenseFile.Locate() ?? "не найден (license.flv в корне установки)"}");
+                break;
+
             case "online":
                 var players = Alt.GetAllPlayers();
                 Alt.Log($"[Console] Онлайн: {players.Count} игроков");
@@ -921,6 +973,13 @@ public class StarterResource : Resource
     public override void OnTick()
     {
         TickStoreSync();
+
+        var nowMs = _clock.ElapsedMilliseconds;
+        if (nowMs >= _nextLicenseCheckMs)
+        {
+            if (_nextLicenseCheckMs != 0) CheckLicense(logAlways: false);
+            _nextLicenseCheckMs = nowMs + LicenseRecheckMs;
+        }
         if (System.Threading.Interlocked.Exchange(ref _pendingAdminRecheck, 0) == 1)
         {
             try { ApplyRevokedAdminRights(); }

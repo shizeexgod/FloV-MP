@@ -30,7 +30,32 @@ public class GamemodeResource : Resource
     private ChatSystem? _chat;
     private ConsoleCommands? _console;
     private FloVMP.Core.Economy.EconomyService? _economy;
-    private LicenseClient? _licenseClient;
+    private LicenseStatus _license = LicenseFile.Evaluate(null, DateTime.UtcNow);
+    private long _nextLicenseCheckMs;
+
+    private void CheckLicense(bool logAlways)
+    {
+        var previous = _license.State;
+        try
+        {
+            _license = LicenseFile.Evaluate(LicenseFile.Locate(), DateTime.UtcNow,
+                Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY"));
+        }
+        catch (Exception ex)
+        {
+            Alt.Log($"[FloV:MP] [License] ошибка проверки: {ex.Message}");
+            return;
+        }
+        if (logAlways || previous != _license.State)
+            Alt.Log($"[FloV:MP] [License] {_license.Message}");
+    }
+
+    /// <summary>https — всегда; http — только на эту же машину (токен не уходит открытым текстом).</summary>
+    private static bool IsTrustedEndpoint(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback);
+    }
     private TelemetryReporter? _telemetry;
     private AntiCheatSystem? _antiCheat;
     private FloVMP.Core.Factions.FactionService? _factions;
@@ -119,7 +144,7 @@ public class GamemodeResource : Resource
             Alt.LogWarning("[FloV:MP] core: голосовой канал НЕ создан — проверьте секцию [voice] в server.toml " +
                            "и запущен ли altv-voice-server.");
 
-        _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName, _bans);
+        _auth = new AuthSystem(accountStore, OnPlayerAuthed, ServerName, _bans, playerLimit: () => _license.PlayerLimit);
         _auth.Attach();
 
         // Встроенный HTTP-API (:7799) — авторизация для лаунчера + живой /info.
@@ -211,62 +236,55 @@ public class GamemodeResource : Resource
         _console.Attach();
         Alt.Log($"[FloV:MP] core: data dir -> {dataDir}");
 
-        // Лицензирование и телеметрия платформы
-        var licConfig = LicenseConfig.FromEnvironment();
-        _licenseClient = new LicenseClient(licConfig, cacheDir: dataDir);
-        var licResult = _licenseClient.VerifyAsync().GetAwaiter().GetResult();
-        if (licResult.IsValid)
-        {
-            Alt.Log($"[FloV:MP] [Security] Лицензия активна: {licResult.Plan.ToUpper()} (Слоты: {licResult.MaxPlayers})");
-            if (licResult.IsCachedOffline)
-            {
-                Alt.Log($"[FloV:MP] [Security] Автономный режим: {licResult.ErrorMessage}");
-            }
-        }
-        else
-        {
-            Alt.Log($"[FloV:MP] [Security] ОШИБКА ЛИЦЕНЗИИ: {licResult.ErrorMessage}");
-            if (licConfig.StrictMode)
-            {
-                Alt.Log("[FloV:MP] [Security] Сервер остановлен из-за ошибки лицензии.");
-                System.Environment.Exit(1);
-            }
-        }
+        // Лицензия: подписанный порталом license.flv, проверяется локально (см.
+        // LicenseFile). Сервер не останавливается — без лицензии ограничен по слотам.
+        CheckLicense(logAlways: true);
 
         _tickManager = new FloVMP.Core.Spatial.AdaptiveTickManager<uint>();
         _occlusion = new FloVMP.Core.Spatial.OcclusionCullingService();
 
-        _telemetry = new TelemetryReporter(licConfig)
+        // Телеметрия и удалённые команды — только если адрес задан явно. Раньше
+        // по умолчанию сервер каждые 10–15 с стучался на http://localhost:3000,
+        // а токеном агента служил общий для всех дефолтный ключ.
+        var licConfig = LicenseConfig.FromEnvironment();
+        var telemetryUrl = Environment.GetEnvironmentVariable("FLOVMP_TELEMETRY_URL");
+        if (IsTrustedEndpoint(telemetryUrl))
         {
-            GetPlayerCount = () => Alt.GetAllPlayers().Count,
-            GetMaxPlayers = () => licResult.MaxPlayers,
-            GetTickRate = () =>
+            _telemetry = new TelemetryReporter(licConfig)
             {
-                var players = Alt.GetAllPlayers();
-                if (players.Count == 0) return 60;
-                int sum = 0;
-                foreach (var p in players)
+                GetPlayerCount = () => Alt.GetAllPlayers().Count,
+                GetMaxPlayers = () => _license.PlayerLimit,
+                GetTickRate = () =>
                 {
-                    if (p.Exists)
-                        sum += _tickManager?.GetEffectiveTickRate(p.Id) ?? 60;
-                }
-                return Math.Max(10, sum / players.Count);
-            },
-            GetFps = () => 60,
-            GetMemoryMb = () => System.GC.GetTotalMemory(false) / (1024 * 1024)
-        };
-        _telemetry.Start();
+                    var players = Alt.GetAllPlayers();
+                    if (players.Count == 0) return 60;
+                    int sum = 0;
+                    foreach (var p in players)
+                    {
+                        if (p.Exists)
+                            sum += _tickManager?.GetEffectiveTickRate(p.Id) ?? 60;
+                    }
+                    return Math.Max(10, sum / players.Count);
+                },
+                GetFps = () => 60,
+                GetMemoryMb = () => System.GC.GetTotalMemory(false) / (1024 * 1024)
+            };
+            _telemetry.Start();
+        }
 
-        var agentToken = Environment.GetEnvironmentVariable("FLOVMP_AGENT_TOKEN") ?? licConfig.LicenseKey;
-        var commandApiUrl = Environment.GetEnvironmentVariable("FLOVMP_COMMAND_URL") ?? "http://localhost:3000/api/v1/agent/command";
-        _agent = new RemoteServerAgent(agentToken, commandApiUrl);
-        _agent.OnBroadcastRequested += async msg =>
+        var commandApiUrl = Environment.GetEnvironmentVariable("FLOVMP_COMMAND_URL");
+        var agentToken = Environment.GetEnvironmentVariable("FLOVMP_AGENT_TOKEN");
+        if (IsTrustedEndpoint(commandApiUrl) && !string.IsNullOrWhiteSpace(agentToken))
         {
-            _chat?.Broadcast($"[ОБЪЯВЛЕНИЕ /o] {msg}");
-            Alt.Log($"[FloV:MP] [Dashboard] Broadcast: {msg}");
-            return await Task.FromResult("OK");
-        };
-        _agent.Start();
+            _agent = new RemoteServerAgent(agentToken, commandApiUrl!);
+            _agent.OnBroadcastRequested += async msg =>
+            {
+                _chat?.Broadcast($"[ОБЪЯВЛЕНИЕ /o] {msg}");
+                Alt.Log($"[FloV:MP] [Dashboard] Broadcast: {msg}");
+                return await Task.FromResult("OK");
+            };
+            _agent.Start();
+        }
 
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnPlayerDead += OnPlayerDead;
@@ -296,8 +314,6 @@ public class GamemodeResource : Resource
         _telemetry?.Stop();
         _telemetry?.Dispose();
         _telemetry = null;
-        _licenseClient?.Dispose();
-        _licenseClient = null;
 
         // Dispose сбрасывает инвентари на диск И гасит фоновый таймер записи:
         // без этого таймер тикает после остановки ресурса, а при перезагрузке
@@ -350,6 +366,13 @@ public class GamemodeResource : Resource
         _antiCheat?.Tick();
 
         var now = _clock.ElapsedMilliseconds;
+
+        // Срок лицензии может истечь на работающем сервере — раз в час перепроверяем.
+        if (now >= _nextLicenseCheckMs)
+        {
+            if (_nextLicenseCheckMs != 0) CheckLicense(logAlways: false);
+            _nextLicenseCheckMs = now + 60 * 60 * 1000;
+        }
 
         // Запланированный /restart. Выполняется здесь, на главном потоке:
         // гасить сервер из фонового потока — гонка в нативной памяти движка.

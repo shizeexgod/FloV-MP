@@ -47,9 +47,13 @@ public sealed class AuthSystem
     // без них работает только бан аккаунта, как было раньше.
     private readonly FloVMP.Core.Security.MultiTierBanService? _bans;
 
+    // Лимит игроков по лицензии (license.flv); null — без ограничения.
+    private readonly Func<int>? _playerLimit;
+
     public AuthSystem(IAccountStore store, Action<IPlayer, Account> onAuthed, string serverName = "RolePlay Server",
-                      FloVMP.Core.Security.MultiTierBanService? bans = null)
+                      FloVMP.Core.Security.MultiTierBanService? bans = null, Func<int>? playerLimit = null)
     {
+        _playerLimit = playerLimit;
         _store = store;
         _auth = new AuthService(_store);
         _onAuthed = onAuthed;
@@ -100,6 +104,17 @@ public sealed class AuthSystem
         // более получать возможность зарегистрировать новый аккаунт — ровно
         // этим раньше и обходился «бан по HWID».
         if (_bans is not null && RejectIfBanned(player)) return;
+
+        if (_playerLimit is not null)
+        {
+            var limit = _playerLimit();
+            if (Alt.GetAllPlayers().Count > limit)
+            {
+                Alt.Log($"[FloV:MP] [License] вход {player.Name} отклонён: предел {limit} игроков");
+                player.Kick($"Сервер заполнен ({limit} игроков).");
+                return;
+            }
+        }
 
         // NUI логина покажем, когда клиентский ресурс сообщит, что готов
         // (flovmp:client:ready). Иначе auth:show может уйти раньше, чем
