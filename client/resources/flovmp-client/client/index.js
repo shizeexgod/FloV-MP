@@ -510,7 +510,8 @@ export function toggleEsp(targetMode = null) {
         alt.log('[FloV:MP] Доступ к ESP отклонен (нет прав администратора)');
         return;
     }
-    if (targetMode !== null && typeof targetMode === 'number') {
+    if (targetMode !== null && Number.isFinite(Number(targetMode))) {
+        targetMode = Number(targetMode);
         espMode = Math.max(0, Math.min(3, targetMode));
     } else {
         espMode = (espMode + 1) % 4;
@@ -552,8 +553,11 @@ alt.everyTick(() => {
 
     const player = alt.Player.local;
     if (player && player.valid) {
-        native.setPlayerWantedLevel(player.scriptID, 0, false);
-        native.setPlayerWantedLevelNow(player.scriptID, false);
+        // Эти нативы принимают индекс игрока (PLAYER_ID), а не хэндл педа:
+        // со scriptID розыск молча не сбрасывался.
+        const pid = native.playerId();
+        native.setPlayerWantedLevel(pid, 0, false);
+        native.setPlayerWantedLevelNow(pid, false);
 
         // Контроль работы двигателя транспорта (синхронизация с сервером FloV:MP)
         if (player.vehicle && native.getPedInVehicleSeat(player.vehicle.scriptID, -1, false) === player.scriptID) {
@@ -580,7 +584,9 @@ alt.everyTick(() => {
     native.hideHudComponentThisFrame(22); // Weapons HUD
 
     // Блокировка Escape в меню паузы при открытом вводе или консоли
-    if (chatTyping || consoleView) {
+    // Именно consoleOpen: окно консоли создаётся заранее при входе и живёт всю
+    // сессию — проверка consoleView навсегда блокировала меню паузы и карту.
+    if (chatTyping || consoleOpen) {
         native.disableControlAction(0, 199, true); // INPUT_FRONTEND_PAUSE
         native.disableControlAction(0, 200, true); // INPUT_FRONTEND_PAUSE_ALTERNATE
     }
@@ -641,7 +647,7 @@ alt.everyTick(() => {
             noClipPos.x += (-dirY) * flyL * speed;
             noClipPos.y += dirX * flyL * speed;
         } else if (native.isControlPressed(0, 35) || native.isDisabledControlPressed(0, 35)) {
-            flyL = Math.min(8.0, flyL * 1.05);
+            flyL = Math.min(8.0, flyL * 1.025);
             noClipPos.x -= (-dirY) * flyL * speed;
             noClipPos.y -= dirX * flyL * speed;
         } else {
@@ -653,7 +659,7 @@ alt.everyTick(() => {
             flyH = Math.min(8.0, flyH * 1.025);
             noClipPos.z += flyH * speed;
         } else if (native.isControlPressed(0, 36) || native.isDisabledControlPressed(0, 36)) {
-            flyH = Math.min(8.0, flyH * 1.05);
+            flyH = Math.min(8.0, flyH * 1.025);
             noClipPos.z -= flyH * speed;
         } else {
             flyH = 2.0;
@@ -1215,7 +1221,7 @@ function loadCollisionAndUnfreeze(targetPos) {
             native.setEntityCoordsNoOffset(player.scriptID, targetPos.x, targetPos.y, spawnZ, false, false, false);
             native.setEntityVelocity(player.scriptID, 0, 0, 0);
             native.clearPedTasksImmediately(player.scriptID);
-            native.setRunSprintMultiplierForPlayer(player.scriptID, 1.0);
+            native.setRunSprintMultiplierForPlayer(native.playerId(), 1.0);
             native.setPedCanRagdoll(player.scriptID, true);
             native.freezeEntityPosition(player.scriptID, false);
             alt.nextTick(() => {
@@ -1270,7 +1276,7 @@ function handleVoiceKeyUp() {
 // =============================================================================
 alt.on('keydown', (key) => {
     if (key === KEYBINDS.voice || key === KEYBINDS.voiceAlt) {
-        if (!chatTyping && !consoleOpen) {
+        if (!chatTyping && !consoleOpen && !authView) {
             handleVoiceKeyDown();
         }
     }
@@ -1289,6 +1295,11 @@ alt.on('keyup', (key) => {
         }
     }
     if (consoleOpen) return;
+
+    // Форма входа: игрок печатает логин и пароль, keyup приходит и сюда.
+    // Без этой проверки буква «t» в пароле открывала чат и уводила фокус
+    // из поля, «b»/«n» включали микрофон, «l» слала /lock.
+    if (authView) return;
 
     // F4 — NoClip
     if (key === KEYBINDS.noclip) {
@@ -1309,7 +1320,7 @@ alt.on('keyup', (key) => {
     }
 
     // K — Ремень безопасности в авто
-    if (key === KEYBINDS.seatbelt) {
+    if (key === KEYBINDS.seatbelt && !chatTyping) {
         const player = alt.Player.local;
         if (player && player.valid && player.vehicle) {
             seatbeltOn = !seatbeltOn;
@@ -1530,7 +1541,7 @@ function applyGodMode(enabled) {
     if (local && local.valid) {
         try {
             native.setEntityInvincible(local.scriptID, godMode);
-            native.setPlayerInvincible(local.scriptID, godMode);
+            native.setPlayerInvincible(native.playerId(), godMode);
         } catch (e) { }
     }
 }
@@ -1542,7 +1553,7 @@ alt.onServer('starter:setSpeed', (multiplier) => {
     if (local && local.valid) {
         try {
             const mult = Math.max(1.0, Math.min(1.49, Number(multiplier) || 1.0));
-            native.setRunSprintMultiplierForPlayer(local.scriptID, mult);
+            native.setRunSprintMultiplierForPlayer(native.playerId(), mult);
         } catch (e) { }
     }
 });

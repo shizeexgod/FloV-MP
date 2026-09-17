@@ -130,6 +130,27 @@ public class StarterResource : Resource
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
 
+    /// <summary>
+    /// Может ли администратор применять силовую команду к цели: к себе — да,
+    /// к другому — только если цель ниже по назначенному рангу. Раньше /kick,
+    /// /freeze, /vmute, /disarm и /gethere работали против кого угодно: админ
+    /// второго уровня мог выкинуть с сервера владельца.
+    /// </summary>
+    private bool CanActOn(IPlayer admin, IPlayer target)
+    {
+        if (admin.Id == target.Id) return true;
+        return GetAssignedAdminRank(target) < GetAssignedAdminRank(admin);
+    }
+
+    // Перебор пароля /alogin: без ограничения его сдерживал только лимит чата
+    // (~80 попыток в минуту). После 5 ошибок — пауза 10 минут на SocialClubId
+    // (или ID подключения, если SC нет); переподключение её не сбрасывает.
+    private const int AloginMaxFailures = 5;
+    private static readonly TimeSpan AloginLockout = TimeSpan.FromMinutes(10);
+    private readonly ConcurrentDictionary<string, (int Failures, DateTime LockedUntil)> _aloginFailures = new();
+
+    private static string AloginKey(IPlayer p) => p.SocialClubId > 0 ? "sc:" + p.SocialClubId : "id:" + p.Id;
+
     public int GetAssignedAdminRank(IPlayer player)
     {
         // Источник правды — AdminBootstrapManager (admins.json или таблица
@@ -474,26 +495,6 @@ public class StarterResource : Resource
         {
         }
 
-        SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
-
-        var assigned = GetAssignedAdminRank(player);
-        if (_adminLevels.TryGetValue(player.Id, out var activeLvl) && activeLvl == 8)
-        {
-            SendChatMessage(player, "{34d399}[FloV:MP Admin]{ffffff} Добро пожаловать, {fde047}Владелец сервера (" + player.Name + "){ffffff}! Все права администратора (Уровень 8) активированы автоматически.");
-        }
-        else if (assigned > 0)
-        {
-            SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
-        }
-        else if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
-        {
-            SendChatMessage(player, "{38bdf8}[Setup]{ffffff} Доступна команда {fde047}/claimowner <токен>{ffffff} для первичной активации прав.");
-        }
-        else
-        {
-            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
-        }
-
         var initLvl = _adminLevels.TryGetValue(player.Id, out var curLvl) ? curLvl : 0;
         player.Emit("flovmp:console:setAdmin", initLvl);
         player.SetStreamSyncedMetaData("adminLevel", initLvl);
@@ -526,6 +527,29 @@ public class StarterResource : Resource
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
         player.Emit("flovmp:console:setAdmin", lvl);
         player.SetStreamSyncedMetaData("adminLevel", lvl);
+
+        // Приветствие — здесь, а не в OnPlayerConnect: при подключении
+        // клиентский скрипт ещё не загружен, и отправленные туда сообщения
+        // (включая подсказку /claimowner владельцу) терялись.
+        SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
+
+        var assigned = GetAssignedAdminRank(player);
+        if (_adminLevels.TryGetValue(player.Id, out var activeLvl) && activeLvl == 8)
+        {
+            SendChatMessage(player, "{34d399}[FloV:MP Admin]{ffffff} Добро пожаловать, {fde047}Владелец сервера (" + player.Name + "){ffffff}! Все права администратора (Уровень 8) активированы автоматически.");
+        }
+        else if (assigned > 0)
+        {
+            SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
+        }
+        else if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
+        {
+            SendChatMessage(player, "{38bdf8}[Setup]{ffffff} Доступна команда {fde047}/claimowner <токен>{ffffff} для первичной активации прав.");
+        }
+        else
+        {
+            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
+        }
     }
 
     private void OnConsoleCommand(string name, string[] args)
@@ -987,6 +1011,7 @@ public class StarterResource : Resource
                 }
                 if (IsAdmin(player, 2))
                 {
+                    SendChatMessage(player, "{f87171}Модерация (2+): {a1a1aa}/kick <id> [причина], /bans, /vmute <id>");
                     SendChatMessage(player, "{f87171}Блокировки: {a1a1aa}/bans (список), /ban <id> <дней> [причина] (3), /banip <id> <дней> (4), /hwidban <id> <дней> (4), /hardban <id> <причина> (6, навсегда), /unban <ник|IP|HWID|ID бана> (4)");
                     SendChatMessage(player, "{f87171}Голос: {a1a1aa}/vmute <id> — заглушить или вернуть голос игроку (переключатель)");
                 }
@@ -1118,11 +1143,19 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора на этом сервере.");
                     return;
                 }
+                var aKey = AloginKey(player);
+                if (assignedRank != 8 && _aloginFailures.TryGetValue(aKey, out var af) && af.LockedUntil > DateTime.UtcNow)
+                {
+                    var left = (int)Math.Ceiling((af.LockedUntil - DateTime.UtcNow).TotalMinutes);
+                    SendChatMessage(player, $"{{ef4444}}[FloV:MP Security] Слишком много неверных попыток. Повторите через {left} мин.");
+                    return;
+                }
                 var pwdOk = !string.IsNullOrEmpty(AdminPassword)
                             && parts.Length > 1
                             && string.Equals(parts[1], AdminPassword, StringComparison.Ordinal);
                 if (assignedRank == 8 || pwdOk)
                 {
+                    _aloginFailures.TryRemove(aKey, out _);
                     _adminAuthed[player.Id] = true;
                     _adminLevels[player.Id] = assignedRank;
                     player.Emit("flovmp:console:setAdmin", assignedRank);
@@ -1132,7 +1165,14 @@ public class StarterResource : Resource
                 }
                 else
                 {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
+                    _aloginFailures.AddOrUpdate(aKey,
+                        _ => (1, DateTime.MinValue),
+                        (_, cur) => cur.LockedUntil != DateTime.MinValue && cur.LockedUntil <= DateTime.UtcNow
+                            ? (1, DateTime.MinValue)
+                            : (cur.Failures + 1, cur.Failures + 1 >= AloginMaxFailures ? DateTime.UtcNow + AloginLockout : DateTime.MinValue));
+                    SendChatMessage(player, string.IsNullOrEmpty(AdminPassword)
+                        ? "{ef4444}[FloV:MP Security] Пароль администратора на сервере не задан (FLOVMP_ADMIN_PASSWORD) — заступайте на дежурство командой /aduty."
+                        : "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
                     Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /alogin от {player.Name} (ID: {player.Id})");
                 }
                 break;
@@ -1195,6 +1235,12 @@ public class StarterResource : Resource
                     return;
                 }
                 targetLvl = Math.Clamp(targetLvl, 0, 8);
+                if (target.Id != player.Id && (GetAssignedAdminRank(target) >= GetAssignedAdminRank(player)
+                                               || _adminManager.IsFounder(target.SocialClubId, target.Name)))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя менять права администратора равного или большего уровня (и Основателя). Это делается из консоли сервера.");
+                    return;
+                }
                 SetAssignedAdminRank(target, targetLvl);
                 _adminLevels[target.Id] = targetLvl;
                 target.Emit("flovmp:console:setAdmin", targetLvl);
@@ -1308,6 +1354,11 @@ public class StarterResource : Resource
                 // Измерение администратора переносится на игрока — иначе игрок
                 // из интерьера оказывался бы рядом по координатам, но в другом
                 // мире, и они друг друга не видели.
+                if (!CanActOn(player, gethereTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя телепортировать администратора равного или большего уровня.");
+                    return;
+                }
                 gethereTarget.Dimension = player.Dimension;
                 gethereTarget.Position = new Position(player.Position.X + 1.0f, player.Position.Y, player.Position.Z);
                 SendChatMessage(player, $"{{34d399}}Игрок {gethereTarget.Name} телепортирован к вам.");
@@ -1330,6 +1381,11 @@ public class StarterResource : Resource
                 if (frzTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок не найден.");
+                    return;
+                }
+                if (!CanActOn(player, frzTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя заморозить администратора равного или большего уровня.");
                     return;
                 }
                 var isFreeze = cmd == "freeze";
@@ -1435,7 +1491,16 @@ public class StarterResource : Resource
                     return;
                 }
                 var wepName = parts.Length > 1 ? parts[1] : "weapon_pistol";
-                var ammo = parts.Length > 2 && int.TryParse(parts[2], out var a) ? a : 250;
+                // Имя уходит обратно в чат: фигурные скобки там — цветовые коды.
+                wepName = new string(wepName.Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
+                if (wepName.Length == 0 || wepName.Length > 40)
+                {
+                    SendChatMessage(player, "{fde047}Использование: /gun <weapon_pistol> [патроны 1-9999]");
+                    return;
+                }
+                if (!wepName.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase)) wepName = "weapon_" + wepName;
+                // Отрицательное или огромное число патронов уходило в игру как есть.
+                var ammo = parts.Length > 2 && int.TryParse(parts[2], out var a) ? Math.Clamp(a, 1, 9999) : 250;
                 try
                 {
                     var wepHash = Alt.Hash(wepName);
@@ -1459,7 +1524,17 @@ public class StarterResource : Resource
                 if (parts.Length > 1 && uint.TryParse(parts[1], out var dId))
                 {
                     var foundD = Alt.GetPlayerById(dId);
-                    if (foundD != null) disarmTarget = foundD;
+                    if (foundD == null)
+                    {
+                        SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                        return;
+                    }
+                    disarmTarget = foundD;
+                }
+                if (!CanActOn(player, disarmTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя разоружить администратора равного или большего уровня.");
+                    return;
                 }
                 disarmTarget.RemoveAllWeapons(true);
                 SendChatMessage(player, $"{{34d399}}Все оружие у игрока {disarmTarget.Name} изъято.");
@@ -1561,7 +1636,8 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
                     return;
                 }
-                var armorVal = parts.Length > 1 && ushort.TryParse(parts[1], out var arm) ? arm : (ushort)100;
+                // Броня в GTA — 0..100; раньше принималось до 65535.
+                var armorVal = parts.Length > 1 && ushort.TryParse(parts[1], out var arm) ? Math.Min(arm, (ushort)100) : (ushort)100;
                 player.Armor = armorVal;
                 SendChatMessage(player, $"{{34d399}}Броня установлена на {armorVal}.");
                 break;
@@ -1692,7 +1768,12 @@ public class StarterResource : Resource
                 }
                 if (parts.Length > 1)
                 {
-                    var skinModel = parts[1];
+                    var skinModel = new string(parts[1].Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
+                    if (skinModel.Length == 0 || skinModel.Length > 40)
+                    {
+                        SendChatMessage(player, "{fde047}Использование: /skin <модель, напр. mp_m_freemode_01>");
+                        return;
+                    }
                     try
                     {
                         player.Model = Alt.Hash(skinModel);
@@ -1724,6 +1805,11 @@ public class StarterResource : Resource
                 if (kickTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                if (!CanActOn(player, kickTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя исключить администратора равного или большего уровня.");
                     return;
                 }
                 var reason = parts.Length > 2 ? string.Join(' ', parts[2..]) : "Исключен администратором";
@@ -1763,6 +1849,11 @@ public class StarterResource : Resource
                 if (vmuteTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                if (!CanActOn(player, vmuteTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя заглушить администратора равного или большего уровня.");
                     return;
                 }
                 try
