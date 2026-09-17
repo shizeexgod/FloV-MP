@@ -40,6 +40,29 @@ Updated: 2026-09-17 (админы в базе, новый установщик �
 - Не проверено вживую: клавиша B для голоса (штатный PTT alt:V — N; `alt.setMicGain`
   в API нет, обёртка ничего не делает).
 
+### 2026-09-17, третий раунд — Windows exe, лицензия, SDK, исходники
+
+- **FloVMP-Server.exe** (`server/src/FloVMP.ServerHost`): запуск одним файлом на
+  Windows, голос+сервер в одном окне, Job Object, junction для путей с кириллицей
+  (сервер из такой папки падал). start.cmd/run-server.ps1 убраны.
+- **Лицензия** (`LicenseFile`): license.flv портала (RSA-2048), без лицензии —
+  32 слота, сервер не останавливается. Старый LicenseClient удалён. На проде
+  license.flv (lifetime, 2000 слотов, ключ FLV-34C6-24FA-1E9F).
+- **gamemode/ + sdk/**: папка сервера владельца из шаблона, build.cmd/build.sh
+  (--install-sdk, --restart), API модов: flovmp:commands:register, flovmp:command,
+  flovmp:player:ready, flovmp:platform:ready. Проверено на Windows и VDS.
+- **Исходники**: `scripts/export_source.py` + `source-kit/` (README, LICENSE, docs);
+  выгрузка собирается/тестируется/пакуется сама. Частные маркеры — `scripts/private-markers.txt`.
+- Тестовые папки: `C:\ПРОЕКТЫ РАБОТА\FloV-MP AI-Testing` (MariaDB 11.4, владелец
+  509264618, license.flv), `FloV-MP my test` (чистая установка + gamemode),
+  `FloV-MP Source` (выгрузка + zip). MariaDB root — в mariadb-root-password.txt там же.
+- Исправлено: откат исправного обновления в install.sh (перезапись лога),
+  build.sh перезапускал чужую службу, 2FA через API без пароля, X-Real-IP,
+  лимит регистраций, выдуманные цифры в консоли F8, подсказки несуществующих
+  команд в чате, UAC при каждом запуске, commandline.txt, аргументы коннектора.
+- VDS: тестовый инстанс /opt/flovmp-itest (служба flovmp-itest, база flovmp_itest)
+  оставлен для проверок; .NET SDK 8 установлен в /usr/share/dotnet.
+
 ## Прогресс (2026-09-15) — ночной прогон
 
 Подробный разбор: `docs/night-audit-2026-09-15.md`.
