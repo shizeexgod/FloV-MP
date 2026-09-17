@@ -320,6 +320,16 @@ if [ "$UPGRADE" -eq 1 ]; then
   step "2/8 Обновление $OLD_VERSION → $PKG_VERSION"
 else
   step "2/8 Новая установка в $INSTALL_DIR"
+  # Порты новой установки не должны быть заняты (например, другим сервером на
+  # этой машине): иначе сервер не стартует, и ошибка видна только в логе.
+  if command -v ss >/dev/null 2>&1; then
+    for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT" "$VOICE_INTERNAL_PORT"; do
+      if ss -H -lnu "sport = :$p" 2>/dev/null | grep -q . || ss -H -lnt "sport = :$p" 2>/dev/null | grep -q .; then
+        die "порт $p уже занят другой программой (возможно, другим сервером). Укажите свободные: --port, --voice-port, --voice-internal-port"
+      fi
+    done
+    ok "порты $GAME_PORT, $VOICE_PUBLIC_PORT, $VOICE_INTERNAL_PORT свободны"
+  fi
 fi
 
 # ---------------------------------------------------------------------
