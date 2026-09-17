@@ -82,6 +82,7 @@ ReadSettings();
 Console.Title = $"FloV:MP Server — {name} :{port}";
 
 using var job = new JobObject();
+using var dailyBackup = new DailyBackup(root, () => env, text => Info(text));
 var stopRequested = false;
 Process? server = null;
 Process? voice = null;

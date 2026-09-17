@@ -164,3 +164,40 @@ public sealed class ServerHostConfigTests : IDisposable
         return count;
     }
 }
+
+public sealed class DailyBackupTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "flovmp-backup-tests", Guid.NewGuid().ToString("N"));
+
+    public DailyBackupTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, true); } catch { }
+    }
+
+    [Fact]
+    public void IsDue_OnlyWithDatabaseAndOldOrMissingBackup()
+    {
+        var now = DateTime.UtcNow;
+        var noDb = new Dictionary<string, string>();
+        var withDb = new Dictionary<string, string> { ["FLOVMP_DB_PASSWORD"] = "x", ["FLOVMP_DB_NAME"] = "rp" };
+
+        Assert.False(FloVMP.ServerHost.DailyBackup.IsDue(_root, noDb, now));   // база не настроена
+        Assert.True(FloVMP.ServerHost.DailyBackup.IsDue(_root, withDb, now));  // копий нет
+
+        var dir = Directory.CreateDirectory(Path.Combine(_root, "backups")).FullName;
+        var file = Path.Combine(dir, "db_rp_2026-01-01_00-00-00.sql");
+        File.WriteAllText(file, "--");
+        File.SetLastWriteTimeUtc(file, now.AddHours(-2));
+        Assert.False(FloVMP.ServerHost.DailyBackup.IsDue(_root, withDb, now)); // свежая
+
+        File.SetLastWriteTimeUtc(file, now.AddHours(-30));
+        Assert.True(FloVMP.ServerHost.DailyBackup.IsDue(_root, withDb, now));  // старше суток
+
+        // копия другой базы не считается
+        var other = Path.Combine(dir, "db_other_2026-01-01_00-00-00.sql");
+        File.WriteAllText(other, "--");
+        Assert.True(FloVMP.ServerHost.DailyBackup.IsDue(_root, withDb, now));
+    }
+}
