@@ -27,21 +27,24 @@ const config: Config = {
           soft: '#ff8ab8',
           dark: '#c41d63',
         },
-        // functional status colours only — used for badges/state, never decoration
+        // functional status colours only — used for tiny state dots/borders, never for
+        // large text/icon fills (дашборд: премиум монохром + розовый, без "радуги")
         ok: '#3fb984',
         warn: '#d8a13a',
         err: '#e5484d',
-        // legacy aliases kept so nothing breaks; visually muted toward neutral
-        cyber: { DEFAULT: '#8b93a1', soft: '#aeb4bf', dark: '#6b7280' },
-        cyan: { neon: '#8b93a1' },
-        emeraldx: { DEFAULT: '#3fb984', soft: '#8fd9bd' },
+        // legacy aliases — retinted neutral gray on purpose so old call sites (emeraldx/
+        // cyber/violetx) stop reading as green/blue/violet decoration across the dashboard
+        cyber: { DEFAULT: '#9aa0aa', soft: '#c2c6cd', dark: '#6b7280' },
+        cyan: { neon: '#9aa0aa' },
+        emeraldx: { DEFAULT: '#9aa0aa', soft: '#c2c6cd' },
         violetx: { DEFAULT: '#9aa0aa', soft: '#c2c6cd' },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['Manrope', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        display: ['Unbounded', 'Manrope', 'ui-sans-serif', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {

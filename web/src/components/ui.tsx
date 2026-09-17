@@ -1,7 +1,129 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Copy, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, X } from 'lucide-react';
+
+/* ------------------------------------------------------------------ *
+ *  Select — компактный кастомный выпадающий список (вместо системного
+ *  <select>). Единый стиль для всех «вылезающих списков» в проекте.
+ * ------------------------------------------------------------------ */
+export interface SelectOption {
+  value: string;
+  label: string;
+  meta?: string;
+}
+
+export function Select({
+  value,
+  options,
+  onChange,
+  placeholder = '—',
+  className = '',
+  triggerClassName = '',
+  disabled = false,
+  ariaLabel,
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  triggerClassName?: string;
+  disabled?: boolean;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const firstOptionRef = useRef<HTMLButtonElement | null>(null);
+  const current = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) firstOptionRef.current?.focus();
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (options.length > 0) setOpen((v) => !v);
+        }}
+        onKeyDown={(event) => {
+          if ((event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') && options.length > 0) {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex h-9 w-full items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-left text-[12px] font-semibold text-white/80 transition-colors hover:border-white/[0.14] hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-50 ${triggerClassName}`}
+      >
+        <span className="min-w-0 flex-1 truncate">{current ? current.label : placeholder}</span>
+        <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 shrink-0 text-white/30 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      <div
+        role="listbox"
+        aria-hidden={!open}
+        className={`absolute left-0 top-[calc(100%+0.4rem)] z-20 w-full min-w-[180px] origin-top rounded-xl border border-white/[0.1] p-1.5 shadow-[0_20px_50px_-18px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-150 ${
+          open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
+        }`}
+        style={{ backgroundColor: 'var(--panel)' }}
+      >
+        {options.length === 0 ? (
+          <div className="px-2.5 py-2 text-[11.5px] text-white/35">{placeholder}</div>
+        ) : (
+          options.map((opt, index) => (
+            <button
+              key={opt.value}
+              ref={index === 0 ? firstOptionRef : undefined}
+              type="button"
+              role="option"
+              aria-selected={opt.value === value}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  const items = Array.from(
+                    wrapRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []
+                  );
+                  const currentIndex = items.indexOf(event.currentTarget);
+                  const direction = event.key === 'ArrowDown' ? 1 : -1;
+                  items[(currentIndex + direction + items.length) % items.length]?.focus();
+                }
+              }}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] font-semibold transition-colors ${
+                opt.value === value ? 'bg-brand/10 text-brand' : 'text-white/65 hover:bg-white/[0.05] hover:text-white'
+              }`}
+            >
+              <span className="min-w-0 truncate">{opt.label}</span>
+              {opt.meta ? <span className="shrink-0 text-[10px] font-normal text-white/30">{opt.meta}</span> : null}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ *
  *  Ambient decorative blobs
@@ -131,7 +253,7 @@ export function Toast({
     info: 'border-brand/35 text-brand',
   };
   return (
-    <div className="fixed right-4 top-24 z-[70] max-w-sm animate-slide-down">
+    <div className="fixed right-4 top-24 z-[70] max-w-sm animate-slide-down" role="status" aria-live="polite">
       <div
         className={`glass-panel card-edge flex items-start gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold shadow-glass ${tones[tone]}`}
       >
@@ -139,7 +261,7 @@ export function Toast({
           {tone === 'success' ? <Check className="h-4 w-4" /> : tone === 'error' ? <X className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </span>
         <span className="flex-1 text-slate-100">{message}</span>
-        <button onClick={onClose} className="text-slate-500 transition hover:text-white">
+        <button type="button" onClick={onClose} aria-label="Закрыть уведомление" className="text-slate-500 transition-colors hover:text-white">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -186,6 +308,7 @@ export function Modal({
   children: React.ReactNode;
   maxWidth?: string;
 }) {
+  const titleId = React.useId();
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -201,20 +324,27 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div
+      <button
+        type="button"
+        aria-label="Закрыть диалог"
         className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in-fast"
         onClick={onClose}
       />
       <div
         className={`glass-panel card-edge relative w-full ${maxWidth} animate-scale-in rounded-3xl p-7 shadow-glass sm:p-8`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
       >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-white"
+          aria-label="Закрыть"
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white/5 hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>
-        <h3 className="text-xl font-bold text-white">{title}</h3>
+        <h3 id={titleId} className="text-xl font-bold text-white">{title}</h3>
         {description ? <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{description}</p> : null}
         <div className="mt-6">{children}</div>
       </div>
@@ -265,9 +395,9 @@ export function Spinner({ className = 'h-5 w-5' }: { className?: string }) {
   );
 }
 
-export function FieldLabel({ children }: { children: React.ReactNode }) {
+export function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
-    <label className="mb-2 block font-mono text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+    <label htmlFor={htmlFor} className="mb-2 block text-[11px] font-semibold text-white/55">
       {children}
     </label>
   );

@@ -59,10 +59,10 @@ export function TelemetryTab() {
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard icon={Cpu} tone="text-emeraldx" ring="border-emeraldx/40 bg-emeraldx/10" label="Tick Rate" value={hasLatest ? String(latest!.tick_rate) : '—'} unit={hasLatest ? 'Hz' : ''} foot={D.tele.tickFoot} />
-            <MetricCard icon={Gauge} tone="text-brand" ring="border-brand/40 bg-brand/10" label="Server FPS" value={hasLatest ? String(latest!.fps) : '—'} unit={hasLatest ? 'FPS' : ''} foot={D.tele.fpsFoot} />
-            <MetricCard icon={HardDrive} tone="text-cyber" ring="border-cyber/40 bg-cyber/10" label="CoreCLR RAM" value={hasLatest ? String(latest!.memory_mb) : '—'} unit={hasLatest ? 'MB' : ''} foot={D.tele.ramFoot} />
-            <MetricCard icon={Users} tone="text-violetx" ring="border-violetx/40 bg-violetx/10" label={D.tele.playersLabel} value={hasLatest ? String(latest!.players) : '—'} unit={hasLatest ? `/ ${latest!.max_players}` : ''} foot={D.tele.playersFoot} />
+            <MetricCard icon={Cpu} label="Tick Rate" value={hasLatest ? String(latest!.tick_rate) : '—'} unit={hasLatest ? 'Hz' : ''} foot={D.tele.tickFoot} />
+            <MetricCard icon={Gauge} label="Server FPS" value={hasLatest ? String(latest!.fps) : '—'} unit={hasLatest ? 'FPS' : ''} foot={D.tele.fpsFoot} />
+            <MetricCard icon={HardDrive} label="CoreCLR RAM" value={hasLatest ? String(latest!.memory_mb) : '—'} unit={hasLatest ? 'MB' : ''} foot={D.tele.ramFoot} />
+            <MetricCard icon={Users} accent label={D.tele.playersLabel} value={hasLatest ? String(latest!.players) : '—'} unit={hasLatest ? `/ ${latest!.max_players}` : ''} foot={D.tele.playersFoot} />
           </div>
 
           {/* 24-Hour Activity Chart & SLA */}

@@ -8,16 +8,15 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  ChevronDown,
   CreditCard,
   Download,
   KeyRound,
   Layers,
+  Lock,
   LogOut,
   Menu,
   Percent,
   Plug,
-  Plus,
   RefreshCw,
   ScrollText,
   Server,
@@ -25,9 +24,8 @@ import {
   Terminal,
   X,
 } from 'lucide-react';
-import { Spinner, useToast } from '@/components/ui';
+import { Select, Spinner, useToast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
-import LangSwitch from '@/components/LangSwitch';
 
 import {
   DashboardProvider,
@@ -47,12 +45,16 @@ import { LogsTab } from '@/components/dashboard/LogsTab';
 import { ApiTab } from '@/components/dashboard/ApiTab';
 import { SettingsTab } from '@/components/dashboard/SettingsTab';
 import { BillingTab } from '@/components/dashboard/BillingTab';
+import { NoProjectGate } from '@/components/dashboard/NoProjectGate';
 import { IpBindModal } from '@/components/dashboard/IpBindModal';
-import { NewLicenseModal } from '@/components/dashboard/NewLicenseModal';
 import { NewProjectModal } from '@/components/dashboard/NewProjectModal';
 import { ProjectSettingsModal } from '@/components/dashboard/ProjectSettingsModal';
 import { InvoiceModal } from '@/components/dashboard/InvoiceModal';
 import type { TwoFaState } from '@/components/dashboard/_ctx';
+
+// Без проекта доступны только его создание, оплата и настройки аккаунта.
+// Рабочие инструменты не рисуют пустые графики и выдуманные показатели.
+const UNGATED_TABS = new Set<TabKey>(['projects', 'billing', 'settings']);
 
 const TAB_ICONS: Partial<Record<TabKey, React.ElementType>> = {
   projects: Server,
@@ -493,6 +495,13 @@ export default function DashboardPage() {
 
   const createProjectHandler = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (licenses.length === 0) {
+      // Сначала оформляется реальный счёт. Не создаём фиктивную Lifetime-лицензию
+      // и не показываем проект как активный до подтверждённой оплаты.
+      setNewProjOpen(false);
+      setInvoiceOpen(true);
+      return;
+    }
     setCreatingProj(true);
     try {
       const res = await fetch('/api/v1/projects', {
@@ -800,13 +809,26 @@ export default function DashboardPage() {
   const latest = telemetry.length ? telemetry[telemetry.length - 1] : null;
 
   const onboarding = useMemo(
-    () => [
-      { done: true, title: D.overview.stepAccount, note: user?.email ?? '' },
-      { done: !!primaryLic, title: D.overview.stepLicense, note: primaryLic ? `${D.overview.stepPlan}: ${primaryLic.plan}` : D.overview.stepLicenseNo },
-      { done: !!isIpBound, title: D.overview.stepIp, note: isIpBound ? primaryLic!.bound_ip : D.overview.stepIpNo, warn: !isIpBound },
-      { done: true, title: D.overview.stepNode, note: 'UDP 7788 · FastDL' },
-    ],
-    [user, primaryLic, isIpBound]
+    () => {
+      const connectedServer = servers.find((server) => server.status === 'online');
+      const knownServer = connectedServer ?? servers[0];
+      return [
+        { done: true, title: D.overview.stepAccount, note: user?.email ?? '' },
+        { done: !!primaryLic, title: D.overview.stepLicense, note: primaryLic ? `${D.overview.stepPlan}: ${primaryLic.plan}` : D.overview.stepLicenseNo },
+        { done: !!isIpBound, title: D.overview.stepIp, note: isIpBound ? primaryLic!.bound_ip : D.overview.stepIpNo, warn: !isIpBound },
+        {
+          done: !!connectedServer,
+          title: D.overview.stepNode,
+          note: connectedServer
+            ? `${connectedServer.ip}:${connectedServer.port}`
+            : knownServer
+              ? D.overview.stepNodeOffline
+              : D.overview.stepNodeNo,
+          warn: !connectedServer,
+        },
+      ];
+    },
+    [D, user, primaryLic, isIpBound, servers]
   );
 
   if (loading) {
@@ -856,26 +878,24 @@ export default function DashboardPage() {
 
   const renderNavigation = () => (
     <>
-      <div className="border-b border-white/[0.07] px-3 pb-4 pt-3">
-        <label className="mb-2 block px-1 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25" htmlFor="dashboard-project">
+      <div className="px-3 pb-3 pt-3">
+        <div className="mb-1.5 px-1 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
           {D.workspace.currentProject}
-        </label>
-        <div className="relative">
-          <select
-            id="dashboard-project"
-            value={selectedProject?.id ?? ''}
-            onChange={(event) => {
-              const project = projects.find((item) => item.id === Number(event.target.value));
-              if (project) handleSelectProject(project);
-            }}
-            className="h-12 w-full appearance-none rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 pr-9 text-xs font-bold text-white/75 transition-[border-color,background-color] hover:border-white/[0.14] hover:bg-white/[0.04]"
-          >
-            {projects.length === 0 ? <option value="">{D.workspace.noProject}</option> : null}
-            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-          </select>
-          <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
         </div>
+        <Select
+          value={selectedProject ? String(selectedProject.id) : ''}
+          onChange={(v) => {
+            const project = projects.find((item) => item.id === Number(v));
+            if (project) handleSelectProject(project);
+          }}
+          options={projects.map((p) => ({ value: String(p.id), label: p.name, meta: `/${p.slug}` }))}
+          placeholder={D.workspace.noProject}
+          ariaLabel={D.workspace.currentProject}
+          disabled={projects.length === 0}
+          triggerClassName="h-10 text-[12.5px]"
+        />
       </div>
+      <hr className="rule-soft mx-3" />
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label={D.workspace.sections}>
         {NAV_GROUPS.map((group, groupIndex) => (
@@ -883,10 +903,11 @@ export default function DashboardPage() {
             <div className="mb-1.5 px-2 text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
               {D.navGroups[group.id]}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.keys.map((key) => {
                 const Icon = TAB_ICONS[key] ?? Layers;
                 const selected = tab === key;
+                const locked = !UNGATED_TABS.has(key) && projects.length === 0;
                 return (
                   <button
                     key={key}
@@ -894,13 +915,17 @@ export default function DashboardPage() {
                     data-section={key}
                     onClick={() => selectTab(key)}
                     aria-current={selected ? 'page' : undefined}
-                    className={`group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left text-[11px] font-bold transition-[color,background-color,transform] duration-200 active:scale-[0.99] ${
-                      selected ? 'bg-white/[0.07] text-white' : 'text-white/38 hover:bg-white/[0.035] hover:text-white/75'
+                    className={`group flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-[11.5px] font-bold transition-colors duration-150 active:scale-[0.99] ${
+                      selected
+                        ? 'bg-brand/[0.12] text-white'
+                        : locked
+                        ? 'text-white/25 hover:bg-white/[0.03] hover:text-white/40'
+                        : 'text-white/45 hover:bg-white/[0.04] hover:text-white/80'
                     }`}
                   >
-                    {selected ? <span aria-hidden="true" className="absolute -left-3 h-5 w-0.5 rounded-r-full bg-brand" /> : null}
-                    <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 transition-colors ${selected ? 'text-brand' : 'text-white/25 group-hover:text-white/50'}`} />
-                    <span className="min-w-0 truncate">{D.tabs[key]}</span>
+                    <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 transition-colors ${selected ? 'text-brand' : 'text-white/25 group-hover:text-white/45'}`} />
+                    <span className="min-w-0 flex-1 truncate">{D.tabs[key]}</span>
+                    {locked ? <Lock aria-hidden="true" className="h-3 w-3 shrink-0 text-white/15" /> : null}
                   </button>
                 );
               })}
@@ -915,20 +940,21 @@ export default function DashboardPage() {
     <DashboardProvider value={ctx}>
       <div className="precision-dashboard h-dvh overflow-hidden bg-[#09090b] text-white">
         {node}
-        <div className="flex h-full min-w-0">
-          <aside className="hidden w-[248px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0d0d10] lg:flex">
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+        <div className="flex h-full min-w-0 gap-3 p-3">
+          <aside className="hidden w-[240px] shrink-0 flex-col rounded-2xl border border-white/[0.07] bg-[#0d0d10] lg:flex">
+            <div className="flex h-14 shrink-0 items-center px-4">
               <Link href="/" className="group flex items-center gap-2.5" aria-label="FloV:MP">
-                <Image src="/branding/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain transition-transform duration-200 group-hover:scale-105" />
+                <Image src="/branding/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain transition-transform duration-200 group-hover:scale-105" />
                 <span translate="no" className="text-sm font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
               </Link>
-              <LangSwitch className="scale-[0.82] origin-right" />
             </div>
+            <hr className="rule-soft mx-3" />
 
             {renderNavigation()}
 
-            <div className="shrink-0 border-t border-white/[0.07] p-3">
-              <div className="flex items-center gap-3 rounded-lg p-2">
+            <hr className="rule-soft mx-3" />
+            <div className="shrink-0 p-3">
+              <div className="flex items-center gap-3 rounded-xl p-2">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand/10 text-[10px] font-extrabold uppercase text-brand">
                   {(user?.username || 'F').slice(0, 2)}
                 </span>
@@ -943,8 +969,8 @@ export default function DashboardPage() {
             </div>
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.07] bg-[#0c0c0f] px-4 lg:hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0b0d] lg:border-0 lg:bg-transparent">
+            <header className="flex h-14 shrink-0 items-center gap-3 rounded-t-2xl bg-[#0c0c0f] px-4 lg:hidden">
               <button type="button" onClick={() => setMobileNavOpen(true)} aria-label={D.workspace.openMenu} aria-expanded={mobileNavOpen} className="grid h-9 w-9 place-items-center rounded-lg border border-white/[0.08] text-white/55 transition-colors hover:border-white/[0.15] hover:text-white">
                 <Menu aria-hidden="true" className="h-4 w-4" />
               </button>
@@ -952,12 +978,11 @@ export default function DashboardPage() {
                 <Image src="/branding/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
                 <span translate="no" className="text-xs font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
               </Link>
-              <div className="ml-auto"><LangSwitch className="scale-[0.88] origin-right" /></div>
             </header>
 
-            <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#0b0b0d]">
+            <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain">
               <div className="mx-auto w-full max-w-[1240px] p-4 sm:p-6 xl:p-8">
-                <header className="mb-6 flex flex-col gap-4 border-b border-white/[0.07] pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <header className="mb-6 flex flex-col gap-4 pb-6 sm:flex-row sm:items-end sm:justify-between">
                   <div className="min-w-0">
                     <div className="mb-2 flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-brand">
                       <span className="truncate">{currentProjectName}</span>
@@ -969,7 +994,7 @@ export default function DashboardPage() {
                         <ActiveIcon aria-hidden="true" className="h-4 w-4" />
                       </span>
                       <div className="min-w-0">
-                        <h1 className="truncate text-xl font-extrabold tracking-tight text-white sm:text-2xl">{D.tabs[tab]}</h1>
+                        <h1 className="truncate text-xl font-bold tracking-tight text-white sm:text-2xl">{D.tabs[tab]}</h1>
                         <p className="mt-1 text-xs leading-relaxed text-white/40">{D.tabDescriptions[tab]}</p>
                       </div>
                     </div>
@@ -979,26 +1004,29 @@ export default function DashboardPage() {
                       <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
                       {D.refresh}
                     </button>
-                    <button type="button" onClick={() => setNewLicOpen(true)} className="btn btn-primary h-9 flex-1 px-3.5 text-xs sm:flex-none">
-                      <Plus aria-hidden="true" className="h-3.5 w-3.5" />
-                      {D.newLicense}
-                    </button>
                   </div>
                 </header>
+                <hr className="rule mb-6" />
 
                 <section key={tab} data-dashboard-tab={tab} className="dashboard-section min-w-0 animate-view-in">
-                  {tab === 'projects' && <ProjectsTab />}
-                  {tab === 'console' && <ConsoleTab />}
-                  {tab === 'overview' && <OverviewTab />}
-                  {tab === 'telemetry' && <TelemetryTab />}
-                  {tab === 'analytics' && <AnalyticsTab />}
-                  {tab === 'watchdog' && <WatchdogTab />}
-                  {tab === 'logs' && <LogsTab />}
-                  {tab === 'api' && <ApiTab />}
-                  {tab === 'sdk' && <SdkTab />}
-                  {tab === 'builder' && <BuilderTab />}
-                  {tab === 'billing' && <BillingTab />}
-                  {tab === 'affiliate' && <AffiliateTab />}
+                  {!UNGATED_TABS.has(tab) && projects.length === 0 ? (
+                    <NoProjectGate />
+                  ) : (
+                    <>
+                      {tab === 'projects' && <ProjectsTab />}
+                      {tab === 'overview' && <OverviewTab />}
+                      {tab === 'console' && <ConsoleTab />}
+                      {tab === 'telemetry' && <TelemetryTab />}
+                      {tab === 'analytics' && <AnalyticsTab />}
+                      {tab === 'watchdog' && <WatchdogTab />}
+                      {tab === 'logs' && <LogsTab />}
+                      {tab === 'api' && <ApiTab />}
+                      {tab === 'sdk' && <SdkTab />}
+                      {tab === 'builder' && <BuilderTab />}
+                      {tab === 'billing' && <BillingTab />}
+                      {tab === 'affiliate' && <AffiliateTab />}
+                    </>
+                  )}
                   {tab === 'settings' && <SettingsTab />}
                 </section>
               </div>
@@ -1009,19 +1037,21 @@ export default function DashboardPage() {
         {mobileNavOpen ? (
           <div className="fixed inset-0 z-[90] lg:hidden">
             <button type="button" onClick={() => setMobileNavOpen(false)} aria-label={D.workspace.closeMenu} className="absolute inset-0 bg-black/70" />
-            <aside className="relative z-10 flex h-full w-[min(88vw,320px)] flex-col border-r border-white/[0.08] bg-[#0d0d10] shadow-2xl" role="dialog" aria-modal="true" aria-label={D.workspace.sections}>
-              <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/[0.07] px-5">
+            <aside className="relative z-10 m-3 flex h-[calc(100%-1.5rem)] w-[min(88vw,320px)] flex-col rounded-2xl border border-white/[0.08] bg-[#0d0d10] shadow-2xl" role="dialog" aria-modal="true" aria-label={D.workspace.sections}>
+              <div className="flex h-14 shrink-0 items-center justify-between px-4">
                 <span className="flex items-center gap-2.5">
-                  <Image src="/branding/logo.png" alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />
+                  <Image src="/branding/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" />
                   <span translate="no" className="text-sm font-extrabold text-white">FloV<span className="text-brand">:MP</span></span>
                 </span>
                 <button type="button" onClick={() => setMobileNavOpen(false)} aria-label={D.workspace.closeMenu} className="grid h-9 w-9 place-items-center rounded-lg text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white">
                   <X aria-hidden="true" className="h-4 w-4" />
                 </button>
               </div>
+              <hr className="rule-soft mx-3" />
               {renderNavigation()}
-              <div className="shrink-0 border-t border-white/[0.07] p-3">
-                <button type="button" onClick={logout} className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] text-xs font-bold text-white/55 transition-colors hover:border-white/[0.15] hover:text-white">
+              <hr className="rule-soft mx-3" />
+              <div className="shrink-0 p-3">
+                <button type="button" onClick={logout} className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-white/[0.08] text-xs font-bold text-white/55 transition-colors hover:border-white/[0.15] hover:text-white">
                   <LogOut aria-hidden="true" className="h-4 w-4" /> {t.common.logout}
                 </button>
               </div>
@@ -1030,7 +1060,6 @@ export default function DashboardPage() {
         ) : null}
 
         <IpBindModal />
-        <NewLicenseModal />
         <NewProjectModal />
         <ProjectSettingsModal />
         <InvoiceModal />

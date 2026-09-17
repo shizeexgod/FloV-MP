@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FolderKanban } from 'lucide-react';
+import { FolderKanban, Infinity as InfinityIcon } from 'lucide-react';
 import { Spinner, Modal, FieldLabel } from '@/components/ui';
 import { useDashboard } from './_ctx';
 
@@ -15,8 +15,10 @@ export function NewProjectModal() {
     setNewProjSlug,
     creatingProj,
     createProjectHandler,
+    licenses,
     D,
   } = useDashboard();
+  const needsPurchase = licenses.length === 0;
   return (
       <Modal
         open={newProjOpen}
@@ -25,14 +27,33 @@ export function NewProjectModal() {
         description={D.modal.newProjDesc}
       >
         <form onSubmit={createProjectHandler} className="space-y-5">
-          <div className="flex items-start gap-3 text-sm text-white/65">
-            <FolderKanban className="mt-0.5 h-4 w-4 flex-none text-brand" />
-            <p className="leading-relaxed">{D.modal.newProjDesc}</p>
-          </div>
+          {needsPurchase ? (
+            <div className="rounded-2xl border border-brand/20 bg-brand/[0.055] p-4">
+              <div className="flex items-start gap-4">
+                <InfinityIcon className="mt-0.5 h-5 w-5 flex-none text-brand" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <strong className="text-sm text-white">{D.modal.lifetimeName}</strong>
+                    <span className="text-xl font-extrabold text-white">{D.modal.lifetimePrice}</span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-white/50">{D.modal.lifetimeNote}</p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-white/35">{D.modal.purchaseBeforeCreate}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 text-sm text-white/65">
+              <FolderKanban className="mt-0.5 h-4 w-4 flex-none text-brand" />
+              <p className="leading-relaxed">{D.modal.newProjDesc}</p>
+            </div>
+          )}
           <div>
-            <FieldLabel>{D.builder.projectName}</FieldLabel>
+            <FieldLabel htmlFor="new-project-name">{D.builder.projectName}</FieldLabel>
             <input
+              id="new-project-name"
               required
+              name="projectName"
+              autoComplete="off"
               value={newProjName}
               onChange={(e) => {
                 setNewProjName(e.target.value);
@@ -45,9 +66,13 @@ export function NewProjectModal() {
             />
           </div>
           <div>
-            <FieldLabel>{D.modal.slugLabel}</FieldLabel>
+            <FieldLabel htmlFor="new-project-slug">{D.modal.slugLabel}</FieldLabel>
             <input
+              id="new-project-slug"
               required
+              name="projectSlug"
+              autoComplete="off"
+              spellCheck={false}
               value={newProjSlug}
               onChange={(e) => setNewProjSlug(e.target.value)}
               placeholder="florida-v"
@@ -69,7 +94,7 @@ export function NewProjectModal() {
               className="btn btn-primary h-10 px-5 text-xs disabled:opacity-50"
             >
               {creatingProj ? <Spinner className="h-4 w-4" /> : null}
-              {D.proj.create}
+              {needsPurchase ? D.modal.continueToPurchase : D.proj.create}
             </button>
           </div>
         </form>

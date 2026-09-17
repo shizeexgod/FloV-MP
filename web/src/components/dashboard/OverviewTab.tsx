@@ -11,7 +11,7 @@ export function OverviewTab() {
     showKeyId,
     setShowKeyId,
     copied,
-    setNewLicOpen,
+    setNewProjOpen,
     copy,
     openIpModal,
     D,
@@ -36,7 +36,7 @@ export function OverviewTab() {
                   className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
                 >
                   {s.done ? (
-                    <Check className="h-5 w-5 shrink-0 text-emeraldx" />
+                    <Check className="h-5 w-5 shrink-0 text-brand" />
                   ) : (
                     <CircleDot className={`h-5 w-5 shrink-0 ${s.warn ? 'text-amber-400' : 'text-slate-500'}`} />
                   )}
@@ -68,7 +68,7 @@ export function OverviewTab() {
               <div className="glass card-edge rounded-3xl p-12 text-center">
                 <KeyRound className="mx-auto h-10 w-10 text-slate-600" />
                 <p className="mt-3 font-medium text-slate-300">{D.overview.noLicenses}</p>
-                <button onClick={() => setNewLicOpen(true)} className="btn btn-primary mt-4 h-10 px-4 text-xs">
+                <button onClick={() => setNewProjOpen(true)} className="btn btn-primary mt-4 h-10 px-4 text-xs">
                   {D.overview.createFirst}
                 </button>
               </div>
@@ -88,11 +88,11 @@ export function OverviewTab() {
                             <span
                               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
                                 active
-                                  ? 'border-emeraldx/30 bg-emeraldx/15 text-emeraldx'
-                                  : 'border-red-500/30 bg-red-500/15 text-red-400'
+                                  ? 'border-brand/30 bg-brand/10 text-brand'
+                                  : 'border-err/30 bg-err/10 text-err'
                               }`}
                             >
-                              <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emeraldx' : 'bg-red-400'}`} />
+                              <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-brand' : 'bg-err'}`} />
                               {active ? D.overview.active : D.overview.suspended}
                             </span>
                           </div>

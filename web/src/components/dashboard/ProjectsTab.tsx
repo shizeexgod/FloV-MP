@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Box, Check, Copy, Cpu, Download, Play, Plus, Radio, RefreshCw, Server, Settings2, ShieldCheck, Sliders, Square, Tag } from 'lucide-react';
+import { Box, Cpu, Download, Play, Plus, Radio, RefreshCw, Server, Settings2, ShieldCheck, Sliders, Square, Tag } from 'lucide-react';
 import { Spinner, Badge } from '@/components/ui';
-import { useDashboard, planTone } from './_ctx';
+import { useDashboard } from './_ctx';
 import { ServerSettingsModal } from './ServerSettingsModal';
 import { NewServerModal } from './NewServerModal';
 import { DownloadMultiplayerModal } from './DownloadMultiplayerModal';
+import { NoProjectGate } from './NoProjectGate';
 
 export function ProjectsTab() {
   const {
@@ -13,7 +14,6 @@ export function ProjectsTab() {
     servers,
     loadingServers,
     dispatchingAction,
-    copied,
     resources,
     loadingResources,
     resourceActionLoading,
@@ -23,7 +23,6 @@ export function ProjectsTab() {
     loadResources,
     handleResourceControl,
     handleDispatchCommand,
-    copy,
     D,
   } = useDashboard();
 
@@ -31,38 +30,19 @@ export function ProjectsTab() {
   const [serverToConfigure, setServerToConfigure] = useState<any>(null);
   const [newServerOpen, setNewServerOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
-  const [downloadingFlv, setDownloadingFlv] = useState(false);
 
-  const handleDownloadFlv = async (proj: any) => {
-    if (!proj) return;
-    try {
-      setDownloadingFlv(true);
-      const res = await fetch(`/api/v1/projects/${proj.id}/license-flv`);
-      if (!res.ok) throw new Error(D.proj.downloadError);
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'license.flv';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      alert(e.message || D.proj.downloadError);
-    } finally {
-      setDownloadingFlv(false);
-    }
-  };
+  if (projects.length === 0) {
+    return <NoProjectGate />;
+  }
 
   return (
-        <div className="relative space-y-8 animate-fade-in">
+        <div className="relative space-y-6 animate-fade-in">
           {/* Project Switcher Bar */}
-          <div className="glass-panel card-edge flex flex-col gap-4 rounded-3xl p-6 shadow-glass sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <Server className="h-5 w-5 text-brand" />
-                <h2 className="text-lg font-black text-white">{D.proj.title}</h2>
+                <Server className="h-4 w-4 text-brand" />
+                <h2 className="text-base font-bold text-white">{D.proj.title}</h2>
               </div>
               <p className="mt-1 text-xs text-slate-400">
                 {D.proj.hierarchy}
@@ -70,120 +50,42 @@ export function ProjectsTab() {
             </div>
             <button
               onClick={() => setNewProjOpen(true)}
-              className="btn btn-primary h-10 px-4 text-xs"
+              className="btn btn-primary h-9 px-3.5 text-xs"
             >
               <Plus className="h-4 w-4" />
               {D.proj.create}
             </button>
           </div>
 
-          {/* Projects Selector Pills */}
-          <div className="flex flex-wrap gap-3">
-            {projects.map((p) => {
-              const active = selectedProject?.id === p.id;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => handleSelectProject(p)}
-                  className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-[border-color,background-color,box-shadow,transform] ${
-                    active
-                      ? 'border-brand bg-brand/10 shadow-neon-pink'
-                      : 'border-white/10 bg-white/[0.02] hover:border-white/20'
-                  }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl font-mono text-sm font-black uppercase ${
-                      active ? 'bg-brand text-white' : 'bg-white/5 text-slate-400'
-                    }`}
-                  >
-                    {p.name.slice(0, 2)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-white">{p.name}</span>
-                      <Badge tone={planTone(p.plan)}>{p.plan}</Badge>
-                    </div>
-                    <div className="mt-0.5 font-mono text-[11px] text-slate-400">
-                      /{p.slug} · {p.max_players} {D.proj.slots}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
           {/* Selected Project Overview Card */}
           {selectedProject && (
-            <div className="glass card-edge rounded-3xl p-6 sm:p-8">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="glass no-lift card-edge rounded-2xl p-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div>
-                  <span className="eyebrow text-brand">{D.proj.activeProject}</span>
-                  <h3 className="mt-1 text-2xl font-black text-white">{selectedProject.name}</h3>
-                  <p className="mt-1 font-mono text-xs text-slate-400">
-                    ID: #{selectedProject.id} · {D.proj.plan}: <span className="text-white uppercase">{selectedProject.plan}</span> · {D.proj.limit}: <span className="text-brand">{selectedProject.max_players} {D.proj.slots}</span>
-                  </p>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand">{D.proj.activeProject}</span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                    <h3 className="text-lg font-bold text-white">{selectedProject.name}</h3>
+                    <Badge tone="brand">Lifetime</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-white/40">/{selectedProject.slug} · {selectedProject.max_players} {D.proj.slots}</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
-                    <span className="text-slate-500 mr-2">License:</span>
-                    <strong className="text-white">{selectedProject.license_key}</strong>
-                  </div>
-                  <button
-                    onClick={() => copy(selectedProject.license_key)}
-                    className="btn btn-ghost h-9 w-9 p-0"
-                    title={D.proj.copyLicenseKey}
-                    aria-label={D.proj.copyLicenseKey}
-                  >
-                    {copied === selectedProject.license_key ? (
-                      <Check className="h-4 w-4 text-emeraldx" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => handleDownloadFlv(selectedProject)}
-                    disabled={downloadingFlv}
-                    className="btn h-9 border border-cyber/40 bg-cyber/10 px-3 text-xs font-semibold text-cyber transition hover:bg-cyber/20 flex items-center gap-1.5"
-                    title={D.proj.downloadFlvTitle}
-                  >
-                    {downloadingFlv ? <Spinner className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                    license.flv
-                  </button>
-
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => setDownloadModalOpen(true)}
-                    className="btn btn-primary h-9 px-3.5 text-xs font-bold flex items-center gap-1.5 shadow-neon-pink"
+                    className="btn btn-ghost h-9 px-3.5 text-xs font-semibold"
                     title={D.proj.downloadFilesTitle}
                   >
                     <Download className="h-3.5 w-3.5" />
                     {D.proj.filesButton}
                   </button>
 
-                  <div className="rounded-xl border border-white/10 bg-ink-950/60 px-4 py-2 font-mono text-xs text-slate-300">
-                    <span className="text-slate-500 mr-2">Agent API Key:</span>
-                    <strong className="text-brand">{selectedProject.api_key.slice(0, 16)}…</strong>
-                  </div>
-                  <button
-                    onClick={() => copy(selectedProject.api_key)}
-                    className="btn btn-ghost h-9 w-9 p-0"
-                    title={D.proj.copyAgentKey}
-                    aria-label={D.proj.copyAgentKey}
-                  >
-                    {copied === selectedProject.api_key ? (
-                      <Check className="h-4 w-4 text-emeraldx" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </button>
-
                   <button
                     onClick={() => openProjectSettings(selectedProject)}
-                    className="btn h-9 border border-brand/40 bg-brand/10 px-3 text-xs font-semibold text-brand transition hover:bg-brand/20"
+                    className="btn btn-ghost h-9 px-3.5 text-xs font-semibold"
                     title={D.proj.settingsWebhook}
                   >
-                    <Sliders className="h-4 w-4" />
+                    <Sliders className="h-3.5 w-3.5 text-brand" />
                     {D.proj.settingsWebhook}
                   </button>
                 </div>
@@ -208,7 +110,7 @@ export function ProjectsTab() {
                 {selectedProject && (
                   <button
                     onClick={() => setNewServerOpen(true)}
-                    className="btn btn-primary h-8 px-3 text-xs font-semibold flex items-center gap-1.5 shadow-neon-pink"
+                    className="btn btn-primary h-8 px-3 text-xs font-semibold flex items-center gap-1.5"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     {D.proj.addServer}
@@ -251,11 +153,11 @@ export function ProjectsTab() {
                             <span
                               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
                                 isProd
-                                  ? 'border-emeraldx/30 bg-emeraldx/15 text-emeraldx'
+                                  ? 'border-brand/30 bg-brand/10 text-brand'
                                   : isDev
                                   ? 'border-cyber/30 bg-cyber/15 text-cyber'
                                   : srv.environment === 'test'
-                                  ? 'border-amber-500/30 bg-amber-500/15 text-amber-300'
+                                  ? 'border-warn/30 bg-warn/15 text-warn'
                                   : 'border-violetx/30 bg-violetx/15 text-violetx'
                               }`}
                             >
@@ -278,7 +180,7 @@ export function ProjectsTab() {
                           <div>
                             <span className="text-slate-500">{D.proj.slotsShort}:</span>{' '}
                             {srv.slot_limit ? (
-                              <strong className="text-amber-300" title={D.proj.limitSet}>{srv.slot_limit} ({D.proj.limited})</strong>
+                              <strong className="text-warn" title={D.proj.limitSet}>{srv.slot_limit} ({D.proj.limited})</strong>
                             ) : (
                               <strong className="text-emeraldx" title={D.proj.unlimited}>{srv.max_players} ({D.proj.unlimited.toLowerCase()})</strong>
                             )}
@@ -314,7 +216,7 @@ export function ProjectsTab() {
                           <button
                             onClick={() => handleDispatchCommand(srv.id, 'restart')}
                             disabled={isRestarting}
-                            className="btn h-9 border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-50"
+                            className="btn h-9 border border-warn/30 bg-warn/10 text-xs font-semibold text-warn transition hover:bg-warn/20 disabled:opacity-50"
                           >
                             {isRestarting ? <Spinner className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
                             {D.proj.restart}
@@ -322,7 +224,7 @@ export function ProjectsTab() {
                           <button
                             onClick={() => handleDispatchCommand(srv.id, 'stop')}
                             disabled={isStopping}
-                            className="btn h-9 border border-red-500/30 bg-red-500/10 text-xs font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                            className="btn h-9 border border-err/30 bg-err/10 text-xs font-semibold text-err transition hover:bg-err/20 disabled:opacity-50"
                           >
                             {isStopping ? <Spinner className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
                             {D.proj.stop}
@@ -402,11 +304,11 @@ export function ProjectsTab() {
                               <span
                                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                                   isRunning
-                                    ? 'bg-emeraldx/15 text-emeraldx border border-emeraldx/30'
+                                    ? 'bg-brand/10 text-brand border border-brand/30'
                                     : 'bg-slate-700/20 text-slate-400 border border-slate-600/30'
                                 }`}
                               >
-                        <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emeraldx' : 'bg-slate-500'}`} />
+                        <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-brand' : 'bg-slate-500'}`} />
                                 {isRunning ? D.proj.running : D.proj.stopped}
                               </span>
                             </td>
@@ -425,7 +327,7 @@ export function ProjectsTab() {
                                     <button
                                       onClick={() => handleResourceControl(servers[0].id, res.name, 'stop')}
                                       disabled={isStopping}
-                                      className="btn h-8 border border-red-500/30 bg-red-500/10 px-2.5 text-[11px] text-red-400 transition hover:bg-red-500/20"
+                                      className="btn h-8 border border-err/30 bg-err/10 px-2.5 text-[11px] text-err transition hover:bg-err/20"
                                       title={D.proj.resStop}
                                     >
                                       {isStopping ? <Spinner className="h-3 w-3" /> : <Square className="h-3 w-3" />}
@@ -435,7 +337,7 @@ export function ProjectsTab() {
                                   <button
                                     onClick={() => handleResourceControl(servers[0].id, res.name, 'start')}
                                     disabled={isStarting}
-                                    className="btn h-8 border border-emeraldx/30 bg-emeraldx/10 px-2.5 text-[11px] text-emeraldx transition hover:bg-emeraldx/20"
+                                    className="btn h-8 border border-brand/30 bg-brand/10 px-2.5 text-[11px] text-brand transition hover:bg-brand/20"
                                     title={D.proj.resStart}
                                   >
                                     {isStarting ? <Spinner className="h-3 w-3" /> : <Play className="h-3 w-3" />}

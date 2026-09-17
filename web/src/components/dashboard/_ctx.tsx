@@ -236,16 +236,15 @@ export function useDashboard(): DashCtx {
 /* ----------------------------- shared sub-component ----------------------------- */
 export function MetricCard({
   icon: Icon,
-  tone,
-  ring,
+  accent = false,
   label,
   value,
   unit,
   foot,
 }: {
   icon: React.ElementType;
-  tone: string;
-  ring: string;
+  /** Выделить карточку акцентным розовым (только для главной метрики раздела) */
+  accent?: boolean;
   label: string;
   value: string;
   unit: string;
@@ -255,14 +254,18 @@ export function MetricCard({
     <div className="glass card-edge rounded-2xl p-6">
       <div className="flex items-center justify-between">
         <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
-        <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${ring} ${tone}`}>
+        <span
+          className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
+            accent ? 'border-brand/30 bg-brand/10 text-brand' : 'border-white/10 bg-white/[0.03] text-white/45'
+          }`}
+        >
           <Icon className="h-4 w-4" />
         </span>
       </div>
       <div className="mt-3 font-mono text-3xl font-black text-white">
         {value} <span className="text-xs font-normal text-slate-500">{unit}</span>
       </div>
-      <div className={`mt-2 font-mono text-[11px] ${tone}`}>{foot}</div>
+      <div className="mt-2 font-mono text-[11px] text-white/35">{foot}</div>
     </div>
   );
 }
