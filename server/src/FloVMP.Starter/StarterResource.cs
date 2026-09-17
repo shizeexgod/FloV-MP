@@ -2145,8 +2145,27 @@ public class StarterResource : Resource
     }
 }
 
+    /// <summary>
+    /// Может ли игрок пользоваться командой по её уровню из реестра
+    /// (то есть из server/config/admin-commands.cfg). Для событий, которые
+    /// шлёт клиент: их отправит и поддельный клиент, поэтому проверка обязана
+    /// быть на сервере и совпадать с настройкой владельца.
+    /// </summary>
+    private bool MayUse(IPlayer player, string command)
+    {
+        var def = FloVMP.Core.Admin.AdminCommandRegistry.Get(command);
+        if (def is null) return false;
+        return def.MinLevel == 0 || IsAdmin(player, def.MinLevel);
+    }
+
     private void OnTeleportWaypoint(IPlayer player, float x, float y, float z)
     {
+        if (!MayUse(player, "tpm"))
+        {
+            Alt.LogWarning($"[Security Violation] Неавторизованный запрос teleportWaypoint от {player.Name} (ID: {player.Id})");
+            SendChatMessage(player, "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
+            return;
+        }
 
         if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(z) ||
             float.IsInfinity(x) || float.IsInfinity(y) || float.IsInfinity(z) ||
@@ -2162,6 +2181,13 @@ public class StarterResource : Resource
 
     private void OnToggleNoClip(IPlayer player, bool enabled)
     {
+        if (!MayUse(player, "noclip"))
+        {
+            Alt.LogWarning($"[Security Violation] Неавторизованная попытка toggleNoClip от {player.Name} (ID: {player.Id})");
+            SendChatMessage(player, "{ef4444}[FloV:MP Security] Полет NoClip отклонен сервером (недостаточно прав).");
+            return;
+        }
+
 
         SendChatMessage(player, enabled ? "{34d399}Админ-полет (NoClip) ВКЛЮЧЕН" : "{fde047}Админ-полет (NoClip) ВЫКЛЮЧЕН");
     }

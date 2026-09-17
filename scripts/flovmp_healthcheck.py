@@ -150,6 +150,39 @@ def check_security_regressions(rep):
                     hits.append("{}:{}".format(p.relative_to(ROOT), i))
         rep.add(FAIL if hits else PASS, why, "; ".join(hits[:3]) if hits else "чисто")
 
+    # События от клиента — то, что может прислать поддельный клиент. Каждый
+    # обработчик обязан либо проверять права на сервере, либо быть в списке
+    # заведомо общедоступных. Проверка появилась после реального случая:
+    # правка сняла проверку прав с обработчика телепорта, и телепортироваться
+    # смог любой игрок — ни в одном логе это не отражалось.
+    PUBLIC_CLIENT_EVENTS = {
+        "OnChatMessage": "чат доступен всем игрокам",
+        "OnClientReady": "сигнал готовности клиента, защищён от повторов",
+    }
+    starter_src = ROOT / "server/src/FloVMP.Starter/StarterResource.cs"
+    if starter_src.exists():
+        src = starter_src.read_text(encoding="utf-8", errors="ignore")
+        handlers = set(re.findall(r'Alt\.OnClient<[^>]*>\("[^"]+",\s*([A-Za-z_][A-Za-z0-9_]*)\)', src))
+        unguarded = []
+        for h in sorted(handlers):
+            if h in PUBLIC_CLIENT_EVENTS:
+                continue
+            m = re.search(r'private\s+(?:async\s+)?void\s+' + re.escape(h) + r'\s*\([^)]*\)\s*\{', src)
+            if not m:
+                unguarded.append(h + " (тело не найдено)")
+                continue
+            # Тело метода: до начала следующего члена класса. Иначе окно
+            # захватывает соседний метод, и проверка «видит» чужую защиту.
+            tail = src[m.end():]
+            nxt = re.search(r"\n    (?:private|public|internal|protected)\s", tail)
+            body = tail[:nxt.start()] if nxt else tail[:2000]
+            if "MayUse(" not in body and "IsAdmin(" not in body:
+                unguarded.append(h)
+        rep.add(PASS if not unguarded else FAIL,
+                "обработчики событий клиента проверяют права",
+                ", ".join(unguarded) if unguarded else
+                "проверено обработчиков: {}".format(len(handlers)))
+
     # Команда, которую сервер знает, но реестр прав не описывает, проверяется
     # только внутри обработчика — то есть её уровень нельзя настроить файлом.
     reg = ROOT / "server/src/FloVMP.Core/Admin/AdminCommandRegistry.cs"
