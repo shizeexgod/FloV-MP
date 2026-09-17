@@ -171,6 +171,20 @@ bool PreflightOk()
         Error($"Порт {port} занят другой программой (возможно, запущен другой сервер). Смените port в server\\server.toml или закройте её.");
         return false;
     }
+
+    // Голосовые порты (UDP): занятый порт не мешает игре, но голос молча не поднимется.
+    foreach (var (key, label) in new[] { ("externalPublicPort", "для игроков"), ("externalPort", "внутренний") })
+    {
+        if (!int.TryParse(ServerConfig.ReadToml(serverToml, key, "voice"), out var vp) || vp <= 0 || vp > 65535) continue;
+        try
+        {
+            using var probe = new UdpClient(new IPEndPoint(IPAddress.Any, vp));
+        }
+        catch (SocketException)
+        {
+            Info($"Голосовой порт {vp} ({label}) занят другой программой — голосовой чат не заработает. Смените порт в server\\server.toml и voice\\voice.toml.");
+        }
+    }
     return true;
 }
 
