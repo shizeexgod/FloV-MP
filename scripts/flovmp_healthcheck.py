@@ -511,6 +511,27 @@ def check_voice(rep):
 
 # ------------- 3d. Пакет и установщик -------------
 
+def check_client_natives(rep):
+    """Нативы alt:V чувствительны к регистру, а вызовы в клиенте обёрнуты в try:
+    опечатка в имени не даёт ошибки — функция просто молча не работает
+    (так /weather годами не менял погоду). Сверяем с полным списком имён."""
+    section("5b. Клиент: только существующие нативы alt:V")
+    names_p = ROOT / "scripts/data/altv-natives.txt"
+    if not names_p.exists():
+        rep.add(SKIP, "список нативов", "нет scripts/data/altv-natives.txt")
+        return
+    known = {l.strip() for l in names_p.read_text(encoding="utf-8").splitlines()
+             if l.strip() and not l.startswith("#")}
+    client_dir = ROOT / "client/resources/flovmp-client/client"
+    used = {}
+    for f in client_dir.rglob("*.js"):
+        for m in re.finditer(r"\bnative\.([A-Za-z0-9_]+)\s*\(", f.read_text(encoding="utf-8", errors="ignore")):
+            used.setdefault(m.group(1), f.name)
+    unknown = sorted(n for n in used if n not in known)
+    rep.add(PASS if not unknown else FAIL, "вызываемые нативы существуют ({} шт.)".format(len(used)),
+            ", ".join(unknown) if unknown else "")
+
+
 def check_installer(rep):
     section("3d. Пакет и установщик")
     shell = [ROOT / "scripts/install.sh"] + sorted((ROOT / "scripts/package-templates").rglob("*.sh"))
@@ -811,6 +832,7 @@ def main():
     check_event_contract(rep)
     check_migrations(rep)
     check_installer(rep)
+    check_client_natives(rep)
     check_version_consistency(rep)
 
     if args.build or args.all:
