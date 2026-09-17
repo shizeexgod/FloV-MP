@@ -36,6 +36,13 @@ public sealed class AuthService
     private readonly TimeSpan _window;
 
     private readonly Dictionary<string, (int count, DateTime first)> _attempts = new();
+
+    // Успешные регистрации с одного адреса. Неудачи ограничивал _attempts, но
+    // успешная регистрация сбрасывала счётчик — и бот с одного IP создавал
+    // аккаунты без предела, засоряя базу и нагружая CPU хешированием.
+    public const int MaxRegistrationsPerWindow = 3;
+    private static readonly TimeSpan RegistrationWindow = TimeSpan.FromHours(1);
+    private readonly Dictionary<string, (int count, DateTime first)> _registrations = new();
     private readonly object _lock = new();
 
     public AuthService(IAccountStore store, Func<DateTime>? now = null,
@@ -53,6 +60,9 @@ public sealed class AuthService
         if (throttleKey != null && IsRateLimited(throttleKey))
             return new AuthResult(AuthOutcome.RateLimited, "слишком много попыток, подождите");
 
+        if (throttleKey != null && RegistrationLimitReached(throttleKey))
+            return new AuthResult(AuthOutcome.RateLimited, "с этого адреса уже создано несколько аккаунтов, попробуйте позже");
+
         if (!Account.IsValidUsername(username))
             return throttleKey != null ? Fail(throttleKey, AuthOutcome.BadUsername, "имя: 3-20 символов, буквы/цифры/_") : new AuthResult(AuthOutcome.BadUsername, "имя: 3-20 символов, буквы/цифры/_");
         if (!Account.IsValidPassword(password))
@@ -60,7 +70,11 @@ public sealed class AuthService
         if (_store.Exists(username))
             return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserExists, "имя уже занято") : new AuthResult(AuthOutcome.UserExists, "имя уже занято");
 
-        if (throttleKey != null) ClearAttempts(throttleKey);
+        if (throttleKey != null)
+        {
+            ClearAttempts(throttleKey);
+            CountRegistration(throttleKey);
+        }
         var acc = _store.Create(username, PasswordHasher.Hash(password));
         return new AuthResult(AuthOutcome.Ok, "регистрация успешна", acc);
     }
@@ -248,6 +262,32 @@ public sealed class AuthService
                 .Select(kv => kv.Key)
                 .ToList();
             foreach (var k in stale) _attempts.Remove(k);
+        }
+    }
+
+    private bool RegistrationLimitReached(string key)
+    {
+        lock (_lock)
+        {
+            if (!_registrations.TryGetValue(key, out var e)) return false;
+            if (_now() - e.first > RegistrationWindow) { _registrations.Remove(key); return false; }
+            return e.count >= MaxRegistrationsPerWindow;
+        }
+    }
+
+    private void CountRegistration(string key)
+    {
+        lock (_lock)
+        {
+            if (_registrations.Count > 4096)
+            {
+                var now = _now();
+                foreach (var k in _registrations.Where(kv => now - kv.Value.first > RegistrationWindow).Select(kv => kv.Key).ToList())
+                    _registrations.Remove(k);
+            }
+            _registrations[key] = _registrations.TryGetValue(key, out var e) && _now() - e.first <= RegistrationWindow
+                ? (e.count + 1, e.first)
+                : (1, _now());
         }
     }
 

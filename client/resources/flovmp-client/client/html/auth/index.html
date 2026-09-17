@@ -298,8 +298,16 @@
       <label for="password">Пароль</label>
       <input id="password" name="password" type="password"
              autocomplete="current-password" spellcheck="false"
-             maxlength="72" placeholder="Не короче 6 символов…">
+             maxlength="100" placeholder="Не короче 6 символов…">
       <p class="hint" id="password-hint" hidden>Минимум 6 символов.</p>
+    </div>
+
+    <!-- Показывается, только если на аккаунте включена двухфакторная защита. -->
+    <div class="field" id="code-field" hidden>
+      <label for="code">Код из приложения</label>
+      <input id="code" name="one-time-code" type="text"
+             autocomplete="one-time-code" inputmode="numeric" spellcheck="false"
+             maxlength="6" placeholder="Например, 123456…">
     </div>
 
     <button type="submit" class="submit" id="submit">Войти</button>
@@ -317,6 +325,8 @@
   var form      = document.getElementById('auth-form');
   var userInput = document.getElementById('username');
   var passInput = document.getElementById('password');
+  var codeField = document.getElementById('code-field');
+  var codeInput = document.getElementById('code');
   var submitBtn = document.getElementById('submit');
   var message   = document.getElementById('message');
   var tabLogin  = document.getElementById('tab-login');
@@ -351,9 +361,15 @@
        предложит существующий пароль на форме регистрации. */
     passInput.setAttribute('autocomplete', isReg ? 'new-password' : 'current-password');
     passHint.hidden = !isReg;
+    showCode(false);
 
     clearMessage();
     userInput.focus();
+  }
+
+  function showCode(on) {
+    codeField.hidden = !on;
+    if (!on) codeInput.value = '';
   }
 
   function clearMessage() {
@@ -403,9 +419,17 @@
       return;
     }
 
+    var needCode = mode === 'login' && !codeField.hidden;
+    var code = codeInput.value.trim();
+    if (needCode && !/^\d{6}$/.test(code)) {
+      fail('Введите 6 цифр из приложения-аутентификатора.', codeInput);
+      return;
+    }
+
     clearMessage();
     setBusy(true);
-    bridge.emit(mode === 'register' ? 'flovmp:auth:register' : 'flovmp:auth:login', user, pass);
+    if (needCode) bridge.emit('flovmp:auth:login2fa', user, pass, code);
+    else bridge.emit(mode === 'register' ? 'flovmp:auth:register' : 'flovmp:auth:login', user, pass);
   });
 
   /* Enter в любом поле отправляет форму — это делает сама форма. Escape
@@ -418,8 +442,16 @@
     if (name) serverEl.textContent = String(name);
   });
 
-  bridge.on('flovmp:auth:result', function (ok, text) {
+  bridge.on('flovmp:auth:result', function (ok, text, needCode) {
     setBusy(false);
+    if (!ok && needCode) {
+      /* Пароль верный, аккаунт под 2FA: показываем поле кода и ставим в него фокус. */
+      var first = codeField.hidden;
+      showCode(true);
+      if (!first) codeInput.value = '';
+      fail(text || 'Введите код из приложения-аутентификатора.', codeInput);
+      return;
+    }
     if (ok) {
       message.textContent = text || 'Готово.';
       message.setAttribute('data-kind', 'ok');

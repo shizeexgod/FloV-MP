@@ -80,6 +80,9 @@ public sealed class AuthSystem
         Alt.OnPlayerDisconnect += OnDisconnect;
         Alt.OnClient("flovmp:client:ready", OnClientReady);
         Alt.OnClient<string, string>("flovmp:auth:login", OnLogin);
+        // Вход с кодом 2FA. Раньше игрок с включённой 2FA не мог войти в игру
+        // вовсе: сервер требовал код, а в форме входа его некуда было ввести.
+        Alt.OnClient<string, string, string>("flovmp:auth:login2fa", OnLogin2fa);
         Alt.OnClient<string, string>("flovmp:auth:register", OnRegister);
     }
 
@@ -203,7 +206,12 @@ if (_authed.TryRemove(player.Id, out var acc))
         }
     });
 
-    private void OnLogin(IPlayer player, string username, string password) => Safe.Run("auth.OnLogin", () =>
+    private void OnLogin(IPlayer player, string username, string password) => StartLogin(player, username, password, null);
+
+    private void OnLogin2fa(IPlayer player, string username, string password, string code) =>
+        StartLogin(player, username, password, code);
+
+    private void StartLogin(IPlayer player, string username, string password, string? code) => Safe.Run("auth.OnLogin", () =>
     {
         if (!player.Exists || IsAuthed(player)) return;
         // Один запрос на игрока за раз: иначе спам кнопкой «Войти» плодит
@@ -216,7 +224,7 @@ if (_authed.TryRemove(player.Id, out var acc))
         Task.Run(() =>
         {
             AuthResult r;
-            try { r = _auth.Login(u, pw, key); }
+            try { r = _auth.Login(u, pw, key, code); }
             catch (Exception ex)
             {
                 Alt.Log($"[FloV:MP] auth: сбой входа: {ex.Message}");
@@ -250,7 +258,8 @@ if (_authed.TryRemove(player.Id, out var acc))
         var res = item.Result;
         if (!res.Ok || res.Account is null)
         {
-            player.Emit("flovmp:auth:result", false, res.Message);
+            var needCode = res.Outcome is AuthOutcome.TwoFaRequired or AuthOutcome.WrongCode;
+            player.Emit("flovmp:auth:result", false, res.Message, needCode);
             Alt.Log($"[FloV:MP] auth: вход отклонён для {player.Name}: {res.Outcome}");
             return;
         }
@@ -345,8 +354,11 @@ if (_authed.TryRemove(player.Id, out var acc))
             FloVMP.Core.Logging.LogActor.Player(account.Id, account.Username), Ip(player));
 
         // Хэндофф в лаунчер: если игрок зашёл в игру без входа в лаунчере,
-        // после этого лаунчер подхватит аккаунт из session.json.
-        SessionHandoff.Write(account);
+        // после этого лаунчер подхватит аккаунт из session.json. Только для
+        // игрока с этой же машины: файл пишется на машине СЕРВЕРА, и раньше
+        // лаунчер на ПК с сервером подхватывал аккаунт любого зашедшего игрока.
+        if (IsLocalPlayer(player))
+            SessionHandoff.Write(account);
 
         try
         {
@@ -365,6 +377,17 @@ if (_authed.TryRemove(player.Id, out var acc))
 
         player.Emit("flovmp:auth:hide");
         _onAuthed(player, account);
+    }
+
+    private static bool IsLocalPlayer(IPlayer player)
+    {
+        try
+        {
+            var ip = (player.Ip ?? "").Trim();
+            if (ip.StartsWith("::ffff:", StringComparison.OrdinalIgnoreCase)) ip = ip[7..];
+            return System.Net.IPAddress.TryParse(ip, out var addr) && System.Net.IPAddress.IsLoopback(addr);
+        }
+        catch { return false; }
     }
 
     private static string Ip(IPlayer player)

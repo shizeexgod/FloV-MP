@@ -183,6 +183,10 @@ function openAuth(serverName) {
             alt.emitServer('flovmp:auth:login', String(user || ''), String(pass || ''));
         });
 
+        authView.on('flovmp:auth:login2fa', (user, pass, code) => {
+            alt.emitServer('flovmp:auth:login2fa', String(user || ''), String(pass || ''), String(code || ''));
+        });
+
         authView.on('flovmp:auth:register', (user, pass) => {
             alt.emitServer('flovmp:auth:register', String(user || ''), String(pass || ''));
         });
@@ -297,9 +301,9 @@ alt.onServer('flovmp:auth:hide', () => {
     closeLoading();
 });
 
-alt.onServer('flovmp:auth:result', (ok, message) => {
+alt.onServer('flovmp:auth:result', (ok, message, needCode) => {
     if (!authView) return;
-    try { authView.emit('flovmp:auth:result', !!ok, String(message || '')); } catch (e) { }
+    try { authView.emit('flovmp:auth:result', !!ok, String(message || ''), !!needCode); } catch (e) { }
 });
 
 // =============================================================================

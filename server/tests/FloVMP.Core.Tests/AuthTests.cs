@@ -326,6 +326,19 @@ public sealed class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public void Register_limits_successful_accounts_per_address()
+    {
+        for (var i = 0; i < AuthService.MaxRegistrationsPerWindow; i++)
+            Assert.True(_svc.Register($"Farm_{i}", "secret6", "ip:farm").Ok);
+
+        Assert.Equal(AuthOutcome.RateLimited, _svc.Register("Farm_x", "secret6", "ip:farm").Outcome);
+        Assert.True(_svc.Register("Other_1", "secret6", "ip:other").Ok); // другой адрес не затронут
+
+        _now = _now.AddHours(2);
+        Assert.True(_svc.Register("Farm_later", "secret6", "ip:farm").Ok);
+    }
+
+    [Fact]
     public void Login_blocked_when_temporary_ban_is_active()
     {
         _svc.Register("BannedGuy", "secret6");
