@@ -188,6 +188,13 @@ reload_units() { systemctl daemon-reload >/dev/null 2>&1 || true; }
 # Удаление
 # ---------------------------------------------------------------------
 if [ "$UNINSTALL" -eq 1 ]; then
+  # Проверки ДО первого действия. Раньше службы успевали удалиться, а затем
+  # установщик отказывался от --purge без --yes: сервер уже остановлен и
+  # снят с автозапуска, хотя пользователя об этом не спрашивали.
+  if [ "$PURGE" -eq 1 ]; then
+    [ "$ASSUME_YES" -eq 1 ] || die "--purge удаляет файлы и базу безвозвратно; повторите с --yes"
+    [ -f "$INSTALL_DIR/manifest.txt" ] || die "$INSTALL_DIR не похож на установку FloV:MP — ничего не удалено"
+  fi
   step "Удаление FloV:MP ($SERVICE)"
   if [ "$HAS_SYSTEMD" -eq 1 ]; then
     systemctl stop "$SERVICE.service" "$SERVICE-voice.service" >/dev/null 2>&1 || true
@@ -198,13 +205,49 @@ if [ "$UNINSTALL" -eq 1 ]; then
     reload_units
     ok "службы $SERVICE и $SERVICE-voice удалены"
   fi
+
+  # Снятие службы не всегда убивает процессы: на части контейнерных VDS
+  # systemctl — совместимая замена, которая не трогает потомков. Тогда после
+  # удаления игровой и голосовой серверы продолжают работать и держат порты,
+  # а новая установка на те же порты падает с «порт занят».
+  # Добиваем только то, что запущено ИЗ ЭТОЙ папки.
+  # Совпадение по исполняемому файлу И по аргументам: обработчик сбоев движка
+  # запускается системным бинарником, но держит папку в аргументах — и, что
+  # важнее, наследует сетевые сокеты. Пока жив он, порт остаётся занятым, хотя
+  # сам сервер уже остановлен.
+  belongs_to_dir() {
+    local pid="$1" dir="$2" exe args
+    exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+    case "$exe" in "$dir"/*) return 0 ;; esac
+    # tr -d, а не замена на пробел: подстановка команды в bash ругается на
+    # нулевые байты, а для поиска подстроки с путём склейка аргументов не мешает.
+    args="$(tr -d ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    case "$args" in *"$dir/"*) return 0 ;; esac
+    return 1
+  }
+
+  stop_leftovers() {
+    local dir="$1" pid found=0 signal
+    for signal in TERM KILL; do
+      for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+        [ "$pid" = "$$" ] && continue
+        belongs_to_dir "$pid" "$dir" || continue
+        kill "-$signal" "$pid" 2>/dev/null && found=1
+      done
+      [ "$found" -eq 1 ] || return 0
+      sleep 2
+    done
+    ok "остановлены процессы из $dir (служба их не сняла)"
+  }
+  stop_leftovers "$INSTALL_DIR"
   if [ "$PURGE" -eq 1 ]; then
-    [ "$ASSUME_YES" -eq 1 ] || die "--purge удаляет файлы и базу безвозвратно; повторите с --yes"
-    [ -f "$INSTALL_DIR/manifest.txt" ] || die "$INSTALL_DIR не похож на установку FloV:MP — файлы не удалены"
-    ENV_DB_NAME="$DB_NAME"; ENV_DB_USER="$DB_USER"
-    if [ -f "$INSTALL_DIR/config/flovmp.env" ]; then
-      ENV_DB_NAME="$(sed -n 's/^FLOVMP_DB_NAME=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_NAME="${ENV_DB_NAME:-$DB_NAME}"
-      ENV_DB_USER="$(sed -n 's/^FLOVMP_DB_USER=//p' "$INSTALL_DIR/config/flovmp.env" | tail -1)"; ENV_DB_USER="${ENV_DB_USER:-$DB_USER}"
+    # Удаляется только база, которую завёл установщик ЭТОЙ установки
+    # (отметка config/.db-created). Всё остальное — чужое: сервер мог быть
+    # подключён к общей базе проекта или к базе соседнего инстанса.
+    ENV_DB_NAME=""; ENV_DB_USER=""
+    if [ -f "$INSTALL_DIR/config/.db-created" ]; then
+      ENV_DB_NAME="$(sed -n '1p' "$INSTALL_DIR/config/.db-created")"
+      ENV_DB_USER="$(sed -n '2p' "$INSTALL_DIR/config/.db-created")"
     fi
     # Перед удалением — архив всего, что принадлежит владельцу: код своего
     # сервера (gamemode), настройки, лицензия, данные и дамп базы. Потерять
@@ -215,7 +258,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
       [ -e "$INSTALL_DIR/$keep" ] && mkdir -p "$SAVE_DIR/$(dirname "$keep")" && cp -a "$INSTALL_DIR/$keep" "$SAVE_DIR/$keep"
     done
     find "$INSTALL_DIR/sql/migrations" -maxdepth 1 -name '[1-9][0-9][0-9]_*.sql' -exec sh -c 'mkdir -p "$1/sql/migrations" && cp -a "$2" "$1/sql/migrations/"' _ "$SAVE_DIR" {} \; 2>/dev/null || true
-    if command -v mysqldump >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
+    if [ -n "$ENV_DB_NAME" ] && command -v mysqldump >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]]; then
       mysqldump -u root --single-transaction --routines --triggers "$ENV_DB_NAME" 2>/dev/null | gzip > "$SAVE_DIR/database-$ENV_DB_NAME.sql.gz" || true
     fi
     if tar -czf "$SAVE_ARCHIVE" -C "$SAVE_DIR" . 2>/dev/null; then
@@ -227,7 +270,9 @@ if [ "$UNINSTALL" -eq 1 ]; then
     fi
     rm -rf "$SAVE_DIR"
 
-    if command -v mysql >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] && [[ "$ENV_DB_USER" =~ ^[A-Za-z0-9_]+$ ]]; then
+    if [ -z "$ENV_DB_NAME" ]; then
+      info "база данных не тронута: её заводил не этот установщик (нет config/.db-created)"
+    elif command -v mysql >/dev/null 2>&1 && [[ "$ENV_DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] && [[ "$ENV_DB_USER" =~ ^[A-Za-z0-9_]+$ ]]; then
       mysql -u root <<SQL >/dev/null 2>&1 && ok "база $ENV_DB_NAME и пользователь $ENV_DB_USER удалены" || warn "базу удалить не удалось — удалите вручную"
 DROP DATABASE IF EXISTS \`$ENV_DB_NAME\`;
 DROP USER IF EXISTS '$ENV_DB_USER'@'localhost';
@@ -555,6 +600,13 @@ SQL
     then
       if MYSQL_PWD="$DB_PASSWORD" mysql -h 127.0.0.1 -u "$DB_USER" "$DB_NAME" -e "SELECT 1" >/dev/null 2>&1; then
         DB_OK=1
+        # Отметка «эту базу и пользователя завёл установщик именно этой
+        # установки». Только их потом удаляет --purge. Без отметки удаление
+        # шло по имени из flovmp.env и сносило базу, которую сервер лишь
+        # использует: на машине с несколькими серверами удаление тестового
+        # инстанса уносило чужого пользователя вместе с доступом.
+        printf '%s\n%s\n' "$DB_NAME" "$DB_USER" > "$INSTALL_DIR/config/.db-created"
+        chmod 600 "$INSTALL_DIR/config/.db-created" 2>/dev/null || true
         ok "MariaDB: база $DB_NAME, пользователь $DB_USER — подключение проверено"
         info "Таблицы (аккаунты, баны, администраторы) создаст сам сервер при старте — sql/migrations"
       else
