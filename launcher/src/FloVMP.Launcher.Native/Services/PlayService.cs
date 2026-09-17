@@ -50,10 +50,15 @@ public static class PlayService
         var safePort = serverPort <= 0 ? 7788 : serverPort;
 
         var clientDir = FindClientDir();
-        var clientArg = !string.IsNullOrWhiteSpace(clientDir) ? $" --client \"{clientDir}\"" : "";
+        var clientArg = !string.IsNullOrWhiteSpace(clientDir) ? " --client " + QuoteArg(clientDir) : "";
 
         var detectedPlatform = GtaLocatorService.DetectPlatform(safeGtaPath);
-        var args = $"-connect {safeHost}:{safePort} --gta \"{safeGtaPath}\" --nick \"{safeNick}\" --platform {detectedPlatform}{clientArg}";
+        // Каждый аргумент экранируется по правилам CommandLineToArgvW. Раньше
+        // значения просто оборачивались в кавычки: путь или ник, кончающийся
+        // на «\», экранировал закрывающую кавычку, и все следующие аргументы
+        // съезжали — игра не запускалась с непонятной ошибкой коннектора.
+        var args = "-connect " + QuoteArg($"{safeHost}:{safePort}") + " --gta " + QuoteArg(safeGtaPath) +
+                   " --nick " + QuoteArg(safeNick) + " --platform " + QuoteArg(detectedPlatform) + clientArg;
 
         if (detectedPlatform == "egs")
         {
@@ -106,13 +111,13 @@ public static class PlayService
             {
                 var gameArgs = BuildGameArgs(s);
                 if (gameArgs.Length > 0)
-                    args += $" --game-args \"{gameArgs.Replace("\"", "")}\"";
+                    args += " --game-args " + QuoteArg(gameArgs);
                 if (!string.IsNullOrWhiteSpace(s.ProcPriority) && s.ProcPriority != "normal")
-                    args += $" --priority {s.ProcPriority}";
+                    args += " --priority " + QuoteArg(s.ProcPriority);
                 if (s.FpsLimit > 0)
                     args += $" --fps-limit {s.FpsLimit}";
                 if (!string.IsNullOrWhiteSpace(s.GraphicsPreset) && s.GraphicsPreset != "untouched")
-                    args += $" --gfx-preset {s.GraphicsPreset}";
+                    args += " --gfx-preset " + QuoteArg(s.GraphicsPreset);
             }
         }
         catch { }
@@ -137,6 +142,35 @@ public static class PlayService
         {
             return new LaunchResult(false, $"Ошибка запуска: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Экранирует один аргумент командной строки Windows (правила
+    /// CommandLineToArgvW): обратные слеши перед кавычкой и в конце удваиваются,
+    /// кавычки экранируются.
+    /// </summary>
+    public static string QuoteArg(string? value)
+    {
+        value ??= "";
+        if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '"' }) < 0) return value;
+
+        var sb = new System.Text.StringBuilder("\"");
+        var backslashes = 0;
+        foreach (var ch in value)
+        {
+            if (ch == '\\') { backslashes++; continue; }
+            if (ch == '"')
+            {
+                sb.Append('\\', backslashes * 2 + 1).Append('"');
+            }
+            else
+            {
+                sb.Append('\\', backslashes).Append(ch);
+            }
+            backslashes = 0;
+        }
+        sb.Append('\\', backslashes * 2).Append('"');
+        return sb.ToString();
     }
 
     /// <summary>
