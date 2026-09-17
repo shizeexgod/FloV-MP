@@ -176,7 +176,7 @@ public class MultiTierBanService
     {
         var id = Guid.NewGuid().ToString("N")[..12];
         var flags = TierToFlags(tier);
-        var expires = durationDays > 0 ? DateTime.UtcNow.AddDays(durationDays) : (DateTime?)null;
+        var expires = durationDays > 0 ? DateTime.UtcNow.AddDays(Math.Min(durationDays, 36500)) : (DateTime?)null;
 
         var record = new BanRecord(
             id,
