@@ -783,6 +783,10 @@ public class StarterResource : Resource
                 {
                     matchedPlayer = Alt.GetPlayerById(targetId);
                 }
+                if (explicitSc && ulong.TryParse(targetArg, out var scId))
+                {
+                    matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => p.SocialClubId == scId);
+                }
                 if (matchedPlayer == null && !explicitSc)
                 {
                     matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, targetArg, StringComparison.OrdinalIgnoreCase));
