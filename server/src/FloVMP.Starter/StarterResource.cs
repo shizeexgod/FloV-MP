@@ -463,6 +463,7 @@ public class StarterResource : Resource
         }
 
         Alt.OnPlayerConnect += OnPlayerConnect;
+        Alt.OnPlayerConnectDenied += OnPlayerConnectDenied;
         Alt.OnPlayerDisconnect += OnPlayerDisconnect;
         Alt.OnPlayerDead += OnPlayerDead;
         Alt.OnConsoleCommand += OnConsoleCommand;
@@ -488,6 +489,7 @@ public class StarterResource : Resource
         catch (Exception ex) { Alt.LogWarning($"[FloV:MP] Не удалось сохранить баны: {ex.Message}"); }
 
         Alt.OnPlayerConnect -= OnPlayerConnect;
+        Alt.OnPlayerConnectDenied -= OnPlayerConnectDenied;
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         Alt.OnPlayerDead -= OnPlayerDead;
         Alt.OnConsoleCommand -= OnConsoleCommand;
@@ -518,6 +520,30 @@ public class StarterResource : Resource
     /// главном потоке при каждом подключении, и запрос к базе здесь означал бы
     /// задержку тика на каждом входе.
     /// </summary>
+    /// <summary>
+    /// Движок отказал клиенту ещё до входа в игру. Раньше в логе не было
+    /// ничего: игрок пишет «не могу зайти», а владелец видит тишину и гадает
+    /// — не та версия клиента, сервер полон, неверный пароль или ветка.
+    /// </summary>
+    private void OnPlayerConnectDenied(PlayerConnectDeniedReason reason, string name, string ip,
+                                       ulong passwordHash, bool isDebug, string branch,
+                                       ushort versionMajor, ushort versionMinor, string cdnUrl,
+                                       long discordId)
+    {
+        var human = reason switch
+        {
+            PlayerConnectDeniedReason.WRONG_VERSION => "версия клиента не совпадает с версией сервера",
+            PlayerConnectDeniedReason.WRONG_BRANCH => $"другая ветка клиента ({branch})",
+            PlayerConnectDeniedReason.DEBUG_NOT_ALLOWED => "клиент в отладочном режиме, а сервер его не принимает (debug в server.toml)",
+            PlayerConnectDeniedReason.WRONG_PASSWORD => "неверный пароль сервера",
+            PlayerConnectDeniedReason.WRONG_CDN_URL => $"клиент пришёл с другого адреса файлов ({cdnUrl})",
+            _ => reason.ToString(),
+        };
+        Alt.LogWarning($"[FloV:MP] вход отклонён движком: {name} ({ip}) — {human}. " +
+                       $"Клиент {versionMajor}.{versionMinor}, ветка {branch}" +
+                       (isDebug ? ", отладочный режим" : ""));
+    }
+
     private bool RejectIfBanned(IPlayer player)
     {
         if (_bans is null) return false;
