@@ -21,6 +21,26 @@ namespace FloVMP.Core.Tests
         }
 
         [Fact]
+        public void OfflineBanBySocialClub_BlocksThatPlayerOnly()
+        {
+            // Консольный «ban sc:<SocialClubId>»: нарушитель уже вышел, и из
+            // его признаков сервер помнит только Social Club — ни IP, ни
+            // железа. Блокировка обязана сработать при следующем входе и не
+            // задеть остальных, у кого этих признаков тоже нет.
+            var service = new MultiTierBanService();
+            service.CreateBan(0, "sc:123456789", null, "123456789", null, null,
+                BanTier.SocialClubBan, "console", "нарушение правил", 5);
+
+            var banned = service.CheckConnection(0, "10.0.0.1", "123456789", "HWID_A", "MAC_A", HwidPolicyMode.Strict);
+            Assert.True(banned.IsBlocked);
+            Assert.Contains("нарушение правил", banned.Reason);
+
+            Assert.False(service.CheckConnection(0, "10.0.0.1", "999888777", "HWID_A", "MAC_A", HwidPolicyMode.Strict).IsBlocked);
+            // Игрок без Social Club не должен подходить под «пустые» признаки бана.
+            Assert.False(service.CheckConnection(0, "10.0.0.2", "0", "0000000000000000", "0000000000000000", HwidPolicyMode.Strict).IsBlocked);
+        }
+
+        [Fact]
         public void ZeroIdentifiers_DoNotMatchOtherPlayers()
         {
             // Игрок без SocialClub (0) и с неопределившимся железом (нули).
