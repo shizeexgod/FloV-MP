@@ -115,7 +115,8 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
   на Linux то же делает `sudo ./install.sh --owner-sc <SocialClubId>`;
 - в игре: `/claimowner <токен>` (токен — в окне сервера / выводе установщика и
   в `config/flovmp.env`; действует, пока нет ни одного администратора);
-- в консоли сервера (окно `FloVMP-Server.exe`): `setadmin <ID игрока> 8`;
+- в консоли сервера (окно `FloVMP-Server.exe`): `setadmin <ID игрока> 8`, а если
+  игрока нет в сети — `setadmin sc:<SocialClubId> 8`;
 - в базе данных — см. `sql/README.md`.
 
 На дежурство администратор заступает командой `/aduty`; если в `flovmp.env`

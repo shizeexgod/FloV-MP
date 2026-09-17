@@ -764,10 +764,13 @@ public class StarterResource : Resource
             case "setadmin":
                 if (args.Length < 2)
                 {
-                    Alt.Log("[Console] Использование: setadmin <ID|Ник|SocialClub> <Уровень 0-8>");
+                    Alt.Log("[Console] Использование: setadmin <ID|Ник|SocialClubId|sc:SocialClubId> <Уровень 0-8>");
                     return;
                 }
                 var targetArg = args[0];
+                // «sc:<id>» — явно SocialClubId, даже если число похоже на ID игрока.
+                var explicitSc = targetArg.StartsWith("sc:", StringComparison.OrdinalIgnoreCase);
+                if (explicitSc) targetArg = targetArg[3..];
                 if (!int.TryParse(args[1], out var newLvl))
                 {
                     Alt.Log("[Console] Уровень должен быть числом от 0 до 8.");
@@ -776,11 +779,11 @@ public class StarterResource : Resource
                 newLvl = Math.Clamp(newLvl, 0, 8);
 
                 IPlayer? matchedPlayer = null;
-                if (uint.TryParse(targetArg, out var targetId))
+                if (!explicitSc && uint.TryParse(targetArg, out var targetId))
                 {
                     matchedPlayer = Alt.GetPlayerById(targetId);
                 }
-                if (matchedPlayer == null)
+                if (matchedPlayer == null && !explicitSc)
                 {
                     matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, targetArg, StringComparison.OrdinalIgnoreCase));
                 }
@@ -795,12 +798,20 @@ public class StarterResource : Resource
                 }
                 else
                 {
-                    if (!targetArg.All(char.IsDigit))
+                    if (targetArg.Length == 0 || !targetArg.All(char.IsDigit))
                     {
                         // Игрок с таким ником не в сети, а права по нику отключены
                         // (ник подделывается). Раньше запись молча сохранялась и
                         // не действовала — владелец думал, что выдал права.
                         Alt.Log($"[Console] Игрок '{targetArg}' не в сети. Права выдаются по SocialClubId: setadmin <SocialClubId> {newLvl}");
+                        return;
+                    }
+                    // ID игроков alt:V не больше 65535: такое число почти наверняка ID
+                    // вышедшего игрока, а не SocialClubId. Раньше права молча
+                    // записывались на несуществующий SocialClubId.
+                    if (!explicitSc && ulong.TryParse(targetArg, out var shortId) && shortId <= ushort.MaxValue)
+                    {
+                        Alt.Log($"[Console] Игрок с ID {targetArg} не в сети. Если это SocialClubId: setadmin sc:{targetArg} {newLvl}");
                         return;
                     }
                     _adminManager.SetAdmin(targetArg, newLvl);
