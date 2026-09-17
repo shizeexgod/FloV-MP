@@ -3,8 +3,8 @@
 ## Сборка и тесты
 
 ```bash
-dotnet build server/FloVMP.slnx -c Release
-dotnet test server/FloVMP.slnx
+dotnet build server/FloVMP.sln -c Release
+dotnet test server/FloVMP.sln
 python scripts/pack_server.py --os windows      # или linux / all
 python scripts/pack_server.py --skip-build      # только перекладка пакета
 ```

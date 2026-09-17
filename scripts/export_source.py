@@ -28,7 +28,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 INCLUDE = [
     "VERSION",
-    "server/FloVMP.slnx",
+    "server/FloVMP.sln",
     "server/Directory.Build.props",
     "server/src/FloVMP.Core",
     "server/src/FloVMP.Starter",
@@ -39,7 +39,7 @@ INCLUDE = [
     "server/resources/flovmp-starter",
     "server/resources/flovmp-core",
     "client/resources/flovmp-client",
-    "sql",
+    "sql/migrations",
     "config/server.toml",
     "assets/branding/app.ico",
     "scripts/pack_server.py",
@@ -216,8 +216,8 @@ def main():
 
     if not args.no_verify:
         log("[4/5] сборка, тесты и Windows-пакет из выгрузки")
-        run(["dotnet", "build", "server/FloVMP.slnx", "-c", "Release", "-nologo", "-v", "q"], dest)
-        run(["dotnet", "test", "server/FloVMP.slnx", "-c", "Release", "-nologo", "-v", "q"], dest)
+        run(["dotnet", "build", "server/FloVMP.sln", "-c", "Release", "-nologo", "-v", "q"], dest)
+        run(["dotnet", "test", "server/FloVMP.sln", "-c", "Release", "-nologo", "-v", "q"], dest)
         run([sys.executable, "scripts/pack_server.py", "--os", "all", "--no-archive"], dest)
         for d in ("dist",):
             shutil.rmtree(os.path.join(dest, d), ignore_errors=True)

@@ -18,8 +18,8 @@
 
 ```bash
 # сборка и тесты
-dotnet build server/FloVMP.slnx -c Release
-dotnet test server/FloVMP.slnx
+dotnet build server/FloVMP.sln -c Release
+dotnet test server/FloVMP.sln
 
 # готовые пакеты для установки (dist/server/)
 python scripts/pack_server.py --os all
