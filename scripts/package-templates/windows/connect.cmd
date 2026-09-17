@@ -1,13 +1,14 @@
 @echo off
+chcp 65001 >nul
 setlocal
-title FloV:MP Direct Connect
+title FloV:MP — подключение к серверу
 
+rem Подключение к серверу с этого ПК: connect.cmd [адрес:порт]
+rem По умолчанию — сервер, запущенный здесь же (127.0.0.1:7788).
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=127.0.0.1:7788"
 
-echo ========================================================
-echo  FloV:MP Direct Connect: %TARGET%
-echo ========================================================
+echo [FloV:MP] Подключение к %TARGET%
 
 if exist "%~dp0tools\connector\FloVMP.Connect.exe" (
     "%~dp0tools\connector\FloVMP.Connect.exe" -connect "%TARGET%"
@@ -20,6 +21,6 @@ if exist "%APPDATA_CONNECTOR%" (
     exit /b %errorlevel%
 )
 
-echo [ERROR] FloV:MP connector not found. Install the FloV:MP Launcher first.
+echo [FloV:MP] Не найден клиент FloV:MP. Установите лаунчер FloV:MP и подключитесь через него.
 pause
 exit /b 1
