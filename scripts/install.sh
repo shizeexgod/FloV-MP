@@ -87,6 +87,13 @@ USAGE
 INSTALL_DIR="/opt/flovmp"
 SERVER_NAME="FloV:MP Server"
 SLOTS="1000"
+# Потоки отправки и приёма синхронизации: на одном потоке сервер упирается в
+# несколько сотен игроков раньше, чем в процессор. Берём половину ядер (1..4):
+# оставить ядра под стример и голосовой сервер важнее, чем занять все.
+CORES="$(nproc 2>/dev/null || echo 2)"
+SYNC_SEND="$(( CORES / 2 ))"; [ "$SYNC_SEND" -lt 1 ] && SYNC_SEND=1; [ "$SYNC_SEND" -gt 4 ] && SYNC_SEND=4
+SYNC_RECEIVE="$SYNC_SEND"
+
 GAME_PORT="7788"
 VOICE_PUBLIC_PORT="7895"
 VOICE_INTERNAL_PORT="7896"
@@ -494,6 +501,8 @@ if [ ! -f "$SERVER_TOML" ] || [ ! -f "$VOICE_TOML" ]; then
     content="${content//__FLOVMP_VOICE_PORT__/$VOICE_INTERNAL_PORT}"
     content="${content//__FLOVMP_VOICE_PUBLIC_HOST__/$PUBLIC_HOST}"
     content="${content//__FLOVMP_VOICE_PUBLIC_PORT__/$VOICE_PUBLIC_PORT}"
+    content="${content//__FLOVMP_SYNC_SEND__/$SYNC_SEND}"
+    content="${content//__FLOVMP_SYNC_RECEIVE__/$SYNC_RECEIVE}"
     printf '%s\n' "$content" > "$dst"
     chmod 600 "$dst"
   }
@@ -515,7 +524,7 @@ fi
 step "6/8 База данных"
 DB_OK=0
 if [ "$USE_DB" -eq 0 ] || [ -z "$DB_PASSWORD" ]; then
-  warn "без базы данных: права, баны и аккаунты хранятся в файлах"
+  warn "без базы данных: права и баны хранятся в файлах"
 else
   if [ "$HAS_SYSTEMD" -eq 1 ]; then
     systemctl enable mariadb >/dev/null 2>&1 || systemctl enable mysql >/dev/null 2>&1 || true

@@ -48,7 +48,7 @@ var voiceExe = Path.Combine(voiceDir, "altv-voice-server.exe");
 try
 {
     var init = ServerConfig.Initialize(root);
-    if (init.CreatedEnv) Ok("Создан config\\flovmp.env (ваши настройки: база данных, владелец, пароль администратора).");
+    if (init.CreatedEnv) Ok("Создан config\\flovmp.env (ваши настройки: база данных, владелец сервера, лицензия).");
     if (init.CreatedToml) Ok("Созданы server\\server.toml и voice\\voice.toml (название, порт, слоты, голос).");
     if (Workspace.CreateGamemodeIfMissing(root))
         Ok(@"Создана папка gamemode — здесь пишется ваш сервер (C# + JavaScript). Описание: gamemode\README.md, сборка: gamemode\build.cmd.");

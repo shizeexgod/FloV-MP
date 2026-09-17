@@ -185,6 +185,8 @@ def make_server_toml_example():
         (r"(?m)^(externalPort\s*=\s*)\d+", r"\g<1>__FLOVMP_VOICE_PORT__"),
         (r'(?m)^(externalPublicHost\s*=\s*)"[^"]*"', r'\1"__FLOVMP_VOICE_PUBLIC_HOST__"'),
         (r"(?m)^(externalPublicPort\s*=\s*)\d+", r"\g<1>__FLOVMP_VOICE_PUBLIC_PORT__"),
+        (r"(?m)^(syncSend\s*=\s*)\d+", r"\g<1>__FLOVMP_SYNC_SEND__"),
+        (r"(?m)^(syncReceive\s*=\s*)\d+", r"\g<1>__FLOVMP_SYNC_RECEIVE__"),
         (r'(?m)^(description\s*=\s*)"[^"]*"', r'\1"FloV:MP Server"'),
         (r'(?m)^(website\s*=\s*)"[^"]*"', r'\1""'),
     ]

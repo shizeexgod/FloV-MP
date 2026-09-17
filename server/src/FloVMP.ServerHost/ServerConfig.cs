@@ -15,6 +15,9 @@ public static class ServerConfig
 
     public sealed record InitResult(bool CreatedEnv, bool CreatedToml);
 
+    /// <summary>Сколько потоков синхронизации отдать серверу: половина ядер, 1..4.</summary>
+    private static int SyncThreads() => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+
     public static InitResult Initialize(string root)
     {
         var createdEnv = false;
@@ -46,6 +49,12 @@ public static class ServerConfig
                 ["__FLOVMP_VOICE_PORT__"] = "7896",
                 ["__FLOVMP_VOICE_PUBLIC_HOST__"] = "127.0.0.1",
                 ["__FLOVMP_VOICE_PUBLIC_PORT__"] = "7895",
+                // Потоки синхронизации по ядрам машины: на одном потоке
+                // отправка упирается в несколько сотен игроков раньше, чем
+                // в процессор. Половина ядер, но не больше четырёх — остальное
+                // нужно стримеру и голосовому серверу.
+                ["__FLOVMP_SYNC_SEND__"] = SyncThreads().ToString(),
+                ["__FLOVMP_SYNC_RECEIVE__"] = SyncThreads().ToString(),
             };
             if (File.Exists(serverToml) != File.Exists(voiceToml))
             {

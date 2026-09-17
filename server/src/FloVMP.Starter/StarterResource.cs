@@ -74,18 +74,86 @@ public class StarterResource : Resource
     }
 
     /// <summary>Отправить сообщение тем, кто рядом (в том же измерении).</summary>
+    // Индекс игроков по клеткам карты для сообщений «рядом» (/me, /do, /s, /w).
+    //
+    // Раньше каждое такое сообщение перебирало ВСЕХ игроков сервера и читало
+    // у каждого Position — а каждое обращение к Position уходит в движок.
+    // Три обращения на игрока (X, Y, Z) при 2000 онлайна — шесть тысяч
+    // переходов в движок на одну строчку чата, а в отыгровках они идут потоком.
+    //
+    // Теперь позиции снимаются пачкой не чаще четырёх раз в секунду, а
+    // сообщение опрашивает только соседние клетки. Позиция в индексе может
+    // отстать максимум на четверть секунды — поэтому у радиуса есть запас
+    // NearbyIndexSlack: за 250 мс игрок пешком проходит около двух метров,
+    // на транспорте больше, и без запаса собеседник у границы радиуса
+    // случайно выпадал бы из разговора.
+    private readonly FloVMP.Core.Spatial.SpatialHashGrid<uint> _nearbyIndex =
+        new(FloVMP.Core.Spatial.SpatialHashGrid<uint>.RecommendedCellSize(ShoutRadius));
+    private long _nearbyIndexBuiltMs = -1;
+    private const long NearbyIndexMaxAgeMs = 250;
+    private const float NearbyIndexSlack = 20.0f;
+    private readonly List<uint> _nearbyCandidates = new();
+
+    /// <summary>
+    /// Порог, с которого индекс выгоднее перебора. На маленьком сервере
+    /// (десятки игроков) перебор дешевле, чем поддержание индекса.
+    /// </summary>
+    private const int NearbyIndexMinPlayers = 64;
+
+    private void RebuildNearbyIndex()
+    {
+        var now = _clock.ElapsedMilliseconds;
+        if (_nearbyIndexBuiltMs >= 0 && now - _nearbyIndexBuiltMs < NearbyIndexMaxAgeMs) return;
+
+        _nearbyIndex.Clear();
+        foreach (var p in Alt.GetAllPlayers())
+        {
+            if (!p.Exists) continue;
+            var pp = p.Position;
+            _nearbyIndex.InsertOrUpdate(p.Id,
+                new FloVMP.Core.AntiCheat.Vector3D(pp.X, pp.Y, pp.Z), p.Dimension);
+        }
+        _nearbyIndexBuiltMs = now;
+    }
+
     private void SendNearby(IPlayer origin, float radius, string message, string kind, string author)
     {
+        using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfChatNearby);
         var pos = origin.Position;
         var dim = origin.Dimension;
         var radiusSq = radius * radius;
 
-        foreach (var p in Alt.GetAllPlayers())
+        var players = Alt.GetAllPlayers();
+        if (players.Count < NearbyIndexMinPlayers)
         {
-            if (!p.Exists || p.Dimension != dim) continue;
-            var dx = p.Position.X - pos.X;
-            var dy = p.Position.Y - pos.Y;
-            var dz = p.Position.Z - pos.Z;
+            foreach (var p in players)
+            {
+                if (!p.Exists || p.Dimension != dim) continue;
+                // Position — обращение в движок: читаем один раз, а не трижды.
+                var pp = p.Position;
+                var dx = pp.X - pos.X;
+                var dy = pp.Y - pos.Y;
+                var dz = pp.Z - pos.Z;
+                if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
+                p.Emit("flovmp:chat:msg", kind, author, message);
+            }
+            return;
+        }
+
+        RebuildNearbyIndex();
+        _nearbyCandidates.Clear();
+        _nearbyIndex.FindInRadius(new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z),
+            radius + NearbyIndexSlack, dim, _nearbyCandidates);
+
+        foreach (var id in _nearbyCandidates)
+        {
+            var p = Alt.GetPlayerById(id);
+            if (p is null || !p.Exists || p.Dimension != dim) continue;
+            // Живая позиция — только у кандидатов: их единицы, а не весь сервер.
+            var pp = p.Position;
+            var dx = pp.X - pos.X;
+            var dy = pp.Y - pos.Y;
+            var dz = pp.Z - pos.Z;
             if (dx * dx + dy * dy + dz * dz > radiusSq) continue;
             p.Emit("flovmp:chat:msg", kind, author, message);
         }
@@ -840,6 +908,28 @@ public class StarterResource : Resource
                 if (onlineCount == 0) Alt.Log("  (администраторов в сети нет)");
                 break;
 
+            // Профилировщик тика: без него разговор об оптимизации — догадки.
+            case "perf":
+                var perfArg = args.Length > 0 ? args[0].ToLowerInvariant() : "";
+                if (perfArg is "on" or "off")
+                {
+                    FloVMP.Core.Diagnostics.TickProfiler.Enabled = perfArg == "on";
+                    FloVMP.Core.Diagnostics.TickProfiler.Reset();
+                    Alt.Log($"[Console] Замер тика {(perfArg == "on" ? "включён" : "выключен")}, счётчики сброшены.");
+                    break;
+                }
+                if (perfArg == "reset")
+                {
+                    FloVMP.Core.Diagnostics.TickProfiler.Reset();
+                    Alt.Log("[Console] Счётчики замера сброшены.");
+                    break;
+                }
+                Alt.Log("─── ЗАМЕР ИГРОВОГО ТИКА ───");
+                foreach (var line in FloVMP.Core.Diagnostics.TickProfiler.Report()) Alt.Log("  " + line);
+                if (!FloVMP.Core.Diagnostics.TickProfiler.Enabled)
+                    Alt.Log("  Включить: perf on (или FLOVMP_PERF=1 в config/flovmp.env)");
+                break;
+
             case "reloadadmins":
                 _adminManager.Reload();
                 Alt.Log("[Console] " + FloVMP.Core.Admin.AdminCommandLevels.LoadOrCreate(
@@ -1158,24 +1248,39 @@ public class StarterResource : Resource
 
     private int _pendingAdminRecheck;
 
+    // Номера секций профилировщика: регистрируются один раз, дальше замер
+    // адресуется числом и ничего не выделяет (см. TickProfiler).
+    private static readonly int PerfTick = FloVMP.Core.Diagnostics.TickProfiler.Register("tick");
+    private static readonly int PerfStoreSync = FloVMP.Core.Diagnostics.TickProfiler.Register("store-sync");
+    private static readonly int PerfRespawn = FloVMP.Core.Diagnostics.TickProfiler.Register("respawn");
+    private static readonly int PerfAdminRights = FloVMP.Core.Diagnostics.TickProfiler.Register("admin-rights");
+    private static readonly int PerfLicense = FloVMP.Core.Diagnostics.TickProfiler.Register("license");
+    private static readonly int PerfChatNearby = FloVMP.Core.Diagnostics.TickProfiler.Register("chat-nearby");
+
     public override void OnTick()
     {
-        TickStoreSync();
+        using var _perfTick = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfTick);
+
+        using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfStoreSync))
+            TickStoreSync();
 
         var nowMs = _clock.ElapsedMilliseconds;
         if (nowMs >= _nextLicenseCheckMs)
         {
+            using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfLicense);
             if (_nextLicenseCheckMs != 0) CheckLicense(logAlways: false);
             _nextLicenseCheckMs = nowMs + LicenseRecheckMs;
         }
         if (System.Threading.Interlocked.Exchange(ref _pendingAdminRecheck, 0) == 1)
         {
+            using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAdminRights);
             try { ApplyRevokedAdminRights(); }
             catch (Exception ex) { Alt.LogWarning($"[FloV:MP Admin] Проверка отозванных прав: {ex.Message}"); }
         }
 
         if (_pendingRespawns.Count > 0)
         {
+            using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfRespawn);
             var now = _clock.ElapsedMilliseconds;
             for (int i = _pendingRespawns.Count - 1; i >= 0; i--)
             {
