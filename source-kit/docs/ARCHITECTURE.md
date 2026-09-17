@@ -25,7 +25,10 @@
 
 - спавн, смерть и возрождение;
 - чат: общий, `/me`, `/do`, `/b`, `/s`, `/w`; ограничение частоты и очистка текста;
-- администрирование: 8 уровней, дежурство (`/alogin`, `/aduty`), телепорты, транспорт, NoClip, ESP, модерация;
+- администрирование: уровень игрока (0 — игрок, 1..8 — администратор) хранится
+  в базе или `server/config/admins.json` и действует сразу при заходе; какая
+  команда с какого уровня работает — `server/config/admin-commands.cfg`
+  (по умолчанию все команды у создателя сервера, уровень 8);
 - блокировки по Social Club, IP, HWID, MAC — с синхронизацией между инстансами;
 - голосовой канал (пространственный, 25 м) и мут голоса;
 - проверка лицензии и лимит игроков;
@@ -58,6 +61,7 @@
 |---|---|---|
 | блокировки | `bans` | `server/flovmp-data/bans.json` |
 | администраторы | `admins` | `server/config/admins.json` |
+| уровни команд | — | `server/config/admin-commands.cfg` |
 
 База подключается, если задан `FLOVMP_DB_PASSWORD` (или `FLOVMP_DB_CONNECTION`).
 Если база недоступна, сервер работает на файлах и пишет об этом в лог.
@@ -92,7 +96,6 @@
 | `FLOVMP_DB_POOL_MIN`, `FLOVMP_DB_POOL_MAX` | размер пула соединений |
 | `FLOVMP_OWNER_SC` | SocialClubId владельца (уровень 8) |
 | `FLOVMP_SETUP_TOKEN` | токен для `/claimowner` |
-| `FLOVMP_ADMIN_PASSWORD` | пароль `/alogin` перед дежурством |
 | `FLOVMP_LICENSE_KEY` | ключ лицензии (license.flv должен быть выдан на него) |
 | `FLOVMP_LICENSE_FILE` | путь к license.flv, если он не в корне установки |
 | `FLOVMP_TELEMETRY_URL`, `FLOVMP_COMMAND_URL`, `FLOVMP_AGENT_TOKEN` | связь с порталом (необязательно) |

@@ -23,118 +23,71 @@ public class AdminTests
     }
 
     [Fact]
-    public void Helper_Level1_CanUseHelperCommands_CannotUseModeratorCommands()
+    public void ByDefault_OnlyFounderHasEveryCommand()
     {
-        Assert.True(AdminCommandRegistry.CanExecute(1, "a"));
-        Assert.True(AdminCommandRegistry.CanExecute(1, "stats"));
-        Assert.True(AdminCommandRegistry.CanExecute(1, "freeze"));
-        Assert.True(AdminCommandRegistry.CanExecute(1, "unfreeze"));
+        AdminCommandRegistry.ResetToDefaults();
 
-        Assert.False(AdminCommandRegistry.CanExecute(1, "kick"));
-        Assert.False(AdminCommandRegistry.CanExecute(1, "ban"));
-        Assert.False(AdminCommandRegistry.CanExecute(1, "veh"));
+        // На новом сервере админ один — создатель, и ему доступно всё.
+        foreach (var def in AdminCommandRegistry.All)
+        {
+            Assert.Equal(8, def.MinLevel);
+            Assert.True(AdminCommandRegistry.CanExecute(8, def.Name));
+            Assert.False(AdminCommandRegistry.CanExecute(7, def.Name));
+            Assert.False(AdminCommandRegistry.CanExecute(0, def.Name));
+        }
+
+        // Команды, которых в платформе нет, не разрешены никому.
+        Assert.False(AdminCommandRegistry.CanExecute(8, "jail"));
+        Assert.False(AdminCommandRegistry.CanExecute(8, "givemoney"));
     }
 
     [Fact]
-    public void Moderator_Level2_CanKickAndMute_CannotBan()
+    public void CommandLevels_OwnerFileOverridesDefaults()
     {
-        Assert.True(AdminCommandRegistry.CanExecute(2, "kick"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "mute"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "goto"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "gethere"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "revive"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "heal"));
-        Assert.True(AdminCommandRegistry.CanExecute(2, "armor"));
+        try
+        {
+            var (levels, problems) = AdminCommandLevels.Parse(
+                "# свой сервер\nkick 1\nban 1   # модератор банит сам\n\n");
+            Assert.Empty(problems);
+            Assert.Equal(2, levels.Count);
 
-        Assert.False(AdminCommandRegistry.CanExecute(2, "ban"));
-        Assert.False(AdminCommandRegistry.CanExecute(2, "veh"));
-        Assert.False(AdminCommandRegistry.CanExecute(2, "god"));
+            Assert.Equal(2, AdminCommandLevels.Parse("kick 1\nban 1\n").Levels.Count);
+            AdminCommandRegistry.ApplyOverrides(levels);
+
+            Assert.True(AdminCommandRegistry.CanExecute(1, "kick"));
+            Assert.True(AdminCommandRegistry.CanExecute(1, "ban"));
+            // Команда, которой в файле нет, остаётся у создателя сервера.
+            Assert.False(AdminCommandRegistry.CanExecute(7, "setadmin"));
+            Assert.False(AdminCommandRegistry.CanExecute(7, "noclip"));
+        }
+        finally
+        {
+            AdminCommandRegistry.ResetToDefaults();
+        }
     }
 
     [Fact]
-    public void SeniorMod_Level3_CanBan_CannotSpawnVehicles()
+    public void CommandLevels_BadLinesAreReportedAndSkipped()
     {
-        Assert.True(AdminCommandRegistry.CanExecute(3, "ban"));
-        Assert.True(AdminCommandRegistry.CanExecute(3, "warn"));
-        Assert.True(AdminCommandRegistry.CanExecute(3, "slap"));
+        // Опечатка в файле не должна ни ронять сервер, ни открывать команду всем.
+        var (levels, problems) = AdminCommandLevels.Parse(
+            "kikc 1\nkick\nkick 99\nkick abc\nkick 2\n");
 
-        Assert.False(AdminCommandRegistry.CanExecute(3, "veh"));
-        Assert.False(AdminCommandRegistry.CanExecute(3, "tp"));
+        Assert.Equal(4, problems.Count);
+        Assert.Single(levels);
+        Assert.Equal(2, levels["kick"]);
     }
 
     [Fact]
-    public void Admin_Level4_CanSpawnVehiclesAndSetHp()
+    public void CommandLevels_DefaultFileCoversEveryCommand()
     {
-        Assert.True(AdminCommandRegistry.CanExecute(4, "veh"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "car"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "dv"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "sethp"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "repair"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "fix"));
-        Assert.True(AdminCommandRegistry.CanExecute(4, "god"));
+        AdminCommandRegistry.ResetToDefaults();
+        var (levels, problems) = AdminCommandLevels.Parse(AdminCommandLevels.DefaultFileContent());
 
-        Assert.False(AdminCommandRegistry.CanExecute(4, "tp"));
-        Assert.False(AdminCommandRegistry.CanExecute(4, "makeadmin"));
-    }
-
-    [Fact]
-    public void SeniorAdmin_Level5_CanTeleportAndSetWeather()
-    {
-        Assert.True(AdminCommandRegistry.CanExecute(5, "tp"));
-        Assert.True(AdminCommandRegistry.CanExecute(5, "tpm"));
-        Assert.True(AdminCommandRegistry.CanExecute(5, "setweather"));
-        Assert.True(AdminCommandRegistry.CanExecute(5, "settime"));
-
-        Assert.False(AdminCommandRegistry.CanExecute(5, "makeadmin"));
-    }
-
-    [Fact]
-    public void MainAdmin_Level7_CanMakeAdmin_CannotFullOverride()
-    {
-        Assert.True(AdminCommandRegistry.CanExecute(7, "makeadmin"));
-        Assert.True(AdminCommandRegistry.CanExecute(7, "banip"));
-
-        Assert.False(AdminCommandRegistry.CanExecute(7, "setadminlevel"));
-    }
-
-    [Fact]
-    public void Owner_Level8_HasFullAccess()
-    {
-        Assert.True(AdminCommandRegistry.CanExecute(8, "setadminlevel"));
-        Assert.True(AdminCommandRegistry.CanExecute(8, "srvrestart"));
-        Assert.True(AdminCommandRegistry.CanExecute(8, "ban"));
-        Assert.True(AdminCommandRegistry.CanExecute(8, "veh"));
-        Assert.True(AdminCommandRegistry.CanExecute(8, "tpm"));
-    }
-
-    [Fact]
-    public void NewAdminCommands_LevelsAreEnforced()
-    {
-        // Level 1: noclip, esp
-        Assert.True(AdminCommandRegistry.CanExecute(1, "noclip"));
-        Assert.True(AdminCommandRegistry.CanExecute(1, "esp"));
-        Assert.False(AdminCommandRegistry.CanExecute(0, "noclip"));
-        Assert.False(AdminCommandRegistry.CanExecute(0, "esp"));
-
-        // Level 4: speed
-        Assert.True(AdminCommandRegistry.CanExecute(4, "speed"));
-        Assert.False(AdminCommandRegistry.CanExecute(3, "speed"));
-
-        // Level 5: weather, time, skin
-        Assert.True(AdminCommandRegistry.CanExecute(5, "weather"));
-        Assert.True(AdminCommandRegistry.CanExecute(5, "time"));
-        Assert.True(AdminCommandRegistry.CanExecute(5, "skin"));
-        Assert.False(AdminCommandRegistry.CanExecute(4, "weather"));
-        Assert.False(AdminCommandRegistry.CanExecute(4, "time"));
-        Assert.False(AdminCommandRegistry.CanExecute(4, "skin"));
-
-        // Level 7: promote
-        Assert.True(AdminCommandRegistry.CanExecute(7, "promote"));
-        Assert.False(AdminCommandRegistry.CanExecute(6, "promote"));
-
-        // Level 8: setadmin
-        Assert.True(AdminCommandRegistry.CanExecute(8, "setadmin"));
-        Assert.False(AdminCommandRegistry.CanExecute(7, "setadmin"));
+        Assert.Empty(problems);
+        Assert.Equal(AdminCommandRegistry.All.Count, levels.Count);
+        foreach (var def in AdminCommandRegistry.All)
+            Assert.Equal(def.MinLevel, levels[def.Name]);
     }
 
     [Fact]

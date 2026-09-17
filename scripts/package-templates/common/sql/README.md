@@ -25,7 +25,7 @@ ON DUPLICATE KEY UPDATE level = VALUES(level), is_founder = VALUES(is_founder);
   в окне консоли (Windows, `FloVMP-Server.exe`), мгновенно — командой `reloadadmins`.
 
 Снять права: `DELETE FROM admins WHERE social_club = '123456789';`
-Администратор на дежурстве теряет права сразу после синхронизации.
+Администратор теряет права сразу после синхронизации.
 
 Выдавать права по нику нельзя: ник задаёт сам игрок, и любой мог бы взять
 ник администратора.

@@ -90,7 +90,7 @@ public sealed class GamemodeResource : Resource
         }
     }
 
-    /// <summary>Уровень администратора на дежурстве (0 — обычный игрок). Выставляет платформа.</summary>
+    /// <summary>Уровень администратора (0 — обычный игрок). Выставляет платформа.</summary>
     public static int AdminLevel(IPlayer player) =>
         player.GetLocalMetaData("adminLevel", out int level) ? level : 0;
 

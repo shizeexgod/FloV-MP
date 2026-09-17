@@ -150,13 +150,22 @@ def check_security_regressions(rep):
                     hits.append("{}:{}".format(p.relative_to(ROOT), i))
         rep.add(FAIL if hits else PASS, why, "; ".join(hits[:3]) if hits else "чисто")
 
+    # Команда, которую сервер знает, но реестр прав не описывает, проверяется
+    # только внутри обработчика — то есть её уровень нельзя настроить файлом.
+    reg = ROOT / "server/src/FloVMP.Core/Admin/AdminCommandRegistry.cs"
     starter = ROOT / "server/src/FloVMP.Starter/StarterResource.cs"
-    if starter.exists():
-        txt = starter.read_text(encoding="utf-8", errors="ignore")
-        tail = txt.split("FLOVMP_ADMIN_PASSWORD", 1)[1][:80] if "FLOVMP_ADMIN_PASSWORD" in txt else ""
-        ok = bool(tail) and '?? "' not in tail
-        rep.add(PASS if ok else FAIL, "админ-пароль без небезопасного дефолта",
-                "" if ok else "есть дефолт - /alogin открыт всем, кто знает строку")
+    if reg.exists() and starter.exists():
+        registered = set(re.findall(r'Register\("([^"]+)"', reg.read_text(encoding="utf-8", errors="ignore")))
+        s_txt = starter.read_text(encoding="utf-8", errors="ignore")
+        marker = "private void HandleCommand"
+        handled = set(re.findall(r'case "([a-z0-9_]+)":', s_txt[s_txt.find(marker):])) if marker in s_txt else set()
+        ghost = sorted(registered - handled)
+        rep.add(PASS if not ghost else FAIL, "у каждой команды из реестра есть обработчик",
+                ", ".join(ghost) if ghost else "чисто")
+        leftover = sorted(set(re.findall(r'IsAdmin\(player, (\d+)\)', s_txt)))
+        rep.add(PASS if not leftover else WARN, "нет проверок уровня мимо реестра",
+                "" if not leftover else "уровни зашиты в обработчиках: " + ", ".join(leftover))
+
 
 
 # ------------------- 3. Горячий путь (блокировка тика) -------------------

@@ -555,7 +555,7 @@ alt.everyTick(() => {
                 if (!onScreen) continue;
 
                 // Уровни администраторов присылает сервер и только администраторам
-                // на дежурстве (flovmp:admin:roster); -1 — Основатель, скрытый от младших.
+                // (flovmp:admin:roster); -1 — Основатель, скрытый от младших.
                 let pAdmin = isSelf ? currentAdminLevel : (adminRoster[p.id] || 0);
                 if (!isSelf && (pAdmin < 0 || (currentAdminLevel < 8 && pAdmin >= 8))) continue;
 

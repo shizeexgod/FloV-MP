@@ -101,7 +101,7 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
 | `voice/voice.toml` | **ваше** | не трогается |
 | `config/flovmp.env` | **ваше** | не трогается |
 | `license.flv` | **ваше** | не трогается |
-| `server/config/admins.json`, `server/flovmp-data/` | **ваше** | не трогается |
+| `server/config/` (`admins.json`, `admin-commands.cfg`), `server/flovmp-data/` | **ваше** | не трогается |
 | `server/resources/<ваши ресурсы>` | **ваше** | не трогается |
 | `sql/migrations/100+` | **ваше** | не трогается |
 
@@ -119,8 +119,14 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
   игрока нет в сети — `setadmin sc:<SocialClubId> 8`;
 - в базе данных — см. `sql/README.md`.
 
-На дежурство администратор заступает командой `/aduty`; если в `flovmp.env`
-задан `FLOVMP_ADMIN_PASSWORD`, сначала `/alogin <пароль>`. Список команд — `/help`.
+Права действуют сразу при заходе на сервер: ни пароля, ни дежурства нет.
+Список доступных команд — `/help`.
+
+По умолчанию все админ-команды доступны только создателю сервера (уровень 8).
+Нужны младшие администраторы — откройте `server/config/admin-commands.cfg`
+(создаётся при первом запуске), поставьте нужным командам уровень пониже
+(например, `kick 2`), выдайте помощнику этот уровень и выполните `reloadadmins`
+в консоли сервера.
 
 SocialClubId игрока виден в логе сервера при его подключении.
 

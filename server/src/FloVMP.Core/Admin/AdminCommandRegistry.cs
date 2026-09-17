@@ -1,104 +1,119 @@
-using System.Collections.Concurrent;
-
 namespace FloVMP.Core.Admin;
 
 /// <summary>
-/// Реестр административных команд 8-уровневой системы FloV:MP.
-/// Предоставляет проверку прав, валидацию уровня доступа и автогенерацию справки.
+/// Какая команда с какого уровня прав доступна.
+///
+/// Уровень игрока хранится один — в базе (таблица <c>admins</c>) или в
+/// <c>config/admins.json</c>: 0 — обычный игрок, 1..8 — администратор. Права
+/// действуют сразу при заходе на сервер, никакого дежурства и паролей.
+///
+/// На новом сервере администратор ровно один — создатель (уровень 8), и ему
+/// доступно всё: поэтому по умолчанию у каждой команды уровень 8. Младшие
+/// администраторы появляются тогда, когда владелец сам решит, что им можно:
+/// он снижает уровень нужных команд в <c>server/config/admin-commands.cfg</c>
+/// (см. <see cref="AdminCommandLevels"/>) и выдаёт игрокам уровни 1..7.
 /// </summary>
 public static class AdminCommandRegistry
 {
     private static readonly Dictionary<string, AdminCommandDef> Commands = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, int> Defaults = new(StringComparer.OrdinalIgnoreCase);
 
     static AdminCommandRegistry()
     {
-        // ── Уровень 1: Хелпер (Мл. Модератор) ──────────────────────
-        Register("a", 1, "/a <текст>", "Внутренний чат администрации");
-        Register("o", 1, "/o <текст>", "Глобальный чат / объявление на весь сервер");
-        Register("stats", 1, "/stats <ID/ник>", "Статистика и информация об игроке");
-        Register("freeze", 1, "/freeze <ID/ник>", "Заморозить игрока на месте");
-        Register("unfreeze", 1, "/unfreeze <ID/ник>", "Разморозить игрока");
-        Register("sp", 1, "/sp <ID/ник>", "Следить за игроком (режим спектатора)");
-        Register("spoff", 1, "/spoff", "Выйти из режима слежки");
-        Register("ans", 1, "/ans <ID/ник> <ответ>", "Ответить на обращение / репорт");
-        Register("noclip", 1, "/noclip", "Включить/выключить режим полёта (F4 NoClip)");
-        Register("esp", 1, "/esp [0-3]", "Переключить админ-видение (F3 Wallhack)");
+        // ── Инструменты администратора ─────────────────────────────
+        Register("a", 8, "/a <текст>", "Чат администрации");
+        Register("admin", 8, "/admin <текст>", "Чат администрации (алиас /a)");
+        Register("esp", 8, "/esp [0-3]", "Админ-видение (F3)");
+        Register("noclip", 8, "/noclip", "Полёт сквозь стены (F4)");
+        Register("fly", 8, "/fly", "Полёт сквозь стены (алиас /noclip)");
+        Register("tpm", 8, "/tpm", "Телепорт на метку карты (F5)");
+        Register("tp", 8, "/tp <X> <Y> <Z>", "Телепорт по координатам");
+        Register("goto", 8, "/goto <ID/ник>", "Телепортироваться к игроку");
+        Register("gethere", 8, "/gethere <ID/ник>", "Телепортировать игрока к себе");
+        Register("freeze", 8, "/freeze <ID/ник>", "Заморозить игрока");
+        Register("unfreeze", 8, "/unfreeze <ID/ник>", "Разморозить игрока");
+        Register("revive", 8, "/revive [ID/ник]", "Поднять погибшего игрока");
+        Register("heal", 8, "/heal [ID/ник]", "Восстановить здоровье");
+        Register("armor", 8, "/armor [ID/ник] [0-100]", "Выдать броню");
+        Register("god", 8, "/god", "Неуязвимость");
+        Register("godmode", 8, "/godmode", "Неуязвимость (алиас /god)");
+        Register("kill", 8, "/kill [ID/ник]", "Убить игрока");
+        Register("suicide", 8, "/suicide", "Убить себя (алиас /kill)");
+        Register("speed", 8, "/speed [множитель] [ID/ник]", "Множитель скорости бега");
+        Register("car", 8, "/car <модель>", "Создать транспорт");
+        Register("veh", 8, "/veh <модель>", "Создать транспорт (алиас /car)");
+        Register("fix", 8, "/fix", "Починить транспорт");
+        Register("repair", 8, "/repair", "Починить транспорт (алиас /fix)");
+        Register("dv", 8, "/dv", "Удалить транспорт");
+        Register("delveh", 8, "/delveh", "Удалить транспорт (алиас /dv)");
+        Register("destroyveh", 8, "/destroyveh", "Удалить транспорт (алиас /dv)");
+        Register("weapon", 8, "/weapon <название>", "Выдать оружие");
+        Register("gun", 8, "/gun <название>", "Выдать оружие (алиас /weapon)");
+        Register("givegun", 8, "/givegun <название>", "Выдать оружие (алиас /weapon)");
+        Register("disarm", 8, "/disarm [ID/ник]", "Забрать оружие");
+        Register("removeweapons", 8, "/removeweapons [ID/ник]", "Забрать оружие (алиас /disarm)");
+        Register("skin", 8, "/skin <модель>", "Сменить модель персонажа");
+        Register("ped", 8, "/ped <модель>", "Сменить модель персонажа (алиас /skin)");
+        Register("setdim", 8, "/setdim <ID/ник> <номер>", "Виртуальный мир игрока");
+        Register("dim", 8, "/dim <ID/ник> <номер>", "Виртуальный мир (алиас /setdim)");
+        Register("dimension", 8, "/dimension <ID/ник> <номер>", "Виртуальный мир (алиас /setdim)");
+        Register("weather", 8, "/weather <название|0-14>", "Погода на сервере");
+        Register("time", 8, "/time <часы> [минуты]", "Игровое время на сервере");
 
-        // ── Уровень 2: Модератор ───────────────────────────────────
-        Register("goto", 2, "/goto <ID/ник>", "Телепортироваться к игроку");
-        Register("gethere", 2, "/gethere <ID/ник>", "Телепортировать игрока к себе");
-        Register("kick", 2, "/kick <ID/ник> [причина]", "Исключить игрока с сервера");
-        Register("mute", 2, "/mute <ID/ник> <минут> [причина]", "Заблокировать текстовый чат игроку");
-        Register("unmute", 2, "/unmute <ID/ник>", "Снять блокировку чата");
-        Register("jail", 2, "/jail <ID/ник> <минут> [причина]", "Посадить в деморган (КПЗ)");
-        Register("unjail", 2, "/unjail <ID/ник>", "Выпустить из деморгана");
-        Register("revive", 2, "/revive <ID/ник>", "Воскресить/реанимировать погибшего игрока");
-        Register("heal", 2, "/heal [ID/ник]", "Восстановить здоровье до 100% (себе или игроку)");
-        Register("armor", 2, "/armor [ID/ник] [кол-во 0-100]", "Восстановить броню (себе или игроку)");
+        // ── Модерация ──────────────────────────────────────────────
+        Register("kick", 8, "/kick <ID/ник> [причина]", "Исключить игрока");
+        Register("vmute", 8, "/vmute <ID/ник>", "Заглушить голос игрока");
+        Register("voicemute", 8, "/voicemute <ID/ник>", "Заглушить голос (алиас /vmute)");
+        Register("bans", 8, "/bans", "Список блокировок");
+        Register("banlist", 8, "/banlist", "Список блокировок (алиас /bans)");
 
-        // ── Уровень 3: Старший Модератор ──────────────────────────
-        Register("ban", 3, "/ban <ID/ник> <дней> [причина]", "Заблокировать аккаунт игрока (Standard)");
-        Register("banip", 3, "/banip <ID/ник> <дней> [причина]", "Заблокировать аккаунт и IP игрока");
-        Register("unban", 3, "/unban <ник/ID>", "Разблокировать аккаунт / железо");
-        Register("checkban", 3, "/checkban <ID/ник>", "Проверить статус блокировок и HWID");
-        Register("warn", 3, "/warn <ID/ник> [причина]", "Выдать предупреждение (варн)");
-        Register("unwarn", 3, "/unwarn <ID/ник>", "Снять предупреждение");
-        Register("slap", 3, "/slap <ID/ник>", "Подбросить игрока (проверка на АФК/бот)");
+        // ── Блокировки ─────────────────────────────────────────────
+        Register("ban", 8, "/ban <ID/ник> <дней> [причина]", "Заблокировать игрока");
+        Register("banip", 8, "/banip <ID/ник> <дней> [причина]", "Заблокировать игрока и его IP");
 
-        // ── Уровень 4: Администратор ──────────────────────────────
-        Register("bansc", 4, "/bansc <ID/ник> <дней> [причина]", "Заблокировать Rockstar Social Club игрока");
-        Register("veh", 4, "/veh <модель> [цвет1] [цвет2]", "Создать временный транспорт");
-        Register("car", 4, "/car <модель> [цвет1] [цвет2]", "Создать временный транспорт (алиас /veh)");
-        Register("dv", 4, "/dv [радиус]", "Удалить ближайший/занимаемый транспорт");
-        Register("sethp", 4, "/sethp <ID/ник> <кол-во 0-100>", "Установить уровень здоровья игрока");
-        Register("heal4", 4, "/heal4 <ID/ник>", "Восстановить здоровье игроку");
-        Register("setarmor", 4, "/setarmor <ID/ник> <кол-во 0-100>", "Установить уровень брони игрока");
-        Register("repair", 4, "/repair", "Починить транспорт, в котором находится админ");
-        Register("fix", 4, "/fix", "Починить транспорт (алиас /repair)");
-        Register("fuel", 4, "/fuel", "Заправить транспорт до 100%");
-        Register("god", 4, "/god", "Режим неуязвимости администратора (GodMode)");
-        // Алиас: обработчик в ChatSystem ловит и "god", и "godmode". Без
-        // регистрации /godmode отвечал "неизвестная команда".
-        Register("godmode", 4, "/godmode", "Режим неуязвимости администратора (алиас /god)");
-        Register("speed", 4, "/speed [множитель 1.0-1.49] [ID/ник]", "Установить множитель скорости бега");
+        Register("hwidban", 8, "/hwidban <ID/ник> <дней> [причина]", "Блокировка по железу (HWID + MAC)");
+        Register("unban", 8, "/unban <ник|IP|HWID|ID бана>", "Снять блокировку");
 
-        // ── Уровень 5: Старший Администратор ──────────────────────
-        Register("hwidban", 5, "/hwidban <ID/ник> <дней> [причина]", "Аппаратная блокировка по железу (HWID + MAC)");
-        Register("macban", 5, "/macban <ID/ник> <дней> [причина]", "Аппаратная блокировка по сетевому MAC-адресу");
-        Register("tp", 5, "/tp <X> <Y> <Z>", "Телепорт по точным координатам");
-        Register("tpm", 5, "/tpm [redsquare|city|police|hospital]", "Быстрый телепорт по ключевым локациям сервера");
-        Register("setweather", 5, "/setweather <ID_погоды>", "Изменить погоду на сервере");
-        Register("weather", 5, "/weather <0-14|CLEAR|...>", "Изменить погоду на сервере (алиас /setweather)");
-        Register("settime", 5, "/settime <часы 0-23> [минуты]", "Изменить игровое время");
-        Register("time", 5, "/time <часы 0-23> [минуты]", "Изменить игровое время (алиас /settime)");
-        Register("setskin", 5, "/setskin <ID/ник> <модель>", "Изменить модель персонажа (скин)");
-        Register("skin", 5, "/skin <ID/ник> <модель>", "Изменить модель персонажа (алиас /setskin)");
+        Register("hardban", 8, "/hardban <ID/ник> [причина]", "Блокировка навсегда по всем признакам");
 
-        // ── Уровень 6: Куратор / Зам. ГА ──────────────────────────
-        Register("hardban", 6, "/hardban <ID/ник> [причина]", "Тотальная перманентная блокировка (Account+IP+SC+HWID+MAC)");
-        Register("givemoney", 6, "/givemoney <ID/ник> <сумма>", "Выдать наличные средства игроку");
-        Register("takemoney", 6, "/takemoney <ID/ник> <сумма>", "Изъять наличные средства у игрока");
-        Register("giveitem", 6, "/giveitem <ID/ник> <item_id> <кол-во>", "Выдать предмет в инвентарь");
-        Register("setdim", 6, "/setdim <ID/ник> <dimension>", "Установить виртуальный мир (дименшн)");
-        // ВРЕМЕННО НЕ РЕГИСТРИРУЕТСЯ: SnapshotManager написан, но обработчика
-        // команды в ChatSystem нет — админ вводил /snapshot и молча ничего не
-        // происходило. Вернуть регистрацию вместе с реализацией обработчика.
-        // Register("snapshot", 6, "/snapshot <take|list|restore> <ID/ник> [snapshotId]", "Снимки состояний (Time-Machine) и точечный откат персонажа");
-
-        // ── Уровень 7: Главный Администратор (ГА) ─────────────────
-        Register("makeadmin", 7, "/makeadmin <ID/ник> <уровень 0-6>", "Назначить администратора (до 6 ранга)");
-        Register("promote", 7, "/promote <ID/ник> <уровень 0-6>", "Назначить администратора (алиас /makeadmin)");
-        Register("clearadmin", 7, "/clearadmin <ник>", "Снять администратора");
-
-        // ── Уровень 8: Руководитель проекта / Разработчик ─────────
-        Register("setadminlevel", 8, "/setadminlevel <ID/ник> <уровень 0-8>", "Полный доступ к уровням администрации");
-        Register("setadmin", 8, "/setadmin <ID/ник> <уровень 0-8>", "Установить уровень администратора (алиас /setadminlevel)");
-        Register("srvrestart", 8, "/srvrestart [секунд]", "Перезапустить сервер с оповещением");
+        // ── Права администрации ────────────────────────────────────
+        Register("setadmin", 8, "/setadmin <ID> <уровень 0-8>", "Выдать или снять права администратора");
     }
 
     private static void Register(string name, int minLevel, string usage, string description)
     {
         Commands[name] = new AdminCommandDef(name, minLevel, usage, description);
+        Defaults[name] = minLevel;
+    }
+
+    /// <summary>Уровни по умолчанию — из них пишется образец admin-commands.cfg.</summary>
+    public static IReadOnlyDictionary<string, int> DefaultLevels => Defaults;
+
+    /// <summary>
+    /// Применить раскладку владельца из <c>server/config/admin-commands.cfg</c>.
+    /// Незнакомые имена игнорируются: опечатка в файле не должна открывать
+    /// команду всем и не должна ронять сервер. Команды, которых в файле нет,
+    /// остаются с уровнем по умолчанию.
+    /// </summary>
+    public static int ApplyOverrides(IReadOnlyDictionary<string, int> levels)
+    {
+        var applied = 0;
+        foreach (var (name, level) in levels)
+        {
+            if (!Commands.TryGetValue(name, out var def)) continue;
+            var clamped = Math.Clamp(level, 0, 8);
+            if (clamped == def.MinLevel) continue;
+            Commands[name] = def with { MinLevel = clamped };
+            applied++;
+        }
+        return applied;
+    }
+
+    /// <summary>Вернуть уровни по умолчанию (используется в тестах и при сбросе).</summary>
+    public static void ResetToDefaults()
+    {
+        foreach (var (name, level) in Defaults)
+            Commands[name] = Commands[name] with { MinLevel = level };
     }
 
     public static AdminCommandDef? Get(string commandName)
@@ -120,7 +135,10 @@ public static class AdminCommandRegistry
         return Commands.Values
             .Where(c => playerAdminLevel >= c.MinLevel)
             .OrderBy(c => c.MinLevel)
-            .ThenBy(c => c.Name)
+            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    public static IReadOnlyList<AdminCommandDef> All =>
+        Commands.Values.OrderBy(c => c.MinLevel).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
 }

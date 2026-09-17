@@ -11,7 +11,8 @@ namespace FloVMP.Starter;
 /// <summary>
 /// Чистый ванильный стартер для клиентов FloV:MP с разграничением прав (RBAC):
 /// - Обычные игроки: чистый спавн, чат, /pos, F8 консоль в режиме игрока (без админ-кнопок).
-/// - Администраторы: F4 NoClip, /tpm, /car, /heal, /weather, /time, полная панель Дев-тулс в F8.
+/// - Администраторы (уровень в базе > 0, действует сразу с захода): F4 NoClip,
+///   F3 ESP, F5 телепорт на метку, команды чата по server/config/admin-commands.cfg.
 /// - 100% серверная валидация: любая попытка несанкционированного вызова админских событий
 ///   (teleportWaypoint, toggleNoClip, команды) строго блокируется на сервере.
 /// - Pre-DB архитектура: автосохранение прав в config/admins.json, команды консоли сервера (setadmin/setfounder),
@@ -28,11 +29,6 @@ public class StarterResource : Resource
     private bool _platformRespawn = true;
     private static readonly uint DefaultPlayerModel = Alt.Hash("mp_m_freemode_01");
 
-    // Пароль админ-дежурства. НЕТ небезопасного дефолта: раньше в исходниках
-    // лежал "flovmp2026" — он попадает в поставляемую клиентам сборку (strings
-    // на DLL) и открывает /alogin. Если переменная не задана — парольный путь
-    // ОТКЛЮЧЁН (вход по назначенному рангу/токену остаётся).
-    private static readonly string? AdminPassword = Environment.GetEnvironmentVariable("FLOVMP_ADMIN_PASSWORD");
     private readonly ConcurrentDictionary<uint, int> _adminLevels = new();
     // Права игрока без SocialClubId (0) — только на эту сессию, по ID
     // подключения; очищаются при выходе. Раньше здесь был словарь по НИКУ:
@@ -106,15 +102,6 @@ public class StarterResource : Resource
         "CLEARING", "RAIN", "THUNDER", "SNOW", "BLIZZARD", "SNOWLIGHT", "XMAS", "HALLOWEEN",
     };
 
-    /// <summary>
-    /// Администраторы, подтвердившие пароль командой /alogin в этой сессии.
-    ///
-    /// Раньше /aduty ставила на дежурство БЕЗ пароля — то есть второй фактор
-    /// /alogin обходился одной командой, хотя сервер при каждом входе прямо
-    /// говорил админу «для входа на дежурство введите /alogin &lt;пароль&gt;».
-    /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _adminAuthed = new();
-
     /// <summary>Кто уже сообщил о готовности — защита от повторов от клиента.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _clientReady = new();
 
@@ -145,7 +132,7 @@ public class StarterResource : Resource
     // и свои команды в отдельном ресурсе было не сделать.
     private static readonly HashSet<string> BuiltinCommands = new(StringComparer.Ordinal)
     {
-        "a","admin","adminauth","aduty","alogin","armor","b","ban","banip","banlist","bans","car","claimowner","clear","cls","coords","delveh","destroyveh","dim","dimension","disarm","do","dv","engine","esp","fix","fly","freeze","gethere","givegun","god","godmode","goto","gun","hardban","heal","help","hwidban","kick","kill","lock","me","noclip","ooc","ped","pos","removeweapons","repair","revive","s","setadmin","setdim","shout","skin","speed","suicide","time","tp","tpm","unban","unfreeze","veh","vmute","voicemute","w","weapon","weather","whisper",
+        "a","admin","armor","b","ban","banip","banlist","bans","car","claimowner","clear","cls","coords","delveh","destroyveh","dim","dimension","disarm","do","dv","engine","esp","fix","fly","freeze","gethere","givegun","god","godmode","goto","gun","hardban","heal","help","hwidban","kick","kill","lock","me","noclip","ooc","ped","pos","removeweapons","repair","revive","s","setadmin","setdim","shout","skin","speed","suicide","time","tp","tpm","unban","unfreeze","veh","vmute","voicemute","w","weapon","weather","whisper",
         "license",
     };
     private readonly ConcurrentDictionary<string, (string Description, int MinLevel)> _modCommands = new(StringComparer.Ordinal);
@@ -218,50 +205,25 @@ public class StarterResource : Resource
         return GetAssignedAdminRank(target) < GetAssignedAdminRank(admin);
     }
 
-    // Перебор пароля /alogin: без ограничения его сдерживал только лимит чата
-    // (~80 попыток в минуту). После 5 ошибок — пауза 10 минут на SocialClubId
-    // (или ID подключения, если SC нет); переподключение её не сбрасывает.
-    private const int AloginMaxFailures = 5;
-    private static readonly TimeSpan AloginLockout = TimeSpan.FromMinutes(10);
-    private readonly ConcurrentDictionary<string, (int Failures, DateTime LockedUntil)> _aloginFailures = new();
-
-    private static string AloginKey(IPlayer p) => p.SocialClubId > 0 ? "sc:" + p.SocialClubId : "id:" + p.Id;
-
-    // Команды для подсказок в чате: (имя, описание, мин. уровень на дежурстве).
-    // -1 — показывать тем, у кого есть назначенные права (даже не на дежурстве).
+    // Команды, доступные всем игрокам. Админские подсказки берутся из
+    // AdminCommandRegistry: там уровни, которые владелец правит в
+    // server/config/admin-commands.cfg, и дублировать их здесь нельзя — разойдутся.
     private static readonly (string Cmd, string Desc, int Level)[] ChatCommandHints =
     {
         ("help", "список команд", 0), ("me", "действие персонажа", 0), ("do", "описание ситуации", 0),
         ("b", "OOC-сообщение", 0), ("s", "крикнуть", 0), ("w", "шёпот игроку: /w <id> <текст>", 0),
         ("pos", "координаты", 0), ("engine", "двигатель (2)", 0), ("lock", "замок транспорта (L)", 0),
         ("clear", "очистить чат", 0),
-        ("alogin", "вход администратора: /alogin <пароль>", -1), ("aduty", "дежурство администратора", -1),
-        ("a", "админ-чат", 1), ("tpm", "телепорт на метку (F5)", 1), ("noclip", "полёт (F4)", 1),
-        ("esp", "админ-видение: /esp [0-3] (F3)", 1), ("car", "транспорт: /car [модель]", 1),
-        ("fix", "починить транспорт", 1), ("dv", "удалить транспорт", 1), ("gun", "оружие: /gun <название> [патроны]", 1),
-        ("disarm", "забрать оружие: /disarm [id]", 1), ("tp", "телепорт: /tp <x> <y> <z>", 1),
-        ("goto", "к игроку: /goto <id>", 1), ("gethere", "игрока к себе: /gethere <id>", 1),
-        ("freeze", "заморозить: /freeze <id>", 1), ("unfreeze", "разморозить: /unfreeze <id>", 1),
-        ("revive", "реанимировать: /revive [id]", 1), ("heal", "здоровье и броня", 1), ("armor", "броня: /armor [0-100]", 1),
-        ("god", "бессмертие", 1), ("kill", "умереть", 1), ("weather", "погода: /weather <тип>", 1),
-        ("time", "время: /time <час> [мин]", 1), ("speed", "скорость бега: /speed <1.0-1.49>", 1),
-        ("setdim", "измерение: /setdim <номер>", 1), ("skin", "скин: /skin <модель>", 1),
-        ("kick", "исключить: /kick <id> [причина]", 2), ("bans", "список блокировок", 2), ("vmute", "голосовой мут: /vmute <id>", 2),
-        ("ban", "блокировка: /ban <id> <дней> [причина]", 3),
-        ("banip", "бан по IP: /banip <id> <дней> [причина]", 4), ("hwidban", "бан по железу: /hwidban <id> <дней> [причина]", 4),
-        ("unban", "снять блокировку: /unban <ник|IP|HWID|ID>", 4),
-        ("hardban", "навсегда: /hardban <id> <причина>", 6),
-        ("setadmin", "права: /setadmin <id> <0-8>", 8),
     };
 
-    /// <summary>Уровень на дежурстве — клиенту (консоль F8, NoClip/ESP), в метаданные и список подсказок чата.</summary>
+    /// <summary>Уровень администратора — клиенту (консоль F8, NoClip/ESP), в метаданные и список подсказок чата.</summary>
     private void PushAdminLevel(IPlayer player, int level)
     {
         if (player is null || !player.Exists) return;
         player.Emit("flovmp:console:setAdmin", level);
         // Local meta видит только сам игрок (и сервер). Раньше уровень лежал в
         // stream synced meta, которую получают клиенты всех игроков рядом: читер
-        // видел, кто вокруг администратор и кто на дежурстве, даже невидимый в NoClip.
+        // видел, кто вокруг администратор, даже невидимого в NoClip.
         player.SetLocalMetaData("adminLevel", level);
         SendChatCommands(player);
 
@@ -279,7 +241,7 @@ public class StarterResource : Resource
     private readonly ConcurrentDictionary<uint, int> _rosterLevels = new();
 
     /// <summary>
-    /// Кто администратор — только администраторам на дежурстве (для ESP).
+    /// Кто администратор — только администраторам (для ESP).
     /// Основатель (8) для младших уровней передаётся как -1: клиент его не рисует.
     /// </summary>
     private void BroadcastAdminRoster()
@@ -301,12 +263,17 @@ public class StarterResource : Resource
 
     private void SendChatCommands(IPlayer player)
     {
-        var assigned = GetAssignedAdminRank(player) > 0;
         var list = new List<object>();
         foreach (var (cmd, desc, level) in ChatCommandHints)
         {
-            if (level == -1 ? assigned : level == 0 || IsAdmin(player, level))
+            if (level == 0 || IsAdmin(player, level))
                 list.Add(new { cmd, desc });
+        }
+        var adminLevel = _adminLevels.TryGetValue(player.Id, out var myLvl) ? myLvl : 0;
+        if (adminLevel > 0)
+        {
+            foreach (var def in FloVMP.Core.Admin.AdminCommandRegistry.GetAvailableCommands(adminLevel))
+                list.Add(new { cmd = def.Name, desc = def.Description });
         }
         if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
             list.Add(new { cmd = "claimowner", desc = "стать владельцем: /claimowner <токен>" });
@@ -363,6 +330,11 @@ public class StarterResource : Resource
         FloVMP.Core.CoreConsole.Warn = msg => Alt.LogWarning(msg);
 
         _adminManager = new AdminBootstrapManager();
+
+        // Раскладка «команда → уровень» владельца. Файла нет — создаётся
+        // образец со значениями по умолчанию.
+        Alt.Log("[FloV:MP] " + FloVMP.Core.Admin.AdminCommandLevels.LoadOrCreate(
+            Path.Combine(Directory.GetCurrentDirectory(), "config"), Alt.LogWarning));
 
         // Хранилище банов: общая таблица MariaDB, если база настроена, иначе
         // локальный файл. Фабрика сама печатает выбранный режим — владелец
@@ -669,11 +641,13 @@ public class StarterResource : Resource
         {
             SetAssignedAdminRank(player, 8);
             _adminLevels[player.Id] = 8;
-            Alt.Log($"[FloV:MP Admin] Владелец сервера {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}) автоматически авторизован (Уровень 8 - Основатель).");
+            Alt.Log($"[FloV:MP Admin] Владелец сервера {player.Name} (ID: {player.Id}, SC: {player.SocialClubId}): уровень 8.");
         }
         else
         {
-            _adminLevels[player.Id] = 0;
+            // Права из базы (таблица admins) или config/admins.json действуют
+            // сразу с захода: ни пароля, ни дежурства.
+            _adminLevels[player.Id] = GetAssignedAdminRank(player);
         }
 
         // Активация 3D войс-канала
@@ -712,6 +686,10 @@ public class StarterResource : Resource
             _adminLevels[player.Id] = 8;
             SetAssignedAdminRank(player, 8);
         }
+        else
+        {
+            _adminLevels[player.Id] = GetAssignedAdminRank(player);
+        }
 
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
         PushAdminLevel(player, lvl);
@@ -742,7 +720,7 @@ public class StarterResource : Resource
         }
         else if (assigned > 0)
         {
-            SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас есть права администратора (Уровень " + assigned + "). Для входа на дежурство введите: {fde047}/alogin <пароль>");
+            SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас права администратора (Уровень " + assigned + "). Список команд: {fde047}/help");
         }
         else if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
         {
@@ -856,15 +834,19 @@ public class StarterResource : Resource
                     {
                         onlineCount++;
                         var lvl = _adminLevels.TryGetValue(p.Id, out var l) ? l : 0;
-                        Alt.Log($"  [{p.Id}] {p.Name} — Ур. {lvl} (На дежурстве)");
+                        Alt.Log($"  [{p.Id}] {p.Name} — уровень {lvl}");
                     }
                 }
-                if (onlineCount == 0) Alt.Log("  (нет активных админов на дежурстве)");
+                if (onlineCount == 0) Alt.Log("  (администраторов в сети нет)");
                 break;
 
             case "reloadadmins":
                 _adminManager.Reload();
+                Alt.Log("[Console] " + FloVMP.Core.Admin.AdminCommandLevels.LoadOrCreate(
+                    Path.Combine(Directory.GetCurrentDirectory(), "config"), Alt.LogWarning));
                 ApplyRevokedAdminRights();
+                foreach (var onlinePlayer in Alt.GetAllPlayers())
+                    if (onlinePlayer.Exists && _clientReady.ContainsKey(onlinePlayer.Id)) SendChatCommands(onlinePlayer);
                 Alt.Log(_adminManager.HasStore
                     ? "[Console] Права перечитаны из базы (таблица admins) и config/admins.json."
                     : "[Console] config/admins.json успешно перезагружен.");
@@ -1045,10 +1027,6 @@ public class StarterResource : Resource
         var wasAdmin = _rosterLevels.TryRemove(player.Id, out _);
         _clientReady.TryRemove(player.Id, out _);
         _chatRate.TryRemove(player.Id, out _);
-        // Подтверждение пароля живёт одну сессию: после переподключения —
-        // заново /alogin. Иначе тот, кто занял освободившийся ID, унаследовал бы
-        // чужое подтверждение.
-        _adminAuthed.TryRemove(player.Id, out _);
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _sessionAdminRanks.TryRemove(player.Id, out _);
@@ -1098,24 +1076,38 @@ public class StarterResource : Resource
     }
 
     /// <summary>
-    /// Снять дежурство с тех, у кого права отозваны или понижены (в базе или
-    /// консолью). Только главный поток: трогает сущности игроков.
+    /// Привести уровень игроков в сети к тому, что записано в базе или
+    /// config/admins.json: права могли выдать, понизить или снять снаружи.
+    /// Только главный поток: трогает сущности игроков.
     /// </summary>
     private void ApplyRevokedAdminRights()
     {
-        foreach (var (playerId, onDuty) in _adminLevels.ToArray())
+        foreach (var online in Alt.GetAllPlayers())
+        {
+            if (online.Exists && !_adminLevels.ContainsKey(online.Id))
+                _adminLevels[online.Id] = 0;
+        }
+
+        foreach (var (playerId, current) in _adminLevels.ToArray())
         {
             var p = Alt.GetPlayerById(playerId);
             if (p is null || !p.Exists) { _adminLevels.TryRemove(playerId, out _); continue; }
 
             var assigned = GetAssignedAdminRank(p);
-            if (assigned >= onDuty) continue;
+            if (assigned == current) continue;
+            if (assigned > current)
+            {
+                _adminLevels[playerId] = assigned;
+                PushAdminLevel(p, assigned);
+                SendChatMessage(p, $"{{34d399}}[Admin] Вам выданы права администратора (уровень {assigned}).");
+                Alt.Log($"[FloV:MP Admin] Уровень повышен до {assigned}: [{p.Id}] {p.Name}.");
+                continue;
+            }
 
             if (assigned <= 0)
             {
                 _adminLevels.TryRemove(playerId, out _);
 
-                _adminAuthed.TryRemove(playerId, out _);
                 DestroyAdminVehicle(playerId);
                 if (_godModes.TryRemove(playerId, out var hadGod) && hadGod) p.Emit("starter:setGodMode", false);
                 PushAdminLevel(p, 0);
@@ -1253,27 +1245,41 @@ public class StarterResource : Resource
             if (parts.Length == 0) return;
 
             var cmd = parts[0].ToLowerInvariant();
+
+            // Одна проверка прав на все админские команды: уровень берётся из
+            // AdminCommandRegistry, то есть из server/config/admin-commands.cfg, если
+            // владелец его правил. Проверок внутри обработчиков нет намеренно —
+            // разъехавшись с файлом, они молча запрещали бы разрешённое.
+            var cmdDef = FloVMP.Core.Admin.AdminCommandRegistry.Get(cmd);
+            if (cmdDef is not null && cmdDef.MinLevel > 0 && !IsAdmin(player, cmdDef.MinLevel))
+            {
+                SendChatMessage(player, $"{{ef4444}}[FloV:MP] Команда /{cmd} доступна с уровня администратора {cmdDef.MinLevel}.");
+                return;
+            }
         switch (cmd)
         {
             case "help":
                 SendChatMessage(player, "{38bdf8}─── СПИСОК КОМАНД СЕРВЕРА ───");
                 SendChatMessage(player, "{e4e4e7}Чат и отыгровки: {a1a1aa}/me, /do, /b (OOC), /s (крик), /w <id> (шепот), /clear");
                 SendChatMessage(player, "{e4e4e7}Транспорт: {a1a1aa}/engine (2), /lock (L)");
-                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /alogin <пароль>, /claimowner <токен>");
-                if (IsAdmin(player, 1))
+                SendChatMessage(player, "{e4e4e7}Общие: {a1a1aa}/pos (координаты), /claimowner <токен>");
+
+                // Админская часть — из AdminCommandRegistry, то есть ровно те
+                // команды и уровни, которые сервер и проверяет. Раньше список
+                // был написан руками и расходился с реальными правами.
+                var myLevel = _adminLevels.TryGetValue(player.Id, out var lvlForHelp) ? lvlForHelp : 0;
+                if (myLevel > 0)
                 {
-                    SendChatMessage(player, "{34d399}Администрация: {a1a1aa}/tpm (F5), /noclip (F4), /esp [0-3] (F3), /car [модель], /fix, /dv, /gun [название], /disarm, /tp <x y z>, /goto <id>, /gethere <id>, /freeze <id>, /unfreeze <id>, /revive [id], /heal, /armor, /god, /kill, /weather, /time, /speed, /setdim, /skin, /kick, /a (админ-чат)");
+                    foreach (var group in FloVMP.Core.Admin.AdminCommandRegistry
+                                 .GetAvailableCommands(myLevel)
+                                 .Where(c => !c.Description.Contains("алиас"))
+                                 .GroupBy(c => c.MinLevel))
+                    {
+                        var line = string.Join(", ", group.Select(c => c.Usage));
+                        SendChatMessage(player, $"{{34d399}}Администрация (уровень {group.Key}+): {{a1a1aa}}" + line);
+                    }
                 }
-                if (IsAdmin(player, 2))
-                {
-                    SendChatMessage(player, "{f87171}Модерация (2+): {a1a1aa}/kick <id> [причина], /bans, /vmute <id>");
-                    SendChatMessage(player, "{f87171}Блокировки: {a1a1aa}/bans (список), /ban <id> <дней> [причина] (3), /banip <id> <дней> (4), /hwidban <id> <дней> (4), /hardban <id> <причина> (6, навсегда), /unban <ник|IP|HWID|ID бана> (4)");
-                    SendChatMessage(player, "{f87171}Голос: {a1a1aa}/vmute <id> — заглушить или вернуть голос игроку (переключатель)");
-                }
-                if (IsAdmin(player, 8))
-                {
-                    SendChatMessage(player, "{fde047}Главный Администратор: {a1a1aa}/setadmin <id> <lvl 0-8>");
-                }
+
                 var visibleModCommands = _modCommands
                     .Where(kv => kv.Value.MinLevel == 0 || IsAdmin(player, kv.Value.MinLevel))
                     .OrderBy(kv => kv.Key)
@@ -1348,11 +1354,6 @@ public class StarterResource : Resource
 
             case "a":
             case "admin":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для использования админ-чата.");
-                    return;
-                }
                 if (parts.Length < 2)
                 {
                     SendChatMessage(player, "{fde047}Использование: /a <сообщение для администрации>");
@@ -1396,91 +1397,7 @@ public class StarterResource : Resource
                 }
                 break;
 
-            case "alogin":
-            case "adminauth":
-                var assignedRank = GetAssignedAdminRank(player);
-                if (assignedRank <= 0)
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора на этом сервере.");
-                    return;
-                }
-                var aKey = AloginKey(player);
-                if (assignedRank != 8 && _aloginFailures.TryGetValue(aKey, out var af) && af.LockedUntil > DateTime.UtcNow)
-                {
-                    var left = (int)Math.Ceiling((af.LockedUntil - DateTime.UtcNow).TotalMinutes);
-                    SendChatMessage(player, $"{{ef4444}}[FloV:MP Security] Слишком много неверных попыток. Повторите через {left} мин.");
-                    return;
-                }
-                var pwdOk = !string.IsNullOrEmpty(AdminPassword)
-                            && parts.Length > 1
-                            && string.Equals(parts[1], AdminPassword, StringComparison.Ordinal);
-                if (assignedRank == 8 || pwdOk)
-                {
-                    _aloginFailures.TryRemove(aKey, out _);
-                    _adminAuthed[player.Id] = true;
-                    _adminLevels[player.Id] = assignedRank;
-                    PushAdminLevel(player, assignedRank);
-                    SendChatMessage(player, $"{{34d399}}[FloV:MP Security] Авторизация успешна! Вход на дежурство выполнен (Уровень {assignedRank}). Админ-функции и F8 разблокированы.");
-                    Alt.Log($"[Security] Администратор {player.Name} (ID: {player.Id}, Уровень: {assignedRank}) заступил на дежурство.");
-                }
-                else
-                {
-                    _aloginFailures.AddOrUpdate(aKey,
-                        _ => (1, DateTime.MinValue),
-                        (_, cur) => cur.LockedUntil != DateTime.MinValue && cur.LockedUntil <= DateTime.UtcNow
-                            ? (1, DateTime.MinValue)
-                            : (cur.Failures + 1, cur.Failures + 1 >= AloginMaxFailures ? DateTime.UtcNow + AloginLockout : DateTime.MinValue));
-                    SendChatMessage(player, string.IsNullOrEmpty(AdminPassword)
-                        ? "{ef4444}[FloV:MP Security] Пароль администратора на сервере не задан (FLOVMP_ADMIN_PASSWORD) — заступайте на дежурство командой /aduty."
-                        : "{ef4444}[FloV:MP Security] Неверный пароль администратора!");
-                    Alt.LogWarning($"[Security Alert] Неудачная попытка авторизации /alogin от {player.Name} (ID: {player.Id})");
-                }
-                break;
-
-            case "aduty":
-                var dRank = GetAssignedAdminRank(player);
-                if (dRank <= 0)
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав администратора.");
-                    return;
-                }
-                var isDuty = _adminLevels.TryGetValue(player.Id, out var curDuty) && curDuty > 0;
-                if (isDuty)
-                {
-                    _adminLevels[player.Id] = 0;
-                    PushAdminLevel(player, 0);
-                    SendChatMessage(player, "{fde047}[Admin]{ffffff} Вы вышли с дежурства администрации.");
-                }
-                else
-                {
-                    // Выйти с дежурства можно всегда, а ЗАСТУПИТЬ — только после
-                    // /alogin, если пароль администратора настроен. Исключения:
-                    //   * владелец (уровень 8) — /alogin и сам пускает его без пароля;
-                    //   * пароль не задан вовсе — тогда второго фактора нет, и
-                    //     закрыть /aduty значило бы запереть младших админов.
-                    var passwordConfigured = !string.IsNullOrEmpty(AdminPassword);
-                    var mayGoOnDuty = !passwordConfigured
-                                      || dRank == 8
-                                      || _adminAuthed.ContainsKey(player.Id);
-                    if (!mayGoOnDuty)
-                    {
-                        SendChatMessage(player, "{fde047}[Admin]{ffffff} Сначала подтвердите пароль: {fde047}/alogin <пароль>");
-                        Alt.LogWarning($"[Security Alert] Попытка заступить на дежурство без пароля: {player.Name} (ID: {player.Id})");
-                        return;
-                    }
-
-                    _adminLevels[player.Id] = dRank;
-                    PushAdminLevel(player, dRank);
-                    SendChatMessage(player, $"{{34d399}}[Admin]{{ffffff}} Вы заступили на дежурство (Уровень {dRank}).");
-                }
-                break;
-
             case "setadmin":
-                if (!IsAdmin(player, 8))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 8).");
-                    return;
-                }
                 if (parts.Length < 3 || !uint.TryParse(parts[1], out var targetId) || !int.TryParse(parts[2], out var targetLvl))
                 {
                     SendChatMessage(player, "{fde047}Использование: /setadmin <ID> <Уровень 0-8>");
@@ -1507,11 +1424,6 @@ public class StarterResource : Resource
                 break;
 
             case "esp":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для включения ESP.");
-                    return;
-                }
                 if (parts.Length > 1 && int.TryParse(parts[1], out var targetMode))
                 {
                     player.Emit("flovmp:admin:toggleEsp", Math.Clamp(targetMode, 0, 3));
@@ -1523,20 +1435,10 @@ public class StarterResource : Resource
                 break;
 
             case "tpm":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для телепортации.");
-                    return;
-                }
                 player.Emit("starter:requestWaypointTp");
                 break;
 
             case "tp":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для телепортации.");
-                    return;
-                }
                 if (parts.Length < 4 || !float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpx)
                     || !float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpy)
                     || !float.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tpz))
@@ -1556,11 +1458,6 @@ public class StarterResource : Resource
                 break;
 
             case "goto":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var gotoId))
                 {
                     SendChatMessage(player, "{fde047}Использование: /goto <ID игрока>");
@@ -1587,11 +1484,6 @@ public class StarterResource : Resource
                 break;
 
             case "gethere":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var gethereId))
                 {
                     SendChatMessage(player, "{fde047}Использование: /gethere <ID игрока>");
@@ -1624,11 +1516,6 @@ public class StarterResource : Resource
 
             case "freeze":
             case "unfreeze":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var frzId))
                 {
                     SendChatMessage(player, $"{{fde047}}Использование: /{cmd} <ID игрока>");
@@ -1653,11 +1540,6 @@ public class StarterResource : Resource
 
             case "car":
             case "veh":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для спавна транспорта.");
-                    return;
-                }
                 var modelName = parts.Length > 1 ? parts[1] : "adder";
 
                 // Имя модели уходит и в Alt.Hash, и обратно в чат. Фигурные
@@ -1690,11 +1572,6 @@ public class StarterResource : Resource
 
             case "fix":
             case "repair":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 IVehicle? targetVeh = player.Vehicle;
                 if (targetVeh == null || !targetVeh.Exists)
                 {
@@ -1716,11 +1593,6 @@ public class StarterResource : Resource
             case "dv":
             case "delveh":
             case "destroyveh":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 IVehicle? delTarget = player.Vehicle;
                 if (delTarget == null || !delTarget.Exists)
                 {
@@ -1742,11 +1614,6 @@ public class StarterResource : Resource
             case "weapon":
             case "gun":
             case "givegun":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 var wepName = parts.Length > 1 ? parts[1] : "weapon_pistol";
                 // Имя уходит обратно в чат: фигурные скобки там — цветовые коды.
                 wepName = new string(wepName.Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
@@ -1772,11 +1639,6 @@ public class StarterResource : Resource
 
             case "disarm":
             case "removeweapons":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 IPlayer disarmTarget = player;
                 if (parts.Length > 1 && uint.TryParse(parts[1], out var dId))
                 {
@@ -1839,31 +1701,16 @@ public class StarterResource : Resource
 
             case "noclip":
             case "fly":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для включения NoClip.");
-                    return;
-                }
                 player.Emit("starter:toggleNoClip");
                 break;
 
             case "heal":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для лечения.");
-                    return;
-                }
                 player.Health = 200;
                 player.Armor = 100;
                 SendChatMessage(player, "{34d399}Здоровье и броня восстановлены до 100%.");
                 break;
 
             case "revive":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для реанимации.");
-                    return;
-                }
                 IPlayer targetRevive = player;
                 if (parts.Length > 1 && uint.TryParse(parts[1], out var revId))
                 {
@@ -1888,11 +1735,6 @@ public class StarterResource : Resource
                 break;
 
             case "armor":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 // Броня в GTA — 0..100; раньше принималось до 65535.
                 var armorVal = parts.Length > 1 && ushort.TryParse(parts[1], out var arm) ? Math.Min(arm, (ushort)100) : (ushort)100;
                 player.Armor = armorVal;
@@ -1901,11 +1743,6 @@ public class StarterResource : Resource
 
             case "god":
             case "godmode":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 var currentGod = _godModes.GetOrAdd(player.Id, false);
                 var newGod = !currentGod;
                 _godModes[player.Id] = newGod;
@@ -1915,21 +1752,11 @@ public class StarterResource : Resource
 
             case "kill":
             case "suicide":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 player.Health = 0;
                 SendChatMessage(player, "{ef4444}Вы погибли.");
                 break;
 
             case "speed":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 var speedMult = parts.Length > 1 && float.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sm) ? sm : 1.0f;
                 // GTA принимает множитель бега только в пределах 1.0–1.49; клиент
                 // и так его зажимает. Но сервер раньше отвечал админу исходным
@@ -1944,11 +1771,6 @@ public class StarterResource : Resource
                 break;
 
             case "weather":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для смены погоды.");
-                    return;
-                }
                 if (parts.Length > 1)
                 {
                     var weatherType = parts[1].ToUpperInvariant();
@@ -1974,11 +1796,6 @@ public class StarterResource : Resource
                 break;
 
             case "time":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав для смены времени.");
-                    return;
-                }
                 if (parts.Length > 1 && int.TryParse(parts[1], out var hour))
                 {
                     var minute = parts.Length > 2 && int.TryParse(parts[2], out var m) ? m : 0;
@@ -2002,11 +1819,6 @@ public class StarterResource : Resource
             case "setdim":
             case "dim":
             case "dimension":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 if (parts.Length > 1 && int.TryParse(parts[1], out var dim))
                 {
                     player.Dimension = dim;
@@ -2020,11 +1832,6 @@ public class StarterResource : Resource
 
             case "skin":
             case "ped":
-                if (!IsAdmin(player, 1))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] У вас нет прав.");
-                    return;
-                }
                 if (parts.Length > 1)
                 {
                     var skinModel = new string(parts[1].Where(ch => char.IsLetterOrDigit(ch) || ch == '_').ToArray());
@@ -2050,11 +1857,6 @@ public class StarterResource : Resource
                 break;
 
             case "kick":
-                if (!IsAdmin(player, 2))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
-                    return;
-                }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var kickId))
                 {
                     SendChatMessage(player, "{fde047}Использование: /kick <ID> [причина]");
@@ -2089,11 +1891,6 @@ public class StarterResource : Resource
             // кричащий в микрофон, останавливался только киком или баном.
             case "vmute":
             case "voicemute":
-                if (!IsAdmin(player, 2))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
-                    return;
-                }
                 if (_spatialVoiceChannel is null)
                 {
                     SendChatMessage(player, "{ef4444}Голосовой канал не создан — глушить нечего (см. [voice] в server.toml).");
@@ -2139,11 +1936,6 @@ public class StarterResource : Resource
                 break;
 
             case "unban":
-                if (!IsAdmin(player, 4))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 4+).");
-                    return;
-                }
                 if (parts.Length < 2)
                 {
                     SendChatMessage(player, "{fde047}Использование: /unban <ник|IP|HWID|ID бана>");
@@ -2164,11 +1956,6 @@ public class StarterResource : Resource
 
             case "bans":
             case "banlist":
-                if (!IsAdmin(player, 2))
-                {
-                    SendChatMessage(player, "{ef4444}[FloV:MP Security] Доступ запрещен (требуется Уровень 2+).");
-                    return;
-                }
                 if (_bans is null)
                 {
                     SendChatMessage(player, "{ef4444}Сервис блокировок не подключён.");
@@ -2221,12 +2008,6 @@ public class StarterResource : Resource
 
     private void OnTeleportWaypoint(IPlayer player, float x, float y, float z)
     {
-        if (!IsAdmin(player, 1))
-        {
-            Alt.LogWarning($"[Security Violation] Неавторизованный запрос teleportWaypoint от {player.Name} (ID: {player.Id})");
-            SendChatMessage(player, "{ef4444}[FloV:MP Security] Телепортация отклонена сервером (недостаточно прав).");
-            return;
-        }
 
         if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(z) ||
             float.IsInfinity(x) || float.IsInfinity(y) || float.IsInfinity(z) ||
@@ -2242,12 +2023,6 @@ public class StarterResource : Resource
 
     private void OnToggleNoClip(IPlayer player, bool enabled)
     {
-        if (!IsAdmin(player, 1))
-        {
-            Alt.LogWarning($"[Security Violation] Неавторизованная попытка toggleNoClip от {player.Name} (ID: {player.Id})");
-            SendChatMessage(player, "{ef4444}[FloV:MP Security] Полет NoClip отклонен сервером (недостаточно прав).");
-            return;
-        }
 
         SendChatMessage(player, enabled ? "{34d399}Админ-полет (NoClip) ВКЛЮЧЕН" : "{fde047}Админ-полет (NoClip) ВЫКЛЮЧЕН");
     }
