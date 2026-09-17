@@ -171,11 +171,19 @@ public static class LicenseFile
 
         var limit = info.MaxPlayers > 0 ? info.MaxPlayers : UnlicensedPlayerLimit;
 
+        // Лицензия «выдана в будущем» — почти всегда сбитые часы сервера, а не
+        // подделка (подпись уже проверена). Лицензию из-за этого не отнимаем:
+        // иначе сервер с неверной датой остался бы без слотов на ровном месте.
+        // Но о причине говорим прямо, иначе владелец ищет проблему в лицензии.
+        var clockNote = info.IssuedAtUtc > nowUtc.AddDays(1)
+            ? $" | часы сервера отстают: лицензия выдана {info.IssuedAtUtc:dd.MM.yyyy}, а сейчас {nowUtc:dd.MM.yyyy} — проверьте время на машине"
+            : "";
+
         if (nowUtc <= info.ExpiresAtUtc)
         {
             var days = (int)Math.Floor((info.ExpiresAtUtc - nowUtc).TotalDays);
             return new LicenseStatus(LicenseState.Valid, info,
-                $"лицензия {info.LicenseKey} ({info.Project}, тариф {info.Plan}): до {info.ExpiresAtUtc:dd.MM.yyyy}, осталось {days} дн., слотов {limit}",
+                $"лицензия {info.LicenseKey} ({info.Project}, тариф {info.Plan}): до {info.ExpiresAtUtc:dd.MM.yyyy}, осталось {days} дн., слотов {limit}{clockNote}",
                 limit);
         }
 

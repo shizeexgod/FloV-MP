@@ -27,7 +27,8 @@ public sealed class LicenseFileTests : IDisposable
 
     /// <summary>Файл в формате портала (createSignedLicenseFlv).</summary>
     private string MakeFlv(string key = "FLV-AAAA-BBBB-CCCC", string issuedTo = "Owner", int maxPlayers = 500,
-                           DateTime? expires = null, string? watermark = null, Action<byte[]>? tamper = null)
+                           DateTime? expires = null, string? watermark = null, Action<byte[]>? tamper = null,
+                           DateTime? issuedAt = null)
     {
         var payload = new
         {
@@ -37,7 +38,7 @@ public sealed class LicenseFileTests : IDisposable
             plan = "business",
             maxPlayers,
             maxServers = 3,
-            issuedAt = Now.AddDays(-10).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            issuedAt = (issuedAt ?? Now.AddDays(-10)).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             expiresAt = (expires ?? Now.AddDays(30)).ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             watermark = watermark ?? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(issuedTo + "|" + key)))[..16].ToLowerInvariant(),
         };
@@ -57,6 +58,19 @@ public sealed class LicenseFileTests : IDisposable
         Assert.Equal(LicenseState.Valid, s.State);
         Assert.Equal(500, s.PlayerLimit);
         Assert.Equal("Mason RP", s.Info!.Project);
+    }
+
+    [Fact]
+    public void Licence_from_the_future_works_but_warns_about_server_clock()
+    {
+        // Сбитые часы на машине владельца: лицензия «выдана завтра». Подпись
+        // настоящая, поэтому слоты не отнимаем — но причину называем, иначе
+        // владелец ищет проблему в лицензии, а она во времени сервера.
+        var s = Check(MakeFlv(issuedAt: Now.AddDays(30)));
+
+        Assert.Equal(LicenseState.Valid, s.State);
+        Assert.Equal(500, s.PlayerLimit);
+        Assert.Contains("часы сервера", s.Message);
     }
 
     [Fact]
