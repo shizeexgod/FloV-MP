@@ -169,15 +169,9 @@ public class AdminBootstrapManager
                 _config = new AdminConfigFile();
             }
 
-            // Проверка переменных окружения для явного назначения владельца
-            var envOwner = Environment.GetEnvironmentVariable("FLOVMP_OWNER_NAME");
-            if (!string.IsNullOrWhiteSpace(envOwner))
-            {
-                _config.Admins[envOwner.Trim()] = 8;
-                if (!_config.Founders.Contains(envOwner.Trim()))
-                    _config.Founders.Add(envOwner.Trim());
-            }
-
+            // Владелец из окружения — только по SocialClubId: ник задаёт сам
+            // игрок, и прежний FLOVMP_OWNER_NAME лишь засорял admins.json записью,
+            // которая при выключенных правах по нику ничего не давала.
             var envOwnerSc = Environment.GetEnvironmentVariable("FLOVMP_OWNER_SC");
             _envOwnerSc = !string.IsNullOrWhiteSpace(envOwnerSc) && IsSocialClubKey(envOwnerSc.Trim())
                 ? envOwnerSc.Trim()
