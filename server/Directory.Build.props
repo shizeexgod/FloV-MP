@@ -15,7 +15,7 @@
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- Версия всех сборок — из файла VERSION в корне. -->
-    <Version Condition="Exists('$(MSBuildThisFileDirectory)..\VERSION')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\VERSION').Trim())</Version>
+    <Version Condition="Exists('$(MSBuildThisFileDirectory)../VERSION')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</Version>
   </PropertyGroup>
 
 </Project>
