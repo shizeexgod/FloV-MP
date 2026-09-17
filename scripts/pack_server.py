@@ -185,12 +185,14 @@ def make_server_toml_example():
 # ---------------------------------------------------------------------
 # Сборка
 # ---------------------------------------------------------------------
-def publish_dotnet(publish_root, skip_build, with_connector):
+def publish_dotnet(publish_root, skip_build, with_connector, with_host):
     starter = os.path.join(publish_root, "flovmp-starter")
     connector = os.path.join(publish_root, "connector")
+    host = os.path.join(publish_root, "server-host")
     if skip_build and os.path.isdir(starter):
         log("[build] пропущено (--skip-build)")
-        return starter, (connector if os.path.isdir(connector) else None)
+        return (starter, (connector if os.path.isdir(connector) else None),
+                (host if os.path.isdir(host) else None))
 
     shutil.rmtree(publish_root, ignore_errors=True)
     log("[build] FloVMP.Starter (Release)")
@@ -200,10 +202,16 @@ def publish_dotnet(publish_root, skip_build, with_connector):
         log("[build] FloVMP.Connect (Release)")
         run(["dotnet", "publish", "launcher/src/FloVMP.Connect/FloVMP.Connect.csproj",
              "-c", "Release", "-o", connector, "--nologo", "-v", "q"])
-    return starter, (connector if with_connector else None)
+    if with_host:
+        # Один exe без распаковки: .NET 8 и так нужен серверу C#.
+        log("[build] FloVMP.ServerHost (FloVMP-Server.exe)")
+        run(["dotnet", "publish", "server/src/FloVMP.ServerHost/FloVMP.ServerHost.csproj",
+             "-c", "Release", "-r", "win-x64", "--self-contained", "false",
+             "-p:PublishSingleFile=true", "-p:DebugType=none", "-o", host, "--nologo", "-v", "q"])
+    return starter, (connector if with_connector else None), (host if with_host else None)
 
 
-def stage_package(target_os, stage, args, version, starter_dir, connector_dir):
+def stage_package(target_os, stage, args, version, starter_dir, connector_dir, host_dir=None):
     altv = args.altv_backup
     br = args.branch
     plat = "x64_linux" if target_os == "linux" else "x64_win32"
@@ -284,8 +292,12 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir):
 
     if target_os == "linux":
         copy(os.path.join(REPO, "scripts", "install.sh"), S("install.sh"))
-    elif connector_dir:
-        copy_tree(connector_dir, S("tools", "connector"))
+    else:
+        if not host_dir or not os.path.isfile(os.path.join(host_dir, "FloVMP-Server.exe")):
+            fail("нет FloVMP-Server.exe — соберите без --skip-build")
+        copy(os.path.join(host_dir, "FloVMP-Server.exe"), S("FloVMP-Server.exe"))
+        if connector_dir:
+            copy_tree(connector_dir, S("tools", "connector"))
 
     with open(S("VERSION"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(version + "\n")
@@ -381,7 +393,7 @@ def verify_stage(stage, target_os, entries):
         required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh",
                      "server/flovmp-server", "voice/altv-voice-server", "server/modules/libcsharp-module.so"]
     else:
-        required += ["start.cmd", "scripts/run-server.ps1", "scripts/lib.ps1",
+        required += ["FloVMP-Server.exe", "scripts/lib.ps1",
                      "server/flovmp-server.exe", "voice/altv-voice-server.exe", "server/modules/csharp-module.dll"]
     for r in required:
         if r not in rels:
@@ -482,12 +494,13 @@ def main():
 
     targets = ["linux", "windows"] if args.os == "all" else [args.os]
     os.makedirs(args.out, exist_ok=True)
-    starter, connector = publish_dotnet(os.path.join(args.out, ".publish"), args.skip_build,
-                                        "windows" in targets and not args.no_connector)
+    starter, connector, host = publish_dotnet(os.path.join(args.out, ".publish"), args.skip_build,
+                                              "windows" in targets and not args.no_connector,
+                                              "windows" in targets)
 
     for t in targets:
         stage = os.path.join(args.out, "flovmp-server-{}-{}".format(version, t))
-        stage_package(t, stage, args, version, starter, connector)
+        stage_package(t, stage, args, version, starter, connector, host)
         normalize_text_files(stage)
         entries = write_manifests(stage, t, version)
         verify_stage(stage, t, entries)

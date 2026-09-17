@@ -23,7 +23,7 @@ ON DUPLICATE KEY UPDATE level = VALUES(level), is_founder = VALUES(is_founder);
   вашем подключении: `Игрок Имя (ID: 1, SocialClub: 123456789) подключается...`
 - `level` — от 1 (помощник) до 8 (основатель).
 - Права применяются в течение 30 секунд без перезапуска. Если сервер запущен
-  в окне консоли (Windows, `start.cmd`), мгновенно — командой `reloadadmins`.
+  в окне консоли (Windows, `FloVMP-Server.exe`), мгновенно — командой `reloadadmins`.
 
 Снять права: `DELETE FROM admins WHERE social_club = '123456789';`
 Администратор на дежурстве теряет права сразу после синхронизации.

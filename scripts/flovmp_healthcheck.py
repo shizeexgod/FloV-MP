@@ -736,13 +736,23 @@ def check_live_server(rep, target):
     # Голосовой порт. Игроки подключаются к нему напрямую, и закрытый файрвол
     # здесь означает «голоса нет» при идеально настроенном конфиге — причём
     # молча, без единой ошибки где-либо.
+    # Голосовой сервер слушает ТОЛЬКО UDP: проверка по TCP давала ложное
+    # «недоступен». По UDP явный отказ (ICMP port unreachable) виден как
+    # ошибка сокета; молчание — порт открыт (голосовой сервер на мусор не отвечает).
     voice_port = int(os.environ.get("FLOVMP_VOICE_PUBLIC_PORT", "7895"))
     try:
-        with socket.create_connection((host, voice_port), timeout=5):
-            rep.add(PASS, "голосовой порт {} принимает TCP".format(voice_port))
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.settimeout(2)
+            udp.connect((host, voice_port))
+            udp.send(b"\x00")
+            udp.recv(16)
+        rep.add(PASS, "голосовой порт {} (UDP) отвечает".format(voice_port))
+    except socket.timeout:
+        rep.add(PASS, "голосовой порт {} (UDP) не отклонён".format(voice_port),
+                "отказа нет; снаружи дополнительно проверьте, что UDP {} открыт в файрволе".format(voice_port))
     except OSError as e:
-        rep.add(WARN, "голосовой порт {}".format(voice_port),
-                "недоступен ({}) - если голос настроен, игроки его не услышат".format(e))
+        rep.add(WARN, "голосовой порт {} (UDP)".format(voice_port),
+                "отклонён ({}) - голосовой сервер не запущен или порт другой".format(e))
 
     info = None
     for api_port in (7799, 80):

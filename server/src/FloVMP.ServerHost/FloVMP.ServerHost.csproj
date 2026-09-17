@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Запуск сервера на Windows одним файлом: FloVMP-Server.exe в корне пакета. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>FloVMP-Server</AssemblyName>
+    <RootNamespace>FloVMP.ServerHost</RootNamespace>
+    <ApplicationIcon>..\..\..\assets\branding\app.ico</ApplicationIcon>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Product>FloV:MP Server</Product>
+  </PropertyGroup>
+</Project>

@@ -33,15 +33,36 @@ sudo ./install.sh --owner-sc <ваш SocialClubId>
 Установку можно запускать повторно: ваши настройки сохраняются, а исправляются
 только поломки (например, пароль базы).
 
-## Запуск на Windows (для разработки)
+## Запуск на Windows
+
+Нужен [.NET 8 Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/8.0).
 
 1. Распакуйте `flovmp-server-*-windows.zip`.
-2. Запустите `start.cmd`. При первом запуске он создаст настройки и откроет
-   два окна — голосовой сервер и игровой.
-3. Подключитесь: `connect.cmd` (по умолчанию `127.0.0.1:7788`).
+2. Запустите `FloVMP-Server.exe`. При первом запуске он создаст
+   `config\flovmp.env`, `server\server.toml`, `voice\voice.toml`.
+3. Сервер и голосовой чат работают в одном окне. Команды сервера
+   (`setadmin`, `kick`, `reloadadmins` и другие) вводятся прямо в него.
+4. Остановка — Ctrl+C или закрыть окно. Если сервер остановился сам, окно
+   покажет причину и предложит перезапуск.
+5. Подключение с этого ПК: `connect.cmd` (по умолчанию `127.0.0.1:7788`).
 
-База данных на Windows необязательна. Чтобы её подключить, установите
-MariaDB, создайте базу и пользователя и впишите их в `config\flovmp.env`.
+Папку можно держать где угодно, в том числе в пути с русскими буквами.
+
+База данных на Windows необязательна: без неё аккаунты, права и баны хранятся
+в файлах. Чтобы подключить MariaDB, создайте базу и пользователя (пример ниже)
+и впишите их в `config\flovmp.env`:
+
+```sql
+CREATE DATABASE flovmp_server CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'flovmp'@'localhost' IDENTIFIED BY 'придумайте_пароль';
+CREATE USER 'flovmp'@'127.0.0.1' IDENTIFIED BY 'придумайте_пароль';
+GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'localhost';
+GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
+```
+
+Для игроков из интернета откройте в файрволе порт игры (UDP и TCP, по умолчанию
+7788) и голоса (UDP 7895), а в `server\server.toml` в секции `[voice]` впишите
+внешний IP в `externalPublicHost`.
 
 ## Структура
 
