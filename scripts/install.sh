@@ -524,6 +524,14 @@ SQL
   fi
 fi
 
+# Папка gamemode — сервер владельца. Создаётся из шаблона один раз и дальше
+# принадлежит ему: обновления платформы её не трогают.
+if [ ! -e "$INSTALL_DIR/gamemode" ] && [ -d "$INSTALL_DIR/sdk/template" ]; then
+  cp -r "$INSTALL_DIR/sdk/template" "$INSTALL_DIR/gamemode"
+  chmod +x "$INSTALL_DIR/gamemode/build.sh" 2>/dev/null || true
+  ok "создана папка gamemode — здесь пишется ваш сервер (см. gamemode/README.md)"
+fi
+
 # ---------------------------------------------------------------------
 # 7. Службы и файрвол
 # ---------------------------------------------------------------------
@@ -713,6 +721,7 @@ fi
 echo "   • повторно: sudo $INSTALL_DIR/install.sh --owner-sc <SocialClubId>"
 echo "   SocialClubId игрока виден в логе при его подключении."
 echo
+echo "  Ваш сервер (код):       $INSTALL_DIR/gamemode — сборка: sudo $INSTALL_DIR/gamemode/build.sh --install-sdk --restart"
 echo "  Резервная копия базы:   $INSTALL_DIR/scripts/backup-db.sh"
 echo "  Обновление:             распакуйте новый пакет и запустите его ./install.sh"
 echo "${C_GREEN}=====================================================================${C_OFF}"

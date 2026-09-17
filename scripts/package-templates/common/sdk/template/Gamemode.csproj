@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ваш серверный ресурс. Сборка: build.cmd (Windows) или ./build.sh (Linux).
+    Результат попадает в ..\server\resources\gamemode и подключается сервером.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Gamemode</AssemblyName>
+    <RootNamespace>Gamemode</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\server\resources\gamemode\</OutputPath>
+    <FloVMPRef>..\sdk\ref\</FloVMPRef>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AltV.Net"><HintPath>$(FloVMPRef)AltV.Net.dll</HintPath></Reference>
+    <Reference Include="AltV.Net.Shared"><HintPath>$(FloVMPRef)AltV.Net.Shared.dll</HintPath></Reference>
+    <Reference Include="AltV.Net.CApi"><HintPath>$(FloVMPRef)AltV.Net.CApi.dll</HintPath></Reference>
+    <!-- Хелперы платформы: база данных, миграции, логирование. -->
+    <Reference Include="FloVMP.Core"><HintPath>$(FloVMPRef)FloVMP.Core.dll</HintPath></Reference>
+    <Reference Include="MySqlConnector"><HintPath>$(FloVMPRef)MySqlConnector.dll</HintPath></Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>$(FloVMPRef)Microsoft.Extensions.Logging.Abstractions.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="resource.toml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="client\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

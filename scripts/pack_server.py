@@ -54,6 +54,8 @@ USER_OWNED = [
     "server/resources/<свои ресурсы>",
     "sql/migrations/100+",
     "license.flv",
+    "gamemode/",
+    "server/resources/gamemode/",
     "backups/",
 ]
 
@@ -72,7 +74,8 @@ PLACEHOLDERS = [
 
 LINUX_EXECUTABLES = {
     "install.sh", "start.sh", "start-voice.sh",
-    "scripts/lib-env.sh", "scripts/backup-db.sh",
+    "scripts/lib-env.sh", "scripts/backup-db.sh", "scripts/build-gamemode.sh",
+    "sdk/template/build.sh",
     "server/flovmp-server", "server/flovmp-crash-handler",
     "voice/altv-voice-server", "voice/altv-crash-handler",
 }
@@ -276,6 +279,12 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
     copy_tree(os.path.join(REPO, "client", "resources", "flovmp-client"),
               S("server", "resources", "flovmp-client"))
 
+    # SDK для своего сервера (папка gamemode): сборки для компиляции — ровно те,
+    # что загружает сервер, иначе мод соберётся против другой версии API.
+    for dll in ("AltV.Net.dll", "AltV.Net.Shared.dll", "AltV.Net.CApi.dll", "FloVMP.Core.dll",
+                "MySqlConnector.dll", "Microsoft.Extensions.Logging.Abstractions.dll"):
+        copy(os.path.join(starter_dir, dll), S("sdk", "ref", dll))
+
     log("[{}] шаблоны и база".format(target_os))
     with open(S("server", "server.toml.example"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(make_server_toml_example())
@@ -388,12 +397,14 @@ def verify_stage(stage, target_os, entries):
                 "config/flovmp.env.example", "sql/README.md",
                 "server/resources/flovmp-starter/FloVMP.Starter.dll",
                 "server/resources/flovmp-starter/resource.toml",
-                "server/resources/flovmp-client/resource.toml"]
+                "server/resources/flovmp-client/resource.toml",
+                "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/template/Gamemode.csproj",
+                "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md"]
     if target_os == "linux":
-        required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh",
+        required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",
                      "server/flovmp-server", "voice/altv-voice-server", "server/modules/libcsharp-module.so"]
     else:
-        required += ["FloVMP-Server.exe", "scripts/lib.ps1",
+        required += ["FloVMP-Server.exe", "scripts/lib.ps1", "scripts/build-gamemode.ps1",
                      "server/flovmp-server.exe", "voice/altv-voice-server.exe", "server/modules/csharp-module.dll"]
     for r in required:
         if r not in rels:

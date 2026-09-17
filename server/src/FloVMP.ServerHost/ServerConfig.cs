@@ -126,3 +126,51 @@ public static class ServerConfig
         return $"FLV-{hex[..4]}-{hex[4..8]}-{hex[8..12]}-{hex[12..16]}";
     }
 }
+
+public static class Workspace
+{
+    /// <summary>
+    /// Папка gamemode — ваш сервер. Создаётся из sdk/template, если её нет;
+    /// существующая не трогается никогда.
+    /// </summary>
+    public static bool CreateGamemodeIfMissing(string root)
+    {
+        var target = Path.Combine(root, "gamemode");
+        var template = Path.Combine(root, "sdk", "template");
+        if (Directory.Exists(target) || !Directory.Exists(template)) return false;
+        CopyDirectory(template, target);
+        return true;
+    }
+
+    /// <summary>
+    /// Добавить ресурс в список resources в server.toml, если его там нет и он
+    /// собран (есть resource.toml). Возвращает true, если файл изменён.
+    /// </summary>
+    public static bool EnsureResourceEnabled(string root, string name)
+    {
+        var serverToml = Path.Combine(root, "server", "server.toml");
+        if (!File.Exists(serverToml)) return false;
+        if (!File.Exists(Path.Combine(root, "server", "resources", name, "resource.toml"))) return false;
+
+        var text = File.ReadAllText(serverToml);
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"(?ms)^resources\s*=\s*\[(.*?)^\s*\]");
+        if (!match.Success) return false;
+        if (match.Groups[1].Value.Contains("\"" + name + "\"")) return false;
+
+        var body = match.Groups[1];
+        var insertAt = body.Index + body.Length;
+        var newline = text.Contains("\r\n") ? "\r\n" : "\n";
+        text = text.Insert(insertAt, "    \"" + name + "\"," + newline);
+        File.WriteAllText(serverToml, text, new System.Text.UTF8Encoding(false));
+        return true;
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)));
+    }
+}

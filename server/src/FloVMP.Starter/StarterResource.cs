@@ -127,6 +127,41 @@ public class StarterResource : Resource
 
     private FloVMP.Core.Security.IBanStore? _banStore;
 
+    // --- Команды модов -------------------------------------------------------
+    // Свой ресурс владельца (папка gamemode) регистрирует чат-команды событием
+    //   Alt.Emit("flovmp:commands:register", "имя", "описание", минУровеньАдмина)
+    // и получает их вызовы:
+    //   Alt.OnServer<IPlayer, string, string>("flovmp:command", (игрок, имя, аргументы) => ...)
+    // Раньше платформа отвечала «Неизвестная команда» на всё, чего не знала сама,
+    // и свои команды в отдельном ресурсе было не сделать.
+    private static readonly HashSet<string> BuiltinCommands = new(StringComparer.Ordinal)
+    {
+        "a","admin","adminauth","aduty","alogin","armor","b","ban","banip","banlist","bans","car","claimowner","clear","cls","coords","delveh","destroyveh","dim","dimension","disarm","do","dv","engine","esp","fix","fly","freeze","gethere","givegun","god","godmode","goto","gun","hardban","heal","help","hwidban","kick","kill","lock","me","noclip","ooc","ped","pos","removeweapons","repair","revive","s","setadmin","setdim","shout","skin","speed","suicide","time","tp","tpm","unban","unfreeze","veh","vmute","voicemute","w","weapon","weather","whisper",
+        "license",
+    };
+    private readonly ConcurrentDictionary<string, (string Description, int MinLevel)> _modCommands = new(StringComparer.Ordinal);
+
+    private void OnRegisterModCommand(string name, string description, int minLevel)
+    {
+        name = (name ?? "").Trim().TrimStart('/').ToLowerInvariant();
+        if (name.Length is 0 or > 32 || !name.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_'))
+        {
+            Alt.LogWarning($"[FloV:MP] [Mods] команда '{name}' отклонена: только латиница, цифры и _, до 32 символов.");
+            return;
+        }
+        if (BuiltinCommands.Contains(name))
+        {
+            Alt.LogWarning($"[FloV:MP] [Mods] команда /{name} уже есть в платформе — выберите другое имя.");
+            return;
+        }
+        var entry = ((description ?? "").Trim(), Math.Clamp(minLevel, 0, 8));
+        // Мод регистрирует команды и при своём старте, и по flovmp:platform:ready —
+        // повтор той же команды не шумит в логе.
+        if (_modCommands.TryGetValue(name, out var existing) && existing == entry) return;
+        _modCommands[name] = entry;
+        Alt.Log($"[FloV:MP] [Mods] зарегистрирована команда /{name}" + (minLevel > 0 ? $" (администраторы {minLevel}+)" : ""));
+    }
+
     // Лицензия (license.flv). Перепроверяется раз в час: срок может истечь на
     // работающем сервере. Без действующей лицензии сервер работает с лимитом игроков.
     private FloVMP.Core.Licensing.LicenseStatus _license =
@@ -249,17 +284,16 @@ public class StarterResource : Resource
 
         CheckLicense(logAlways: true);
 
-        Alt.Log("[FloV:MP Starter] Dedicated server initialized successfully!");
-        Alt.Log("[FloV:MP Starter] Security: Server-Side RBAC active. Regular players isolated from admin actions.");
+        Alt.Log("[FloV:MP Starter] Платформа запущена.");
+        Alt.Log("[FloV:MP Starter] Права проверяются на сервере: админ-действия недоступны обычным игрокам.");
 
         if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
         {
             Alt.Log("=================================================================================");
-            Alt.Log("[FloV:MP Setup] SERVER RUNNING IN STANDALONE PRE-DB MODE.");
-            Alt.Log($"[FloV:MP Setup] Initial setup token: {_adminManager.CurrentSetupToken}");
-            Alt.Log("[FloV:MP Setup] To claim Owner privileges (Level 8 Founder):");
-            Alt.Log("[FloV:MP Setup]  1. In server console: setadmin <ID> 8  (or setfounder <ID>)");
-            Alt.Log($"[FloV:MP Setup]  2. In-game chat:     /claimowner {_adminManager.CurrentSetupToken}");
+            Alt.Log("[FloV:MP Setup] Администраторов ещё нет. Стать владельцем (уровень 8):");
+            Alt.Log($"[FloV:MP Setup]  1. в игре:             /claimowner {_adminManager.CurrentSetupToken}");
+            Alt.Log("[FloV:MP Setup]  2. в консоли сервера:  setadmin <ID игрока> 8");
+            Alt.Log("[FloV:MP Setup]  3. в config/flovmp.env: FLOVMP_OWNER_SC=<ваш SocialClubId>");
             Alt.Log("=================================================================================");
         }
 
@@ -296,6 +330,10 @@ public class StarterResource : Resource
         Alt.OnClient<IPlayer, float, float, float>("starter:teleportWaypoint", OnTeleportWaypoint);
         Alt.OnClient<IPlayer, bool>("starter:toggleNoClip", OnToggleNoClip);
         Alt.OnClient<IPlayer, bool>("flovmp:admin:noclip", OnToggleNoClip);
+        Alt.OnServer<string, string, int>("flovmp:commands:register", OnRegisterModCommand);
+
+        // Ресурсы, стартовавшие раньше платформы, по этому событию повторяют регистрацию команд.
+        Alt.Emit("flovmp:platform:ready");
     }
 
     public override void OnStop()
@@ -570,6 +608,10 @@ public class StarterResource : Resource
         var lvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 0;
         player.Emit("flovmp:console:setAdmin", lvl);
         player.SetStreamSyncedMetaData("adminLevel", lvl);
+
+        // Сигнал своим ресурсам (gamemode): клиент загружен, игрок заспавнен —
+        // можно показывать свой интерфейс, телепортировать, выдавать данные.
+        Alt.Emit("flovmp:player:ready", player);
 
         // Приветствие — здесь, а не в OnPlayerConnect: при подключении
         // клиентский скрипт ещё не загружен, и отправленные туда сообщения
@@ -1078,6 +1120,13 @@ public class StarterResource : Resource
                 {
                     SendChatMessage(player, "{fde047}Главный Администратор: {a1a1aa}/setadmin <id> <lvl 0-8>");
                 }
+                var visibleModCommands = _modCommands
+                    .Where(kv => kv.Value.MinLevel == 0 || IsAdmin(player, kv.Value.MinLevel))
+                    .OrderBy(kv => kv.Key)
+                    .Select(kv => string.IsNullOrEmpty(kv.Value.Description) ? "/" + kv.Key : $"/{kv.Key} — {kv.Value.Description}")
+                    .ToList();
+                if (visibleModCommands.Count > 0)
+                    SendChatMessage(player, "{c4b5fd}Сервер: {a1a1aa}" + string.Join(", ", visibleModCommands));
                 break;
 
             case "me":
@@ -1994,6 +2043,17 @@ public class StarterResource : Resource
                 break;
 
             default:
+                if (_modCommands.TryGetValue(cmd, out var modCommand))
+                {
+                    if (modCommand.MinLevel > 0 && !IsAdmin(player, modCommand.MinLevel))
+                    {
+                        SendChatMessage(player, $"{{ef4444}}[FloV:MP Security] Доступ запрещен (требуется Уровень {modCommand.MinLevel}+).");
+                        break;
+                    }
+                    var argsLine = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : "";
+                    Alt.Emit("flovmp:command", player, cmd, argsLine);
+                    break;
+                }
                 SendChatMessage(player, $"{{a1a1aa}}Неизвестная команда: /{cmd}. Введите /help для списка доступных команд.");
                 break;
         }
