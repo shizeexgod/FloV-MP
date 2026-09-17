@@ -237,7 +237,7 @@ static void HandleAuthRequest(HttpListenerContext ctx, string path, AuthService 
             "login" => auth.Login(username, password, throttleKey, req.Code),
             "change-password" => auth.ChangePassword(username, password, req.NewPassword ?? "", throttleKey),
             "change-email" => auth.ChangeEmail(username, password, req.Email ?? "", throttleKey),
-            "2fa/enable" => auth.Enable2fa(username, req.Secret ?? "", req.Code ?? "", throttleKey),
+            "2fa/enable" => auth.Enable2fa(username, password, req.Secret ?? "", req.Code ?? "", throttleKey),
             "2fa/disable" => auth.Disable2fa(username, req.Code ?? "", throttleKey),
             _ => new AuthResult(AuthOutcome.BadUsername, "неизвестная операция"),
         };

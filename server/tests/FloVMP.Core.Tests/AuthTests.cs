@@ -222,13 +222,28 @@ public sealed class AuthServiceTests : IDisposable
         var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
         var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
 
-        Assert.Equal(AuthOutcome.WrongCode, _svc.Enable2fa("Tfa", secret, "000000").Outcome);
-        Assert.True(_svc.Enable2fa("Tfa", secret, goodCode).Ok);
+        Assert.Equal(AuthOutcome.WrongCode, _svc.Enable2fa("Tfa", "secret6", secret, "000000").Outcome);
+        Assert.True(_svc.Enable2fa("Tfa", "secret6", secret, goodCode).Ok);
 
         // теперь вход без кода — TwoFaRequired, с неверным — WrongCode, с верным — Ok
         Assert.Equal(AuthOutcome.TwoFaRequired, _svc.Login("Tfa", "secret6", "ip:t").Outcome);
         Assert.Equal(AuthOutcome.WrongCode, _svc.Login("Tfa", "secret6", "ip:t", "111111").Outcome);
         Assert.True(_svc.Login("Tfa", "secret6", "ip:t", goodCode).Ok);
+    }
+
+    [Fact]
+    public void Enable2fa_requires_account_password()
+    {
+        // Без пароля любой, кто знает имя аккаунта, включил бы на нём 2FA со
+        // своим секретом и запер владельца.
+        _svc.Register("TfaVictim", "secret6");
+        var secret = Totp.GenerateSecret();
+        var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
+        var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
+
+        Assert.Equal(AuthOutcome.WrongPassword, _svc.Enable2fa("TfaVictim", "", secret, goodCode).Outcome);
+        Assert.Equal(AuthOutcome.WrongPassword, _svc.Enable2fa("TfaVictim", "attacker1", secret, goodCode).Outcome);
+        Assert.True(_svc.Login("TfaVictim", "secret6", "ip:v").Ok); // 2FA не включилась
     }
 
     [Fact]
@@ -238,7 +253,7 @@ public sealed class AuthServiceTests : IDisposable
         var secret = Totp.GenerateSecret();
         var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
         var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
-        _svc.Enable2fa("Tfa2", secret, goodCode);
+        _svc.Enable2fa("Tfa2", "secret6", secret, goodCode);
 
         Assert.Equal(AuthOutcome.WrongCode, _svc.Disable2fa("Tfa2", "garbage").Outcome);
         Assert.True(_svc.Disable2fa("Tfa2", "secret6").Ok);          // по паролю
@@ -256,7 +271,7 @@ public sealed class AuthServiceTests : IDisposable
         var store1 = new JsonAccountStore(path);
         var s1 = new AuthService(store1, () => _now);
         s1.Register("Persist2fa", "secret6");
-        Assert.True(s1.Enable2fa("Persist2fa", secret, goodCode).Ok);
+        Assert.True(s1.Enable2fa("Persist2fa", "secret6", secret, goodCode).Ok);
         store1.Flush(); // Update пишется в фоне — сбрасываем явно
 
         var s2 = new AuthService(new JsonAccountStore(path), () => _now);
@@ -285,7 +300,7 @@ public sealed class AuthServiceTests : IDisposable
         var secret = Totp.GenerateSecret();
         var counter = ((long)(_now - DateTime.UnixEpoch).TotalSeconds) / 30;
         var goodCode = Totp.Compute(Totp.FromBase32(secret), counter);
-        _svc.Enable2fa("Brute2fa", secret, goodCode);
+        _svc.Enable2fa("Brute2fa", "secret6", secret, goodCode);
 
         for (var i = 0; i < 3; i++)
         {

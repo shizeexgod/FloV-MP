@@ -174,7 +174,7 @@ public sealed class HttpApiSystem
 
                 try
                 {
-                    var ip = ctx.Request.RemoteEndPoint?.Address.ToString() ?? "unknown";
+                    var ip = ClientKey(ctx);
                     var now = DateTime.UtcNow;
                     var window = _rate.AddOrUpdate(ip,
                         _ => (1, now),
@@ -287,11 +287,7 @@ public sealed class HttpApiSystem
         var password = req.Password ?? "";
         // за nginx реальный адрес — в X-Real-IP / X-Forwarded-For; RemoteEndPoint
         // это всегда 127.0.0.1 (прокси), по нему троттлинг был бы глобальным.
-        var throttleKey = FirstNonEmpty(
-            ctx.Request.Headers["X-Real-IP"],
-            ctx.Request.Headers["X-Forwarded-For"]?.Split(',')[0],
-            ctx.Request.RemoteEndPoint?.Address.ToString(),
-            username);
+        var throttleKey = ClientKey(ctx);
 
         var route = path["/api/auth/".Length..].TrimEnd('/');
 
@@ -301,7 +297,7 @@ public sealed class HttpApiSystem
             "login" => _auth.Login(username, password, throttleKey, req.Code),
             "change-password" => _auth.ChangePassword(username, password, req.NewPassword ?? "", throttleKey),
             "change-email" => _auth.ChangeEmail(username, password, req.Email ?? "", throttleKey),
-            "2fa/enable" => _auth.Enable2fa(username, req.Secret ?? "", req.Code ?? "", throttleKey),
+            "2fa/enable" => _auth.Enable2fa(username, password, req.Secret ?? "", req.Code ?? "", throttleKey),
             "2fa/disable" => _auth.Disable2fa(username, req.Code ?? "", throttleKey),
             _ => new AuthResult(AuthOutcome.BadUsername, "неизвестная операция"),
         };
@@ -340,6 +336,25 @@ public sealed class HttpApiSystem
         }
         body = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
         return true;
+    }
+
+    /// <summary>
+    /// Адрес клиента для ограничения частоты. Заголовкам X-Real-IP /
+    /// X-Forwarded-For верим только от прокси на этой же машине (nginx на
+    /// loopback): при FLOVMP_API_BIND=public без прокси их задаёт сам клиент,
+    /// и случайный X-Real-IP в каждом запросе обходил лимит подбора пароля.
+    /// </summary>
+    internal static string ClientKey(HttpListenerContext ctx)
+    {
+        var remote = ctx.Request.RemoteEndPoint?.Address;
+        if (remote is not null && IPAddress.IsLoopback(remote))
+        {
+            return FirstNonEmpty(
+                ctx.Request.Headers["X-Real-IP"],
+                ctx.Request.Headers["X-Forwarded-For"]?.Split(',')[0],
+                remote.ToString());
+        }
+        return remote?.ToString() ?? "unknown";
     }
 
     private static string FirstNonEmpty(params string?[] vals)

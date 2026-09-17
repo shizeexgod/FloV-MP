@@ -175,9 +175,11 @@ public sealed class AuthService
 
     /// <summary>
     /// Включение 2FA: клиент сгенерировал секрет и показал QR, игрок ввёл
-    /// код — проверяем и, если сходится, сохраняем секрет и включаем флаг.
+    /// пароль и код — проверяем и, если сходится, сохраняем секрет.
+    /// Пароль обязателен: иначе любой, кто знает имя аккаунта, включил бы на
+    /// нём 2FA со своим секретом и запер владельца снаружи.
     /// </summary>
-    public AuthResult Enable2fa(string username, string secretBase32, string code, string? throttleKey = null)
+    public AuthResult Enable2fa(string username, string password, string secretBase32, string code, string? throttleKey = null)
     {
         PruneAttempts();
         if (throttleKey != null && IsRateLimited(throttleKey))
@@ -186,6 +188,9 @@ public sealed class AuthService
         var acc = _store.FindByUsername(username);
         if (acc is null)
             return throttleKey != null ? Fail(throttleKey, AuthOutcome.UserNotFound, "нет такого игрока") : new AuthResult(AuthOutcome.UserNotFound, "нет такого игрока");
+
+        if (!Account.IsValidPassword(password) || !PasswordHasher.Verify(password, acc.PasswordHash))
+            return throttleKey != null ? Fail(throttleKey, AuthOutcome.WrongPassword, "пароль неверный") : new AuthResult(AuthOutcome.WrongPassword, "пароль неверный");
 
         if (acc.TwoFaEnabled)
             return new AuthResult(AuthOutcome.Ok, "двухфакторная защита уже включена", acc);
