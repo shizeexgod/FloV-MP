@@ -1,11 +1,16 @@
+using System.Reflection;
+
 namespace FloVMP.Gamemode;
 
 /// <summary>
-/// Метаданные сборки геймода. Пока константа вручную; когда появится
-/// CI/скрипт релиза — подставлять сюда версию/хэш коммита автоматически.
+/// Метаданные сборки геймода. Версия берётся из файла VERSION в корне
+/// репозитория (server/Directory.Build.props).
 /// </summary>
 public static class BuildInfo
 {
-    /// <summary>Версия геймода FloV:MP (не путать с версией движка alt:V).</summary>
-    public const string Version = "0.6.0-logging";
+    /// <summary>Версия FloV:MP (не путать с версией движка alt:V).</summary>
+    public static string Version { get; } =
+        typeof(BuildInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0]
+        ?? typeof(BuildInfo).Assembly.GetName().Version?.ToString()
+        ?? "0.0.0";
 }
