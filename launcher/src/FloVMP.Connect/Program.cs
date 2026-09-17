@@ -771,11 +771,17 @@ static string? FindRockstarLauncher()
 static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
 {
     var cmdFile = Path.Combine(gtaDir, "commandline.txt");
+    var backup = cmdFile + ".flovmp-backup";
     var parts = new List<string> { "-scDisableCloudSaves", "-noCloud" };
     if (!string.IsNullOrWhiteSpace(gameArgs)) parts.Add(gameArgs.Trim());
     if (fpsLimit > 0) parts.Add($"-FPSLimit {fpsLimit}");
     try
     {
+        // Свой commandline.txt игрока раньше молча перезаписывался и после
+        // игры удалялся. Сохраняем копию и возвращаем её при выходе. Если копия
+        // уже есть (прошлый запуск упал), она — оригинал, не затираем её.
+        if (File.Exists(cmdFile) && !File.Exists(backup))
+            File.Copy(cmdFile, backup);
         File.WriteAllLines(cmdFile, parts);
         Console.WriteLine($"[connect] Применены параметры в commandline.txt: {string.Join(' ', parts)}");
     }
@@ -787,7 +793,11 @@ static void CleanupGameCommandLine(string gtaDir)
     try
     {
         var cmdFile = Path.Combine(gtaDir, "commandline.txt");
-        if (File.Exists(cmdFile)) File.Delete(cmdFile);
+        var backup = cmdFile + ".flovmp-backup";
+        if (File.Exists(backup))
+            File.Move(backup, cmdFile, overwrite: true);
+        else if (File.Exists(cmdFile))
+            File.Delete(cmdFile);
     }
     catch { }
 }
@@ -874,8 +884,28 @@ static void EnsureDirectRouteToHost(string connectTarget)
     {
         var host = connectTarget.Split(':')[0].Trim();
         if (host is "127.0.0.1" or "localhost" || string.IsNullOrWhiteSpace(host)) return;
-        if (!System.Net.IPAddress.TryParse(host, out var hostIp)
-            || hostIp.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return;
+        if (!System.Net.IPAddress.TryParse(host, out var hostIp))
+        {
+            // Сервер по доменному имени: маршрут ставится на его IPv4.
+            try
+            {
+                hostIp = System.Net.Dns.GetHostAddresses(host)
+                    .FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            }
+            catch { hostIp = null; }
+            if (hostIp is null) return;
+            host = hostIp.ToString();
+        }
+        if (hostIp.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return;
+
+        // Маршрут нужен только при активном VPN/TUN. Раньше он ставился всегда,
+        // и у игрока без прав администратора КАЖДЫЙ запуск игры начинался с
+        // двух окон UAC (route delete и route add) — даже без всякого VPN.
+        if (!IsTunnelActive())
+        {
+            Console.WriteLine("[connect] VPN/TUN не обнаружен — прямой маршрут не нужен.");
+            return;
+        }
 
         // Шлюз ТОЛЬКО физического интерфейса (Ethernet/Wi-Fi) и ТОЛЬКО IPv4 —
         // иначе route add с IPv6-шлюзом (fe80::…) невалиден и падает.
@@ -904,10 +934,18 @@ static void EnsureDirectRouteToHost(string connectTarget)
         Console.WriteLine($"[connect] Прямой маршрут к {host} через физический шлюз {physicalGateway} (в обход VPN/TUN)...");
         var admin = IsRunningAsAdmin();
 
-        // Снимаем возможный устаревший маршрут (с другим шлюзом) — молча.
-        RunRoute($"delete {host}", admin, silent: true);
-
-        var ok = RunRoute($"add {host} mask 255.255.255.255 {physicalGateway} metric 1", admin, silent: false);
+        bool ok;
+        if (admin)
+        {
+            // Снимаем возможный устаревший маршрут (с другим шлюзом) — молча.
+            RunRoute($"delete {host}", admin, silent: true);
+            ok = RunRoute($"add {host} mask 255.255.255.255 {physicalGateway} metric 1", admin, silent: false);
+        }
+        else
+        {
+            // Без прав — ОДНО окно UAC на обе команды, а не по окну на каждую.
+            ok = RunElevatedCmd($"route delete {host} >nul 2>&1 & route add {host} mask 255.255.255.255 {physicalGateway} metric 1");
+        }
         if (ok)
             Console.WriteLine("[connect] Прямой маршрут добавлен — трафик к серверу идёт мимо VPN.");
         else if (!admin)
@@ -919,6 +957,51 @@ static void EnsureDirectRouteToHost(string connectTarget)
     {
         Console.WriteLine($"[connect] Предупреждение: не удалось добавить прямой маршрут: {ex.Message}");
     }
+}
+
+/// <summary>Есть ли поднятый VPN/TUN-интерфейс (Happ, sing-box, WireGuard, OpenVPN…).</summary>
+static bool IsTunnelActive()
+{
+    try
+    {
+        return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Any(ni =>
+            ni.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up &&
+            (ni.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Tunnel
+                                      or System.Net.NetworkInformation.NetworkInterfaceType.Ppp
+             || new[] { "tun", "tap", "vpn", "wintun", "wireguard", "sing-box", "happ", "openvpn" }
+                    .Any(k => ni.Description.Contains(k, StringComparison.OrdinalIgnoreCase)
+                           || ni.Name.Contains(k, StringComparison.OrdinalIgnoreCase))) &&
+            // Системные туннели Windows (Teredo, 6to4, ISATAP) всегда «подняты» и VPN не являются.
+            !ni.Description.Contains("Teredo", StringComparison.OrdinalIgnoreCase) &&
+            !ni.Description.Contains("6to4", StringComparison.OrdinalIgnoreCase) &&
+            !ni.Description.Contains("ISATAP", StringComparison.OrdinalIgnoreCase) &&
+            ni.GetIPProperties().UnicastAddresses.Any(u => u.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork));
+    }
+    catch { return false; }
+}
+
+/// <summary>Одна команда cmd с повышением прав — один запрос UAC.</summary>
+static bool RunElevatedCmd(string command)
+{
+    try
+    {
+        var psi = new ProcessStartInfo("cmd.exe", "/c " + command)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WindowStyle = ProcessWindowStyle.Hidden,
+        };
+        using var p = Process.Start(psi);
+        if (p == null) return false;
+        p.WaitForExit(6000);
+        return p.HasExited && p.ExitCode == 0;
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        Console.WriteLine("[connect] UAC-запрос на добавление маршрута отклонён.");
+        return false;
+    }
+    catch { return false; }
 }
 
 /// <summary>Запускает route.exe; если нет прав админа — поднимает через UAC (runas).</summary>
