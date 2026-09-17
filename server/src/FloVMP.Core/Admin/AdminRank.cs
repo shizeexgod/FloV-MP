@@ -1,7 +1,7 @@
 namespace FloVMP.Core.Admin;
 
 /// <summary>
-/// 8-уровневая иерархия администрации FloV:MP (согласно AGENTS.md).
+/// 8-уровневая иерархия администрации FloV:MP.
 /// </summary>
 public enum AdminRank
 {

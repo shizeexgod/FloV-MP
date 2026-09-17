@@ -6,8 +6,7 @@ using FloVMP.Core.Auth;
 namespace FloVMP.Gamemode;
 
 /// <summary>
-/// Авторизация игрока (каркас Фазы 3, портирование паттерна az_auth
-/// Florida V на C#/alt:V).
+/// Авторизация игрока в RP-режиме.
 ///
 /// Поток:
 ///   connect  → игрок НЕ спавнится (клиент на чёрном экране), шлём

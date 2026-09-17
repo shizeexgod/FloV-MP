@@ -303,7 +303,7 @@ alt.onServer('flovmp:auth:result', (ok, message) => {
 });
 
 // =============================================================================
-// 1. СИСТЕМА СВОБОДНОГО ПОЛЁТА (NoClip) — Архитектура Sayonara RP
+// 1. СВОБОДНЫЙ ПОЛЁТ АДМИНИСТРАТОРА (NoClip)
 // =============================================================================
 let noClip = false;
 let noClipPos = null;
@@ -411,7 +411,7 @@ export function toggleNoClip() {
 }
 
 // =============================================================================
-// 1.1 СИСТЕМА АДМИН-ВИДЕНИЯ (ESP / Wallhack) — Архитектура Sayonara RP
+// 1.1 АДМИН-ВИДЕНИЕ (ESP)
 // =============================================================================
 let espMode = 0; // 0: ВЫКЛ, 1: Игроки, 2: Транспорт, 3: Все (Игроки + ТС)
 
@@ -591,7 +591,7 @@ alt.everyTick(() => {
         native.disableControlAction(0, 200, true); // INPUT_FRONTEND_PAUSE_ALTERNATE
     }
 
-    // Перемещение NoClip (Sayonara RP: точная сферическая математика + ускорение)
+    // Перемещение NoClip: направление по камере + плавное ускорение
     if (noClip && player && player.valid) {
         native.disableControlAction(0, 30, true);  // MOVE_LR
         native.disableControlAction(0, 31, true);  // MOVE_UD
@@ -611,7 +611,7 @@ alt.everyTick(() => {
         const pitch = camRot.x * (Math.PI / 180.0);
         const cosPitch = Math.cos(pitch);
 
-        // Вектор взгляда камеры (сферические координаты Sayonara RP)
+        // Вектор взгляда камеры (сферические координаты)
         const dirX = -Math.sin(heading) * cosPitch;
         const dirY = Math.cos(heading) * cosPitch;
         const dirZ = Math.sin(pitch);
@@ -674,7 +674,7 @@ alt.everyTick(() => {
         native.setEntityAlpha(player.scriptID, 0, false);
     }
 
-    // Отрисовка ESP (Sayonara RP: аппаратный рендеринг native text, дистанционное масштабирование)
+    // Отрисовка ESP: текст нативами игры, масштаб по дистанции
     if (espMode > 0 && currentAdminLevel >= 1 && inGame) {
         const camPos = native.getGameplayCamCoord();
         const showPlayers = (espMode === 1 || espMode === 3);

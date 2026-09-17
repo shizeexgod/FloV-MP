@@ -641,7 +641,7 @@ public class GamemodeResource : Resource
                 }
                 _auth?.SaveAccount(acc);
 
-                ChatSystem.SendSystem(p, $"[Банк Держава] Начислено в PayDay: +{totalGain:N0} руб. (Пособие: +{citizenAllowance:N0} руб.{factionSalaryInfo}). Баланс счёта: {acc.Bank:N0} руб.");
+                ChatSystem.SendSystem(p, $"[Банк] Начислено в PayDay: +{totalGain:N0} руб. (Пособие: +{citizenAllowance:N0} руб.{factionSalaryInfo}). Баланс счёта: {acc.Bank:N0} руб.");
             }
 
             _chat?.Broadcast("Все выплаты успешно зачислены на банковские счета граждан.");

@@ -50,7 +50,7 @@ public sealed record BanCheckResult(
     bool ShouldAlertAdmins);
 
 /// <summary>
-/// Сервис многоуровневых наказаний и жесткости банов (Florida V / Arizona V Multi-Tier Architecture).
+/// Сервис многоуровневых блокировок: аккаунт, IP, Social Club, HWID, MAC.
 /// Поддерживает гранулярные уровни от простого /ban до тотального /hardban с учётом FloV:ID политики сервера.
 /// </summary>
 public class MultiTierBanService

@@ -64,7 +64,17 @@ FORBIDDEN_IN_PACKAGE = [
     "server/config/admins.json", "config/admins.json", "license.flv",
 ]
 
-BRANDING_LEAKS = ["Держава", "держава", "derzhava", "Derzhava", "DERZHAVA"]
+def load_private_markers():
+    """Частный брендинг и идентификаторы владельца — из scripts/private-markers.txt
+    (файл не входит в исходники для клиентов)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "private-markers.txt")
+    if not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as fh:
+        return [l.strip() for l in fh if l.strip() and not l.startswith("#")]
+
+
+PRIVATE_MARKERS = load_private_markers()
 
 PLACEHOLDERS = [
     "__FLOVMP_NAME__", "__FLOVMP_PORT__", "__FLOVMP_PLAYERS__",
@@ -431,11 +441,9 @@ def verify_stage(stage, target_os, entries):
             problems.append("CRLF в скрипте: " + rel)
         if rel.endswith((".sh", ".ps1", ".cmd", ".md", ".toml", ".example", ".json", ".sql", ".js", ".html")):
             text = open(p, "rb").read().decode("utf-8", errors="ignore")
-            for term in BRANDING_LEAKS:
+            for term in PRIVATE_MARKERS:
                 if term in text:
-                    problems.append("приватный брендинг «{}» в {}".format(term, rel))
-            if re.search(r"\b509264618\b", text):
-                problems.append("SocialClubId владельца в " + rel)
+                    problems.append("частные данные «{}» в {}".format(term, rel))
 
     if target_os == "linux":
         bash = find_bash()

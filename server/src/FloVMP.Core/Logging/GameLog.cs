@@ -1,7 +1,7 @@
 namespace FloVMP.Core.Logging;
 
 /// <summary>
-/// Единая точка логирования для всех систем (как в Florida V). Вызовы
+/// Единая точка логирования для всех систем. Вызовы
 /// однотипны: <c>GameLog.Money(...)</c>, <c>GameLog.Admin(...)</c> и т.д.
 ///
 /// До <see cref="Configure"/> — тихий no-op (безопасно вызывать из тестов

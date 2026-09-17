@@ -1,8 +1,8 @@
 namespace FloVMP.Core.Auth;
 
 /// <summary>
-/// Хранилище учёток. Скелет — JSON-файл (<see cref="JsonAccountStore"/>);
-/// позже — БД (та же схема, отдельная от Florida V — см. CLAUDE.md).
+/// Хранилище учётных записей: JSON-файл (<see cref="JsonAccountStore"/>)
+/// или MariaDB (<see cref="FloVMP.Core.Database.MySqlAccountStore"/>).
 /// Реализация обязана быть потокобезопасной: события alt:V приходят с
 /// нескольких потоков синхронизации.
 /// </summary>
