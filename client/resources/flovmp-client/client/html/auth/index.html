@@ -372,8 +372,21 @@
     }
   }
 
+  /* Ответ сервера может не прийти (обрыв, сбой обработки). Без ограничения
+     кнопка навсегда оставалась в состоянии «Входим…», и повторить было нельзя. */
+  var BUSY_TIMEOUT_MS = 15000;
+  var busyTimer = null;
+
   function setBusy(on) {
     busy = on;
+    if (busyTimer) { clearTimeout(busyTimer); busyTimer = null; }
+    if (on) {
+      busyTimer = setTimeout(function () {
+        busyTimer = null;
+        setBusy(false);
+        fail('Сервер не ответил. Проверьте соединение и попробуйте ещё раз.');
+      }, BUSY_TIMEOUT_MS);
+    }
     submitBtn.disabled = false; /* кнопка остаётся кликабельной до старта запроса */
     submitBtn.setAttribute('data-busy', String(on));
     submitBtn.innerHTML = on
