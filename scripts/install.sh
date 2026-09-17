@@ -544,6 +544,9 @@ if [ "$HAS_SYSTEMD" -eq 1 ]; then
 Description=FloV:MP Voice Server ($SERVICE)
 After=network-online.target
 Wants=network-online.target
+Before=$SERVICE.service
+# голосовой сервер держит одно соединение с игровым: рестарт игры перезапускает и голос
+PartOf=$SERVICE.service
 
 [Service]
 Type=simple

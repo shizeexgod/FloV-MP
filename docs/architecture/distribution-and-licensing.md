@@ -41,10 +41,10 @@
   4. Создаёт рабочие каталоги `/opt/flovmp` и `/opt/flovmp/voice`.
   5. Стучится на портал по ключу (`/api/v1/licenses/download-by-key?key=...`) и сохраняет проверенный `license.flv`.
   6. Скачивает и распаковывает последний билд платформы мультиплеера.
-  7. Разворачивает локальную MariaDB, создаёт БД `flovmp_server` (или с именем проекта) и накатывает игровую схему `schema.sql`.
+  7. Разворачивает локальную MariaDB, создаёт БД `flovmp_server` (или с именем проекта) и создаёт отдельного пользователя со случайным паролем; таблицы создаёт сервер миграциями `sql/migrations`.
   8. Регистрирует две связанные `systemd`-службы:
-     - `flovmp-game.service` (основной игровой сервер).
-     - `flovmp-voice.service` (внешний 3D-голос с привязкой `PartOf=flovmp-game.service`).
+     - `flovmp.service` (основной игровой сервер).
+     - `flovmp-voice.service` (внешний 3D-голос с привязкой `PartOf=flovmp.service`).
   9. Автоматически запускает сервер и выводит зелёный отчёт со статусом портов (UDP 7788, Voice 7797/7798).
 
 ### Вариант 3. Интерактивная модалка в ЛК («Файлы мультиплеера»)
@@ -53,16 +53,11 @@
   - **Вкладка 2:** Готовая персональная команда `curl -sSL ... | bash` с кнопкой копирования в буфер обмена.
   - **Вкладка 3:** Поле ручного ввода ключа `FLV-XXXX-XXXX-XXXX` + область drag-and-drop для прикрепления существующего файла `license.flv`.
 
-### Вариант 4. Админский мастер-деплой разработчиком (`deploy-licensee.sh`)
-- Для прямой накатки разработчиком на VDS клиента без предварительного захода на сайт:
-  ```bash
-  ./scripts/deploy-licensee.sh --project "Moscow RP" --slots 5000
-  ```
-  Или через curl в одну строку:
-  ```bash
-  curl -sSL http://188.127.229.224:7799/deploy.sh | bash -s -- --project "Moscow RP" --slots 5000
-  ```
-  Скрипт связывается с мастер-сервером (`188.127.229.224`), выпускает криптографическую лицензию RSA-2048, скачивает сборку, разворачивает MariaDB и настраивает связанные сервисы `systemd`.
+### Вариант 4. Установка разработчиком на VDS клиента
+- Старый `deploy-licensee.sh` удалён (2026-09-17): генерировал поддельную лицензию,
+  ставил базу под root без пароля. Единственный установщик — `scripts/install.sh`
+  внутри пакета `scripts/pack_server.py` (см. `docs/install-checklist.md`).
+  Лицензия скачивается только настоящая, по `--key`; без ключа установка идёт без неё.
 
 ---
 
@@ -72,16 +67,16 @@
 Внешний голосовой сервер `altv-voice-server` держит ровно **одно TCP-соединение** с игровым процессом. Если игровой сервер перезапускается (краш, админский рестарт, смена ресурсов), а процесс голоса остаётся работать, внешнее соединение рвётся, и голос **молча отваливается** без ошибок в консоли.
 
 ### Решение через Systemd:
-В конфигурацию голосового сервиса добавлена директива `PartOf=flovmp-game.service`:
+В конфигурацию голосового сервиса добавлена директива `PartOf=flovmp.service`:
 
 #### `/etc/systemd/system/flovmp-voice.service`:
 ```ini
 [Unit]
 Description=FloV:MP Voice Server (alt:V 16.4.39 external voice)
 After=network.target
-Before=flovmp-game.service
+Before=flovmp.service
 # PartOf гарантирует, что рестарт или стоп игрового сервера немедленно перезапускает голос:
-PartOf=flovmp-game.service
+PartOf=flovmp.service
 
 [Service]
 Type=simple
@@ -95,7 +90,7 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 ```
 
-#### `/etc/systemd/system/flovmp-game.service`:
+#### `/etc/systemd/system/flovmp.service`:
 ```ini
 [Unit]
 Description=FloV:MP Game Server

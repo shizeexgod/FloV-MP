@@ -50,3 +50,5 @@ launcher/electron/pw_*.png
 
 # Tooling
 .claude/
+
+__pycache__/

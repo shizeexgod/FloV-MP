@@ -17,33 +17,33 @@ python scripts/flovmp_healthcheck.py --build
 Собрать пакет:
 
 ```bash
-powershell -File scripts/assemble-linux-server.ps1
+python scripts/pack_server.py --os linux
 ```
 
-Убедиться, что в `dist/linux-server/` есть:
-
-- `sql/migrations/*.sql` — **без них сервер стартует без схемы и тихо уходит
-  на JSON-хранилище**. С виду работает, данные не там, где ждут;
-- `voice/altv-voice-server` — иначе голоса не будет вообще;
-- `resources/flovmp-starter/` (или `flovmp-core/` для полного RP-режима).
+Результат — `dist/server/flovmp-server-<версия>-linux.tar.gz` (+ `.sha256`).
+Сборщик сам проверяет, что в пакете есть `sql/migrations`, голосовой сервер,
+ресурсы, и что в него **не попали** `admins.json`, `license.flv`, настройки и
+SocialClub владельца. Любая ошибка — пакет не создаётся.
 
 ---
 
 ## Установка
 
 ```bash
-./deploy-licensee.sh --project "Название" --slots 2000
+tar -xzf flovmp-server-<версия>-linux.tar.gz
+cd flovmp-server-<версия>-linux
+sudo ./install.sh --name "Название" --slots 1000 --owner-sc <SocialClubId владельца>
 ```
 
-Скрипт сам: ставит зависимости, тянет лицензию, создаёт базу, настраивает
-голос (генерирует общий секрет и определяет публичный адрес), регистрирует
-службы.
+Скрипт сам: проверяет целостность пакета, ставит зависимости и .NET 8,
+создаёт базу и отдельного пользователя MariaDB со случайным паролем,
+настраивает голос (секрет, публичный адрес), регистрирует службы
+`flovmp` и `flovmp-voice`, запускает и проверяет по логу загрузку ресурсов,
+миграции и подключение голоса.
 
-Если внешний IP не определяется автоматически — задать явно:
-
-```bash
-FLOVMP_PUBLIC_HOST=<ip-или-домен> ./deploy-licensee.sh --project "Название"
-```
+Если внешний IP не определяется автоматически — `--public-host <ip-или-домен>`.
+Обновление — тот же `./install.sh` из нового пакета (бэкап и откат автоматически).
+Все параметры: `./install.sh --help`.
 
 ---
 
@@ -55,7 +55,7 @@ FLOVMP_PUBLIC_HOST=<ip-или-домен> ./deploy-licensee.sh --project "Наз
 одной ошибки в логе** — и не загрузил ни одного ресурса. Пустой мир.
 
 ```bash
-grep -E "Loading resource|\[C#\]" /opt/flovmp/server.log | head
+grep -E "Loading resource|\[C#\]" /opt/flovmp/server/server.log | head
 ```
 
 Должны быть строки `Loading resource flovmp-starter` и `[C#] [FloV:MP ...`.
@@ -66,7 +66,7 @@ grep -E "Loading resource|\[C#\]" /opt/flovmp/server.log | head
 ### 2. База, а не JSON
 
 ```bash
-grep -E "\[DB\]" /opt/flovmp/server.log
+grep -E "\[DB\]" /opt/flovmp/server/server.log
 ```
 
 Ожидается `Успешное подключение к MariaDB` и строка про миграции. Если видно
@@ -76,7 +76,7 @@ grep -E "\[DB\]" /opt/flovmp/server.log
 ### 3. Голос
 
 ```bash
-grep -A3 "\[voice\]" /opt/flovmp/server.toml
+grep -A3 "\[voice\]" /opt/flovmp/server/server.toml
 grep -c "Connected to alt:V server" /opt/flovmp/voice/voice.log
 ```
 

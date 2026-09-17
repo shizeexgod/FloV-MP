@@ -98,7 +98,7 @@ disableDependencyDownload = true
 #   playerPort = <externalPublicPort>   # интерфейсе нет
 #   loopback = 0
 #
-# Установщик (scripts/deploy-licensee.sh) заполняет оба файла сам.
+# Установщик (scripts/install.sh) заполняет оба файла сам.
 [voice]
 bitrate            = 32000
 externalSecret     = 1
