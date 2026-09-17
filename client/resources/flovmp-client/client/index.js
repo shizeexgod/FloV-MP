@@ -518,6 +518,16 @@ function drawEspText(text, sx, sy, color, scale = 0.28, center = true, bold = fa
     } catch (_) { }
 }
 
+let adminRoster = {};
+alt.onServer('flovmp:admin:roster', (json) => {
+    try {
+        const parsed = JSON.parse(String(json || '{}'));
+        adminRoster = parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+        adminRoster = {};
+    }
+});
+
 export function toggleEsp(targetMode = null) {
     if (currentAdminLevel < 1) {
         alt.log('[FloV:MP] Доступ к ESP отклонен (нет прав администратора)');
@@ -737,14 +747,10 @@ alt.everyTick(() => {
                 const [onScreen, sx, sy] = native.getScreenCoordFromWorldCoord(ax, ay, az);
                 if (!onScreen) continue;
 
-                let pAdmin = 0;
-                try {
-                    pAdmin = p.getStreamSyncedMetaData('adminLevel') || 0;
-                } catch (_) { }
-                if (isSelf) pAdmin = currentAdminLevel;
-
-                // Иерархия: обычный администратор (< 8) не видит Основателя (ур. 8) в ESP
-                if (!isSelf && currentAdminLevel < 8 && pAdmin >= 8) continue;
+                // Уровни администраторов присылает сервер и только администраторам
+                // на дежурстве (flovmp:admin:roster); -1 — Основатель, скрытый от младших.
+                let pAdmin = isSelf ? currentAdminLevel : (adminRoster[p.id] || 0);
+                if (!isSelf && (pAdmin < 0 || (currentAdminLevel < 8 && pAdmin >= 8))) continue;
 
                 let color;
                 let adminBadge = '';

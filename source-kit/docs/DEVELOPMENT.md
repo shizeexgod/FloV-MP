@@ -34,7 +34,8 @@ python scripts/pack_server.py --skip-build      # только переклад�
 | `flovmp:settings:spawn` | ресурс → платформа | x, y, z, поворот (`float`) — точка появления |
 | `flovmp:settings:respawn` | ресурс → платформа | `bool`: `false` — возрождение делает ресурс |
 
-Метаданные игрока: `adminLevel` (stream synced) — текущий уровень на дежурстве.
+Метаданные игрока: `adminLevel` (local meta: видят сервер и сам игрок, другие
+клиенты — нет) — текущий уровень на дежурстве.
 
 События клиенту (`player.Emit`), которые обрабатывает `flovmp-client`:
 

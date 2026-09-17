@@ -213,11 +213,43 @@ public sealed class ChatSystem
         }
     }
 
+    /// <summary>
+    /// Уровень администратора — игроку (local meta + консоль F8) и список
+    /// администрации — только администраторам (для ESP). Основатель (8) для
+    /// младших уровней передаётся как -1: клиент его не рисует.
+    /// </summary>
+    private void PushAdminLevel(IPlayer player, int level)
+    {
+        if (player is null || !player.Exists) return;
+        player.SetLocalMetaData("adminLevel", level);
+        player.Emit("flovmp:console:setAdmin", level);
+        BroadcastAdminRoster();
+    }
+
+    private void BroadcastAdminRoster()
+    {
+        var players = Alt.GetAllPlayers().Where(p => p.Exists).ToArray();
+        var admins = players
+            .Select(p => (p.Id, Level: _accountOf(p)?.AdminLevel ?? 0))
+            .Where(a => a.Level > 0)
+            .ToArray();
+        foreach (var recipient in players)
+        {
+            var own = _accountOf(recipient)?.AdminLevel ?? 0;
+            var roster = new Dictionary<string, int>();
+            if (own > 0)
+            {
+                foreach (var (id, level) in admins)
+                    roster[id.ToString()] = level >= 8 && own < 8 && id != recipient.Id ? -1 : level;
+            }
+            recipient.Emit("flovmp:admin:roster", System.Text.Json.JsonSerializer.Serialize(roster));
+        }
+    }
+
     public void OnPlayerAuthed(IPlayer player, Account account) => Safe.Run("chat.OnPlayerAuthed", () =>
     {
         _names[player.Id] = account.Username;
-        player.SetStreamSyncedMetaData("adminLevel", account.AdminLevel);
-        player.Emit("flovmp:console:setAdmin", account.AdminLevel);
+        PushAdminLevel(player, account.AdminLevel);
         SendSystem(player, $"Добро пожаловать на сервер, {account.Username}. Введите /help для списка команд.");
         if (account.AdminLevel > 0)
         {
@@ -228,6 +260,8 @@ public sealed class ChatSystem
 
     private void OnDisconnect(IPlayer player, string reason) => Safe.Run("chat.OnDisconnect", () =>
     {
+        if ((_accountOf(player)?.AdminLevel ?? 0) > 0)
+            Systems.MainThreadScheduler.RunAfter(0, "chat.roster.disconnect", BroadcastAdminRoster);
         _rate.TryRemove(player.Id, out _);
         _godModeAdmins.TryRemove(player.Id, out _);
         _spectatingAdmins.TryRemove(player.Id, out _);
@@ -2492,8 +2526,7 @@ public sealed class ChatSystem
                 promoteAcc.AdminLevel = newLvl;
                 _saveAccount?.Invoke(promoteAcc);
                 _setAdminExempt?.Invoke(promoteAcc.Id, newLvl > 0);
-                promoteTarget.SetStreamSyncedMetaData("adminLevel", newLvl);
-                promoteTarget.Emit("flovmp:console:setAdmin", newLvl);
+                PushAdminLevel(promoteTarget, newLvl);
                 SendSystem(promoteTarget, $"[Администрация] Ваш статус изменён на: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl) администратором {acc.Username}.");
                 SendSystem(player, $"Вы назначили {promoteTarget.Name} на должность: {AdminTitles.GetTitle(newLvl)} ({newLvl} lvl).");
                 GameLog.Admin("promote", LogActor.Admin(acc.Id, acc.Username), promoteTarget.Name, ("newLevel", newLvl));
@@ -2523,8 +2556,7 @@ public sealed class ChatSystem
                 _setAdminExempt?.Invoke(clearAcc.Id, false);
                 if (onlineTarget != null && onlineTarget.Exists)
                 {
-                    onlineTarget.SetStreamSyncedMetaData("adminLevel", 0);
-                    onlineTarget.Emit("flovmp:console:setAdmin", 0);
+                    PushAdminLevel(onlineTarget, 0);
                 }
                 BroadcastAdmin($"[А-ЧАТ] Главный Администратор {acc.Username} снял права администратора с {clearAcc.Username}.");
                 SendSystem(player, $"Администраторские права успешно сняты с {clearAcc.Username}.");
@@ -2546,8 +2578,7 @@ public sealed class ChatSystem
                 fullAcc.AdminLevel = fullLvl;
                 _saveAccount?.Invoke(fullAcc);
                 _setAdminExempt?.Invoke(fullAcc.Id, fullLvl > 0);
-                fullTarget.SetStreamSyncedMetaData("adminLevel", fullLvl);
-                fullTarget.Emit("flovmp:console:setAdmin", fullLvl);
+                PushAdminLevel(fullTarget, fullLvl);
                 SendSystem(fullTarget, $"[Руководство] Ваш статус изменён на: {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl).");
                 SendSystem(player, $"Успешно установлен ранг {AdminTitles.GetTitle(fullLvl)} ({fullLvl} lvl) для {fullTarget.Name}.");
                 GameLog.Admin("setadmin", LogActor.Admin(acc.Id, acc.Username), fullTarget.Name, ("level", fullLvl));

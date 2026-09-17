@@ -62,7 +62,7 @@ Alt.Emit("flovmp:settings:respawn", false);
 Уровень администратора игрока (0 — обычный игрок):
 
 ```csharp
-player.GetStreamSyncedMetaData("adminLevel", out int level);
+player.GetLocalMetaData("adminLevel", out int level);
 ```
 
 Сообщение в чат: `player.Emit("flovmp:chat:msg", "system", "", "текст {ff3d8a}цвет")`.

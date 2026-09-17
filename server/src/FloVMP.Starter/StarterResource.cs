@@ -260,8 +260,33 @@ public class StarterResource : Resource
     {
         if (player is null || !player.Exists) return;
         player.Emit("flovmp:console:setAdmin", level);
-        player.SetStreamSyncedMetaData("adminLevel", level);
+        // Local meta видит только сам игрок (и сервер). Раньше уровень лежал в
+        // stream synced meta, которую получают клиенты всех игроков рядом: читер
+        // видел, кто вокруг администратор и кто на дежурстве, даже невидимый в NoClip.
+        player.SetLocalMetaData("adminLevel", level);
         SendChatCommands(player);
+        BroadcastAdminRoster();
+    }
+
+    /// <summary>
+    /// Кто администратор — только администраторам на дежурстве (для ESP).
+    /// Основатель (8) для младших уровней передаётся как -1: клиент его не рисует.
+    /// </summary>
+    private void BroadcastAdminRoster()
+    {
+        var admins = _adminLevels.Where(kv => kv.Value > 0).ToArray();
+        foreach (var recipient in Alt.GetAllPlayers())
+        {
+            if (!recipient.Exists || !_clientReady.ContainsKey(recipient.Id)) continue;
+            var own = _adminLevels.TryGetValue(recipient.Id, out var l) ? l : 0;
+            var roster = new Dictionary<string, int>();
+            if (own > 0)
+            {
+                foreach (var (id, level) in admins)
+                    roster[id.ToString()] = level >= 8 && own < 8 && id != recipient.Id ? -1 : level;
+            }
+            recipient.Emit("flovmp:admin:roster", System.Text.Json.JsonSerializer.Serialize(roster));
+        }
     }
 
     private void SendChatCommands(IPlayer player)
@@ -990,6 +1015,7 @@ public class StarterResource : Resource
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
+        var wasAdmin = _adminLevels.TryGetValue(player.Id, out var leftLevel) && leftLevel > 0;
         _clientReady.TryRemove(player.Id, out _);
         _chatRate.TryRemove(player.Id, out _);
         // Подтверждение пароля живёт одну сессию: после переподключения —
@@ -1009,6 +1035,8 @@ public class StarterResource : Resource
         catch
         {
         }
+
+        if (wasAdmin) BroadcastAdminRoster();
     }
 
     private void OnPlayerDead(IPlayer player, IEntity killer, uint weapon)

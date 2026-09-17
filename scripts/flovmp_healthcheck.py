@@ -112,6 +112,8 @@ SECURITY_PATTERNS = [
      "первый зашедший игрок автоматически становится Основателем"),
     (r'AllowNameBasedAdmin\s*\{\s*get;\s*set;\s*\}\s*=\s*true',
      "права по нику (ник задаётся клиентом и подделывается)"),
+    (r'Set(Stream)?SyncedMetaData\("(adminLevel|admin_level|username)"',
+     "уровень админа / логин в meta, видимой всем клиентам (карта администрации для читеров)"),
 ]
 
 SKIP_DIRS = {"obj", "bin", "node_modules", ".git", "runtime", "dist", "native-dist"}

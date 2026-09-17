@@ -372,10 +372,13 @@ if (_authed.TryRemove(player.Id, out var acc))
         {
 #pragma warning disable CS0612, CS0618
             player.SetSyncedMetaData("authed", true);
-            player.SetSyncedMetaData("username", account.Username);
-            player.SetSyncedMetaData("admin_level", account.AdminLevel);
 #pragma warning restore CS0612, CS0618
-            player.SetStreamSyncedMetaData("adminLevel", account.AdminLevel);
+            // Логин аккаунта и уровень администратора — только в local meta (видят
+            // сервер и сам игрок). Раньше они лежали в synced meta, которую получает
+            // каждый клиент на сервере: логины всех игроков — готовый список для
+            // подбора паролей, а уровни — карта администрации для читеров.
+            player.SetLocalMetaData("username", account.Username);
+            player.SetLocalMetaData("adminLevel", account.AdminLevel);
             player.Emit("flovmp:console:setAdmin", account.AdminLevel);
         }
         catch (Exception ex)

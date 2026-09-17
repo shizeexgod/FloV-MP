@@ -92,7 +92,7 @@ public sealed class GamemodeResource : Resource
 
     /// <summary>Уровень администратора на дежурстве (0 — обычный игрок). Выставляет платформа.</summary>
     public static int AdminLevel(IPlayer player) =>
-        player.GetStreamSyncedMetaData("adminLevel", out int level) ? level : 0;
+        player.GetLocalMetaData("adminLevel", out int level) ? level : 0;
 
     /// <summary>Сообщение в чат игроку. {RRGGBB} в тексте — цвет.</summary>
     public static void SendChat(IPlayer player, string text) =>
