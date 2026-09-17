@@ -286,3 +286,27 @@ public class MigrationTests
         return null;
     }
 }
+
+public class OwnerMigrationOrderTests
+{
+    [Fact]
+    public void OwnerMigrations100Plus_RunAfterPlatformMigrations()
+    {
+        // Документация обещает владельцу номера 100+: они обязаны идти после
+        // платформенных 001–099 (сортировка по числу, а не по строке).
+        var dir = Path.Combine(Path.GetTempPath(), "flovmp-mig-order", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (var name in new[] { "100_jobs.sql", "004_admins.sql", "012_future.sql", "001_baseline.sql", "150_houses.sql" })
+                File.WriteAllText(Path.Combine(dir, name), "SELECT 1;");
+
+            var order = MigrationFile.LoadAll(dir).Select(m => m.Name).ToArray();
+            Assert.Equal(new[] { "001_baseline.sql", "004_admins.sql", "012_future.sql", "100_jobs.sql", "150_houses.sql" }, order);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+}
