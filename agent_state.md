@@ -15,8 +15,12 @@ Updated: 2026-09-18 (профиль GTA Legacy 3889, RP-режим удалён,
 - Добавлен `NativeBootstrapDiagnostics`: после 20 секунд такого состояния
   коннектор завершает только запущенный им bootstrap и сообщает именно этот
   статус вместо ложного 240-секундного ожидания.
-- Добавлен интеграционный тест protocol-контракта backup endpoint. Проверка:
-  launcher `83/83`, Release-сборка `FloVMP.Connect` без предупреждений.
+- Cleanup теперь распознаёт и удаляет только временный
+  `commandline.txt.renamed`, созданный native launcher из commandline текущей
+  сессии; пользовательский commandline восстанавливается из `.flovmp-backup`.
+- Добавлены интеграционный тест protocol-контракта backup endpoint и unit-тесты
+  native bootstrap-диагностики. Проверка: launcher `85/85`, Release-сборка
+  `FloVMP.Connect` без предупреждений.
 - Проверены GTAMP и `C:\ViMP backup`: нового native-адаптера 3889 там нет;
   найденный 52 МБ `altv-client.dll` не согласован с его же манифестом 16.4.39,
   поэтому смешивать его с текущим runtime нельзя.

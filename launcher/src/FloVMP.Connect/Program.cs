@@ -228,7 +228,7 @@ if (detectedPlatform == "rgl")
 }
 
 // Подготовка параметров запуска через commandline.txt в папке GTA V
-PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
+var commandLinePrepared = PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
 
 // Очищаем старый кэш ресурсов клиента (кроме skin.bin), чтобы обновления скриптов применялись мгновенно
 var cacheDir = Path.Combine(clientDir, "cache");
@@ -366,7 +366,7 @@ try
 }
 finally
 {
-    CleanupGameCommandLine(gtaDir);
+    CleanupGameCommandLine(gtaDir, commandLinePrepared);
     Console.WriteLine("[connect] Игра закрыта, останавливаю локальный бэкенд.");
 }
 
@@ -795,7 +795,7 @@ static string? FindRockstarLauncher()
     return null;
 }
 
-static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
+static bool PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit)
 {
     var cmdFile = Path.Combine(gtaDir, "commandline.txt");
     var backup = cmdFile + ".flovmp-backup";
@@ -811,11 +811,12 @@ static void PrepareGameCommandLine(string gtaDir, string? gameArgs, int fpsLimit
             File.Copy(cmdFile, backup);
         File.WriteAllLines(cmdFile, parts);
         Console.WriteLine($"[connect] Применены параметры в commandline.txt: {string.Join(' ', parts)}");
+        return true;
     }
-    catch { }
+    catch { return false; }
 }
 
-static void CleanupGameCommandLine(string gtaDir)
+static void CleanupGameCommandLine(string gtaDir, bool commandLinePrepared)
 {
     try
     {
@@ -825,6 +826,14 @@ static void CleanupGameCommandLine(string gtaDir)
             File.Move(backup, cmdFile, overwrite: true);
         else if (File.Exists(cmdFile))
             File.Delete(cmdFile);
+
+        // Native launcher отключает временный commandline.txt переименованием
+        // в *.renamed. Удаляем только тот файл, который создали в этой сессии;
+        // существовавший до запуска пользовательский файл уже восстановлен из
+        // *.flovmp-backup выше.
+        var renamed = cmdFile + ".renamed";
+        if (commandLinePrepared && File.Exists(renamed))
+            File.Delete(renamed);
     }
     catch { }
 }
