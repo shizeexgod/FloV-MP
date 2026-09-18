@@ -221,7 +221,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     case "$exe" in "$dir"/*) return 0 ;; esac
     # tr -d, а не замена на пробел: подстановка команды в bash ругается на
     # нулевые байты, а для поиска подстроки с путём склейка аргументов не мешает.
-    args="$(tr -d ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+    args="$(tr -d '\000' < "/proc/$pid/cmdline" 2>/dev/null || true)"
     case "$args" in *"$dir/"*) return 0 ;; esac
     return 1
   }
