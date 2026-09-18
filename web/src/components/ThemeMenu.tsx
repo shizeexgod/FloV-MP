@@ -79,11 +79,11 @@ export default function ThemeMenu({ showLanguage = true }: { showLanguage?: bool
         onClick={() => setOpen((v) => !v)}
         aria-label={t.common.menu}
         aria-expanded={open}
-        className={`theme-menu-trigger grid h-9 w-9 place-items-center rounded-xl border transition-colors ${
+        className={`theme-menu-trigger grid h-9 w-9 place-items-center rounded-xl border transition-[background-color,border-color,color,transform] duration-300 ${
           open ? 'border-white/[20%] bg-white/[0.08] text-white' : 'border-white/[10%] bg-white/[0.04] text-white/[70%] hover:text-white'
         }`}
       >
-        <Menu aria-hidden="true" className="h-4 w-4" />
+        <Menu aria-hidden="true" className={`theme-menu-trigger__icon h-4 w-4 transition-transform duration-300 ${open ? 'rotate-180' : 'rotate-0'}`} />
       </button>
 
       <div

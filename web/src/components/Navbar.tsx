@@ -18,7 +18,6 @@ export default function Navbar() {
   const t = useT();
   const pathname = usePathname();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
   const LINKS = [
@@ -34,13 +33,6 @@ export default function Navbar() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.authenticated && setUser(d.user))
       .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   useEffect(() => setOpen(false), [pathname]);
@@ -64,16 +56,11 @@ export default function Navbar() {
     'flex h-9 items-center gap-2 rounded-xl border border-white/[15%] bg-white/[0.05] px-3.5 text-xs font-semibold text-white transition-colors hover:border-white/[25%] hover:bg-white/[0.08]';
 
   return (
-    <header className="site-header sticky top-0 z-[60] px-3 pt-3 sm:px-4">
+    <header className="site-header relative z-[60] w-full px-3 sm:px-6 lg:px-8">
       <nav
-        className={`site-nav mx-auto flex h-14 max-w-6xl items-center gap-3 rounded-2xl border px-3 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 sm:px-4 ${
-          scrolled
-            ? 'border-white/[0.12] bg-[#131316]/90 shadow-[0_16px_50px_-20px_rgba(0,0,0,0.7)]'
-            : 'border-white/[0.08] bg-[#131316]/70 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.6)]'
-        }`}
-        style={{ backgroundColor: scrolled ? 'color-mix(in srgb, var(--panel) 90%, transparent)' : 'color-mix(in srgb, var(--panel) 72%, transparent)' }}
+        className="site-nav mx-auto flex min-h-16 w-full max-w-[1440px] items-center gap-4 border-b px-0 py-3 transition-colors duration-300"
       >
-        <Link href="/" className="group flex items-center gap-2.5" aria-label="FloV:MP">
+        <Link href="/" className="site-nav__brand group flex shrink-0 items-center gap-2.5" aria-label="FloV:MP">
           <span className="block h-8 w-8 shrink-0 transition-transform duration-300 group-hover:scale-105">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/branding/logo.png" alt="" width="32" height="32" className="h-full w-full object-contain" />
@@ -83,7 +70,7 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <div className="ml-3 hidden items-center gap-1 lg:flex">
+        <div className="site-nav__links ml-3 hidden items-center gap-1 lg:flex">
           {LINKS.map((l) => (
             <Link
               key={l.href}
@@ -98,7 +85,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="site-nav__actions ml-auto hidden items-center gap-2 md:flex">
           <LangSwitch />
           {user ? (
             <>
