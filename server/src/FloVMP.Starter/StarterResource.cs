@@ -676,14 +676,10 @@ public class StarterResource : Resource
     /// </summary>
     private void HandleBanCommand(IPlayer admin, string cmd, string[] parts)
     {
-        // Порог уровня растёт вместе с необратимостью: hardban — навсегда и по
-        // железу, такое не должен уметь младший модератор.
-        var required = cmd == "hardban" ? 6 : cmd == "ban" ? 3 : 4;
-        if (!IsAdmin(admin, required))
-        {
-            SendChatMessage(admin, $"{{ef4444}}[FloV:MP Security] Доступ запрещен (требуется Уровень {required}+).");
-            return;
-        }
+        // Уровень команды здесь не дублируется: его проверил общий вход в
+        // обработчик команд по server/config/admin-commands.cfg. Зашитые
+        // числа расходились бы с настройкой владельца — например, hardban
+        // оставался бы доступен шестому уровню после запрета в файле.
 
         if (_bans is null)
         {
