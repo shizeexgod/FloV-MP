@@ -199,6 +199,20 @@ def check_security_regressions(rep):
         rep.add(PASS if not leftover else WARN, "нет проверок уровня мимо реестра",
                 "" if not leftover else "уровни зашиты в обработчиках: " + ", ".join(leftover))
 
+        # Обратная сторона: команда, которой нет в реестре, проходит общий вход
+        # без проверки прав — то есть доступна всем. Список ниже — команды,
+        # которые и должны быть доступны каждому игроку; всё остальное обязано
+        # быть в реестре с уровнем.
+        PUBLIC_CHAT_COMMANDS = {
+            "help", "me", "do", "b", "ooc", "s", "shout", "w", "whisper",
+            "pos", "coords", "clear", "cls", "claimowner", "engine", "lock",
+        }
+        handled_cmds = set(re.findall(r'case "([a-z0-9_]+)":', s_txt[s_txt.find(marker):])) if marker in s_txt else set()
+        open_to_all = sorted(handled_cmds - registered - PUBLIC_CHAT_COMMANDS)
+        rep.add(PASS if not open_to_all else FAIL,
+                "нет админ-команд мимо реестра (иначе доступны всем)",
+                ", ".join(open_to_all) if open_to_all else "чисто")
+
 
 
 # ------------------- 3. Горячий путь (блокировка тика) -------------------
