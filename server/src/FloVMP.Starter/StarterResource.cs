@@ -1543,8 +1543,16 @@ public class StarterResource : Resource
                                  .Where(c => !c.Description.Contains("алиас"))
                                  .GroupBy(c => c.MinLevel))
                     {
-                        var line = string.Join(", ", group.Select(c => c.Usage));
-                        SendChatMessage(player, $"{{34d399}}Администрация (уровень {group.Key}+): {{a1a1aa}}" + line);
+                        // Строками по несколько команд: у владельца доступны все
+                        // тридцать с лишним, и одной строкой они превращаются в
+                        // нечитаемую простыню, которая ещё и обрезается в чате.
+                        var usages = group.Select(c => c.Usage).ToList();
+                        for (var i = 0; i < usages.Count; i += 6)
+                        {
+                            var part = string.Join(", ", usages.Skip(i).Take(6));
+                            var head = i == 0 ? $"Администрация (уровень {group.Key}+): " : "  ";
+                            SendChatMessage(player, "{34d399}" + head + "{a1a1aa}" + part);
+                        }
                     }
                 }
 
