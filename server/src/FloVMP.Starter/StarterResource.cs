@@ -258,6 +258,20 @@ public class StarterResource : Resource
             Alt.LogWarning($"[FloV:MP] [License] {_license.Message}");
     }
     private FloVMP.Core.Security.MultiTierBanService? _bans;
+
+    // Проверка движения на сервере. Клиентская защита (NoClip/ESP только
+    // администратору) — это про наш клиент; поддельный клиент её не
+    // исполняет. Единственное, что нельзя подделать, — координаты, которые
+    // приходят на сервер: по ним и видно телепорт, полёт и завышенную скорость.
+    //
+    // По умолчанию только пишет в лог: на живом сервере ложное срабатывание
+    // (лаг, лифт, самолёт) не должно выкидывать игрока. Владелец включает
+    // жёсткое поведение сам — FLOVMP_ANTICHEAT=strict.
+    private FloVMP.Core.AntiCheat.AntiCheatService? _antiCheat;
+    private long _nextAntiCheatMs;
+
+    /// <summary>Как часто сверять позиции игроков, мс.</summary>
+    private const long AntiCheatIntervalMs = 500;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
 
@@ -398,6 +412,32 @@ public class StarterResource : Resource
         FloVMP.Core.CoreConsole.Warn = msg => Alt.LogWarning(msg);
 
         _adminManager = new AdminBootstrapManager();
+
+        // Секции замера регистрируются лениво, при первом обращении. Без этой
+        // строки команда perf сразу после старта показывала «секций 0», хотя
+        // сервер уже работал.
+        _ = PerfTick + PerfStoreSync + PerfRespawn + PerfAdminRights + PerfLicense + PerfChatNearby + PerfAntiCheat;
+
+        // Античит движения. «off» — выключить совсем, «strict» — возвращать
+        // нарушителя назад и предупреждать его, по умолчанию — только лог.
+        var antiCheatMode = (Environment.GetEnvironmentVariable("FLOVMP_ANTICHEAT") ?? "log").Trim().ToLowerInvariant();
+        if (antiCheatMode != "off")
+        {
+            var acConfig = new FloVMP.Core.AntiCheat.AntiCheatConfig
+            {
+                DefaultViolationAction = antiCheatMode == "strict"
+                    ? FloVMP.Core.AntiCheat.AntiCheatAction.TeleportBack
+                    : FloVMP.Core.AntiCheat.AntiCheatAction.LogOnly,
+            };
+            if (antiCheatMode != "strict")
+            {
+                foreach (var severity in acConfig.SeverityActionMap.Keys.ToArray())
+                    acConfig.SeverityActionMap[severity] = FloVMP.Core.AntiCheat.AntiCheatAction.LogOnly;
+            }
+            _antiCheat = new FloVMP.Core.AntiCheat.AntiCheatService(acConfig);
+            _antiCheat.OnDetection += OnAntiCheatDetection;
+            Alt.Log($"[FloV:MP Starter] Проверка движения включена (режим {antiCheatMode}; off/log/strict — FLOVMP_ANTICHEAT).");
+        }
 
         // Раскладка «команда → уровень» владельца. Файла нет — создаётся
         // образец со значениями по умолчанию.
@@ -542,6 +582,55 @@ public class StarterResource : Resource
         Alt.LogWarning($"[FloV:MP] вход отклонён движком: {name} ({ip}) — {human}. " +
                        $"Клиент {versionMajor}.{versionMinor}, ветка {branch}" +
                        (isDebug ? ", отладочный режим" : ""));
+    }
+
+    /// <summary>
+    /// Срабатывание проверки движения. Игрока не наказываем автоматически:
+    /// решает владелец. В строгом режиме возвращаем на последнюю честную
+    /// позицию — это ломает телепорт и полёт, но не выкидывает из игры
+    /// человека с лагами.
+    /// </summary>
+    private void OnAntiCheatDetection(FloVMP.Core.AntiCheat.AntiCheatDetectionEvent ev)
+    {
+        var player = Alt.GetPlayerById((uint)ev.AccountId);
+        Alt.LogWarning($"[FloV:MP Античит] {ev.DetectionType}: {(player?.Name ?? ev.Username)} " +
+                       $"(ID {ev.AccountId}) — {ev.Details}");
+
+        if (player is null || !player.Exists) return;
+        if (ev.SuggestedAction != FloVMP.Core.AntiCheat.AntiCheatAction.TeleportBack) return;
+
+        // Возврат на последнюю честную позицию: её знает служба, у события
+        // только место нарушения.
+        var state = _antiCheat?.GetOrCreateState(ev.AccountId, ev.Username, ev.Location);
+        var back = state?.LastValidPosition ?? ev.Location;
+        player.Position = new Position(back.X, back.Y, back.Z);
+        SendChatMessage(player, "{f59e0b}[FloV:MP] Движение отклонено сервером.");
+    }
+
+    /// <summary>
+    /// Сверка позиций игроков с последней честной. NoClip администратора и
+    /// телепорты платформы отмечаются как законные, иначе собственные
+    /// инструменты администрации выглядели бы как читерство.
+    /// </summary>
+    private void TickAntiCheat(long nowMs)
+    {
+        if (_antiCheat is null || nowMs < _nextAntiCheatMs) return;
+        _nextAntiCheatMs = nowMs + AntiCheatIntervalMs;
+
+        foreach (var player in Alt.GetAllPlayers())
+        {
+            if (!player.Exists || !_clientReady.ContainsKey(player.Id)) continue;
+
+            var pos = player.Position;
+            var vec = new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z);
+            var id = (int)player.Id;
+
+            var state = _antiCheat.GetOrCreateState(id, player.Name, vec);
+            var exempt = _adminLevels.TryGetValue(player.Id, out var lvl) && lvl > 0;
+            if (state.IsAdminExempt != exempt) _antiCheat.SetAdminExemption(id, exempt);
+
+            _antiCheat.CheckMovement(id, vec, player.Vehicle is not null);
+        }
     }
 
     private bool RejectIfBanned(IPlayer player)
@@ -1179,6 +1268,7 @@ public class StarterResource : Resource
         _chatRate.TryRemove(player.Id, out _);
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
+        _antiCheat?.RemovePlayer((int)player.Id);
         _sessionAdminRanks.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
@@ -1316,6 +1406,12 @@ public class StarterResource : Resource
     private static readonly int PerfAdminRights = FloVMP.Core.Diagnostics.TickProfiler.Register("admin-rights");
     private static readonly int PerfLicense = FloVMP.Core.Diagnostics.TickProfiler.Register("license");
     private static readonly int PerfChatNearby = FloVMP.Core.Diagnostics.TickProfiler.Register("chat-nearby");
+    private static readonly int PerfAntiCheat = FloVMP.Core.Diagnostics.TickProfiler.Register("anticheat");
+
+    // Когда замер включён, отчёт сам уходит в лог раз в минуту: иначе его надо
+    // успеть запросить руками именно в тот момент, когда сервер тормозит.
+    private const long PerfReportIntervalMs = 60_000;
+    private long _nextPerfReportMs = PerfReportIntervalMs;
 
     public override void OnTick()
     {
@@ -1336,6 +1432,17 @@ public class StarterResource : Resource
             using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAdminRights);
             try { ApplyRevokedAdminRights(); }
             catch (Exception ex) { Alt.LogWarning($"[FloV:MP Admin] Проверка отозванных прав: {ex.Message}"); }
+        }
+
+        using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAntiCheat))
+            TickAntiCheat(nowMs);
+
+        if (FloVMP.Core.Diagnostics.TickProfiler.Enabled && nowMs >= _nextPerfReportMs)
+        {
+            _nextPerfReportMs = nowMs + PerfReportIntervalMs;
+            foreach (var line in FloVMP.Core.Diagnostics.TickProfiler.Report())
+                Alt.Log("[FloV:MP Замер] " + line);
+            FloVMP.Core.Diagnostics.TickProfiler.Reset();
         }
 
         if (_pendingRespawns.Count > 0)
