@@ -46,6 +46,7 @@ INCLUDE = [
     "scripts/patch_coreclr_host.py",
     "scripts/patch_exe_icon.py",
     "scripts/smoke_windows.ps1",
+    "scripts/smoke_linux.sh",
     "scripts/client-sim",
 ]
 

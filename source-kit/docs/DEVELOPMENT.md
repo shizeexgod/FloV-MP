@@ -11,6 +11,7 @@ node scripts/client-sim/entry_flow.test.mjs     # симуляция клиен�
 node scripts/client-sim/admin_keys.test.mjs     # клавиши администратора и права
 node scripts/client-sim/commands_sync.test.mjs  # список команд в чате и консоли
 powershell -ExecutionPolicy Bypass -File scripts/smoke_windows.ps1   # живой прогон Windows-пакета
+sudo scripts/smoke_linux.sh dist/server/flovmp-server-*-linux.tar.gz  # то же на Linux
 ```
 
 Симуляция клиента загружает настоящий `client/index.js` с подменёнными
@@ -19,7 +20,9 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_windows.ps1   # живо�
 `smoke_windows.ps1` распаковывает свежий архив в папку с русскими буквами,
 запускает сервер на свободных портах, собирает `gamemode` из шаблона,
 выполняет команды консоли и проверяет лог — то же, что проходит владелец
-сервера после покупки.
+сервера после покупки. `smoke_linux.sh` ставит пакет отдельным инстансом
+(своя папка, служба и порты, без базы), собирает `gamemode`, обновляет поверх,
+проверяет, что код владельца цел, и удаляет — уже работающие серверы не трогает.
 
 Проекты используют .NET 8 (`server/Directory.Build.props`): под эту версию
 собран хост C# движка, поднимать её нельзя.
