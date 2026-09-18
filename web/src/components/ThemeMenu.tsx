@@ -13,12 +13,12 @@ export function ThemeControls({ showLanguage = true }: { ringOffset?: string; sh
 
   const seg = (active: boolean) =>
     `flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[12px] font-semibold transition-colors ${
-      active ? 'border-brand bg-brand text-[#0a0a0c]' : 'border-white/10 text-white/55 hover:text-white'
+      active ? 'border-brand bg-brand text-[#0a0a0c]' : 'border-white/[10%] text-white/[55%] hover:text-white'
     }`;
-  const label = 'font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40';
+  const label = 'font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/[40%]';
 
   return (
-    <div className="space-y-3.5">
+    <div className="theme-controls space-y-3.5">
       {showLanguage ? (
         <>
           <div>
@@ -79,15 +79,15 @@ export default function ThemeMenu({ showLanguage = true }: { showLanguage?: bool
         onClick={() => setOpen((v) => !v)}
         aria-label={t.common.menu}
         aria-expanded={open}
-        className={`grid h-9 w-9 place-items-center rounded-xl border transition-colors ${
-          open ? 'border-white/20 bg-white/[0.08] text-white' : 'border-white/10 bg-white/[0.04] text-white/70 hover:text-white'
+        className={`theme-menu-trigger grid h-9 w-9 place-items-center rounded-xl border transition-colors ${
+          open ? 'border-white/[20%] bg-white/[0.08] text-white' : 'border-white/[10%] bg-white/[0.04] text-white/[70%] hover:text-white'
         }`}
       >
         <Menu aria-hidden="true" className="h-4 w-4" />
       </button>
 
       <div
-        className={`absolute right-0 top-[calc(100%+0.55rem)] w-64 origin-top-right rounded-2xl border border-white/[0.12] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-200 ${
+        className={`theme-popover absolute right-0 top-[calc(100%+0.55rem)] w-64 origin-top-right rounded-2xl border border-white/[0.12] p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7)] transition-[opacity,transform] duration-200 ${
           open ? 'pointer-events-auto scale-100 opacity-100' : 'pointer-events-none scale-95 opacity-0'
         }`}
         style={{ backgroundColor: 'var(--panel)' }}

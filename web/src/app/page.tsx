@@ -112,10 +112,6 @@ export default function HomePage() {
       {/* ---------------- ENGINE CORE HERO ---------------- */}
       <div className="engine-home__hero" id="engine">
         <Container className="py-7 sm:py-10">
-          <div className="engine-home__mark-row">
-            <span className="engine-home__mark">F<span>:</span></span><span>FloV<span className="text-brand">:MP</span></span>
-            <span className="engine-home__study"><i /> engine core / local</span>
-          </div>
           <div className="engine-home__stage">
             <nav className="engine-rail" aria-label="Навигация по главной странице">
               <span className="engine-rail__title">SYSTEM</span>
@@ -129,11 +125,11 @@ export default function HomePage() {
               </div>
               <span className="engine-rail__build">BUILD<br />0.1</span>
             </nav>
-            <div className="engine-home__hero-card">
+            <div className="engine-home__hero-content">
               <div className="engine-home__copy">
                 <Reveal variant="left">
                   <div className="engine-home__eyebrow"><span /> 01 / ENGINE CORE</div>
-                  <h1>{t.home.h1a} <em>{t.home.h1accent}</em> {t.home.h1b}</h1>
+                  <h1><span>{t.home.h1a}</span><em>{t.home.h1accent}</em><span>{t.home.h1b}</span></h1>
                 </Reveal>
                 <Reveal delay={70} variant="fade"><p>{t.home.sub}</p></Reveal>
                 <Reveal delay={120} variant="rise">

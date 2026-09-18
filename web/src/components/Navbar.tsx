@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, LogOut, Menu, ShieldAlert, X } from 'lucide-react';
+import { LayoutDashboard, LogOut, ShieldAlert } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import ThemeMenu, { ThemeControls } from './ThemeMenu';
 import LangSwitch from './LangSwitch';
@@ -61,12 +61,12 @@ export default function Navbar() {
 
   // Личный кабинет / вход — всегда в обводке.
   const accountCls =
-    'flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.05] px-3.5 text-xs font-semibold text-white transition-colors hover:border-white/25 hover:bg-white/[0.08]';
+    'flex h-9 items-center gap-2 rounded-xl border border-white/[15%] bg-white/[0.05] px-3.5 text-xs font-semibold text-white transition-colors hover:border-white/[25%] hover:bg-white/[0.08]';
 
   return (
-    <header className="sticky top-0 z-[60] px-3 pt-3 sm:px-4">
+    <header className="site-header sticky top-0 z-[60] px-3 pt-3 sm:px-4">
       <nav
-        className={`mx-auto flex h-14 max-w-6xl items-center gap-3 rounded-2xl border px-3 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 sm:px-4 ${
+        className={`site-nav mx-auto flex h-14 max-w-6xl items-center gap-3 rounded-2xl border px-3 backdrop-blur-md transition-[background-color,border-color,box-shadow] duration-300 sm:px-4 ${
           scrolled
             ? 'border-white/[0.12] bg-[#131316]/90 shadow-[0_16px_50px_-20px_rgba(0,0,0,0.7)]'
             : 'border-white/[0.08] bg-[#131316]/70 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.6)]'
@@ -90,7 +90,7 @@ export default function Navbar() {
               href={l.href}
               prefetch
               className={`nav-link relative whitespace-nowrap px-3 py-2 text-[13px] font-semibold ${
-                isActive(l.href) ? 'is-active text-white' : 'text-white/55'
+                isActive(l.href) ? 'is-active text-white' : 'text-white/[55%]'
               }`}
             >
               {l.label}
@@ -113,7 +113,7 @@ export default function Navbar() {
               </Link>
               <button
                 onClick={logout}
-                className="rounded-xl border border-white/10 p-2 text-white/45 transition hover:bg-white/5 hover:text-white"
+                className="rounded-xl border border-white/[10%] p-2 text-white/[45%] transition hover:bg-white/[5%] hover:text-white"
                 title={t.common.logout}
                 aria-label={t.common.logout}
               >
@@ -130,13 +130,14 @@ export default function Navbar() {
         </div>
 
         <button
+          type="button"
           onClick={() => setOpen((v) => !v)}
-          className="ml-auto rounded-xl border border-white/10 bg-white/[0.04] p-2 text-white/80 md:hidden"
+          className="mobile-menu-toggle ml-auto grid h-9 w-9 place-items-center rounded-xl border border-white/[10%] bg-white/[0.04] text-white/[80%] md:hidden"
           aria-label={t.common.menu}
           aria-expanded={open}
           aria-controls="mobile-navigation"
         >
-          {open ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}
+          <span className="mobile-menu-toggle__glyph" aria-hidden="true"><i /><i /><i /></span>
         </button>
       </nav>
 
@@ -155,7 +156,7 @@ export default function Navbar() {
               href={l.href}
               prefetch
               className={`nav-link block px-3 py-3 text-[15px] font-semibold ${
-                isActive(l.href) ? 'text-brand' : 'text-white/70'
+                isActive(l.href) ? 'text-brand' : 'text-white/[70%]'
               }`}
             >
               {l.label}
@@ -174,7 +175,7 @@ export default function Navbar() {
                 <LayoutDashboard aria-hidden="true" className="h-4 w-4 text-brand" />
                 {t.common.openDashboard} · {user.username}
               </Link>
-              <button onClick={logout} className="py-2 text-center text-sm font-medium text-white/50">
+              <button onClick={logout} className="py-2 text-center text-sm font-medium text-white/[50%]">
                 {t.common.logout}
               </button>
             </div>

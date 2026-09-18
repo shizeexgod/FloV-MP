@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 export async function GET() {
   const session = getSessionUser();
   if (!session) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+    return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 
   const users = await query<Record<string, unknown>>(
@@ -13,7 +13,7 @@ export async function GET() {
     [session.userId]
   );
   if (users.length === 0) {
-    return NextResponse.json({ authenticated: false }, { status: 401 });
+    return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 
   const u = users[0];
