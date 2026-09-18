@@ -7,9 +7,14 @@ dotnet build server/FloVMP.sln -c Release
 dotnet test server/FloVMP.sln
 python scripts/pack_server.py --os windows      # или linux / all
 python scripts/pack_server.py --skip-build      # только перекладка пакета
-python scripts/flovmp_healthcheck.py --build    # проверки проекта, тесты, симуляция клиента
+node scripts/client-sim/entry_flow.test.mjs     # симуляция клиента: вход, загрузка
+node scripts/client-sim/admin_keys.test.mjs     # клавиши администратора и права
+node scripts/client-sim/commands_sync.test.mjs  # список команд в чате и консоли
 powershell -ExecutionPolicy Bypass -File scripts/smoke_windows.ps1   # живой прогон Windows-пакета
 ```
+
+Симуляция клиента загружает настоящий `client/index.js` с подменёнными
+модулями `alt-client` и `natives` — без игры, за секунды.
 
 `smoke_windows.ps1` распаковывает свежий архив в папку с русскими буквами,
 запускает сервер на свободных портах, собирает `gamemode` из шаблона,

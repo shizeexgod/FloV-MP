@@ -45,6 +45,8 @@ INCLUDE = [
     "scripts/package-templates",
     "scripts/patch_coreclr_host.py",
     "scripts/patch_exe_icon.py",
+    "scripts/smoke_windows.ps1",
+    "scripts/client-sim",
 ]
 
 SKIP_DIRS = {"bin", "obj", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}
