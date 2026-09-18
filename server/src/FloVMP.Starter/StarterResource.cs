@@ -9,7 +9,7 @@ using FloVMP.Core.Admin;
 namespace FloVMP.Starter;
 
 /// <summary>
-/// Чистый ванильный стартер для клиентов FloV:MP с разграничением прав (RBAC):
+/// Базовая платформа FloV:MP: всё, что работает на сервере из коробки.
 /// - Обычные игроки: чистый спавн, чат, /pos, F8 консоль в режиме игрока (без админ-кнопок).
 /// - Администраторы (уровень в базе > 0, действует сразу с захода): F4 NoClip,
 ///   F3 ESP, F5 телепорт на метку, команды чата по server/config/admin-commands.cfg.
@@ -533,7 +533,7 @@ public class StarterResource : Resource
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         Alt.OnPlayerDead -= OnPlayerDead;
         Alt.OnConsoleCommand -= OnConsoleCommand;
-        Alt.Log("[FloV:MP Starter] Остановка ванильного стартера.");
+        Alt.Log("[FloV:MP Starter] Остановка платформы.");
     }
 
     public bool IsAdmin(IPlayer player, int minLevel = 1)
