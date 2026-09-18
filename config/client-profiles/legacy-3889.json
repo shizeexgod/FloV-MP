@@ -9,5 +9,5 @@
   "update2RpfSha256": "8e2022693d3be6bf3961bf596045ef2762b34f6aa49d5afb8083659296ca1393",
   "runtimeClientVersion": "16.4.39",
   "runtimeLauncherVersion": "16.3.7",
-  "supportStatus": "needs-version-adapter"
+  "supportStatus": "launch-validation"
 }

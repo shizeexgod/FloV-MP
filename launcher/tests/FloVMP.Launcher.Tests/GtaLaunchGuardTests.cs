@@ -31,7 +31,7 @@ public sealed class GtaLaunchGuardTests
     }
 
     [Fact]
-    public void InstalledLegacy3889_IsFingerprintCheckedAndBlockedUntilAdapter()
+    public void InstalledLegacy3889_IsFingerprintCheckedAndAllowedForCleanProfile()
     {
         var path = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -42,8 +42,8 @@ public sealed class GtaLaunchGuardTests
             return;
 
         var result = GtaLaunchGuard.Evaluate(path);
-        Assert.False(result.Allowed);
-        Assert.Equal("legacy-3889-native-adapter-missing", result.Code);
+        Assert.True(result.Allowed);
+        Assert.Equal("legacy-3889-profile-verified", result.Code);
     }
 
     [Fact]

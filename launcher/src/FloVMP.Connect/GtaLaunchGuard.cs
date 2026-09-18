@@ -94,8 +94,12 @@ public static class GtaLaunchGuard
                     "Legacy 3889 найден, но update\\update2.rpf отсутствует или не совпадает с EGS-профилем. Запуск остановлен без изменения файлов.");
             }
 
-            return new(false, "legacy-3889-native-adapter-missing",
-                $"Legacy {version} EGS распознан точно, но native-клиент FloV:MP {NativeClientVersion} ещё не поддерживает RPF b3889. Нужен адаптер 3889; запуск со старым клиентом остановлен.");
+            // Живой лог b3889 уже подтвердил полный bootstrap, Game Started и
+            // сетевое подключение. Не блокируем этот точный, неизменённый
+            // Epic-профиль: следующая E2E-проверка должна происходить на нём,
+            // а не на смеси exe/RPF из старого backup-flow.
+            return new(true, "legacy-3889-profile-verified",
+                $"Legacy {version} EGS распознан по GTA5.exe и обоим RPF. Запуск FloV:MP разрешён на неизменённом профиле b3889.");
         }
 
         return new(false, "legacy-native-adapter-missing",
