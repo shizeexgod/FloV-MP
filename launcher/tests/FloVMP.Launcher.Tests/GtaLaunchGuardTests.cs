@@ -45,4 +45,21 @@ public sealed class GtaLaunchGuardTests
         Assert.False(result.Allowed);
         Assert.Equal("legacy-3889-native-adapter-missing", result.Code);
     }
+
+    [Fact]
+    public void MalformedExecutable_IsRejectedBeforeFingerprintOrRpfChecks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "flovmp-guard", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "update"));
+        var exe = Path.Combine(root, "GTA5.exe");
+        File.WriteAllBytes(exe, new byte[] { 0x4d, 0x5a });
+
+        try
+        {
+            var result = GtaLaunchGuard.Evaluate(exe);
+            Assert.False(result.Allowed);
+            Assert.Equal("game-version-unreadable", result.Code);
+        }
+        finally { Directory.Delete(root, true); }
+    }
 }
