@@ -2,6 +2,25 @@
 
 Updated: 2026-09-18 (профиль GTA Legacy 3889, RP-режим удалён, новая модель прав, античит, муты, установщик)
 
+### 2026-09-18 — native bootstrap Legacy 3889: CDN-протокол исправлен, разрыв локализован
+
+- Исправлен собственный `LocalCdn`: закрытый launcher всегда запрашивает
+  `/backup/update.json`; ответ `404` давал `0x30,033`, а общий update JSON —
+  `key 'files' not found`. Теперь возвращается строго совместимый пустой
+  manifest `{"files":[]}`. Он не загружает и не заменяет ни одного файла GTA.
+- Живой диагностический прогон Epic Legacy 3889 прошёл backup-проверку, EOS и
+  `Launcher patch completed`, но GTA5.exe не возник и `client_*.log` не создан.
+  Это доказывает: текущий барьер находится в закрытом native bootstrap до
+  `altv-client.dll`; сервер, server license и локальный CDN уже не причина.
+- Добавлен `NativeBootstrapDiagnostics`: после 20 секунд такого состояния
+  коннектор завершает только запущенный им bootstrap и сообщает именно этот
+  статус вместо ложного 240-секундного ожидания.
+- Добавлен интеграционный тест protocol-контракта backup endpoint. Проверка:
+  launcher `83/83`, Release-сборка `FloVMP.Connect` без предупреждений.
+- Проверены GTAMP и `C:\ViMP backup`: нового native-адаптера 3889 там нет;
+  найденный 52 МБ `altv-client.dll` не согласован с его же манифестом 16.4.39,
+  поэтому смешивать его с текущим runtime нельзя.
+
 ### 2026-09-18 — профиль и preflight для GTA Legacy 3889
 
 - Зафиксирован точный Epic Legacy профиль `1.0.3889.0`: SHA-256 exe/RPF и размер
@@ -24,14 +43,15 @@ Updated: 2026-09-18 (профиль GTA Legacy 3889, RP-режим удалён,
   backup-flow отдавал кэшированный `GTA5.exe` b3337 и смешивал его с RPF b3889.
 - Серверная `license.flv` валидна; отказ происходил на клиентском handshake
   после запуска смешанного профиля, а не в лицензировании FloV:MP сервера.
-- `FloVMP.Connect`: `autoBackup=false`, `/backup/*` в `LocalCdn` закрыт `404`,
+- `FloVMP.Connect`: `autoBackup=false`, `/backup/*` в `LocalCdn` возвращает
+  native-совместимый пустой manifest `{"files":[]}`,
   добавлен `GtaLaunchGuard` до запуска GTA. Unsupported Legacy/Enhanced теперь
   останавливаются с объяснением; `--allow-unsupported` оставлен только для
   явной диагностики.
 - Обновлён и проверен коннектор в `C:\ПРОЕКТЫ РАБОТА\FloV-MP AI-Testing\...`.
   Файлы сервера, база, `license.flv` и установленная GTA не изменялись.
-- Проверки: launcher `80/80`, server `399`, health-check `69/69`; CDN:
-  `/backup/*` → `404`, клиентский манифест → `200`.
+- Проверки на момент записи: launcher `83/83`, server `399`, health-check
+  `69/69`; CDN: `/backup/*` → `200` с пустым `files`, клиентский манифест → `200`.
 - Открыто: настоящая поддержка Legacy b3889 и Enhanced требует отдельного
   подтверждённого native client/adapter и полного E2E-прогона.
 

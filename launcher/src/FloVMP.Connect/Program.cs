@@ -297,6 +297,7 @@ try
     // 4) Ждём завершения
     var gtaSeen = false;
     var waitStopwatch = Stopwatch.StartNew();
+    var nativeLaunchedAt = DateTime.Now;
     var lastRglCheck = Stopwatch.StartNew();
     const string windowTitle = "FloV:MP Standalone Client";
     while (true)
@@ -332,6 +333,21 @@ try
 
         if (!gtaSeen)
         {
+            // Старый native bootstrap может отчитаться об успешной инъекции и
+            // оставить свой процесс висеть, хотя GTA уже не была создана.
+            // Раньше это выглядело как "ничего не происходит" в течение 240 с.
+            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(20) &&
+                NativeBootstrapDiagnostics.CompletedWithoutGame(clientDir, nativeLaunchedAt))
+            {
+                NativeBootstrapDiagnostics.PrintFailure();
+                try
+                {
+                    if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+                }
+                catch { }
+                return 4;
+            }
+
             // Ждем до 240 секунд, пока Rockstar Launcher и Epic Games проводят авторизацию и запускают игру.
             // Первый запуск: компиляция шейдеров + RGL/EGS авторизация может занять 2-3 минуты.
             // Если alt:V уже запущен — не применяем таймаут (игра грузится, просто ждём).

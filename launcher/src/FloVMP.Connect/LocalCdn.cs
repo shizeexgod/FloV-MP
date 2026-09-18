@@ -134,13 +134,19 @@ public sealed class LocalCdn : IDisposable
         {
             return (200, "text/plain", "OK"u8.ToArray());
         }
-        // Deliberately do not expose alt:V's GTA backup/update endpoint.
-        // Serving it makes the native launcher copy the cached b3337
-        // executable over a different installed game profile (b3889 in the
-        // current Epic installation). FloV:MP connects to the user's intact
-        // installation and never distributes Rockstar binaries.
+        // Keep the backup endpoint protocol-compatible, but deliberately return
+        // an empty manifest. The native launcher requests this endpoint even
+        // when autoBackup=false; a 404 makes it abort with 0x30,033 before GTA
+        // starts. An empty manifest avoids the old b3337 replacement flow and
+        // never distributes or overwrites Rockstar binaries.
         if (lower.Contains("/backup/"))
-            return (404, "text/plain", "Not Found"u8.ToArray());
+        {
+            // The native alt:V launcher parses this endpoint as its own
+            // backup manifest. Its root contract is an array named `files`;
+            // the generic FloVMP CDN manifest fields are not accepted here.
+            var emptyBackup = "{\"files\":[]}";
+            return (200, "application/json", Enc(emptyBackup));
+        }
         if (lower.Contains("update.json") && lower.Contains("launcher"))
         {
             return (200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
