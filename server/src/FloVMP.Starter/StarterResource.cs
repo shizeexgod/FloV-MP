@@ -46,7 +46,11 @@ public class StarterResource : Resource
 
     // Голосовые муты переживают переподключение: мут самого канала alt:V
     // снимался выходом игрока, то есть нарушитель просто перезаходил.
-    private FloVMP.Core.Security.VoiceMuteStore? _voiceMutes;
+    private FloVMP.Core.Security.MuteStore? _voiceMutes;
+
+    // Мут текстового чата. В платформе его не было вовсе: заглушить болтуна
+    // можно было только голосом или киком, после которого он возвращается.
+    private FloVMP.Core.Security.MuteStore? _chatMutes;
     private AdminBootstrapManager _adminManager = null!;
 
     // Блокировки. В базовой платформе их не было вообще — только kick, после
@@ -204,7 +208,7 @@ public class StarterResource : Resource
     // и свои команды в отдельном ресурсе было не сделать.
     private static readonly HashSet<string> BuiltinCommands = new(StringComparer.Ordinal)
     {
-        "a","admin","armor","b","ban","banip","banlist","bans","car","claimowner","clear","cls","coords","delveh","destroyveh","dim","dimension","disarm","do","dv","engine","esp","fix","fly","freeze","gethere","givegun","god","godmode","goto","gun","hardban","heal","help","hwidban","kick","kill","lock","me","noclip","ooc","ped","pos","removeweapons","repair","revive","s","setadmin","setdim","shout","skin","speed","suicide","time","tp","tpm","unban","unfreeze","veh","vmute","voicemute","w","weapon","weather","whisper",
+        "a","admin","armor","b","ban","banip","banlist","bans","car","claimowner","clear","cls","coords","delveh","destroyveh","dim","dimension","disarm","do","dv","engine","esp","fix","fly","freeze","gethere","givegun","god","godmode","goto","gun","hardban","heal","help","hwidban","kick","kill","lock","me","mute","noclip","ooc","ped","pos","removeweapons","repair","revive","s","setadmin","setdim","shout","skin","speed","suicide","time","tp","tpm","unban","unmute","unfreeze","veh","vmute","voicemute","w","weapon","weather","whisper",
         "license",
     };
     private readonly ConcurrentDictionary<string, (string Description, int MinLevel)> _modCommands = new(StringComparer.Ordinal);
@@ -460,8 +464,10 @@ public class StarterResource : Resource
         // локальный файл. Фабрика сама печатает выбранный режим — владелец
         // сервера должен знать, действуют ли его баны на всех инстансах.
         var starterDataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
-        _voiceMutes = new FloVMP.Core.Security.VoiceMuteStore(
+        _voiceMutes = new FloVMP.Core.Security.MuteStore(
             Path.Combine(starterDataDir, "voice-mutes.json"));
+        _chatMutes = new FloVMP.Core.Security.MuteStore(
+            Path.Combine(starterDataDir, "chat-mutes.json"));
         var starterDbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
                             new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         // Миграции до обращения к таблицам: на свежей установке bans и admins
@@ -1540,6 +1546,18 @@ public class StarterResource : Resource
             return;
         }
 
+        // Мут проверяется после команд: заглушённый игрок по-прежнему может
+        // позвать администратора или посмотреть /help.
+        if (_chatMutes is not null &&
+            _chatMutes.IsMuted(player.SocialClubId.ToString(), DateTime.UtcNow))
+        {
+            var until = _chatMutes.MutedUntil(player.SocialClubId.ToString());
+            SendChatMessage(player, until is null
+                ? "{f59e0b}[FloV:MP] Ваш чат заглушён администрацией."
+                : $"{{f59e0b}}[FloV:MP] Ваш чат заглушён до {until:dd.MM.yyyy HH:mm} UTC.");
+            return;
+        }
+
         BroadcastChatMessage(message, "player", $"[{player.Id}] {player.Name}");
     }
 
@@ -2207,6 +2225,52 @@ public class StarterResource : Resource
 
             // Голосовой мут. Раньше заглушить голос было нечем вообще: игрок,
             // кричащий в микрофон, останавливался только киком или баном.
+            case "mute":
+            case "unmute":
+                if (_chatMutes is null) { SendChatMessage(player, "{ef4444}Муты недоступны."); return; }
+                if (parts.Length < 2 || !uint.TryParse(parts[1], out var muteId))
+                {
+                    SendChatMessage(player, cmd == "mute"
+                        ? "{fde047}Использование: /mute <ID> [минут]"
+                        : "{fde047}Использование: /unmute <ID>");
+                    return;
+                }
+                var muteTarget = Alt.GetPlayerById(muteId);
+                if (muteTarget == null) { SendChatMessage(player, "{ef4444}Игрок с таким ID не найден."); return; }
+                if (!CanActOn(player, muteTarget))
+                {
+                    SendChatMessage(player, "{ef4444}Нельзя заглушить администратора равного или большего уровня.");
+                    return;
+                }
+                var muteSc = muteTarget.SocialClubId.ToString();
+                if (cmd == "unmute")
+                {
+                    var lifted = _chatMutes.Unmute(muteSc);
+                    SendChatMessage(player, lifted
+                        ? $"{{34d399}}Чат игрока {muteTarget.Name} восстановлен."
+                        : $"{{a1a1aa}}У игрока {muteTarget.Name} нет мута чата.");
+                    if (lifted) SendChatMessage(muteTarget, "{34d399}[FloV:MP] Вам снова можно писать в чат.");
+                    Alt.Log($"[FloV:MP] [Chat] {player.Name} снял мут чата с {muteTarget.Name}");
+                    break;
+                }
+
+                int? muteMinutes = null;
+                if (parts.Length > 2)
+                {
+                    if (!int.TryParse(parts[2], out var mm) || mm <= 0 || mm > 60 * 24 * 365)
+                    {
+                        SendChatMessage(player, "{fde047}Минуты — число от 1 до 525600 (год).");
+                        return;
+                    }
+                    muteMinutes = mm;
+                }
+                _chatMutes.Mute(muteSc, muteMinutes is null ? null : DateTime.UtcNow.AddMinutes(muteMinutes.Value));
+                var muteHowLong = muteMinutes is null ? "до снятия" : $"на {muteMinutes} мин.";
+                SendChatMessage(player, $"{{fde047}}Чат игрока {muteTarget.Name} заглушён ({muteHowLong}).");
+                SendChatMessage(muteTarget, $"{{f59e0b}}[FloV:MP] Ваш чат заглушён администрацией ({muteHowLong}).");
+                Alt.Log($"[FloV:MP] [Chat] {player.Name} заглушил чат {muteTarget.Name} ({muteHowLong})");
+                break;
+
             case "vmute":
             case "voicemute":
                 if (_spatialVoiceChannel is null)

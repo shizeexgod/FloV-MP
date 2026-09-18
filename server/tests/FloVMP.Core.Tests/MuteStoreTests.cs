@@ -9,13 +9,13 @@ namespace FloVMP.Core.Tests;
 /// переживает и переподключение, и перезапуск сервера, и при этом сам
 /// заканчивается в срок.
 /// </summary>
-public sealed class VoiceMuteStoreTests : IDisposable
+public sealed class MuteStoreTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "flovmp-vmute", Guid.NewGuid().ToString("N"));
 
     private string Path_ => Path.Combine(_dir, "voice-mutes.json");
 
-    public VoiceMuteStoreTests() => Directory.CreateDirectory(_dir);
+    public MuteStoreTests() => Directory.CreateDirectory(_dir);
 
     public void Dispose()
     {
@@ -26,10 +26,10 @@ public sealed class VoiceMuteStoreTests : IDisposable
     public void Mute_survives_restart()
     {
         var now = DateTime.UtcNow;
-        var store = new VoiceMuteStore(Path_);
+        var store = new MuteStore(Path_);
         store.Mute("123456789", null);
 
-        var reopened = new VoiceMuteStore(Path_);
+        var reopened = new MuteStore(Path_);
         Assert.True(reopened.IsMuted("123456789", now));
         Assert.False(reopened.IsMuted("999888777", now));
     }
@@ -38,7 +38,7 @@ public sealed class VoiceMuteStoreTests : IDisposable
     public void Expired_mute_lifts_itself()
     {
         var now = DateTime.UtcNow;
-        var store = new VoiceMuteStore(Path_);
+        var store = new MuteStore(Path_);
         store.Mute("123456789", now.AddMinutes(30));
 
         Assert.True(store.IsMuted("123456789", now));
@@ -52,7 +52,7 @@ public sealed class VoiceMuteStoreTests : IDisposable
     [Fact]
     public void Unmute_removes_record()
     {
-        var store = new VoiceMuteStore(Path_);
+        var store = new MuteStore(Path_);
         store.Mute("123456789", null);
 
         Assert.True(store.Unmute("123456789"));
@@ -65,7 +65,7 @@ public sealed class VoiceMuteStoreTests : IDisposable
     {
         // SocialClubId = 0 у игрока без привязки. Мут по нулю заглушил бы
         // всех таких игроков разом.
-        var store = new VoiceMuteStore(Path_);
+        var store = new MuteStore(Path_);
         store.Mute("0", null);
 
         Assert.False(store.IsMuted("0", DateTime.UtcNow));
@@ -77,7 +77,7 @@ public sealed class VoiceMuteStoreTests : IDisposable
     {
         File.WriteAllText(Path_, "{ это не json ]");
 
-        var store = new VoiceMuteStore(Path_); // не бросает
+        var store = new MuteStore(Path_); // не бросает
         Assert.False(store.IsMuted("123456789", DateTime.UtcNow));
     }
 }

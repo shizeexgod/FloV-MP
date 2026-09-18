@@ -3,23 +3,24 @@ using System.Text.Json;
 namespace FloVMP.Core.Security;
 
 /// <summary>
-/// Голосовые муты, которые переживают переподключение и перезапуск сервера.
+/// Муты (голос и чат), которые переживают переподключение и перезапуск сервера.
 ///
-/// Зачем: мут голосового канала alt:V живёт только пока игрок в сети. То есть
-/// заглушённый нарушитель выходил и заходил снова — и опять кричал в
-/// микрофон. Для модерации это то же самое, что не иметь мута вовсе.
+/// Зачем: мут голосового канала alt:V живёт только пока игрок в сети, а
+/// текстового мута в платформе не было вовсе. Заглушённый нарушитель выходил
+/// и заходил снова — и опять кричал. Для модерации это то же самое, что не
+/// иметь мута вовсе.
 ///
 /// Ключ — SocialClubId: ник задаёт клиент и подделывается, аккаунтов в
 /// платформе нет. Файл маленький и переписывается целиком: мутов на сервере
 /// единицы, а не тысячи.
 /// </summary>
-public sealed class VoiceMuteStore
+public sealed class MuteStore
 {
     private readonly string _path;
     private readonly object _lock = new();
     private Dictionary<string, DateTime?> _muted = new(StringComparer.Ordinal);
 
-    public VoiceMuteStore(string path)
+    public MuteStore(string path)
     {
         _path = path;
         Load();
@@ -90,7 +91,7 @@ public sealed class VoiceMuteStore
         {
             // Битый файл не должен мешать серверу стартовать: муты — не то,
             // ради чего стоит не пускать игроков вообще.
-            CoreConsole.Warning($"[FloV:MP] voice-mutes.json не прочитан ({ex.Message}) — муты голоса сброшены.");
+            CoreConsole.Warning($"[FloV:MP] файл мутов не прочитан ({ex.Message}) — муты голоса сброшены.");
             _muted = new Dictionary<string, DateTime?>(StringComparer.Ordinal);
         }
     }
@@ -106,7 +107,7 @@ public sealed class VoiceMuteStore
         }
         catch (Exception ex)
         {
-            CoreConsole.Warning($"[FloV:MP] voice-mutes.json не сохранён: {ex.Message}");
+            CoreConsole.Warning($"[FloV:MP] файл мутов не сохранён: {ex.Message}");
         }
     }
 }
