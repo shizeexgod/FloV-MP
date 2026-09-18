@@ -7,7 +7,14 @@ dotnet build server/FloVMP.sln -c Release
 dotnet test server/FloVMP.sln
 python scripts/pack_server.py --os windows      # или linux / all
 python scripts/pack_server.py --skip-build      # только перекладка пакета
+python scripts/flovmp_healthcheck.py --build    # проверки проекта, тесты, симуляция клиента
+powershell -ExecutionPolicy Bypass -File scripts/smoke_windows.ps1   # живой прогон Windows-пакета
 ```
+
+`smoke_windows.ps1` распаковывает свежий архив в папку с русскими буквами,
+запускает сервер на свободных портах, собирает `gamemode` из шаблона,
+выполняет команды консоли и проверяет лог — то же, что проходит владелец
+сервера после покупки.
 
 Проекты используют .NET 8 (`server/Directory.Build.props`): под эту версию
 собран хост C# движка, поднимать её нельзя.
