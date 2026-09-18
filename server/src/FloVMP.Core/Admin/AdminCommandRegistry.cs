@@ -62,8 +62,8 @@ public static class AdminCommandRegistry
 
         // ── Модерация ──────────────────────────────────────────────
         Register("kick", 8, "/kick <ID/ник> [причина]", "Исключить игрока");
-        Register("vmute", 8, "/vmute <ID/ник>", "Заглушить голос игрока");
-        Register("voicemute", 8, "/voicemute <ID/ник>", "Заглушить голос (алиас /vmute)");
+        Register("vmute", 8, "/vmute <ID> [минут]", "Заглушить голос игрока (переживает перезаход)");
+        Register("voicemute", 8, "/voicemute <ID> [минут]", "Заглушить голос (алиас /vmute)");
         Register("bans", 8, "/bans", "Список блокировок");
         Register("banlist", 8, "/banlist", "Список блокировок (алиас /bans)");
 

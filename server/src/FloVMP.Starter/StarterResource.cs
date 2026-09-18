@@ -43,6 +43,10 @@ public class StarterResource : Resource
     private int _storeSyncRunning;
 
     private IVoiceChannel? _spatialVoiceChannel;
+
+    // Голосовые муты переживают переподключение: мут самого канала alt:V
+    // снимался выходом игрока, то есть нарушитель просто перезаходил.
+    private FloVMP.Core.Security.VoiceMuteStore? _voiceMutes;
     private AdminBootstrapManager _adminManager = null!;
 
     // Блокировки. В базовой платформе их не было вообще — только kick, после
@@ -456,6 +460,8 @@ public class StarterResource : Resource
         // локальный файл. Фабрика сама печатает выбранный режим — владелец
         // сервера должен знать, действуют ли его баны на всех инстансах.
         var starterDataDir = Path.Combine(Directory.GetCurrentDirectory(), "flovmp-data");
+        _voiceMutes = new FloVMP.Core.Security.VoiceMuteStore(
+            Path.Combine(starterDataDir, "voice-mutes.json"));
         var starterDbConn = Environment.GetEnvironmentVariable("FLOVMP_DB_CONNECTION") ??
                             new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         // Миграции до обращения к таблицам: на свежей установке bans и admins
@@ -855,6 +861,15 @@ public class StarterResource : Resource
         try
         {
             _spatialVoiceChannel?.AddPlayer(player);
+
+            // Мут, выданный раньше, применяется снова: иначе переподключение
+            // снимало наказание.
+            if (_spatialVoiceChannel is not null && _voiceMutes is not null &&
+                _voiceMutes.IsMuted(player.SocialClubId.ToString(), DateTime.UtcNow))
+            {
+                _spatialVoiceChannel.MutePlayer(player);
+                Alt.Log($"[FloV:MP] [Voice] {player.Name}: голосовой мут применён повторно (выдан ранее).");
+            }
         }
         catch
         {
@@ -2201,8 +2216,19 @@ public class StarterResource : Resource
                 }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var vmuteId))
                 {
-                    SendChatMessage(player, "{fde047}Использование: /vmute <ID>  (повторный вызов снимает мут)");
+                    SendChatMessage(player, "{fde047}Использование: /vmute <ID> [минут]  (повторный вызов снимает мут)");
                     return;
+                }
+                // Срок необязателен: без него мут до снятия вручную.
+                int? vmuteMinutes = null;
+                if (parts.Length > 2)
+                {
+                    if (!int.TryParse(parts[2], out var vm) || vm <= 0 || vm > 60 * 24 * 365)
+                    {
+                        SendChatMessage(player, "{fde047}Минуты — число от 1 до 525600 (год).");
+                        return;
+                    }
+                    vmuteMinutes = vm;
                 }
                 var vmuteTarget = Alt.GetPlayerById(vmuteId);
                 if (vmuteTarget == null)
@@ -2219,17 +2245,24 @@ public class StarterResource : Resource
                 {
                     // Переключатель, а не отдельные /vmute и /vunmute: админу
                     // проще нажать одно и то же, чем помнить текущее состояние.
+                    var vmuteSc = vmuteTarget.SocialClubId.ToString();
                     if (_spatialVoiceChannel.IsPlayerMuted(vmuteTarget))
                     {
                         _spatialVoiceChannel.UnmutePlayer(vmuteTarget);
+                        _voiceMutes?.Unmute(vmuteSc);
                         SendChatMessage(player, $"{{34d399}}Голос игрока {vmuteTarget.Name} восстановлен.");
+                        SendChatMessage(vmuteTarget, "{34d399}[FloV:MP] Ваш голос снова слышен.");
                         Alt.Log($"[FloV:MP] [Voice] {player.Name} снял голосовой мут с {vmuteTarget.Name}");
                     }
                     else
                     {
                         _spatialVoiceChannel.MutePlayer(vmuteTarget);
-                        SendChatMessage(player, $"{{fde047}}Голос игрока {vmuteTarget.Name} заглушён.");
-                        Alt.Log($"[FloV:MP] [Voice] {player.Name} заглушил голос {vmuteTarget.Name}");
+                        var until = vmuteMinutes is null ? (DateTime?)null : DateTime.UtcNow.AddMinutes(vmuteMinutes.Value);
+                        _voiceMutes?.Mute(vmuteSc, until);
+                        var howLong = vmuteMinutes is null ? "до снятия" : $"на {vmuteMinutes} мин.";
+                        SendChatMessage(player, $"{{fde047}}Голос игрока {vmuteTarget.Name} заглушён ({howLong}).");
+                        SendChatMessage(vmuteTarget, $"{{f59e0b}}[FloV:MP] Ваш голос заглушён администрацией ({howLong}).");
+                        Alt.Log($"[FloV:MP] [Voice] {player.Name} заглушил голос {vmuteTarget.Name} ({howLong})");
                     }
                 }
                 catch (Exception ex)
