@@ -667,6 +667,21 @@ public class StarterResource : Resource
             new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z));
     }
 
+    /// <summary>
+    /// Игрок по нику — только если он такой один. Ники не уникальны (гости
+    /// лаунчера все «Игрок»), и «kick Игрок» выкидывал первого попавшегося.
+    /// При нескольких совпадениях команда просит ID и пишет, из кого выбирать.
+    /// </summary>
+    private static IPlayer? FindByUniqueName(string name, Action<string> say)
+    {
+        var matches = Alt.GetAllPlayers()
+            .Where(p => p.Exists && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (matches.Count <= 1) return matches.FirstOrDefault();
+        say($"Ник «{name}» у нескольких игроков ({string.Join(", ", matches.Select(p => "ID " + p.Id))}) — укажите ID.");
+        return null;
+    }
+
     private bool RejectIfBanned(IPlayer player)
     {
         if (_bans is null) return false;
@@ -813,7 +828,19 @@ public class StarterResource : Resource
 
     private void OnPlayerConnect(IPlayer player, string reason)
     {
-        Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}, SocialClub: {player.SocialClubId}) подключается...");
+        Alt.Log($"[FloV:MP] Игрок {FloVMP.Core.Chat.PlayerNamePolicy.ForLog(player.Name)} (ID: {player.Id}, SocialClub: {player.SocialClubId}) подключается...");
+
+        // Ник задаёт клиент, а сервер вставляет его в системные строки чата и
+        // лога — через него подделывали сообщения администрации и строки лога.
+        if (!FloVMP.Core.Chat.PlayerNamePolicy.IsAllowed(player.Name, out var nameProblem))
+        {
+            Alt.LogWarning($"[FloV:MP] вход отклонён: недопустимый ник «{FloVMP.Core.Chat.PlayerNamePolicy.ForLog(player.Name)}» — {nameProblem}.");
+            player.Kick($"Недопустимый ник: {nameProblem}. Смените имя и зайдите снова.");
+            return;
+        }
+
+        // Одинаковые ники НЕ запрещаются: гости лаунчера заходят под одним
+        // ником «Игрок». В чате и командах игроков различает ID ([12] Игрок).
 
         // Блокировка проверяется ДО спавна: забаненный не должен появляться в
         // мире даже на мгновение, иначе остальные игроки видят «призрака», а
@@ -987,7 +1014,9 @@ public class StarterResource : Resource
                 }
                 if (matchedPlayer == null && !explicitSc)
                 {
-                    matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, targetArg, StringComparison.OrdinalIgnoreCase));
+                    var ambiguousName = false;
+                    matchedPlayer = FindByUniqueName(targetArg, m => { ambiguousName = true; Alt.Log("[Console] " + m); });
+                    if (ambiguousName) return;
                 }
 
                 if (matchedPlayer != null)
@@ -1127,7 +1156,9 @@ public class StarterResource : Resource
                 }
                 IPlayer? kickTarget = null;
                 if (uint.TryParse(args[0], out var kId)) kickTarget = Alt.GetPlayerById(kId);
-                if (kickTarget == null) kickTarget = Alt.GetAllPlayers().FirstOrDefault(p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
+                var kickAmbiguous = false;
+                kickTarget ??= FindByUniqueName(args[0], m => { kickAmbiguous = true; Alt.Log("[Console] " + m); });
+                if (kickAmbiguous) return;
                 if (kickTarget == null)
                 {
                     Alt.Log($"[Console] Игрок '{args[0]}' не найден.");
@@ -1161,8 +1192,9 @@ public class StarterResource : Resource
                 if (banOfflineSc is null)
                 {
                     if (uint.TryParse(args[0], out var bId)) banTarget = Alt.GetPlayerById(bId);
-                    banTarget ??= Alt.GetAllPlayers().FirstOrDefault(
-                        p => string.Equals(p.Name, args[0], StringComparison.OrdinalIgnoreCase));
+                    var banAmbiguous = false;
+                    banTarget ??= FindByUniqueName(args[0], m => { banAmbiguous = true; Alt.Log("[Console] " + m); });
+                    if (banAmbiguous) return;
                     if (banTarget == null)
                     {
                         Alt.Log($"[Console] Игрок '{args[0]}' не найден в сети. " +
