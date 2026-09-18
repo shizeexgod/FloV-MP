@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Downloads the official CEF build matching alt:V's client and lays its
     redistributables out in the alt:V client folder structure.

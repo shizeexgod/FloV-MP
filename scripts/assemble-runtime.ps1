@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Assembles a runnable FloV:MP server runtime into C:\FloV-MP\runtime\server.
 

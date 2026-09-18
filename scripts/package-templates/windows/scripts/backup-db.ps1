@@ -1,4 +1,4 @@
-# FloV:MP — резервная копия базы данных (Windows). mysqldump ищется в PATH и в папках MariaDB/MySQL.
+﻿# FloV:MP — резервная копия базы данных (Windows). mysqldump ищется в PATH и в папках MariaDB/MySQL.
 . (Join-Path $PSScriptRoot "lib.ps1")
 Import-FlovmpEnv
 

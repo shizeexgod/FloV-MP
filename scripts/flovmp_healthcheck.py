@@ -492,6 +492,30 @@ def check_voice(rep):
 
 # ------------- 3d. Пакет и установщик -------------
 
+def check_powershell_encoding(rep):
+    """Windows PowerShell 5.1 (встроен в Windows) читает .ps1 без BOM как ANSI.
+    UTF-8 кириллица при этом частично превращается в типографские кавычки:
+    «Г» -> “, «Д» -> ”, «ё» -> ‘ — и разбор скрипта ломается посреди строки.
+    Скрипты с не-ASCII текстом обязаны быть в UTF-8 с BOM."""
+    section("5a. PowerShell-скрипты: кодировка")
+    bad = []
+    total = 0
+    for base in ("scripts",):
+        for p in (ROOT / base).rglob("*.ps1"):
+            if any(s in p.parts for s in SKIP_DIRS):
+                continue
+            total += 1
+            raw = p.read_bytes()
+            if raw.startswith(b"\xef\xbb\xbf"):
+                continue
+            try:
+                raw.decode("ascii")
+            except UnicodeDecodeError:
+                bad.append(str(p.relative_to(ROOT)))
+    rep.add(PASS if not bad else FAIL, "скрипты с кириллицей сохранены с BOM",
+            ", ".join(bad) if bad else "проверено: {}".format(total))
+
+
 def check_client_natives(rep):
     """Нативы alt:V чувствительны к регистру, а вызовы в клиенте обёрнуты в try:
     опечатка в имени не даёт ошибки — функция просто молча не работает
@@ -813,6 +837,7 @@ def main():
     check_event_contract(rep)
     check_migrations(rep)
     check_installer(rep)
+    check_powershell_encoding(rep)
     check_client_natives(rep)
     check_version_consistency(rep)
 

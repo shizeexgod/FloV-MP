@@ -1,4 +1,4 @@
-# Сборка вашего сервера (папка gamemode) в server\resources\gamemode.
+﻿# Сборка вашего сервера (папка gamemode) в server\resources\gamemode.
 # Запускается из gamemode\build.cmd.
 . (Join-Path $PSScriptRoot "lib.ps1")
 
@@ -22,6 +22,23 @@ if ($dotnet) {
 if (-not $sdkOk) {
     Write-Host "[FloV:MP] Для сборки нужен .NET SDK 8 (или новее), а не только Runtime:" -ForegroundColor Red
     Write-Host "          https://dotnet.microsoft.com/download/dotnet/8.0 — раздел SDK, x64." -ForegroundColor Red
+    exit 1
+}
+
+# Работающий сервер держит собранную Gamemode.dll: сборка десять раз пытается
+# её перезаписать и падает с непонятной ошибкой MSBuild про «не удалось
+# скопировать». Проверяем заранее и говорим, что делать.
+$built = Join-Path $Script:Root "server\resources\gamemode\Gamemode.dll"
+# Проверяем сам файл, а не процесс: из папки с русскими буквами сервер
+# запускается через служебную ссылку, и путь процесса с папкой не совпадает.
+$locked = $false
+if (Test-Path $built) {
+    try { $fs = [IO.File]::Open($built, "Open", "ReadWrite", "None"); $fs.Close() }
+    catch { $locked = $true }
+}
+if ($locked) {
+    Write-Host "[FloV:MP] Сервер сейчас запущен и держит файлы gamemode." -ForegroundColor Yellow
+    Write-Host "          Остановите его (Ctrl+C или закройте окно FloVMP-Server.exe) и запустите сборку снова." -ForegroundColor Yellow
     exit 1
 }
 
