@@ -139,6 +139,12 @@ public class AltvTomlTests : IDisposable
         Assert.Equal("false", Value(Write("Player"), "voiceActivationEnabled"));
     }
 
+    [Fact]
+    public void BackupFlow_IsDisabled()
+    {
+        Assert.Equal("false", Value(Write("Player"), "autoBackup"));
+    }
+
     // ---------- ветка клиента ----------
 
     [Theory]

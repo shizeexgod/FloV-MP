@@ -49,9 +49,11 @@ public static class AltvToml
         var voiceActivation = voiceOn &&
             Environment.GetEnvironmentVariable("FLOVMP_VOICE_ACTIVATION") == "1";
 
+        // Never enable alt:V's GTA backup flow. FloV:MP connects to the
+        // player's intact installation and does not replace Rockstar files.
         var toml = $"""
             audioFrameLimit = false
-            autoBackup = true
+            autoBackup = false
             autoFindMic = {(voiceOn ? "true" : "false")}
             branch = '{branch}'
             cachePath = '{cache}'

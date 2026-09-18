@@ -134,19 +134,13 @@ public sealed class LocalCdn : IDisposable
         {
             return (200, "text/plain", "OK"u8.ToArray());
         }
-        if (lower.Contains("/backup/") && lower.EndsWith("update.json"))
-        {
-            return (200, "application/json", Enc(ManifestFor("backup_update.json", BuildBackupManifest())));
-        }
+        // Deliberately do not expose alt:V's GTA backup/update endpoint.
+        // Serving it makes the native launcher copy the cached b3337
+        // executable over a different installed game profile (b3889 in the
+        // current Epic installation). FloV:MP connects to the user's intact
+        // installation and never distributes Rockstar binaries.
         if (lower.Contains("/backup/"))
-        {
-            var name = Path.GetFileName(path);
-            var f = Path.Combine(_clientDir, "cdn", "backup", name);
-            if (!File.Exists(f)) f = Path.Combine(_clientDir, "backup", name);
-            return File.Exists(f)
-                ? (200, "application/octet-stream", File.ReadAllBytes(f))
-                : (404, "text/plain", "Not Found"u8.ToArray());
-        }
+            return (404, "text/plain", "Not Found"u8.ToArray());
         if (lower.Contains("update.json") && lower.Contains("launcher"))
         {
             return (200, "application/json", Enc(ManifestFor("launcher_update.json", LauncherManifest())));
@@ -342,27 +336,6 @@ public sealed class LocalCdn : IDisposable
         }
         return $"{{\"latestBuildNumber\":-1,\"version\":\"{Version}\",\"sdkVersion\":\"{SdkVersion}\"," +
                $"\"hashList\":{{{hashes}}},\"sizeList\":{{{sizes}}}}}";
-    }
-
-    private string BuildBackupManifest()
-    {
-        var backupDir = Path.Combine(_clientDir, "cdn", "backup");
-        if (!Directory.Exists(backupDir)) backupDir = Path.Combine(_clientDir, "backup");
-        if (!Directory.Exists(backupDir)) return "{\"files\":[]}";
-
-        var files = new StringBuilder();
-        var first = true;
-        foreach (var f in Directory.EnumerateFiles(backupDir, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(backupDir, f).Replace('\\', '/');
-            if (rel is "backup_update.json" or "README.md") continue;
-
-            if (!first) files.Append(',');
-            first = false;
-
-            files.Append($"{{\"name\":\"{rel}\",\"hash\":\"{Sha1(f)}\",\"size\":{new FileInfo(f).Length}}}");
-        }
-        return $"{{\"files\":[{files}]}}";
     }
 
     // Возвращает путь к патченой altv-client.dll (staging), если запрошена

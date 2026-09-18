@@ -61,6 +61,17 @@ if (gameExe is null)
     return 2;
 }
 
+var launchCheck = GtaLaunchGuard.Evaluate(Path.Combine(gtaDir, gameExe));
+if (!launchCheck.Allowed && !args.Contains("--allow-unsupported", StringComparer.OrdinalIgnoreCase))
+{
+    Console.Error.WriteLine($"[err] {launchCheck.Message}");
+    Console.Error.WriteLine("[err] GTA не запускалась и файлы установленной игры не изменялись.");
+    Console.Error.WriteLine("[err] Для отдельной диагностики можно явно передать --allow-unsupported; это не режим совместимости.");
+    return 2;
+}
+if (!launchCheck.Allowed)
+    Console.WriteLine($"[connect] ВНИМАНИЕ: принудительный диагностический запуск: {launchCheck.Message}");
+
 var detectedPlatform = AltvToml.DetectPlatform(gtaDir);
 
 Console.WriteLine($"[connect] Сервер    : {connect}");
@@ -490,7 +501,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
 
     if (connect is null)
     {
-        Console.Error.WriteLine("Использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--nick <name>] [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open] [--no-directlaunch]");
+        Console.Error.WriteLine("Использование: FloVMP.Connect.exe -connect <ip:port> [--client <dir>] [--gta <dir>] [--nick <name>] [--port <n>] [--platform <egs|steam|rgl>] [--no-debug] [--keep-open] [--no-directlaunch] [--allow-unsupported]");
         return null;
     }
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
@@ -1047,4 +1058,3 @@ struct TOKEN_PRIVILEGES { public uint PrivilegeCount; public LUID Luid; public u
 
 [StructLayout(LayoutKind.Sequential)]
 struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
-
