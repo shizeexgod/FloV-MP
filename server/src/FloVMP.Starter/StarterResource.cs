@@ -633,6 +633,20 @@ public class StarterResource : Resource
         }
     }
 
+    /// <summary>
+    /// Сообщить проверке движения, что игрока переместила сама платформа
+    /// (спавн, возрождение, команда администратора). Без этого законный
+    /// телепорт выглядел бы как читерский рывок, и в логе копился бы мусор,
+    /// а в строгом режиме игрока отбрасывало бы назад.
+    /// </summary>
+    private void NotifyTeleport(IPlayer player)
+    {
+        if (_antiCheat is null || player is null || !player.Exists) return;
+        var pos = player.Position;
+        _antiCheat.NotifyLegitimateTeleport((int)player.Id,
+            new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z));
+    }
+
     private bool RejectIfBanned(IPlayer player)
     {
         if (_bans is null) return false;
@@ -1457,6 +1471,7 @@ public class StarterResource : Resource
                     try
                     {
                         p.Spawn(_spawnPosition, 0);
+                    NotifyTeleport(p);
                         p.Health = 200;
                         p.Armor = 100;
                         p.Emit("starter:revive");
@@ -1730,6 +1745,7 @@ public class StarterResource : Resource
                     return;
                 }
                 player.Position = new Position(tpx, tpy, tpz + 0.5f);
+                NotifyTeleport(player);
                 SendChatMessage(player, $"{{34d399}}Телепортирован на координаты: {tpx:F1}, {tpy:F1}, {tpz:F1}");
                 break;
 
@@ -1756,6 +1772,7 @@ public class StarterResource : Resource
                 // в пустоту, и цели не видел.
                 player.Dimension = gotoTarget.Dimension;
                 player.Position = new Position(gotoTarget.Position.X, gotoTarget.Position.Y + 1.0f, gotoTarget.Position.Z);
+                NotifyTeleport(player);
                 SendChatMessage(player, $"{{34d399}}Вы телепортировались к {gotoTarget.Name} (ID: {gotoTarget.Id})");
                 break;
 
@@ -1786,6 +1803,7 @@ public class StarterResource : Resource
                 }
                 gethereTarget.Dimension = player.Dimension;
                 gethereTarget.Position = new Position(player.Position.X + 1.0f, player.Position.Y, player.Position.Z);
+                NotifyTeleport(gethereTarget);
                 SendChatMessage(player, $"{{34d399}}Игрок {gethereTarget.Name} телепортирован к вам.");
                 SendChatMessage(gethereTarget, $"{{34d399}}Администратор {player.Name} телепортировал вас к себе.");
                 break;
@@ -2000,6 +2018,7 @@ public class StarterResource : Resource
                 }
                 _pendingRespawns.RemoveAll(r => r.Player == targetRevive);
                 targetRevive.Spawn(targetRevive.Position, 0);
+                NotifyTeleport(targetRevive);
                 targetRevive.Health = 200;
                 targetRevive.Armor = 100;
                 targetRevive.Emit("starter:revive");
@@ -2313,6 +2332,7 @@ public class StarterResource : Resource
         }
 
         player.Position = new Position(x, y, z + 1.0f);
+        NotifyTeleport(player);
         SendChatMessage(player, $"{{34d399}}Телепортация по метке: {x:F1}, {y:F1}, {z:F1}");
     }
 
