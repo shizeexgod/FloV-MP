@@ -1,5 +1,6 @@
 using FloVMP.Connect;
 using Xunit;
+using System.Diagnostics;
 
 namespace FloVMP.Launcher.Tests;
 
@@ -27,5 +28,21 @@ public sealed class GtaLaunchGuardTests
             Assert.Equal("enhanced-native-client-missing", result.Code);
         }
         finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void InstalledLegacy3889_IsFingerprintCheckedAndBlockedUntilAdapter()
+    {
+        var path = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "9d2d0eb64d5c44529cece33fe2a46482",
+            "GTA5.exe");
+        if (!File.Exists(path) || !string.Equals(
+                FileVersionInfo.GetVersionInfo(path).FileVersion?.Trim(), "1.0.3889.0", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var result = GtaLaunchGuard.Evaluate(path);
+        Assert.False(result.Allowed);
+        Assert.Equal("legacy-3889-native-adapter-missing", result.Code);
     }
 }
