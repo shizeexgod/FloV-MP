@@ -70,6 +70,19 @@ client.toggleNoClip();
 check(noClipOn() === false, 'NoClip не включается, хотя уровень администратора остался 8',
       'иначе клиент расходится с server/config/admin-commands.cfg');
 
+// ---------------------------------------------------------------------------
+section('Права отняли посреди полёта: NoClip выключается сам');
+alt.__server('flovmp:chat:commands', JSON.stringify([
+    { cmd: 'help', desc: 'команды' },
+    { cmd: 'noclip', desc: 'полёт' },
+]));
+client.toggleNoClip();
+check(noClipOn() === true, 'полёт включён, пока право есть');
+
+alt.__server('flovmp:chat:commands', JSON.stringify([{ cmd: 'help', desc: 'команды' }]));
+check(noClipOn() === false, 'после снятия права полёт выключен без нажатия клавиши',
+      'иначе снятый администратор летал бы до перезахода');
+
 console.log(`\n${'='.repeat(62)}`);
 console.log(`Пройдено: ${passes}, провалов: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

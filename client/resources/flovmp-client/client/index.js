@@ -79,6 +79,13 @@ function setAllowedCommands(json) {
     } catch (e) {
         allowedCommands = null;
     }
+    // Права отняли, пока инструмент был включён, — выключаем его сразу.
+    // Иначе снятый администратор продолжал бы видеть сквозь стены и летать
+    // до перезахода.
+    if (espMode > 0 && !canUse('esp')) espMode = 0;
+    if (noClip && !canUse('noclip')) {
+        try { toggleNoClip(true); } catch (e) { }
+    }
 }
 alt.onServer('flovmp:chat:commands', (json) => {
     chatCommandsJson = String(json || '[]');
@@ -243,9 +250,12 @@ export function isNoClipActive() {
     return noClip;
 }
 
-export function toggleNoClip() {
-    if (!inGame || chatTyping) return;
-    if (!canUse('noclip')) {
+export function toggleNoClip(forceOff = false) {
+    if (!inGame) return;
+    if (!forceOff && chatTyping) return;
+    // Права нужны только чтобы ВКЛЮЧИТЬ полёт: выключить его можно всегда,
+    // иначе снятый с прав администратор остался бы летать.
+    if (!noClip && !canUse('noclip')) {
         alt.log('[FloV:MP] Попытка вызова NoClip отклонена (нет прав администратора)');
         return;
     }
@@ -538,7 +548,7 @@ alt.everyTick(() => {
     }
 
     // Отрисовка ESP: текст нативами игры, масштаб по дистанции
-    if (espMode > 0 && currentAdminLevel >= 1 && inGame) {
+    if (espMode > 0 && canUse('esp') && inGame) {
         const camPos = native.getGameplayCamCoord();
         const showPlayers = (espMode === 1 || espMode === 3);
         const showVehicles = (espMode === 2 || espMode === 3);
