@@ -316,6 +316,12 @@ public class StarterResource : Resource
         if (previous == level) return;
         if (level > 0) _rosterLevels[player.Id] = level;
         else _rosterLevels.TryRemove(player.Id, out _);
+
+        // Тому, кто только что перестал быть администратором, список уже не
+        // разошлётся (он не в составе) — гасим его ESP явно пустым списком.
+        if (previous > 0 && level == 0)
+            player.Emit("flovmp:admin:roster", "{}");
+
         BroadcastAdminRoster();
     }
 
@@ -328,17 +334,19 @@ public class StarterResource : Resource
     /// </summary>
     private void BroadcastAdminRoster()
     {
+        // Список нужен только администраторам (для ESP). Раньше он уходил
+        // ВСЕМ игрокам — обычным пустым, — то есть при каждом изменении
+        // состава администрации сервер слал событие каждому онлайну: на
+        // тысячах игроков это тысячи отправок ради пустого объекта.
         var admins = _adminLevels.Where(kv => kv.Value > 0).ToArray();
-        foreach (var recipient in Alt.GetAllPlayers())
+        foreach (var (recipientId, own) in admins)
         {
-            if (!recipient.Exists || !_clientReady.ContainsKey(recipient.Id)) continue;
-            var own = _adminLevels.TryGetValue(recipient.Id, out var l) ? l : 0;
+            var recipient = Alt.GetPlayerById(recipientId);
+            if (recipient is null || !recipient.Exists || !_clientReady.ContainsKey(recipientId)) continue;
+
             var roster = new Dictionary<string, int>();
-            if (own > 0)
-            {
-                foreach (var (id, level) in admins)
-                    roster[id.ToString()] = level >= 8 && own < 8 && id != recipient.Id ? -1 : level;
-            }
+            foreach (var (id, level) in admins)
+                roster[id.ToString()] = level >= 8 && own < 8 && id != recipientId ? -1 : level;
             recipient.Emit("flovmp:admin:roster", System.Text.Json.JsonSerializer.Serialize(roster));
         }
     }
