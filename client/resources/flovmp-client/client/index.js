@@ -424,6 +424,12 @@ function disableAmbientDispatch() {
         native.setCreateRandomCops(false);
         native.setCreateRandomCopsNotOnScenarios(false);
         native.setCreateRandomCopsOnScenarios(false);
+        // Розыск отключается целиком, а не сбрасывается каждый кадр: раньше
+        // здесь было два вызова движка на каждый кадр ради того же результата.
+        const pid = native.playerId();
+        native.setMaxWantedLevel(0);
+        native.setPlayerWantedLevel(pid, 0, false);
+        native.setPlayerWantedLevelNow(pid, false);
     } catch (e) { }
 }
 disableAmbientDispatch();
@@ -439,13 +445,6 @@ alt.everyTick(() => {
     native.setParkedVehicleDensityMultiplierThisFrame(0.0);
 
     const player = alt.Player.local;
-    if (player && player.valid) {
-        // Эти нативы принимают индекс игрока (PLAYER_ID), а не хэндл педа:
-        // со scriptID розыск молча не сбрасывался.
-        const pid = native.playerId();
-        native.setPlayerWantedLevel(pid, 0, false);
-        native.setPlayerWantedLevelNow(pid, false);
-    }
 
     // Блокировка Escape в меню паузы при открытом вводе или консоли
     // Именно consoleOpen: окно консоли создаётся заранее при входе и живёт всю
