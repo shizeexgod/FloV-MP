@@ -11,9 +11,7 @@ public static class AltvToml
     {
         var cache = Path.Combine(clientDir, "cache").Replace('\\', '/');
         var gtaNorm = gtaPath.TrimEnd('\\', '/').Replace('\\', '/');
-        var platform = string.IsNullOrWhiteSpace(platformOverride)
-            ? DetectPlatform(gtaPath)
-            : platformOverride.Trim().ToLowerInvariant();
+        var platform = ResolvePlatform(gtaPath, platformOverride);
         // Ник идёт в TOML literal-строку name = '...'. В TOML одинарные кавычки
         // внутри такой строки НЕэкранируемы, а лаунчерный/session.json-ник (в
         // отличие от серверного) может содержать что угодно. Ник вроде O'Brien
@@ -147,5 +145,23 @@ public static class AltvToml
             return "steam";
 
         return "egs";
+    }
+
+    /// <summary>
+    /// Возвращает фактическую платформу запуска. Явный параметр важнее
+    /// эвристики по файлам: тестовые/staging-копии могут содержать и EOS, и
+    /// steam_api64.dll, но запускаться должны только через выбранный магазин.
+    /// </summary>
+    public static string ResolvePlatform(string gtaPath, string? platformOverride = null)
+    {
+        if (string.IsNullOrWhiteSpace(platformOverride)) return DetectPlatform(gtaPath);
+
+        return platformOverride.Trim().ToLowerInvariant() switch
+        {
+            "epic" => "egs",
+            "rockstar" => "rgl",
+            "egs" or "steam" or "rgl" => platformOverride.Trim().ToLowerInvariant(),
+            _ => DetectPlatform(gtaPath),
+        };
     }
 }

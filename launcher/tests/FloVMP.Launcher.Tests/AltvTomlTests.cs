@@ -179,6 +179,20 @@ public class AltvTomlTests : IDisposable
     }
 
     [Fact]
+    public void PlatformOverride_DrivesTheEffectiveLaunchPlatform()
+    {
+        // Staging-копия может содержать следы EGS, но для Steam-depot её
+        // необходимо запускать именно через SteamAppId.
+        File.WriteAllText(Path.Combine(_gtaDir, "EOSSDK-Win64-Shipping.dll"), "");
+        File.WriteAllText(Path.Combine(_gtaDir, "steam_api64.dll"), "");
+
+        Assert.Equal("egs", AltvToml.DetectPlatform(_gtaDir));
+        Assert.Equal("steam", AltvToml.ResolvePlatform(_gtaDir, "steam"));
+        Assert.Equal("egs", AltvToml.ResolvePlatform(_gtaDir, "epic"));
+        Assert.Equal("rgl", AltvToml.ResolvePlatform(_gtaDir, "rockstar"));
+    }
+
+    [Fact]
     public void BothFiles_AreWritten_AndIdentical()
     {
         // Клиент читает altv.toml, наш коннектор — flovmp.toml. Расхождение

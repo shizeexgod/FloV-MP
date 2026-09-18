@@ -73,12 +73,14 @@ if (!launchCheck.Allowed)
     Console.WriteLine($"[connect] ВНИМАНИЕ: принудительный диагностический запуск: {launchCheck.Message}");
 
 var detectedPlatform = AltvToml.DetectPlatform(gtaDir);
+var effectivePlatform = AltvToml.ResolvePlatform(gtaDir, platformOverride);
 
 Console.WriteLine($"[connect] Сервер    : {connect}");
 Console.WriteLine($"[connect] Клиент    : {clientDir}");
 Console.WriteLine($"[connect] GTA V     : {gtaDir}");
 Console.WriteLine($"[connect] Файл игры : {gameExe}");
-Console.WriteLine($"[connect] Платформа : {detectedPlatform.ToUpperInvariant()}");
+Console.WriteLine($"[connect] Платформа : {effectivePlatform.ToUpperInvariant()}" +
+                  (effectivePlatform == detectedPlatform ? "" : $" (явно, авто: {detectedPlatform.ToUpperInvariant()})"));
 
 // Состояние BattlEye проверяем ДО запуска: если он активен, игрок увидит
 // причину сразу, а не через четыре минуты ожидания. Ничего не выключаем —
@@ -96,7 +98,7 @@ if (args.Contains("--check"))
     var beStatus = OperatingSystem.IsWindows() ? BattlEye.Check(gtaDir) : null;
     Console.WriteLine($"[check] клиент   : {clientExe}");
     Console.WriteLine($"[check] игра     : {gameExe}");
-    Console.WriteLine($"[check] платформа: {detectedPlatform}");
+    Console.WriteLine($"[check] платформа: {effectivePlatform}");
     Console.WriteLine($"[check] battleye : {beStatus?.Summary ?? "проверка доступна только на Windows"}");
     // Код 10 — «запускать можно, но BattlEye помешает»; лаунчер отличает его
     // от обычной ошибки конфигурации и показывает инструкцию, а не ошибку.
@@ -217,12 +219,12 @@ if (Process.GetProcessesByName("GTA5").Length == 0 && Process.GetProcessesByName
 }
 
 // Прогрев платформы Epic Games, если игра куплена в Epic Games
-if (detectedPlatform == "egs")
+if (effectivePlatform == "egs")
 {
     EnsureEpicGamesLauncherRunning();
 }
 
-if (detectedPlatform == "rgl")
+if (effectivePlatform == "rgl")
 {
     EnsureRockstarLauncherRunning();
 }
@@ -281,7 +283,7 @@ try
         UseShellExecute = false,
     };
 
-    if (detectedPlatform == "steam")
+    if (effectivePlatform == "steam")
         psi.Environment["SteamAppId"] = "271590";
     else
         psi.Environment.Remove("SteamAppId");
