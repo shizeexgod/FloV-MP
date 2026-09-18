@@ -9,7 +9,7 @@ public sealed class DatabaseConfig
     //   FLOVMP_DB_HOST / FLOVMP_DB_PORT / FLOVMP_DB_NAME / FLOVMP_DB_USER / FLOVMP_DB_PASSWORD
     // Либо целиком: FLOVMP_DB_CONNECTION (её читает GamemodeResource раньше).
     // Пароля нет → BuildConnectionString вернёт пустую строку, и
-    // AccountStoreFactory прозрачно уйдёт на локальный JsonAccountStore.
+    // без базы сервер работает на файлах (права и баны).
     public string Host { get; set; } = Env("FLOVMP_DB_HOST", "127.0.0.1");
     public int Port { get; set; } = int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_DB_PORT"), out var p) ? p : 3306;
     public string Database { get; set; } = Env("FLOVMP_DB_NAME", "flovmp_server");

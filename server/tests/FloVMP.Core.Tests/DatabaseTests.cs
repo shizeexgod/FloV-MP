@@ -42,13 +42,13 @@ public sealed class DatabaseTests : IDisposable
     public void PrepareDatabase_returns_false_when_mysql_unreachable()
     {
         var badConnectionString = "Server=127.0.0.1;Port=59999;Database=fake_db;User ID=nobody;Password=bad;ConnectionTimeout=1;";
-        Assert.False(AccountStoreFactory.TryPrepareDatabase(badConnectionString));
+        Assert.False(DatabaseSetup.TryPrepareDatabase(badConnectionString));
     }
 
     [Fact]
     public void PrepareDatabase_returns_false_when_connection_string_empty()
     {
-        Assert.False(AccountStoreFactory.TryPrepareDatabase(""));
-        Assert.False(AccountStoreFactory.TryPrepareDatabase(null));
+        Assert.False(DatabaseSetup.TryPrepareDatabase(""));
+        Assert.False(DatabaseSetup.TryPrepareDatabase(null));
     }
 }

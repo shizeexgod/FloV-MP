@@ -1,16 +1,12 @@
-using FloVMP.Core.Auth;
-using FloVMP.Core.Logging;
 using MySqlConnector;
 
-using FloVMP.Core;
 namespace FloVMP.Core.Database;
 
 /// <summary>
 /// Подготовка MariaDB при старте сервера: накат миграций и проверка соединения.
 /// </summary>
-public static class AccountStoreFactory
+public static class DatabaseSetup
 {
-
     /// <summary>
     /// Подготовка базы: накат
     /// миграций и проверка соединения. true — база доступна и таблицы на месте.

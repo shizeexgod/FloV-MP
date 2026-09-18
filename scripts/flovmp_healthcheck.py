@@ -593,7 +593,7 @@ def check_migrations(rep):
         locked = "GET_LOCK" in r
         rep.add(PASS if locked else FAIL, "накат защищён блокировкой",
                 "" if locked else "два инстанса мигрируют одновременно -> гонка на схеме")
-        wired = "RunMigrations" in (ROOT / "server/src/FloVMP.Core/Database/AccountStoreFactory.cs")\
+        wired = "RunMigrations" in (ROOT / "server/src/FloVMP.Core/Database/DatabaseSetup.cs")\
             .read_text(encoding="utf-8", errors="ignore")
         rep.add(PASS if wired else FAIL, "миграции подключены к старту",
                 "" if wired else "раннер есть, но никто его не вызывает")

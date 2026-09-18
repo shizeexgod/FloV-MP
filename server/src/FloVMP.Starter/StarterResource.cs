@@ -460,7 +460,7 @@ public class StarterResource : Resource
                             new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
         // Миграции до обращения к таблицам: на свежей установке bans и admins
         // ещё не существуют.
-        var dbReachable = FloVMP.Core.Database.AccountStoreFactory.TryPrepareDatabase(starterDbConn);
+        var dbReachable = FloVMP.Core.Database.DatabaseSetup.TryPrepareDatabase(starterDbConn);
 
         _banStore = FloVMP.Core.Security.BanStoreFactory.Create(
             starterDbConn, Path.Combine(starterDataDir, "bans.json"));
