@@ -1,6 +1,6 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-19 (Linux/Windows delivery hardening, source-kit boundary, b3889 guard)
+Updated: 2026-09-19 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
 
 ### 2026-09-19 — коммерческая поставка отделена от launcher/web, распаковка усилена
 
@@ -27,6 +27,10 @@ Updated: 2026-09-19 (Linux/Windows delivery hardening, source-kit boundary, b388
   `EnableWindowsTargeting`, server Core **398/398**, client-sim **26/26**.
   Launcher Windows E2E и GTA b3889 native adapter требуют Windows hardware gate;
   адаптер всё ещё отсутствует, поэтому `GtaLaunchGuard` блокирует запуск честно.
+- Поставка теперь явно разделена на два артефакта: `pack_server.py` создаёт
+  `runtime-license` с `delivery.json` без исходников, web и launcher; отдельный
+  `export_source.py` создаёт `source-kit` с `SOURCE-MANIFEST.json`, включая
+  полный собственный код/тесты/SDK из списка экспорта, но без web и launcher.
 
 ### 2026-09-18 — native bootstrap Legacy 3889: CDN-протокол исправлен, разрыв локализован
 
