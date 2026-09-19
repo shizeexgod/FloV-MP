@@ -47,6 +47,16 @@ jobs:
           bash -n scripts/install.sh
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
+          python3 - <<'PY'
+          import json
+          with open('config/client-profiles/legacy-3889.json', encoding='utf-8') as f:
+              client = json.load(f)
+          with open('runtime/compat/legacy-3889/native-profile.json', encoding='utf-8') as f:
+              native = json.load(f)
+          assert client['supportStatus'] == native['supportStatus'] == 'needs-native-adapter'
+          assert client['nativeClient']['requiredAdapter'] == 'flovmp-legacy-native-3889'
+          print('compat profiles consistent')
+          PY
           ! grep -RIl --exclude-dir=.git --exclude-dir=bin --exclude-dir=obj \
             -E '(^|/)(web|launcher)/' scripts/package-templates source-kit
 
