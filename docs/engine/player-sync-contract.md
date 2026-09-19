@@ -22,8 +22,9 @@
 - `streamingDistance = 250` — игрок вне этого радиуса не обязан быть создан на
   клиенте как streamed-in entity;
 - dimension должен совпадать; `/setdim` намеренно разделяет виртуальные миры;
-- `maxStreaming.peds = 48` — общий пул ближайших peds, куда входят player-peds
-  и server-side NPC peds;
+- `maxStreaming.peds = 128` — общий пул ближайших peds, куда входят player-peds
+  и server-side NPC peds. Это штатный базовый лимит движка; если проект добавляет
+  много NPC, их количество нужно учитывать в нагрузочном тесте;
 - `syncSend`/`syncReceive` — потоки транспорта состояния, а не расширение
   радиуса видимости.
 
