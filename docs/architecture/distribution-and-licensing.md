@@ -98,7 +98,7 @@ After=network.target mariadb.service flovmp-voice.service
 Wants=flovmp-voice.service
 
 [Service]
-EnvironmentFile=-/opt/flovmp/flovmp.env
+EnvironmentFile=-/opt/flovmp/config/flovmp.env
 Type=simple
 WorkingDirectory=/opt/flovmp
 ExecStart=/opt/flovmp/start.sh

@@ -9,8 +9,8 @@ PartOf=flovmp-game.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/flovmp-voice
-ExecStart=/opt/flovmp-voice/altv-voice-server
+WorkingDirectory=/opt/flovmp/voice
+ExecStart=/opt/flovmp/voice/altv-voice-server
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
