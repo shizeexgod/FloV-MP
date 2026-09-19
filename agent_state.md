@@ -15,6 +15,9 @@ Updated: 2026-09-19 (Linux/Windows delivery hardening, source-kit boundary, b388
   `smoke_windows.ps1` использует этот путь вместо ручного `Expand-Archive` поверх.
 - Linux `install.sh` теперь восстанавливает прежнюю платформу при ошибке копирования
   или post-copy hash check, а не только после неудачного запуска службы.
+- Однокомандная Linux-распаковка сначала проверяет имена и типы всех tar-членов,
+  запрещает symlink-компоненты целевого пути и только потом извлекает архив;
+  экспорт source-kit добавляет `SOURCE-MANIFEST.json` и `.sha256` рядом с ZIP.
 - CDN/AssetPacker отвергают traversal, дубли путей, неверные SHA-256 и размер после
   загрузки; добавлены регрессионные тесты. Server Core: **398 тестов**.
 - Профиль `config/client-profiles/legacy-3889.json` синхронизирован с runtime-профилем;
