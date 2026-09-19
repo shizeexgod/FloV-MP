@@ -512,6 +512,9 @@ def main():
     ap.add_argument("--skip-build", action="store_true")
     ap.add_argument("--with-connector", action="store_true",
                     help="включить внутренний FloVMP.Connect (по умолчанию исключён из продаваемого пакета)")
+    # Старый флаг оставляем как совместимый no-op: connector и так выключен
+    # по умолчанию, но существующие CI/скрипты не должны внезапно ломаться.
+    ap.add_argument("--no-connector", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--no-archive", action="store_true")
     args = ap.parse_args()
 
