@@ -78,4 +78,5 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — как устроен сервер, потоки, хранение данных, безопасность;
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — как дорабатывать: ресурсы, события, команды, база, клиент;
+- [DELIVERY-MODES.md](DELIVERY-MODES.md) — чем отличаются runtime-пакет и source-kit;
 - [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — границы прав на alt:V и другие зависимости.

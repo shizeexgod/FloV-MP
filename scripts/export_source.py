@@ -207,6 +207,11 @@ def write_source_manifest(dest, version):
     entries.sort(key=lambda item: item["path"])
     manifest = {
         "product": "FloV:MP source kit",
+        "deliveryMode": "source-kit",
+        "sourceIncluded": True,
+        "runtimeBinariesIncluded": bool(os.path.isdir(os.path.join(dest, "engine"))),
+        "launcherIncluded": False,
+        "webIncluded": False,
         "version": version,
         "files": entries,
     }

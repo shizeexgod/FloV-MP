@@ -322,6 +322,19 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
 
     with open(S("VERSION"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(version + "\n")
+    with open(S("delivery.json"), "w", encoding="utf-8", newline="\n") as fh:
+        json.dump({
+            "product": "FloV:MP runtime package",
+            "deliveryMode": "runtime-license",
+            "version": version,
+            "os": target_os,
+            "sourceIncluded": False,
+            "launcherIncluded": False,
+            "webIncluded": False,
+            "connectorIncluded": bool(connector_dir),
+            "nativeProfiles": {"legacy-3889": "needs-native-adapter"},
+        }, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
 
 
 def normalize_text_files(stage):
@@ -366,9 +379,14 @@ def write_manifests(stage, target_os, version):
         for rel, digest, _ in entries:
             fh.write("{}  {}\n".format(digest, rel))
     manifest = {
-        "product": "FloV:MP Server",
+        "product": "FloV:MP runtime package",
+        "deliveryMode": "runtime-license",
         "version": version,
         "os": target_os,
+        "sourceIncluded": False,
+        "launcherIncluded": False,
+        "webIncluded": False,
+        "connectorIncluded": any(rel == "tools/connector" or rel.startswith("tools/connector/") for rel, _, _ in entries),
         "commit": git_commit(),
         "builtAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "files": [{"path": r, "sha256": d, "size": s} for r, d, s in entries],
@@ -412,7 +430,7 @@ def verify_stage(stage, target_os, entries):
                 "config/flovmp.env.example", "sql/README.md",
                 "server/resources/flovmp-starter/FloVMP.Starter.dll",
                 "server/resources/flovmp-starter/resource.toml",
-                "server/resources/flovmp-client/resource.toml",
+                "server/resources/flovmp-client/resource.toml", "delivery.json",
                 "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/template/Gamemode.csproj",
                 "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md"]
     if target_os == "linux":

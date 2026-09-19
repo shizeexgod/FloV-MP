@@ -47,6 +47,8 @@ jobs:
           bash -n scripts/install.sh
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
+          grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py
+          grep -q '"deliveryMode": "source-kit"' scripts/export_source.py
           python3 - <<'PY'
           import json
           with open('config/client-profiles/legacy-3889.json', encoding='utf-8') as f:
@@ -59,6 +61,27 @@ jobs:
           PY
           ! grep -RIl --exclude-dir=.git --exclude-dir=bin --exclude-dir=obj \
             -E '(^|/)(web|launcher)/' scripts/package-templates source-kit
+
+      - name: Verify separate source product export
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(mktemp -d)"
+          python3 scripts/export_source.py --out "$out" --no-verify
+          root="$out/flovmp-source-$(tr -d '\r\n' < VERSION)"
+          python3 scripts/verify_source.py "$root"
+          python3 - "$root" <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          meta = json.loads((root / 'SOURCE-MANIFEST.json').read_text(encoding='utf-8'))
+          assert meta['deliveryMode'] == 'source-kit'
+          assert meta['sourceIncluded'] is True
+          assert meta['launcherIncluded'] is False
+          assert meta['webIncluded'] is False
+          assert not (root / 'launcher').exists()
+          assert not (root / 'web').exists()
+          print('source product export: OK')
+          PY
 
       - name: Run client simulations
         run: |
