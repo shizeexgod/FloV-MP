@@ -96,7 +96,7 @@ GRANT ALL PRIVILEGES ON flovmp_server.* TO 'flovmp'@'127.0.0.1';
 
 Файл `license.flv` положите в корень установки (рядом с папками `server` и
 `voice`). Скачать его можно в личном кабинете; установщик Linux скачивает сам:
-`sudo ./install.sh --key FLV-XXXX-XXXX-XXXX`. Проверка идёт на самом сервере,
+`sudo ./install.sh --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`. Проверка идёт на самом сервере,
 интернет не нужен. Без действующей лицензии сервер работает, но пускает не
 больше 32 игроков. Состояние лицензии — в логе при запуске и командой `license`
 в консоли сервера.

@@ -178,7 +178,7 @@ export function OverviewTab() {
                 <strong className="text-white">2.</strong> {D.overview.tomlStep2} <code className="font-mono text-xs text-brand">server.toml</code> {D.overview.tomlStep2b}
                 <pre className="mt-2 overflow-x-auto rounded-xl bg-ink-950/70 p-3 font-mono text-[12px] text-slate-200">
 {`[licensing]
-key      = "${primaryLic?.license_key || 'FLV-XXXX-XXXX-XXXX'}"
+key      = "${primaryLic?.license_key || 'FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX'}"
 bound_ip = "${isIpBound ? primaryLic!.bound_ip : '188.127.229.224'}"`}
                 </pre>
               </li>

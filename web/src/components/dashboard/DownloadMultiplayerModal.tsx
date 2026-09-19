@@ -177,7 +177,7 @@ export function DownloadMultiplayerModal({ open, onClose, project }: DownloadMul
                 <input
                   value={manualKey}
                   onChange={(e) => setManualKey(e.target.value.toUpperCase())}
-                  placeholder="FLV-XXXX-XXXX-XXXX"
+                  placeholder="FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
                   className="field h-11 px-4 font-mono text-sm tracking-wider uppercase text-brand"
                 />
                 <button

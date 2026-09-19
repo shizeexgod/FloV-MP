@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { createSignedLicenseFlv } from '@/lib/license';
+import { createSignedLicenseFlv, isValidLicenseKeyFormat } from '@/lib/license';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/v1/licenses/download-by-key?key=FLV-XXXX-XXXX-XXXX
+ * GET /api/v1/licenses/download-by-key?key=FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
  * Автоматическое получение криптографического license.flv по ключу лицензии (для install.sh).
  */
 export async function GET(req: NextRequest) {
@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
 
     if (!key) {
       return NextResponse.json({ success: false, error: 'Параметр key обязателен' }, { status: 400 });
+    }
+    if (!isValidLicenseKeyFormat(key)) {
+      return NextResponse.json({ success: false, error: 'Некорректный формат лицензионного ключа' }, { status: 400 });
     }
 
     // 1. Поиск в portal_licenses
@@ -31,6 +34,7 @@ export async function GET(req: NextRequest) {
           server_name: p.name,
           plan: p.plan,
           max_players: p.max_players,
+          is_active: p.is_active,
           expires_at: p.expires_at,
           username: 'Licensee',
         };
@@ -41,7 +45,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Лицензия с указанным ключом не найдена' }, { status: 404 });
     }
 
-    const expiresDate = new Date(lic.expires_at || Date.now() + 365 * 24 * 3600 * 1000);
+    if (!lic.is_active) {
+      return NextResponse.json({ success: false, error: 'Лицензия отозвана или приостановлена' }, { status: 403 });
+    }
+
+    const expiresAt = new Date(lic.expires_at).getTime();
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+      return NextResponse.json({ success: false, error: 'Срок действия лицензии истёк' }, { status: 403 });
+    }
+
+    const expiresDate = new Date(expiresAt);
     const now = new Date();
     const remainingDays = Math.max(1, Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 3600 * 24)));
 

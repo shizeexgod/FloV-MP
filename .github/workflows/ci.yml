@@ -60,6 +60,8 @@ jobs:
           python3 scripts/verify-enhanced-1158-contract.py
           python3 scripts/verify-player-sync-contract.py
           python3 scripts/prepare_engine.py --help > /dev/null
+          python3 scripts/flo_update.py --help > /dev/null
+          python3 scripts/test_flo_update.py
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
           grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py
@@ -107,6 +109,9 @@ jobs:
           assert (root / 'scripts' / 'prepare_engine.py').exists()
           assert (root / 'scripts' / 'verify-windows-native.ps1').exists()
           assert (root / 'docs' / 'installation-and-delivery.md').exists()
+          assert (root / 'docs' / 'ecosystem-control-plane-plan.md').exists()
+          assert (root / 'scripts' / 'flo_update.py').exists()
+          assert (root / 'scripts' / 'test_flo_update.py').exists()
           print('source product export: OK')
           PY
 

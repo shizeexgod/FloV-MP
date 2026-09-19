@@ -63,13 +63,13 @@ public static class LicenseFile
     /// </summary>
     public const string AuthorityPublicKeyPem = """
         -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuKirQxSjX3hcS80XVFA8
-        oOZPEfa2ZzSOMj1B3QgpcmjU/lI++TOKpmvhx/JGleQth1uQygJ8prFYuD3wTNvR
-        4ZTO8lrSNS4T/J+gIQQZiXZofJCXrOnf3Bzx5e/1+XCthJkyBZyQUFI0Xs/eIEtn
-        gbqsdHpzsTwUIZhhjZv3Y72G9dV6vRcXXu2nZRbA1AjOMRR6BnNh5ByUjt5aUSt2
-        avAWjPd5YZMFNvaVvcponjbhK4cxhV1W3a0JuXE/3gNYGBE+3/6I+lN+fylJQkKj
-        5kz7MTFu7zhlIU7NfHA10hdKibdLRiDjAUXV9bhKL1mrYnWJUSkUctgunOUuxxOQ
-        HQIDAQAB
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj78Lp8wdYha6Ra87S9xT
+        NYir0eJKRz6ymm6UQnyFRkrPwwMHrNpQ9bYT5Bg9CCXVBvEUlhjh/A4zvudfAlyn
+        PkWeUM5U+9+ddulC8VaR5JKEmBK90i+w98n4lwmYsWNWIoyQH6mMa9zpY1eSYXDh
+        AGWH8siHMmJF8v86DWIGLgtL4YH0H4dv+9E65eegixpEEY+83vuWu3YEFXQzmqky
+        d6hAh78AULXdeaT0gW1Wp9de7hwTFTSpotmdMmoTI/56SZ3pj5sGPfeOMJahw6de
+        8alPzuTTY/xGpzsNC4I2tILtdIqHCWy2i4MCGpWeXNs5kUfHf1qL7abhX0zQMpos
+        LQIDAQAB
         -----END PUBLIC KEY-----
         """;
 

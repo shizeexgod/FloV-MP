@@ -53,7 +53,7 @@ python scripts/prepare_engine.py --source /path/to/altv-backup --dest engine --p
 ```powershell
 & ([scriptblock]::Create((irm https://YOUR-DISTRIBUTION-HOST/bootstrap-windows.ps1))) `
   -PackageUrl 'https://YOUR-DISTRIBUTION-HOST/flovmp-server-1.0.0-windows.zip' `
-  -Sha256 '64-символьный-SHA256' -LicenseKey 'FLV-XXXX-XXXX-XXXX' `
+  -Sha256 '64-символьный-SHA256' -LicenseKey 'FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX' `
   -InstallDir "$PWD\FloVMP"
 ```
 
@@ -65,7 +65,7 @@ curl -fsSL https://YOUR-DISTRIBUTION-HOST/install.sh -o install.sh
 chmod +x install.sh
 sudo ./install.sh \
   --package-url 'https://YOUR-DISTRIBUTION-HOST/flovmp-server-1.0.0-linux.tar.gz' \
-  --sha256 '64-символьный-SHA256' --key 'FLV-XXXX-XXXX-XXXX'
+  --sha256 '64-символьный-SHA256' --key 'FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX'
 ```
 
 Пакеты:
@@ -101,9 +101,11 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `scripts/bootstrap-windows.ps1` | скачивание ZIP по URL, SHA-256 и установка в пустую папку Windows |
 | `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
 | `scripts/verify-enhanced-1158.ps1` | Windows-сбор отпечатка GTA V Enhanced 1.0.1158.13 |
-| `scripts/verify-windows-native.ps1` | итоговая Windows-проверка GTA fingerprint, native adapter и E2E |
+| `scripts/verify-windows-native.ps1` | итоговая Windows-проверка GTA fingerprint, adapter manifest и E2E |
 | `docs/installation-and-delivery.md` | команды установки Windows/Linux/VDS и структура двух поставок |
+| `docs/ecosystem-control-plane-plan.md` | план централизованных ключей, отзывов, релизов и CLI/desktop обновлений |
 | `scripts/prepare_engine.py` | импорт разрешённого внешнего alt:V runtime в локальную `engine/` |
+| `scripts/flo_update.py` | единая проверка и установка/обновление runtime или source-kit |
 | `scripts/collect-legacy-3889-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов b3889 |
 | `scripts/collect-enhanced-1158-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов Enhanced |
 | `scripts/verify-legacy-3889-contract.py` | Mac/Linux-проверка контракта b3889 без запуска GTA |

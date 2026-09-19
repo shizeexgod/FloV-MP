@@ -2,7 +2,7 @@
 # ==============================================================================
 # FloV:MP — Официальный автоматический установщик сервера (One-Line Installer)
 # Использование:
-#   curl -sSL https://flov-mp.ru/install.sh | bash -s -- --key FLV-XXXX-XXXX-XXXX
+#   curl -sSL https://flov-mp.ru/install.sh | bash -s -- --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
 # ==============================================================================
 set -euo pipefail
 
@@ -59,7 +59,7 @@ done
 
 if [ -z "$LICENSE_KEY" ]; then
   echo -e "${RED}[Ошибка] Ключ лицензии не указан!${NC}"
-  echo -e "Использование: curl -sSL $PORTAL_URL/install.sh | bash -s -- --key ${BOLD}FLV-XXXX-XXXX-XXXX${NC}"
+  echo -e "Использование: curl -sSL $PORTAL_URL/install.sh | bash -s -- --key ${BOLD}FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX${NC}"
   exit 1
 fi
 

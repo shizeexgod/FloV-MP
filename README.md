@@ -6,6 +6,9 @@
 
 Полный контекст и архитектурные решения — в [`CLAUDE.md`](CLAUDE.md) и [`AGENTS.md`](AGENTS.md).  
 Текущий статус и дорожная карта — в [`agent_state.md`](agent_state.md).
+Поставка, install/update CLI и план централизованной экосистемы — в
+[`docs/ecosystem-control-plane-plan.md`](docs/ecosystem-control-plane-plan.md) и
+[`docs/installation-and-delivery.md`](docs/installation-and-delivery.md).
 
 ## Стек технологий
 
@@ -30,7 +33,7 @@ FloV-MP/
 ├── sql/          — Схемы MariaDB (игровая schema.sql, портальная portal_schema.sql)
 ├── config/       — server.toml и профили подключения
 ├── scripts/      — Утилиты запуска и обслуживания (run-launcher, run-server, connect)
-├── runtime/      — Локальный рантайм alt:V (бинарники в git не идут)
+├── runtime/      — профили совместимости и локальные runtime-бинарники (в git не идут)
 ├── logs/         — Логи запусков и отладки
 ├── archive/      — Архив устаревших прототипов (старый WPF-лаунчер)
 └── docs/         — Архитектурная и техническая документация

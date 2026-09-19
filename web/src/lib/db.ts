@@ -1,6 +1,7 @@
 import mysql, { Pool } from 'mysql2/promise';
 import fs from 'fs';
 import path from 'path';
+import { generateLicenseKey } from './license';
 
 export interface InvoiceRecord {
   id: number;
@@ -169,7 +170,7 @@ function getStore(): MockStore {
             user_id: 1,
             name: 'FloV:MP Master Project',
             slug: 'flovmp-master',
-            license_key: 'FLV-ENTERPRISE-2026-MASTER',
+            license_key: 'FLV-7E8C4A10-1D6F90B2-3C5E7A91-8F20D4BE',
             plan: 'enterprise',
             max_players: 1500,
             api_key: 'flv_live_master_7a8f19c2',
@@ -255,7 +256,7 @@ function getStore(): MockStore {
       {
         id: 1,
         user_id: 1,
-        license_key: 'FLV-ENTERPRISE-2026-MASTER',
+        license_key: 'FLV-7E8C4A10-1D6F90B2-3C5E7A91-8F20D4BE',
         server_name: 'FloV:MP Server #1',
         bound_ip: '188.127.229.224',
         plan: 'enterprise',
@@ -294,7 +295,7 @@ function getStore(): MockStore {
     telemetry: [
       {
         id: 1,
-        license_key: 'FLV-ENTERPRISE-2026-MASTER',
+        license_key: 'FLV-7E8C4A10-1D6F90B2-3C5E7A91-8F20D4BE',
         players: 1,
         max_players: 1500,
         tick_rate: 60,
@@ -310,7 +311,7 @@ function getStore(): MockStore {
         user_id: 1,
         name: 'FloV:MP Master Project',
         slug: 'flovmp-master',
-        license_key: 'FLV-ENTERPRISE-2026-MASTER',
+        license_key: 'FLV-7E8C4A10-1D6F90B2-3C5E7A91-8F20D4BE',
         plan: 'enterprise',
         max_players: 1500,
         api_key: 'flv_live_master_7a8f19c2',
@@ -887,7 +888,7 @@ export async function createProject(
   plan: string = 'enterprise',
   maxPlayers: number = 1500
 ): Promise<ProjectRecord> {
-  const licenseKey = `FLV-PROJ-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const licenseKey = generateLicenseKey('FLV');
   const apiKey = `flv_live_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
   const expiresAt = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString();
 

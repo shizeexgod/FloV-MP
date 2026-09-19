@@ -1,6 +1,6 @@
 # docs/ — карта документации FloV:MP & Держава Онлайн
 
-Обновлено: 2026-09-09
+Обновлено: 2026-09-19
 
 Разложено по разделам. Актуальный статус проекта и очередь задач — в [`../agent_state.md`](../agent_state.md). Правила и контекст — в [`../AGENTS.md`](../AGENTS.md).
 
@@ -18,6 +18,7 @@
 | [architecture/client-deployment-and-hardware-guide.md](architecture/client-deployment-and-hardware-guide.md) | **Развёртывание на серверах заказчиков**: профиль AMD 8C / 64GB, изоляция KVM/Docker, отказ от Apache в пользу Nginx, защита от DDoS без 3 серверов |
 | [architecture/product-boundaries.md](architecture/product-boundaries.md) | Разграничение: движок FloV:MP vs RP-проект «Держава Онлайн» |
 | [architecture/platform-boundaries.md](architecture/platform-boundaries.md) | Платформенные границы: что входит в сетевой движок, что является гейммодом |
+| [ecosystem-control-plane-plan.md](ecosystem-control-plane-plan.md) | Единый план централизованной лицензии, отзыва ключей, релизов, CLI-патчей и desktop dashboard |
 
 ---
 

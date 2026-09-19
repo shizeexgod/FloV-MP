@@ -125,7 +125,7 @@ FLOVMP_DB_CONNECTION="Server=127.0.0.1;Port=3306;Database=flovmp_rp;Uid=root;Pwd
 Файл `license.flv` содержит RSA-2048 криптографическую подпись.
 Сервер проверяет лицензию локально при старте без обязательного внешнего соединения, обеспечивая 100% автономность.
 Параметры лицензии:
-- Лицензионный ключ (`licenseKey`, формат `FLV-XXXX-XXXX-XXXX`)
+- Лицензионный ключ (`licenseKey`, формат `FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`)
 - Название проекта (`project`)
 - Тарифный план (`plan`: standard, professional, enterprise)
 - Максимальное количество игроков (`maxPlayers`: 500 – 5000)

@@ -7,6 +7,7 @@ param(
     [string]$GtaDir,
     [Parameter(Mandatory = $true)]
     [string]$NativeAdapterPath,
+    [string]$AdapterManifestPath = '',
     [string]$ConnectorPath = '',
     [string]$E2EReport = '',
     [string]$ProfilePath = '',
@@ -21,6 +22,9 @@ if (-not $ProfilePath) {
 }
 $profileData = Get-Content -LiteralPath $ProfilePath -Raw | ConvertFrom-Json
 $GtaDir = [IO.Path]::GetFullPath($GtaDir)
+$NativeAdapterPath = [IO.Path]::GetFullPath($NativeAdapterPath)
+if (-not $AdapterManifestPath) { $AdapterManifestPath = "$NativeAdapterPath.json" }
+$AdapterManifestPath = [IO.Path]::GetFullPath($AdapterManifestPath)
 $issues = [System.Collections.Generic.List[string]]::new()
 
 function Get-ObservedFile([string]$RelativePath) {
@@ -68,13 +72,43 @@ if (-not $profileData.gameSha256 -or -not $profileData.updateRpfSha256 -or -not 
     $issues.Add('профиль не содержит полного подтверждённого fingerprint')
 }
 
-$native = [ordered]@{ path = [IO.Path]::GetFullPath($NativeAdapterPath); exists = $false }
+$native = [ordered]@{ path = $NativeAdapterPath; exists = $false }
 if (Test-Path -LiteralPath $NativeAdapterPath -PathType Leaf) {
     $native.exists = $true
     $native.size = (Get-Item -LiteralPath $NativeAdapterPath).Length
     $native.sha256 = (Get-FileHash -LiteralPath $NativeAdapterPath -Algorithm SHA256).Hash.ToLowerInvariant()
 } else {
     $issues.Add("native adapter не найден: $NativeAdapterPath")
+}
+
+$adapterManifest = [ordered]@{ path = $AdapterManifestPath; exists = $false }
+if (Test-Path -LiteralPath $AdapterManifestPath -PathType Leaf) {
+    $adapterManifest.exists = $true
+    try {
+        $adapterManifest.data = Get-Content -LiteralPath $AdapterManifestPath -Raw | ConvertFrom-Json
+        $expectedId = [string]$profileData.nativeClient.requiredAdapter
+        if ([string]$adapterManifest.data.profile -ne $Profile) {
+            $issues.Add("native adapter manifest profile не совпал: ожидался $Profile")
+        }
+        if ([string]$adapterManifest.data.id -ne $expectedId) {
+            $issues.Add("native adapter manifest id не совпал: ожидался $expectedId")
+        }
+        if ([string]$adapterManifest.data.binary -ne [IO.Path]::GetFileName($NativeAdapterPath)) {
+            $issues.Add('native adapter manifest binary не совпал с указанным файлом')
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$adapterManifest.data.version)) {
+            $issues.Add('native adapter manifest не содержит version')
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$adapterManifest.data.sha256)) {
+            $issues.Add('native adapter manifest не содержит sha256')
+        } elseif ($native.exists -and $native.sha256 -ne ([string]$adapterManifest.data.sha256).ToLowerInvariant()) {
+            $issues.Add('SHA-256 native adapter не совпал с его manifest')
+        }
+    } catch {
+        $issues.Add("native adapter manifest повреждён: $($_.Exception.Message)")
+    }
+} else {
+    $issues.Add("native adapter manifest не найден: $AdapterManifestPath")
 }
 
 $connector = [ordered]@{ path = $ConnectorPath; exists = $true }
@@ -99,6 +133,7 @@ $report = [ordered]@{
     profile = $profile
     gtaDir = $GtaDir
     nativeAdapter = $native
+    nativeAdapterManifest = $adapterManifest
     connector = $connector
     observed = [ordered]@{ exe = $exe; update = $update; update2 = $update2 }
     e2eGate = if ($e2e) { $e2e.e2eGate } else { $null }

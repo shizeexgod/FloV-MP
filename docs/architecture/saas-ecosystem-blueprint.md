@@ -76,7 +76,7 @@ Starting with distributed microservices for day one is an anti-pattern that slow
 **Answer:** Every server reports a compact 15-second JSON/MessagePack heartbeat payload:
 ```json
 {
-  "projectKey": "FLV-PROJ-XXXX-XXXX",
+  "projectKey": "FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX",
   "serverUid": "srv_prod_01",
   "environment": "production",
   "version": "1.0.4",

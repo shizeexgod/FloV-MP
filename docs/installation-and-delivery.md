@@ -17,7 +17,7 @@
 & ([scriptblock]::Create((irm https://HOST/bootstrap-windows.ps1))) `
   -PackageUrl 'https://HOST/flovmp-server-VERSION-windows.zip' `
   -Sha256 '64-символьный-SHA256' `
-  -LicenseKey 'FLV-XXXX-XXXX-XXXX' `
+  -LicenseKey 'FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX' `
   -InstallDir "$PWD\FloVMP"
 ```
 
@@ -37,7 +37,7 @@ chmod +x install.sh
 sudo ./install.sh \
   --package-url https://HOST/flovmp-server-VERSION-linux.tar.gz \
   --sha256 64-символьный-SHA256 \
-  --key FLV-XXXX-XXXX-XXXX
+  --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
 ```
 
 Установщик ставит runtime в `/opt/flovmp`, создаёт отдельного системного
@@ -81,13 +81,27 @@ Windows-native adapter и реальный двухклиентский тест
   -Profile legacy-3889 `
   -GtaDir 'C:\Games\GTAV' `
   -NativeAdapterPath 'C:\FloVMP\native\flovmp-legacy-native-3889.dll' `
+  -AdapterManifestPath 'C:\FloVMP\native\flovmp-legacy-native-3889.dll.json' `
   -E2EReport 'C:\FloVMP\reports\legacy-3889-e2e.json' `
   -WriteReport 'C:\FloVMP\reports\legacy-3889-native.json'
 ```
 
 Скрипт проверяет версию и SHA-256 `GTA5.exe`, `update.rpf`, `update2.rpf`,
-наличие native adapter и все пять E2E-гейтов. При любой ошибке код возврата
+наличие native adapter, его sidecar-манифест (profile/id/version/binary/SHA-256)
+и все пять E2E-гейтов. При любой ошибке код возврата
 ненулевой: такой пакет нельзя помечать как готовый к продаже.
+
+Минимальный sidecar-файл рядом с DLL выглядит так:
+
+```json
+{
+  "profile": "legacy-3889",
+  "id": "flovmp-legacy-native-3889",
+  "version": "1.0.0",
+  "binary": "flovmp-legacy-native-3889.dll",
+  "sha256": "SHA256_БИНАРНИКА_64_СИМВОЛАМИ"
+}
+```
 
 ## Структура установленной папки
 
@@ -106,3 +120,15 @@ FloVMP/
 Игровой клиент подключается к серверу через совместимый внешний runtime и
 native adapter. Отсутствие launcher/web в поставке является намеренным и не
 мешает серверу работать локально или на VDS.
+
+Для последующих обновлений используется единый CLI:
+
+```bash
+python scripts/flo_update.py --product runtime-license --root /opt/flovmp \
+  --package-url https://HOST/flovmp-server-VERSION-linux.tar.gz \
+  --sha256 SHA256_АРХИВА --license-key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
+```
+
+Онлайн-кабинет и desktop-приложение в будущем будут выдавать тот же подписанный
+манифест и запускать тот же проверяемый workflow. Архитектурный план находится
+в `docs/ecosystem-control-plane-plan.md`.
