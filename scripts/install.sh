@@ -48,7 +48,7 @@ validate_manifest_file() {
       die "неверная строка manifest.txt: $line"
     fi
     [[ "$rel" != *" "* ]] || die "пробел в пути manifest.txt запрещён: $rel"
-    [[ "$rel" != /* && "$rel" != *:* ]] || die "абсолютный/ADS-путь manifest.txt запрещён: $rel"
+    [[ "$rel" != /* && "$rel" != *:* && "$rel" != -* ]] || die "абсолютный/ADS/option-путь manifest.txt запрещён: $rel"
     IFS='/' read -r -a parts <<< "$rel"
     for part in "${parts[@]}"; do
       [[ -n "$part" && "$part" != "." && "$part" != ".." ]] || die "небезопасный путь manifest.txt: $rel"
@@ -490,7 +490,7 @@ if [ "$SAME_DIR" -eq 0 ]; then
       [ -n "$f" ] && rm -f "$INSTALL_DIR/$f"
     done
   fi
-  if ! (cd "$SRC_DIR" && tar -cf - -T "$NEW_LIST" manifest.txt manifest.json) | tar -xpf - -C "$INSTALL_DIR"; then
+  if ! (cd "$SRC_DIR" && tar --verbatim-files-from -cf - -T "$NEW_LIST" manifest.txt manifest.json) | tar -xpf - -C "$INSTALL_DIR"; then
     restore_platform
     die "не удалось скопировать файлы в $INSTALL_DIR — прежняя версия восстановлена"
   fi
