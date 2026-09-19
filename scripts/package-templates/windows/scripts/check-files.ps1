@@ -21,6 +21,7 @@ if (-not (Test-Path $manifest)) {
 $total = 0
 $missing = @()
 $changed = @()
+$seen = @{}
 $rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
 
 function Get-ManifestPath([string]$Relative) {
@@ -36,11 +37,11 @@ function Get-ManifestPath([string]$Relative) {
 
 foreach ($line in Get-Content $manifest -Encoding UTF8) {
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
-    $parts = $line -split '\s+', 2
-    if ($parts.Count -lt 2) { continue }
-
-    $expected = $parts[0].Trim()
-    $rel = $parts[1].Trim()
+    if ($line -notmatch '^([0-9a-fA-F]{64})\s{2,}(.+)$') { throw "Неверная строка manifest.txt: $line" }
+    $expected = $Matches[1].Trim()
+    $rel = $Matches[2].Trim()
+    if ($seen.ContainsKey($rel)) { throw "Повторный путь manifest.txt: $rel" }
+    $seen[$rel] = $true
     $path = Get-ManifestPath $rel
     $total++
 
@@ -48,6 +49,8 @@ foreach ($line in Get-Content $manifest -Encoding UTF8) {
     $actual = (Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $expected.ToLowerInvariant()) { $changed += $rel }
 }
+
+if ($total -eq 0) { throw 'manifest.txt пуст.' }
 
 Write-Host "[FloV:MP] Проверено файлов платформы: $total"
 
