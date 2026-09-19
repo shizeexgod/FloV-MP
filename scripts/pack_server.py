@@ -332,7 +332,10 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
             "launcherIncluded": False,
             "webIncluded": False,
             "connectorIncluded": bool(connector_dir),
-            "nativeProfiles": {"legacy-3889": "needs-native-adapter"},
+            "nativeProfiles": {
+                "legacy-3889": "needs-native-adapter",
+                "enhanced-1158": "needs-enhanced-runtime",
+            },
         }, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
 

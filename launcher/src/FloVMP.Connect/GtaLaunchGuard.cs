@@ -14,16 +14,16 @@ public sealed record GtaBuildIdentity(
     string Platform);
 
 /// <summary>
-/// Prevents the legacy alt:V 16.4.39 native client from launching a GTA
-/// profile it cannot understand. This is a preflight guard, not a compatibility
-/// implementation: actual support still requires a native adapter for the
-/// selected GTA build.
+/// Prevents the bundled native client from launching a GTA profile it cannot
+/// understand. This is a preflight guard, not a compatibility implementation:
+/// actual support still requires a native adapter for the selected GTA build.
 /// </summary>
 public static class GtaLaunchGuard
 {
     private const string NativeClientVersion = "16.4.39";
     private const string Legacy3521 = "1.0.3521.0";
     private const string Legacy3889 = "1.0.3889.0";
+    private const string Enhanced1158 = "1.0.1158.13";
     private const string Legacy3889ExeSha256 = "677e4e355cfbdb13273b1d992407e3c261b3a108dc4dd5c8a0c4c1da651802e5";
     private const string Legacy3889UpdateRpfSha256 = "913a335314b4c3c616397782e4175d6a3cf217219750cb9b457b4a781a73ddc0";
     private const string Legacy3889Update2RpfSha256 = "8e2022693d3be6bf3961bf596045ef2762b34f6aa49d5afb8083659296ca1393";
@@ -46,8 +46,27 @@ public static class GtaLaunchGuard
         var fileName = Path.GetFileName(gameExePath);
         if (fileName.Equals("GTA5_Enhanced.exe", StringComparison.OrdinalIgnoreCase))
         {
+            string enhancedVersion;
+            try
+            {
+                enhancedVersion = FileVersionInfo.GetVersionInfo(gameExePath).FileVersion?.Trim() ?? "";
+            }
+            catch (Exception ex)
+            {
+                return new(false, "enhanced-version-unreadable",
+                    $"Не удалось определить версию GTA V Enhanced: {ex.Message}");
+            }
+
+            if (string.Equals(enhancedVersion, Enhanced1158, StringComparison.OrdinalIgnoreCase))
+            {
+                return new(false, "enhanced-1158-native-adapter-missing",
+                    $"GTA V Enhanced {enhancedVersion} распознан, но native-клиент FloV:MP {NativeClientVersion} не имеет проверенного адаптера Enhanced. Нужен адаптер flovmp-enhanced-native-1158; запуск остановлен.");
+            }
+
             return new(false, "enhanced-native-client-missing",
-                "GTA V Enhanced пока не поддерживается текущим native-клиентом FloV:MP 16.4.39.");
+                string.IsNullOrWhiteSpace(enhancedVersion)
+                    ? "GTA V Enhanced распознан, но версия файла не читается; native-адаптер не подтверждён."
+                    : $"GTA V Enhanced {enhancedVersion} не зарегистрирован в native-профилях FloV:MP {NativeClientVersion}; запуск остановлен до добавления проверенного адаптера.");
         }
 
         string version;

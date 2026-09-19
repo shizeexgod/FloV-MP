@@ -39,6 +39,9 @@ jobs:
         run: |
           [scriptblock]::Create((Get-Content scripts/collect-legacy-3889-e2e.ps1 -Raw)) | Out-Null
           Write-Host 'collect-legacy-3889-e2e.ps1: syntax OK'
+          [scriptblock]::Create((Get-Content scripts/verify-enhanced-1158.ps1 -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content scripts/collect-enhanced-1158-e2e.ps1 -Raw)) | Out-Null
+          Write-Host 'Enhanced 1.0.1158.13 diagnostic scripts: syntax OK'
 
   portable-safety:
     runs-on: ubuntu-latest
@@ -52,6 +55,7 @@ jobs:
           python3 -m py_compile scripts/*.py
           bash -n scripts/install.sh
           python3 scripts/verify-legacy-3889-contract.py
+          python3 scripts/verify-enhanced-1158-contract.py
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
           grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py
@@ -64,6 +68,15 @@ jobs:
               native = json.load(f)
           assert client['supportStatus'] == native['supportStatus'] == 'needs-native-adapter'
           assert client['nativeClient']['requiredAdapter'] == 'flovmp-legacy-native-3889'
+          with open('config/client-profiles/enhanced-1158.json', encoding='utf-8') as f:
+              enhanced_client = json.load(f)
+          with open('runtime/compat/enhanced-1158/native-profile.json', encoding='utf-8') as f:
+              enhanced_native = json.load(f)
+          assert enhanced_client['id'] == enhanced_native['id'] == 'enhanced-1158'
+          assert enhanced_client['gameFileVersion'] == enhanced_native['gameFileVersion'] == '1.0.1158.13'
+          assert enhanced_client['supportStatus'] == enhanced_native['supportStatus'] == 'needs-enhanced-runtime'
+          assert enhanced_client['fingerprintStatus'] == enhanced_native['fingerprintStatus'] == 'pending-windows-capture'
+          assert enhanced_native['nativeClient']['requiredAdapter'] == 'flovmp-enhanced-native-1158'
           print('compat profiles consistent')
           PY
           ! grep -RIl --exclude-dir=.git --exclude-dir=bin --exclude-dir=obj \

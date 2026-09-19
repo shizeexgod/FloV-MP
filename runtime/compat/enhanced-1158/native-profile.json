@@ -1,21 +1,23 @@
 {
   "schema": 1,
   "id": "enhanced-1158",
-  "edition": "Enhanced",
+  "edition": "enhanced",
+  "platform": "unknown",
   "gameExecutable": "GTA5_Enhanced.exe",
   "gameFileVersion": "1.0.1158.13",
   "fingerprintStatus": "pending-windows-capture",
   "gameSha256": null,
+  "gameSize": null,
   "updateRpfSha256": null,
   "update2RpfSha256": null,
-  "runtimeClientVersion": "16.4.39",
-  "runtimeLauncherVersion": "16.3.7",
   "nativeClient": {
     "version": "16.4.39",
     "status": "missing",
     "requiredAdapter": "flovmp-enhanced-native-1158",
-    "knownRpf": null
+    "knownRpf": null,
+    "reason": "The available native client is a Legacy runtime and has no verified Enhanced adapter."
   },
+  "supportStatus": "needs-enhanced-runtime",
   "e2eGate": {
     "gameWindowAlive": false,
     "clientConnected": false,
@@ -23,6 +25,5 @@
     "playerSpawned": false,
     "twoClientSync": false
   },
-  "notes": "Known Enhanced executable build 1.0.1158.13. Exact Windows hashes and RPF layout must be captured from a clean installation before support can be enabled.",
-  "supportStatus": "needs-enhanced-runtime"
+  "notes": "Do not fill hashes from an unverified archive. Run verify-enhanced-1158.ps1 on a clean Windows installation and review the capture before adding a native adapter."
 }

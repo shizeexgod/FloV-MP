@@ -18,11 +18,25 @@ NUI и лаунчер не могут заменить этот слой: они
 - версию native-клиента и адаптера;
 - статус поддержки и результаты E2E-гейтов.
 
-Текущий профиль владельца: `legacy-3889-epic`, GTA V Legacy `1.0.3889.0`,
-Epic Games Store. Его файлы проверяются:
+Текущий Legacy-профиль владельца: `legacy-3889-epic`, GTA V Legacy
+`1.0.3889.0`, Epic Games Store. Его файлы проверяются:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\FloV-MP\scripts\verify-legacy-3889.ps1
+```
+
+Enhanced ведётся независимо: `runtime/compat/enhanced-1158` для
+`GTA5_Enhanced.exe` `1.0.1158.13`. До захвата чистых Windows-хэшей этот
+профиль имеет `fingerprintStatus=pending-windows-capture`, а требуемый адаптер
+именуется `flovmp-enhanced-native-1158`. Legacy fingerprint/RPF и Enhanced
+fingerprint/RPF нельзя смешивать.
+
+Проверка Enhanced на Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\FloV-MP\scripts\verify-enhanced-1158.ps1 `
+  -GtaDir 'C:\Program Files\Rockstar Games\Grand Theft Auto V' `
+  -Capture C:\FloV-MP\runtime\compat\enhanced-1158\windows-capture.json
 ```
 
 ## Правила запуска

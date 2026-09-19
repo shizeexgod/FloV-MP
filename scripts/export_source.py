@@ -43,6 +43,7 @@ INCLUDE = [
     "sql/migrations",
     "config/server.toml",
     "config/client-profiles/legacy-3889.json",
+    "config/client-profiles/enhanced-1158.json",
     "assets/branding/app.ico",
     "scripts/pack_server.py",
     "scripts/install.sh",
@@ -50,13 +51,17 @@ INCLUDE = [
     "scripts/patch_coreclr_host.py",
     "scripts/patch_exe_icon.py",
     "scripts/verify-legacy-3889.ps1",
+    "scripts/verify-enhanced-1158.ps1",
     "scripts/collect-legacy-3889-e2e.ps1",
+    "scripts/collect-enhanced-1158-e2e.ps1",
     "scripts/verify-legacy-3889-contract.py",
+    "scripts/verify-enhanced-1158-contract.py",
     "scripts/verify_source.py",
     "scripts/smoke_windows.ps1",
     "scripts/smoke_linux.sh",
     "scripts/client-sim",
     "runtime/compat/legacy-3889",
+    "runtime/compat/enhanced-1158",
 ]
 
 SKIP_DIRS = {"bin", "obj", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}

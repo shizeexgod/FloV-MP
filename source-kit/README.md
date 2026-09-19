@@ -13,6 +13,12 @@
 подтверждённого Windows E2E-прогона адаптер считается неподдержанным; запуск
 с клиентом, рассчитанным на RPF 3521, намеренно блокируется.
 
+Enhanced ведётся отдельным provisional-профилем `1.0.1158.13` в
+`runtime/compat/enhanced-1158`. Точный Windows fingerprint, native-адаптер и
+E2E для Enhanced пока не подтверждены; `verify-enhanced-1158.ps1` только
+собирает отпечаток чистой установки и завершает работу с диагностическим
+кодом до появления адаптера.
+
 ## Что нужно
 
 | Для чего | Что |
@@ -69,10 +75,14 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `scripts/pack_server.py` | сборка пакетов |
 | `scripts/install.sh` | установщик для Linux |
 | `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
+| `scripts/verify-enhanced-1158.ps1` | Windows-сбор отпечатка GTA V Enhanced 1.0.1158.13 |
 | `scripts/collect-legacy-3889-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов b3889 |
+| `scripts/collect-enhanced-1158-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов Enhanced |
 | `scripts/verify-legacy-3889-contract.py` | Mac/Linux-проверка контракта b3889 без запуска GTA |
+| `scripts/verify-enhanced-1158-contract.py` | Mac/Linux-проверка Enhanced-профиля без запуска GTA |
 | `scripts/package-templates` | файлы, которые кладутся в пакет: README, шаблоны настроек, SDK для своего сервера |
 | `runtime/compat/legacy-3889` | профиль отпечатков и E2E-гейты для будущего native-адаптера b3889 |
+| `runtime/compat/enhanced-1158` | отдельный provisional-профиль Enhanced и результаты диагностики |
 | `engine/` | локальный сторонний runtime alt:V; в обычный source-kit не входит, нужен только для сборки runtime-пакетов при наличии прав |
 | `docs/` | архитектура и разработка |
 

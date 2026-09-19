@@ -68,6 +68,15 @@ public sealed class ProfileService
         var issues = new List<string>();
         var hashesValid = true;
 
+        // A provisional profile may intentionally omit hashes while a clean
+        // Windows capture is pending. It must never look launch-ready merely
+        // because there were no hash fields to compare.
+        if (!string.Equals(candidate.SupportStatus, "supported", StringComparison.OrdinalIgnoreCase))
+        {
+            hashesValid = false;
+            issues.Add($"Профиль {candidate.Id} имеет статус {candidate.SupportStatus} и не разрешён для запуска.");
+        }
+
         if (!string.IsNullOrWhiteSpace(candidate.GameSha256))
         {
             var actualExeHash = await ContentHasher.Sha256FileAsync(exePath, ct);
