@@ -21,6 +21,18 @@ if (-not (Test-Path $manifest)) {
 $total = 0
 $missing = @()
 $changed = @()
+$rootFull = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
+
+function Get-ManifestPath([string]$Relative) {
+    if ([string]::IsNullOrWhiteSpace($Relative) -or $Relative.IndexOf([char]0) -ge 0) { throw "Недопустимый путь в manifest.txt: $Relative" }
+    $p = $Relative.Replace('/', '\')
+    if ([IO.Path]::IsPathRooted($p) -or $p -match '^[A-Za-z]:') { throw "Абсолютный путь в manifest.txt: $Relative" }
+    $parts = $p -split '\\'
+    if ($parts | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' }) { throw "Небезопасный путь в manifest.txt: $Relative" }
+    $full = [IO.Path]::GetFullPath((Join-Path $root $p))
+    if (-not $full.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) { throw "Путь вне установки: $Relative" }
+    return $full
+}
 
 foreach ($line in Get-Content $manifest -Encoding UTF8) {
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -29,7 +41,7 @@ foreach ($line in Get-Content $manifest -Encoding UTF8) {
 
     $expected = $parts[0].Trim()
     $rel = $parts[1].Trim()
-    $path = Join-Path $root $rel
+    $path = Get-ManifestPath $rel
     $total++
 
     if (-not (Test-Path $path)) { $missing += $rel; continue }

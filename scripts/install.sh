@@ -437,6 +437,17 @@ mkdir -p "$INSTALL_DIR"
 if [ "$SAME_DIR" -eq 0 ]; then
   NEW_LIST="$(mktemp)"; OLD_LIST="$(mktemp)"
   cut -d' ' -f3- "$SRC_DIR/manifest.txt" | sort > "$NEW_LIST"
+  restore_platform() {
+    # Called only after a failed replacement. Restore the old platform without
+    # touching user-owned config, gamemode, data, or resources.
+    [ "$UPGRADE" -eq 1 ] && [ -n "$BACKUP_ARCHIVE" ] || return 0
+    if [ -f "$INSTALL_DIR/manifest.txt" ]; then
+      while IFS= read -r f; do
+        [ -n "$f" ] && rm -f -- "$INSTALL_DIR/$f"
+      done < "$NEW_LIST"
+    fi
+    tar -xzpf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR" || die "не удалось восстановить резервную копию платформы"
+  }
   if [ "$UPGRADE" -eq 1 ]; then
     cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | sort > "$OLD_LIST"
     mkdir -p "$INSTALL_DIR/backups"
@@ -453,10 +464,25 @@ if [ "$SAME_DIR" -eq 0 ]; then
       [ -n "$f" ] && rm -f "$INSTALL_DIR/$f"
     done
   fi
-  (cd "$SRC_DIR" && tar -cf - -T "$NEW_LIST" manifest.txt manifest.json) | tar -xpf - -C "$INSTALL_DIR" || die "не удалось скопировать файлы в $INSTALL_DIR"
+  if ! (cd "$SRC_DIR" && tar -cf - -T "$NEW_LIST" manifest.txt manifest.json) | tar -xpf - -C "$INSTALL_DIR"; then
+    restore_platform
+    die "не удалось скопировать файлы в $INSTALL_DIR — прежняя версия восстановлена"
+  fi
   rm -f "$NEW_LIST" "$OLD_LIST"
 fi
-(cd "$INSTALL_DIR" && sha256sum --quiet -c manifest.txt) || die "после копирования файлы не совпали с пакетом — проверьте место на диске"
+if ! (cd "$INSTALL_DIR" && sha256sum --quiet -c manifest.txt); then
+  if [ "$SAME_DIR" -eq 0 ] && [ "$UPGRADE" -eq 1 ] && [ -n "$BACKUP_ARCHIVE" ]; then
+    # NEW_LIST is already removed after a successful copy, so derive the list
+    # from the current manifest before restoring the saved old manifest.
+    FAILED_LIST="$(mktemp)"
+    cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | sort > "$FAILED_LIST"
+    while IFS= read -r f; do [ -n "$f" ] && rm -f -- "$INSTALL_DIR/$f"; done < "$FAILED_LIST"
+    rm -f "$FAILED_LIST"
+    tar -xzpf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR" || die "не удалось восстановить резервную копию платформы"
+    die "после копирования файлы не совпали — прежняя версия восстановлена"
+  fi
+  die "после копирования файлы не совпали с пакетом — проверьте место на диске"
+fi
 chmod +x "$INSTALL_DIR/install.sh" "$INSTALL_DIR/start.sh" "$INSTALL_DIR/start-voice.sh" \
          "$INSTALL_DIR/server/flovmp-server" "$INSTALL_DIR/server/flovmp-crash-handler" \
          "$INSTALL_DIR/voice/altv-voice-server" "$INSTALL_DIR"/scripts/*.sh 2>/dev/null || true

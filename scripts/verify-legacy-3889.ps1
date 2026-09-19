@@ -7,6 +7,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $Profile = if ($Profile) { $Profile } else { Join-Path $PSScriptRoot '..\runtime\compat\legacy-3889\native-profile.json' }
 $profileData = Get-Content -LiteralPath $Profile -Raw | ConvertFrom-Json
+$required = @('id', 'gameExecutable', 'gameFileVersion', 'gameSize', 'gameSha256', 'updateRpfSha256', 'update2RpfSha256', 'supportStatus')
+$missing = @($required | Where-Object { -not ($profileData.PSObject.Properties.Name -contains $_) -or [string]::IsNullOrWhiteSpace([string]$profileData.$_) })
+if ($missing.Count -gt 0) {
+    throw "Профиль совместимости неполный ($Profile): отсутствуют $($missing -join ', '). Используйте runtime/compat/legacy-3889/native-profile.json."
+}
+if (-not $profileData.nativeClient -or [string]::IsNullOrWhiteSpace([string]$profileData.nativeClient.requiredAdapter)) {
+    throw "Профиль совместимости неполный ($Profile): отсутствует nativeClient.requiredAdapter."
+}
 $exe = Join-Path $GtaDir $profileData.gameExecutable
 $issues = [System.Collections.Generic.List[string]]::new()
 

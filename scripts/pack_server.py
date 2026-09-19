@@ -206,7 +206,7 @@ def publish_dotnet(publish_root, skip_build, with_connector, with_host):
     host = os.path.join(publish_root, "server-host")
     if skip_build and os.path.isdir(starter):
         log("[build] пропущено (--skip-build)")
-        return (starter, (connector if os.path.isdir(connector) else None),
+        return (starter, (connector if with_connector and os.path.isdir(connector) else None),
                 (host if os.path.isdir(host) else None))
 
     shutil.rmtree(publish_root, ignore_errors=True)
@@ -416,7 +416,7 @@ def verify_stage(stage, target_os, entries):
         required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",
                      "server/flovmp-server", "voice/altv-voice-server", "server/modules/libcsharp-module.so"]
     else:
-        required += ["FloVMP-Server.exe", "scripts/lib.ps1", "scripts/build-gamemode.ps1",
+        required += ["FloVMP-Server.exe", "install.ps1", "install.cmd", "scripts/lib.ps1", "scripts/build-gamemode.ps1",
                      "server/flovmp-server.exe", "voice/altv-voice-server.exe", "server/modules/csharp-module.dll"]
     for r in required:
         if r not in rels:
@@ -507,7 +507,8 @@ def main():
     ap.add_argument("--out", default=os.path.join(REPO, "dist", "server"))
     ap.add_argument("--version", default=None)
     ap.add_argument("--skip-build", action="store_true")
-    ap.add_argument("--no-connector", action="store_true")
+    ap.add_argument("--with-connector", action="store_true",
+                    help="включить внутренний FloVMP.Connect (по умолчанию исключён из продаваемого пакета)")
     ap.add_argument("--no-archive", action="store_true")
     args = ap.parse_args()
 
@@ -519,12 +520,12 @@ def main():
 
     targets = ["linux", "windows"] if args.os == "all" else [args.os]
     connector_project = os.path.join(REPO, "launcher", "src", "FloVMP.Connect", "FloVMP.Connect.csproj")
-    if not args.no_connector and not os.path.isfile(connector_project):
+    if args.with_connector and not os.path.isfile(connector_project):
         log("[build] коннектор игрока (launcher/src/FloVMP.Connect) отсутствует — пакет без tools/connector")
-        args.no_connector = True
+        args.with_connector = False
     os.makedirs(args.out, exist_ok=True)
     starter, connector, host = publish_dotnet(os.path.join(args.out, ".publish"), args.skip_build,
-                                              "windows" in targets and not args.no_connector,
+                                              "windows" in targets and args.with_connector,
                                               "windows" in targets)
 
     for t in targets:

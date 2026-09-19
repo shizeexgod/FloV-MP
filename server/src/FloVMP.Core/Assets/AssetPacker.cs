@@ -67,21 +67,31 @@ public static class AssetPacker
                 .Select(f => Path.GetRelativePath(sourceDir, f).Replace('\\', '/')),
             StringComparer.OrdinalIgnoreCase);
 
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in manifest.Files)
         {
-            var localPath = Path.Combine(sourceDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            var relative = NormalizeRelativePath(entry.Path);
+            if (!seen.Add(relative))
+            {
+                result.HashMismatches.Add(new HashMismatch(relative, entry.Sha256, "duplicate-path"));
+                continue;
+            }
+            var rootFull = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var localPath = Path.GetFullPath(Path.Combine(sourceDir, relative.Replace('/', Path.DirectorySeparatorChar)));
+            if (!localPath.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Небезопасный путь в манифесте: {entry.Path}");
             if (!File.Exists(localPath))
             {
-                result.MissingFiles.Add(entry.Path);
+                result.MissingFiles.Add(relative);
                 continue;
             }
 
-            diskFiles.Remove(entry.Path);
+            diskFiles.Remove(relative);
 
             var actualSha256 = ComputeSha256(localPath);
             if (!string.Equals(actualSha256, entry.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                result.HashMismatches.Add(new HashMismatch(entry.Path, entry.Sha256, actualSha256));
+                result.HashMismatches.Add(new HashMismatch(relative, entry.Sha256, actualSha256));
             }
         }
 
@@ -96,6 +106,19 @@ public static class AssetPacker
         }
 
         return result;
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path.IndexOf('\0') >= 0)
+            throw new InvalidDataException("Пустой или недопустимый путь в манифесте");
+        var normalized = path.Replace('\\', '/');
+        if (normalized.StartsWith('/') || (normalized.Length >= 2 && normalized[1] == ':'))
+            throw new InvalidDataException($"Абсолютный путь в манифесте: {path}");
+        var parts = normalized.Split('/');
+        if (parts.Any(p => p.Length == 0 || p == "." || p == ".."))
+            throw new InvalidDataException($"Небезопасный путь в манифесте: {path}");
+        return string.Join('/', parts);
     }
 
     public static void GzipCompressFile(string sourceFile, string targetFile)

@@ -52,6 +52,7 @@ INCLUDE = [
 
 SKIP_DIRS = {"bin", "obj", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
+FORBIDDEN_TOP_LEVEL = {"web", "launcher", "archive"}
 
 ENGINE_FILES = {
     "x64_win32": [
@@ -201,6 +202,9 @@ def main():
             d = os.path.join(dest, os.path.relpath(s, kit))
             os.makedirs(os.path.dirname(d), exist_ok=True)
             shutil.copy2(s, d)
+    leaked = sorted(name for name in FORBIDDEN_TOP_LEVEL if os.path.exists(os.path.join(dest, name)))
+    if leaked:
+        fail("в source-kit попали внутренние компоненты: " + ", ".join(leaked))
     with open(os.path.join(dest, ".gitignore"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write("bin/\nobj/\ndist/\n.vs/\n*.user\n__pycache__/\n")
 

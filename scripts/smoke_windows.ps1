@@ -48,10 +48,17 @@ function Run-Server($root, $stdinText, $seconds, $tag) {
 try {
     Write-Host "=== Распаковка: $Zip"
     Expand-Archive $Zip -DestinationPath $work -Force
-    $root = Get-ChildItem $work -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'FloVMP-Server.exe') } |
+    $packageRoot = Get-ChildItem $work -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'manifest.txt') } |
         Select-Object -First 1 -ExpandProperty FullName
-    Check ([bool]$root) 'в архиве есть FloVMP-Server.exe'
-    if (-not $root) { exit 1 }
+    Check ([bool]$packageRoot) 'в архиве есть manifest.txt'
+    if (-not $packageRoot) { exit 1 }
+
+    Write-Host "=== Установка через install.cmd (проверка SHA-256 и staging)"
+    $root = Join-Path $work 'installed'
+    $installOutput = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $packageRoot 'install.ps1') `
+        -InstallDir $root -NoStart 2>&1 | Out-String
+    Check ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $root 'FloVMP-Server.exe'))) 'install.ps1 установил проверенный пакет'
+    if (-not (Test-Path (Join-Path $root 'FloVMP-Server.exe'))) { Write-Host $installOutput; exit 1 }
 
     Write-Host "=== Первый запуск (создание настроек)"
     Run-Server $root '' 8 'init' | Out-Null

@@ -53,6 +53,8 @@ public sealed class FileDownloader
         IProgress<DownloadProgress>? progress = null,
         CancellationToken ct = default)
     {
+        ManifestValidation.Validate(manifest);
+        foreach (var entry in entries) ManifestValidation.ValidateEntry(entry);
         long total = entries.Sum(e => e.Size);
         long done = 0;
         int filesDone = 0;
@@ -135,6 +137,8 @@ public sealed class FileDownloader
                 var hash = await ContentHasher.Sha256FileAsync(part, ct);
                 if (!string.Equals(hash, entry.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"SHA-256 mismatch after download (got {hash})");
+                if (new FileInfo(part).Length != entry.Size)
+                    throw new InvalidDataException($"размер файла не совпал после загрузки: {entry.Path}");
 
                 if (File.Exists(dest)) File.Delete(dest);
                 File.Move(part, dest);

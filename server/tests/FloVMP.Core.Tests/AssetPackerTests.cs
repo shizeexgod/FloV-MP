@@ -109,4 +109,13 @@ public class AssetPackerTests : IDisposable
         var restoredText = File.ReadAllText(restoredFile, Encoding.UTF8);
         Assert.Equal(originalText, restoredText);
     }
+
+    [Fact]
+    public void VerifyDirectory_RejectsPathTraversalManifest()
+    {
+        var manifest = new AssetManifest();
+        manifest.Files.Add(new AssetFileEntry("../outside.txt", 1, new string('0', 64), "", DateTime.UtcNow));
+
+        Assert.Throws<InvalidDataException>(() => AssetPacker.VerifyDirectory(_tempDir, manifest));
+    }
 }

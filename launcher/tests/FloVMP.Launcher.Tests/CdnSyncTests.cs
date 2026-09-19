@@ -169,4 +169,34 @@ public sealed class CdnSyncTests : IDisposable
         Assert.True(report.Success, report.Message);
         Assert.True(File.Exists(Path.Combine(_local, "thing.bin")));
     }
+
+    [Fact]
+    public async Task Manifest_rejects_path_traversal_before_writing()
+    {
+        WriteCdn("safe.txt", "safe");
+        var manifest = new Manifest { Version = "v", Branch = "release", BaseUrl = _cdn };
+        manifest.Files.Add(new ManifestEntry
+        {
+            Path = "../outside.txt",
+            Size = 4,
+            Sha256 = await ContentHasher.Sha256FileAsync(Path.Combine(_cdn, "safe.txt"))
+        });
+        var path = Path.Combine(_cdn, "bad.json");
+        await File.WriteAllTextAsync(path, System.Text.Json.JsonSerializer.Serialize(manifest));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ManifestClient().FetchAsync(path));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(_local)!, "outside.txt")));
+    }
+
+    [Fact]
+    public async Task Manifest_rejects_duplicate_paths_and_invalid_hashes()
+    {
+        var manifest = new Manifest { Version = "v", Branch = "release", BaseUrl = _cdn };
+        manifest.Files.Add(new ManifestEntry { Path = "a.txt", Size = 1, Sha256 = new string('0', 64) });
+        manifest.Files.Add(new ManifestEntry { Path = "a.txt", Size = 1, Sha256 = new string('0', 64) });
+        var path = Path.Combine(_cdn, "duplicate.json");
+        await File.WriteAllTextAsync(path, System.Text.Json.JsonSerializer.Serialize(manifest));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new ManifestClient().FetchAsync(path));
+    }
 }

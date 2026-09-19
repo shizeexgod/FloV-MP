@@ -33,10 +33,17 @@ public static class SyncPlanner
     {
         var checks = new List<FileCheck>(manifest.Files.Count);
 
+        ManifestValidation.Validate(manifest);
+        var rootFull = Path.GetFullPath(rootDir);
+        var rootPrefix = rootFull.EndsWith(Path.DirectorySeparatorChar)
+            ? rootFull : rootFull + Path.DirectorySeparatorChar;
+
         foreach (var entry in manifest.Files)
         {
             ct.ThrowIfCancellationRequested();
-            var full = Path.Combine(rootDir, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            var full = Path.GetFullPath(Path.Combine(rootFull, entry.Path.Replace('/', Path.DirectorySeparatorChar)));
+            if (!full.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"манифест: путь выходит за пределы папки движка: {entry.Path}");
 
             if (!File.Exists(full))
             {
@@ -63,7 +70,7 @@ public static class SyncPlanner
         }
 
         var known = manifest.Files
-            .Select(f => Path.GetFullPath(Path.Combine(rootDir, f.Path.Replace('/', Path.DirectorySeparatorChar))))
+            .Select(f => Path.GetFullPath(Path.Combine(rootFull, f.Path.Replace('/', Path.DirectorySeparatorChar))))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var extra = new List<string>();

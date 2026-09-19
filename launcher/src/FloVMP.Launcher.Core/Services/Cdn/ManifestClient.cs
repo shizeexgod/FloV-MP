@@ -43,6 +43,8 @@ public sealed class ManifestClient
         var manifest = JsonSerializer.Deserialize<Manifest>(json, JsonOpts)
                        ?? throw new InvalidDataException("манифест не разобран");
 
+        ManifestValidation.Validate(manifest);
+
         if (string.IsNullOrWhiteSpace(manifest.BaseUrl))
             manifest.BaseUrl = implicitBase;
 
