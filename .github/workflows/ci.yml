@@ -33,3 +33,25 @@ jobs:
 
       - name: Test launcher
         run: dotnet test launcher/FloVMP.Launcher.slnx -c Release --nologo --no-build
+
+  portable-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate packaging scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/*.py
+          bash -n scripts/install.sh
+          grep -q "install.ps1" scripts/pack_server.py
+          grep -q "launcher/" scripts/pack_server.py
+          ! grep -RIl --exclude-dir=.git --exclude-dir=bin --exclude-dir=obj \
+            -E '(^|/)(web|launcher)/' scripts/package-templates source-kit
+
+      - name: Run client simulations
+        run: |
+          node scripts/client-sim/entry_flow.test.mjs
+          node scripts/client-sim/commands_sync.test.mjs
+          node scripts/client-sim/admin_keys.test.mjs
