@@ -65,7 +65,7 @@ def main():
         size = entry.get("size")
         if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdefABCDEF" for c in digest):
             fail("некорректный SHA-256: " + rel)
-        if not isinstance(size, int) or size < 0:
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
             fail("некорректный размер: " + rel)
         path = (root / rel).resolve()
         try:
