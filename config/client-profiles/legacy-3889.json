@@ -23,5 +23,5 @@
     "playerSpawned": false,
     "twoClientSync": false
   },
-  "supportStatus": "needs-version-adapter"
+  "supportStatus": "needs-native-adapter"
 }
