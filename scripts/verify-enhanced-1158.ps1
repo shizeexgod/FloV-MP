@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$GtaDir = 'C:\Program Files\Rockstar Games\Grand Theft Auto V',
     [string]$Profile = '',
