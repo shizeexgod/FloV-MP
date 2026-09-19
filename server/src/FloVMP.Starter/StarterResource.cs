@@ -850,7 +850,9 @@ public class StarterResource : Resource
         // Лимит игроков по лицензии. Администраторы проходят всегда: владелец
         // должен иметь возможность зайти на заполненный сервер.
         var online = Alt.GetAllPlayers().Count;
-        if (online > _license.PlayerLimit && GetAssignedAdminRank(player) <= 0)
+        // `online` already contains the connecting player. Use >= so a limit
+        // of 32 admits exactly 32 players, not an accidental 33rd slot.
+        if (online >= _license.PlayerLimit && GetAssignedAdminRank(player) <= 0)
         {
             Alt.LogWarning($"[FloV:MP] [License] вход {player.Name} отклонён: достигнут предел {_license.PlayerLimit} игроков ({_license.State}).");
             player.Kick(_license.IsLicensed
