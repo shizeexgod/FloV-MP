@@ -64,6 +64,7 @@ public static class ManifestValidation
 
         var normalized = path.Replace('\\', '/');
         if (normalized.StartsWith('/') || normalized.StartsWith("//", StringComparison.Ordinal) ||
+            normalized.Contains(':', StringComparison.Ordinal) ||
             (normalized.Length >= 2 && normalized[1] == ':'))
             throw new InvalidDataException($"манифест: абсолютный путь запрещён: {path}");
 

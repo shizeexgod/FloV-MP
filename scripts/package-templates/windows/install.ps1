@@ -14,7 +14,7 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'Не н
 function Get-SafeRelativePath([string]$Relative) {
     if ([string]::IsNullOrWhiteSpace($Relative) -or $Relative.IndexOf([char]0) -ge 0) { throw "Недопустимый путь в манифесте: '$Relative'" }
     $p = $Relative.Replace('/', '\')
-    if ([IO.Path]::IsPathRooted($p) -or $p -match '^[A-Za-z]:') { throw "Абсолютный путь запрещён: $Relative" }
+    if ([IO.Path]::IsPathRooted($p) -or $p -match ':') { throw "Абсолютный или ADS-путь запрещён: $Relative" }
     $parts = $p -split '\\'
     if ($parts | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' }) { throw "Небезопасный путь в манифесте: $Relative" }
     return ($parts -join '\')

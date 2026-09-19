@@ -113,7 +113,7 @@ public static class AssetPacker
         if (string.IsNullOrWhiteSpace(path) || path.IndexOf('\0') >= 0)
             throw new InvalidDataException("Пустой или недопустимый путь в манифесте");
         var normalized = path.Replace('\\', '/');
-        if (normalized.StartsWith('/') || (normalized.Length >= 2 && normalized[1] == ':'))
+        if (normalized.StartsWith('/') || normalized.Contains(':') || (normalized.Length >= 2 && normalized[1] == ':'))
             throw new InvalidDataException($"Абсолютный путь в манифесте: {path}");
         var parts = normalized.Split('/');
         if (parts.Any(p => p.Length == 0 || p == "." || p == ".."))
