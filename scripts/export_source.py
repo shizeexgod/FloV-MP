@@ -8,12 +8,12 @@
 Что делает:
   1. копирует только перечисленные ниже пути (без bin/obj, служебных файлов,
      истории git);
-  2. добавляет нужную сборщику часть движка alt:V (engine/);
+  2. по явному флагу добавляет локальную копию стороннего движка alt:V;
   3. кладёт README, LICENSE и docs из source-kit/;
   4. проверяет, что нет упоминаний ИИ-инструментов и частных данных
      (scripts/private-markers.txt);
-  5. собирает, прогоняет тесты и собирает Windows-пакет прямо в выгрузке —
-     то есть проверяет, что покупатель соберёт проект из того, что получил;
+  5. собирает и прогоняет тесты прямо в выгрузке; runtime-пакеты собираются
+     только если явно добавлен разрешённый сторонний engine alt:V;
   6. добавляет SOURCE-MANIFEST.json с SHA-256 файлов и упаковывает в zip
      с отдельным .sha256 рядом.
 """
@@ -218,8 +218,11 @@ def write_source_manifest(dest, version):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="папка, в которую выгрузить")
-    ap.add_argument("--altv-backup", default=r"C:\ViMP backup\backup-altv")
+    ap.add_argument("--altv-backup", default=None,
+                    help="локальный runtime alt:V; используется только вместе с --include-altv-engine")
     ap.add_argument("--branch", default="release")
+    ap.add_argument("--include-altv-engine", action="store_true",
+                    help="включить сторонний alt:V engine/ только при наличии прав на его передачу")
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--no-zip", action="store_true")
     args = ap.parse_args()
@@ -247,8 +250,13 @@ def main():
     with open(os.path.join(dest, ".gitignore"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write("bin/\nobj/\ndist/\n.vs/\n*.user\n__pycache__/\n")
 
-    log("[2/5] движок alt:V ({})".format(args.branch))
-    copy_engine(args.altv_backup, dest, args.branch)
+    if args.include_altv_engine:
+        if not args.altv_backup:
+            fail("для --include-altv-engine укажите --altv-backup с runtime, который разрешено передавать")
+        log("[2/5] сторонний движок alt:V ({})".format(args.branch))
+        copy_engine(args.altv_backup, dest, args.branch)
+    else:
+        log("[2/5] сторонний движок alt:V не включён (нужны отдельные права/дистрибутив)")
 
     log("[3/5] проверка текста")
     problems = scan_text(dest)
@@ -259,10 +267,13 @@ def main():
     log("  чисто")
 
     if not args.no_verify:
-        log("[4/5] сборка, тесты и Windows-пакет из выгрузки")
+        log("[4/5] сборка и тесты исходников")
         run(["dotnet", "build", "server/FloVMP.sln", "-c", "Release", "-nologo", "-v", "q"], dest)
         run(["dotnet", "test", "server/FloVMP.sln", "-c", "Release", "-nologo", "-v", "q"], dest)
-        run([sys.executable, "scripts/pack_server.py", "--os", "all", "--no-archive"], dest)
+        if args.include_altv_engine:
+            run([sys.executable, "scripts/pack_server.py", "--os", "all", "--no-archive"], dest)
+        else:
+            log("  ! сборка runtime-пакета пропущена: сторонний alt:V engine не включён")
         for d in ("dist",):
             shutil.rmtree(os.path.join(dest, d), ignore_errors=True)
         for root, dirs, _ in os.walk(dest, topdown=True):

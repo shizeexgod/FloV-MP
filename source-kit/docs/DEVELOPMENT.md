@@ -5,7 +5,7 @@
 ```bash
 dotnet build server/FloVMP.sln -c Release
 dotnet test server/FloVMP.sln
-python scripts/pack_server.py --os windows      # или linux / all
+python scripts/pack_server.py --os windows      # после добавления разрешённого engine/
 python scripts/pack_server.py --skip-build      # только перекладка пакета
 node scripts/client-sim/entry_flow.test.mjs     # симуляция клиента: вход, загрузка
 node scripts/client-sim/admin_keys.test.mjs     # клавиши администратора и права
@@ -13,6 +13,10 @@ node scripts/client-sim/commands_sync.test.mjs  # список команд в �
 powershell -ExecutionPolicy Bypass -File scripts/smoke_windows.ps1   # живой прогон Windows-пакета
 sudo scripts/smoke_linux.sh dist/server/flovmp-server-*-linux.tar.gz  # то же на Linux
 ```
+
+В обычном source-kit папки `engine/` нет. Для полноценного runtime-пакета её
+можно добавить только из разрешённого дистрибутива alt:V; до этого выполняйте
+сборку, тесты и симуляции клиента, а упаковку сервера не запускайте.
 
 Симуляция клиента загружает настоящий `client/index.js` с подменёнными
 модулями `alt-client` и `natives` — без игры, за секунды.
@@ -138,6 +142,10 @@ await conn.OpenAsync();
 
 ## Движок
 
-`engine/` — нужная сборщику часть alt:V 16.4.39 (ветка release):
-`server`, `coreclr-module`, `js-module`, `data`, `voice-server`. Сборщик
-переименовывает бинарники и патчит модуль C# под имя хоста `FloV.Net.Host`.
+`engine/` — локальный сторонний runtime alt:V 16.4.39 (ветка release), который
+обычно не входит в source-kit. Если у владельца есть право на его использование
+и передачу, сборщик принимает его из `--altv-backup` вместе с
+`--include-altv-engine` (или из локальной `engine/`), переименовывает бинарники
+и патчит модуль C# под имя хоста `FloV.Net.Host`. Без разрешённого runtime можно
+собирать и тестировать собственный код, но нельзя выпустить готовый серверный
+архив.

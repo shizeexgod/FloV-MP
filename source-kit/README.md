@@ -29,9 +29,14 @@
 dotnet build server/FloVMP.sln -c Release
 dotnet test server/FloVMP.sln
 
-# готовые пакеты для установки (dist/server/)
+# готовые пакеты для установки (dist/server/): только если владелец отдельно
+# добавил разрешённый runtime alt:V в `engine/`
 python scripts/pack_server.py --os all
 ```
+
+Обычная выгрузка исходников намеренно не содержит `engine/`, поэтому без
+разрешённого стороннего runtime эта последняя команда должна быть отложена;
+сборка и тесты собственного кода при этом работают без него.
 
 Пакеты:
 
@@ -65,10 +70,11 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
 | `scripts/package-templates` | файлы, которые кладутся в пакет: README, шаблоны настроек, SDK для своего сервера |
 | `runtime/compat/legacy-3889` | профиль отпечатков и E2E-гейты для будущего native-адаптера b3889 |
-| `engine/` | движок alt:V 16.4.39 (release, Windows и Linux) — нужен сборщику пакетов |
+| `engine/` | локальный сторонний runtime alt:V; в обычный source-kit не входит, нужен только для сборки runtime-пакетов при наличии прав |
 | `docs/` | архитектура и разработка |
 
 ## Документация
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — как устроен сервер, потоки, хранение данных, безопасность;
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — как дорабатывать: ресурсы, события, команды, база, клиент.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — как дорабатывать: ресурсы, события, команды, база, клиент;
+- [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — границы прав на alt:V и другие зависимости.
