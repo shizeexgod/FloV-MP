@@ -36,6 +36,29 @@ info() { echo "    $*"; }
 warn() { echo "${C_YELLOW}  ! $*${C_OFF}"; }
 die()  { echo; echo "${C_RED}${C_BOLD}ОШИБКА: $*${C_OFF}" >&2; exit 1; }
 
+validate_manifest_file() {
+  local file="$1" line digest rel part
+  [ -f "$file" ] || die "не найден manifest.txt: $file"
+  declare -A seen=()
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    if [[ "$line" =~ ^([0-9a-fA-F]{64})[[:space:]]{2,}(.+)$ ]]; then
+      digest="${BASH_REMATCH[1]}"; rel="${BASH_REMATCH[2]}"
+    else
+      die "неверная строка manifest.txt: $line"
+    fi
+    [[ "$rel" != *" "* ]] || die "пробел в пути manifest.txt запрещён: $rel"
+    [[ "$rel" != /* && "$rel" != *:* ]] || die "абсолютный/ADS-путь manifest.txt запрещён: $rel"
+    IFS='/' read -r -a parts <<< "$rel"
+    for part in "${parts[@]}"; do
+      [[ -n "$part" && "$part" != "." && "$part" != ".." ]] || die "небезопасный путь manifest.txt: $rel"
+    done
+    [ -z "${seen[$rel]+x}" ] || die "повторный путь manifest.txt: $rel"
+    seen["$rel"]="$digest"
+  done < "$file"
+  [ "${#seen[@]}" -gt 0 ] || die "manifest.txt пуст: $file"
+}
+
 usage() {
   cat <<'USAGE'
 FloV:MP — установщик игрового сервера
@@ -324,6 +347,7 @@ if [ -z "$SRC_DIR" ] || [ -n "$PACKAGE_FILE" ] || [ -n "$PACKAGE_URL" ]; then
   tar -xzf "$WORK/package.tar.gz" -C "$WORK" || die "архив повреждён — не распаковывается"
   INNER="$(find "$WORK" -maxdepth 2 -name manifest.txt -printf '%h\n' | head -1)"
   [ -n "$INNER" ] && [ -f "$INNER/install.sh" ] || die "в архиве нет пакета сервера FloV:MP (manifest.txt/install.sh)"
+  validate_manifest_file "$INNER/manifest.txt"
   # Без --package/--package-url, иначе вложенный установщик снова уйдёт качать.
   PASS_ARGS=()
   skip=0
@@ -346,6 +370,7 @@ echo "${C_OFF}"
 # ---------------------------------------------------------------------
 step "1/8 Проверка целостности пакета"
 command -v sha256sum >/dev/null 2>&1 || die "нужен sha256sum (coreutils)"
+validate_manifest_file "$SRC_DIR/manifest.txt"
 if ! (cd "$SRC_DIR" && sha256sum --quiet -c manifest.txt); then
   die "файлы пакета повреждены или неполные (см. список выше). Распакуйте архив заново"
 fi
@@ -449,6 +474,7 @@ if [ "$SAME_DIR" -eq 0 ]; then
     tar -xzpf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR" || die "не удалось восстановить резервную копию платформы"
   }
   if [ "$UPGRADE" -eq 1 ]; then
+    validate_manifest_file "$INSTALL_DIR/manifest.txt"
     cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | sort > "$OLD_LIST"
     mkdir -p "$INSTALL_DIR/backups"
     chmod 700 "$INSTALL_DIR/backups"
