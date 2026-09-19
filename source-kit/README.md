@@ -70,6 +70,7 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `scripts/install.sh` | установщик для Linux |
 | `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
 | `scripts/collect-legacy-3889-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов b3889 |
+| `scripts/verify-legacy-3889-contract.py` | Mac/Linux-проверка контракта b3889 без запуска GTA |
 | `scripts/package-templates` | файлы, которые кладутся в пакет: README, шаблоны настроек, SDK для своего сервера |
 | `runtime/compat/legacy-3889` | профиль отпечатков и E2E-гейты для будущего native-адаптера b3889 |
 | `engine/` | локальный сторонний runtime alt:V; в обычный source-kit не входит, нужен только для сборки runtime-пакетов при наличии прав |

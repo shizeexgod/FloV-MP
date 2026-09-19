@@ -111,6 +111,18 @@ powershell -ExecutionPolicy Bypass -File C:\FloV-MP\scripts\collect-legacy-3889-
   -Server '127.0.0.1:7788'
 ```
 
+Пока Windows недоступна, на Mac/Linux можно проверить только переносимый
+контракт профилей и получить честный синтетический blocked-report:
+
+```bash
+python scripts/verify-legacy-3889-contract.py \
+  --write-report runtime/compat/legacy-3889/machine-report-simulated.json
+```
+
+Этот отчёт намеренно содержит нулевые E2E-гейты и не считается доказательством
+работы GTA; он нужен, чтобы серверная поставка и защитная логика не расходились
+до настоящего Windows-прогона.
+
 Сейчас она завершается кодом `2` именно потому, что адаптер отсутствует. Это
 ожидаемый защитный результат, а не ошибка проверки файлов.
 

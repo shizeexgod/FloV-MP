@@ -31,6 +31,10 @@ Updated: 2026-09-19 (separate runtime/source products, Linux/Windows delivery ha
   `runtime-license` с `delivery.json` без исходников, web и launcher; отдельный
   `export_source.py` создаёт `source-kit` с `SOURCE-MANIFEST.json`, включая
   полный собственный код/тесты/SDK из списка экспорта, но без web и launcher.
+- Добавлен `scripts/collect-legacy-3889-e2e.ps1`: Windows-прогон с явным
+  `--allow-unsupported`, сбором stdout/stderr и `machine-report.json` по пяти
+  E2E-гейтам. Он не меняет GTA и не подменяет Epic-файлы; `twoClientSync`
+  подтверждается вручную отдельным флагом.
 
 ### 2026-09-18 — native bootstrap Legacy 3889: CDN-протокол исправлен, разрыв локализован
 

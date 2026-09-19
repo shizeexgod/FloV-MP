@@ -51,6 +51,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/*.py
           bash -n scripts/install.sh
+          python3 scripts/verify-legacy-3889-contract.py
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
           grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py
