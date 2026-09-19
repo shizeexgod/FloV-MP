@@ -402,6 +402,9 @@ def find_bash():
 def verify_stage(stage, target_os, entries):
     problems = []
     rels = {e[0] for e in entries}
+    for internal in ("launcher/", "web/"):
+        if any(rel == internal[:-1] or rel.startswith(internal) for rel in rels):
+            problems.append("внутренний компонент не должен попадать в серверный пакет: " + internal[:-1])
     for f in FORBIDDEN_IN_PACKAGE:
         if f in rels:
             problems.append("файл клиента попал в пакет: " + f)
