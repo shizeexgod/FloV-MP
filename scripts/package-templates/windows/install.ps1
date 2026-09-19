@@ -3,7 +3,8 @@ param(
     [string]$InstallDir = 'C:\FloVMP',
     [switch]$Force,
     [switch]$NoStart,
-    [string]$LicenseKey = ''
+    [string]$LicenseKey = '',
+    [string]$PortalUrl = 'https://flovmp.ru'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -152,6 +153,26 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($LicenseKey)) {
         Set-FlovmpEnvValue (Join-Path $target 'config\flovmp.env') 'FLOVMP_LICENSE_KEY' $LicenseKey
         Write-Host 'Лицензионный ключ сохранён в config\flovmp.env.' -ForegroundColor Green
+
+        $licensePath = Join-Path $target 'license.flv'
+        if (-not (Test-Path -LiteralPath $licensePath -PathType Leaf)) {
+            $licenseTmp = Join-Path $target ('.license-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+            try {
+                $encodedKey = [Uri]::EscapeDataString($LicenseKey.Trim())
+                $downloadUrl = $PortalUrl.TrimEnd('/') + '/api/v1/licenses/download-by-key?key=' + $encodedKey
+                Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $licenseTmp -ErrorAction Stop
+                if (-not (Test-Path -LiteralPath $licenseTmp -PathType Leaf) -or
+                    (Get-Item -LiteralPath $licenseTmp).Length -eq 0) {
+                    throw 'портал вернул пустой license.flv'
+                }
+                Move-Item -LiteralPath $licenseTmp -Destination $licensePath -Force
+                Write-Host 'Подписанный license.flv получен с портала.' -ForegroundColor Green
+            }
+            catch {
+                if (Test-Path -LiteralPath $licenseTmp) { Remove-Item -LiteralPath $licenseTmp -Force -ErrorAction SilentlyContinue }
+                Write-Warning "license.flv получить не удалось: $($_.Exception.Message). Сервер установлен, но вход игроков будет запрещён до появления действующего файла."
+            }
+        }
     }
     Write-Host "Готово: $target" -ForegroundColor Green
     $committed = $true

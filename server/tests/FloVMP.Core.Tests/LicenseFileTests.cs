@@ -106,15 +106,13 @@ public sealed class LicenseFileTests : IDisposable
     }
 
     [Fact]
-    public void Expired_within_grace_keeps_slots_then_drops_to_unlicensed()
+    public void Expired_license_is_blocked_immediately()
     {
         var content = MakeFlv(maxPlayers: 800, expires: Now.AddDays(-3));
-        var grace = Check(content);
-        Assert.Equal(LicenseState.Grace, grace.State);
-        Assert.Equal(800, grace.PlayerLimit);
-
-        var expired = Check(content, now: Now.AddDays(5));
+        var expired = Check(content);
         Assert.Equal(LicenseState.Expired, expired.State);
+        Assert.False(expired.IsLicensed);
+        Assert.Contains("вход на сервер запрещён", expired.Message);
         Assert.Equal(LicenseFile.UnlicensedPlayerLimit, expired.PlayerLimit);
     }
 
@@ -129,10 +127,12 @@ public sealed class LicenseFileTests : IDisposable
     }
 
     [Fact]
-    public void Missing_file_runs_unlicensed()
+    public void Missing_file_blocks_login()
     {
         var s = LicenseFile.Evaluate(Path.Combine(_dir, "nope.flv"), Now);
         Assert.Equal(LicenseState.Missing, s.State);
+        Assert.False(s.IsLicensed);
+        Assert.Contains("вход на сервер запрещён", s.Message);
         Assert.Equal(LicenseFile.UnlicensedPlayerLimit, s.PlayerLimit);
     }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AltV.Net;
 using AltV.Net.Data;
 using AltV.Net.Elements.Entities;
@@ -237,21 +239,34 @@ public class StarterResource : Resource
         Alt.Log($"[FloV:MP] [Mods] зарегистрирована команда /{name}" + (minLevel > 0 ? $" (администраторы {minLevel}+)" : ""));
     }
 
-    // Лицензия (license.flv). Перепроверяется раз в час: срок может истечь на
-    // работающем сервере. Без действующей лицензии сервер работает с лимитом игроков.
+    // Лицензия (license.flv) и online lease. Локальная подпись защищает от
+    // подмены файла, а портал позволяет немедленно отозвать уже выданный ключ.
     private FloVMP.Core.Licensing.LicenseStatus _license =
         FloVMP.Core.Licensing.LicenseFile.Evaluate(null, DateTime.UtcNow);
-    private const long LicenseRecheckMs = 60 * 60 * 1000;
+    // Дата expiry должна закрывать вход практически сразу даже если portal
+    // недоступен; сама проверка локального файла не делает сетевых операций.
+    private const long LicenseRecheckMs = 60 * 1000;
     private long _nextLicenseCheckMs;
+    private const long LicenseRemoteRecheckMs = 5 * 60 * 1000;
+    private long _nextLicenseRemoteCheckMs;
+    private readonly FloVMP.Core.Licensing.LicenseRemoteVerifier _licenseRemoteVerifier = new();
+    private FloVMP.Core.Licensing.LicenseRemoteResult? _licenseRemoteResult;
+    private readonly CancellationTokenSource _licenseRemoteCts = new();
+    private int _licenseRemoteInFlight;
+    private int _licenseRemoteNeedsApply;
 
     private void CheckLicense(bool logAlways)
     {
         var previous = _license.State;
+        var previousKey = _license.Info?.LicenseKey;
         try
         {
             var path = FloVMP.Core.Licensing.LicenseFile.Locate();
-            _license = FloVMP.Core.Licensing.LicenseFile.Evaluate(
+            var local = FloVMP.Core.Licensing.LicenseFile.Evaluate(
                 path, DateTime.UtcNow, Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY"));
+            if (!string.Equals(previousKey, local.Info?.LicenseKey, StringComparison.OrdinalIgnoreCase))
+                _licenseRemoteResult = null;
+            _license = ApplyRemoteLicense(local, path);
         }
         catch (Exception ex)
         {
@@ -264,6 +279,96 @@ public class StarterResource : Resource
             Alt.Log($"[FloV:MP] [License] {_license.Message}");
         else
             Alt.LogWarning($"[FloV:MP] [License] {_license.Message}");
+
+        if (previous is FloVMP.Core.Licensing.LicenseState.Valid && !_license.IsLicensed)
+            KickPlayersForLicense();
+    }
+
+    private FloVMP.Core.Licensing.LicenseStatus ApplyRemoteLicense(
+        FloVMP.Core.Licensing.LicenseStatus local,
+        string? licensePath)
+    {
+        var remote = _licenseRemoteResult;
+        if (remote?.Revoked == true)
+        {
+            return new FloVMP.Core.Licensing.LicenseStatus(
+                FloVMP.Core.Licensing.LicenseState.Revoked,
+                local.Info,
+                $"лицензия отозвана порталом: {remote.Message} — вход на сервер запрещён",
+                FloVMP.Core.Licensing.LicenseFile.UnlicensedPlayerLimit);
+        }
+
+        if (local.State != FloVMP.Core.Licensing.LicenseState.Valid)
+            return local;
+        if (remote?.Valid == true && remote.LeaseUntilUtc > DateTime.UtcNow)
+            return local;
+
+        var key = local.Info?.LicenseKey ?? Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY") ?? "";
+        var cachePath = FloVMP.Core.Licensing.LicenseLeaseCache.PathFor(licensePath);
+        if (!string.IsNullOrWhiteSpace(key) &&
+            FloVMP.Core.Licensing.LicenseLeaseCache.TryRead(cachePath, key, out var cachedUntil) &&
+            cachedUntil > DateTime.UtcNow)
+            return local;
+
+        // Краткий сбой связи не должен ошибочно блокировать действующую
+        // лицензию. После offline grace без валидного lease вход закрывается.
+        var graceHours = Math.Clamp(
+            FloVMP.Core.Licensing.LicenseConfig.FromEnvironment().OfflineGraceHours, 1, 168);
+        var baseline = licensePath is not null && File.Exists(licensePath)
+            ? File.GetLastWriteTimeUtc(licensePath)
+            : DateTime.UtcNow;
+        if (remote is null || DateTime.UtcNow - baseline <= TimeSpan.FromHours(graceHours))
+            return local;
+
+        return new FloVMP.Core.Licensing.LicenseStatus(
+            FloVMP.Core.Licensing.LicenseState.RemoteUnavailable,
+            local.Info,
+            $"не удалось подтвердить лицензию через портал более {graceHours} ч. — вход на сервер запрещён до восстановления связи",
+            FloVMP.Core.Licensing.LicenseFile.UnlicensedPlayerLimit);
+    }
+
+    private void StartRemoteLicenseCheck()
+    {
+        var config = FloVMP.Core.Licensing.LicenseConfig.FromEnvironment();
+        if (string.IsNullOrWhiteSpace(config.LicenseKey))
+            config.LicenseKey = _license.Info?.LicenseKey ?? "";
+        if (string.IsNullOrWhiteSpace(config.LicenseKey) || string.IsNullOrWhiteSpace(config.LicenseVerifyUrl)) return;
+        if (Interlocked.Exchange(ref _licenseRemoteInFlight, 1) != 0) return;
+        _ = VerifyRemoteLicenseAsync(config);
+    }
+
+    private async Task VerifyRemoteLicenseAsync(FloVMP.Core.Licensing.LicenseConfig config)
+    {
+        try
+        {
+            var result = await _licenseRemoteVerifier.VerifyAsync(config, slots: _license.PlayerLimit, cancellationToken: _licenseRemoteCts.Token);
+            _licenseRemoteResult = result;
+            Interlocked.Exchange(ref _licenseRemoteNeedsApply, 1);
+            if (result.Valid && result.LeasePayloadB64 is not null && result.LeaseSignatureB64 is not null)
+            {
+                var path = FloVMP.Core.Licensing.LicenseLeaseCache.PathFor(FloVMP.Core.Licensing.LicenseFile.Locate());
+                try { FloVMP.Core.Licensing.LicenseLeaseCache.Save(path, result.LeasePayloadB64, result.LeaseSignatureB64); }
+                catch (Exception ex) { Alt.LogWarning($"[FloV:MP] [License] не удалось сохранить lease: {ex.Message}"); }
+            }
+        }
+        catch (OperationCanceledException) when (_licenseRemoteCts.IsCancellationRequested)
+        {
+            // Resource shutdown cancelled an in-flight HTTP request.
+        }
+        catch (Exception ex)
+        {
+            Alt.LogWarning($"[FloV:MP] [License] online-проверка завершилась ошибкой: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _licenseRemoteInFlight, 0);
+        }
+    }
+
+    private void KickPlayersForLicense()
+    {
+        foreach (var player in Alt.GetAllPlayers())
+            if (player.Exists) player.Kick($"[Лицензия] {_license.Message}");
     }
     private FloVMP.Core.Security.MultiTierBanService? _bans;
 
@@ -485,6 +590,7 @@ public class StarterResource : Resource
             _adminManager.AttachStore(new FloVMP.Core.Admin.MySqlAdminStore(starterDbConn));
 
         CheckLicense(logAlways: true);
+        StartRemoteLicenseCheck();
 
         Alt.Log("[FloV:MP Starter] Платформа запущена.");
         Alt.Log("[FloV:MP Starter] Права проверяются на сервере: админ-действия недоступны обычным игрокам.");
@@ -543,6 +649,7 @@ public class StarterResource : Resource
 
     public override void OnStop()
     {
+        _licenseRemoteCts.Cancel();
         // Баны на диск до отписки от событий: выданный в последнюю секунду бан
         // обязан пережить перезапуск.
         try { (_banStore as IDisposable)?.Dispose(); }
@@ -847,17 +954,24 @@ public class StarterResource : Resource
         // сам он успевает выстрелить или задавить кого-то перед киком.
         if (RejectIfBanned(player)) return;
 
-        // Лимит игроков по лицензии. Администраторы проходят всегда: владелец
-        // должен иметь возможность зайти на заполненный сервер.
+        // При любом non-valid статусе закрываем вход полностью. Администратор
+        // не является обходом лицензии: иначе отозванный сервер продолжал бы
+        // работать и через админский аккаунт.
+        if (!_license.IsLicensed)
+        {
+            Alt.LogWarning($"[FloV:MP] [License] вход {player.Name} отклонён: {_license.Message}");
+            player.Kick($"[Лицензия] {_license.Message}");
+            return;
+        }
+
+        // Лимит игроков по действующей лицензии.
         var online = Alt.GetAllPlayers().Count;
         // `online` already contains the connecting player. Use >= so a limit
         // of 32 admits exactly 32 players, not an accidental 33rd slot.
-        if (online >= _license.PlayerLimit && GetAssignedAdminRank(player) <= 0)
+        if (online >= _license.PlayerLimit)
         {
             Alt.LogWarning($"[FloV:MP] [License] вход {player.Name} отклонён: достигнут предел {_license.PlayerLimit} игроков ({_license.State}).");
-            player.Kick(_license.IsLicensed
-                ? $"Сервер заполнен ({_license.PlayerLimit} игроков)."
-                : $"Сервер работает без лицензии и пускает не больше {_license.PlayerLimit} игроков.");
+            player.Kick($"Сервер заполнен ({_license.PlayerLimit} игроков).");
             return;
         }
 
@@ -960,8 +1074,6 @@ public class StarterResource : Resource
         // (включая подсказку /claimowner владельцу) терялись.
         SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
         if (!_license.IsLicensed && GetAssignedAdminRank(player) > 0)
-            SendChatMessage(player, $"{{f59e0b}}[Лицензия]{{ffffff}} {_license.Message}");
-        else if (_license.State == FloVMP.Core.Licensing.LicenseState.Grace && GetAssignedAdminRank(player) > 0)
             SendChatMessage(player, $"{{f59e0b}}[Лицензия]{{ffffff}} {_license.Message}");
 
         var assigned = GetAssignedAdminRank(player);
@@ -1500,6 +1612,13 @@ public class StarterResource : Resource
             if (_nextLicenseCheckMs != 0) CheckLicense(logAlways: false);
             _nextLicenseCheckMs = nowMs + LicenseRecheckMs;
         }
+        if (nowMs >= _nextLicenseRemoteCheckMs)
+        {
+            StartRemoteLicenseCheck();
+            _nextLicenseRemoteCheckMs = nowMs + LicenseRemoteRecheckMs;
+        }
+        if (Interlocked.Exchange(ref _licenseRemoteNeedsApply, 0) == 1)
+            CheckLicense(logAlways: false);
         if (System.Threading.Interlocked.Exchange(ref _pendingAdminRecheck, 0) == 1)
         {
             using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAdminRights);

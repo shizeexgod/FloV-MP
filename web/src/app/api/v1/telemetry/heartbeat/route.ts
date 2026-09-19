@@ -14,12 +14,22 @@ export async function POST(req: NextRequest) {
     const serverIp = (forwardedFor ? forwardedFor.split(',')[0].trim() : null) || realIp || '127.0.0.1';
 
     // Verify license
-    const lics = await query('SELECT id, is_active FROM portal_licenses WHERE license_key = ? LIMIT 1', [
+    let lics = await query('SELECT id, is_active, expires_at FROM portal_licenses WHERE license_key = ? LIMIT 1', [
       licenseKey.trim(),
     ]);
 
+    if (lics.length === 0) {
+      lics = await query('SELECT id, is_active, expires_at FROM portal_projects WHERE license_key = ? LIMIT 1', [
+        licenseKey.trim(),
+      ]);
+    }
+
     if (lics.length === 0 || !lics[0].is_active) {
       return NextResponse.json({ error: 'Недействительная лицензия' }, { status: 403 });
+    }
+    if (lics[0].expires_at && (!Number.isFinite(new Date(lics[0].expires_at).getTime()) ||
+        Date.now() > new Date(lics[0].expires_at).getTime())) {
+      return NextResponse.json({ error: 'Срок действия лицензии истёк' }, { status: 403 });
     }
 
     await query(

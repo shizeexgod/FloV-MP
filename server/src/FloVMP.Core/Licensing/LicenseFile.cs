@@ -19,7 +19,7 @@ public enum LicenseState
 {
     /// <summary>Подпись верна, срок не истёк.</summary>
     Valid,
-    /// <summary>Срок истёк, но идёт неделя отсрочки на продление.</summary>
+    /// <summary>Историческое состояние; production-проверка больше его не создаёт.</summary>
     Grace,
     /// <summary>Файла license.flv нет.</summary>
     Missing,
@@ -27,12 +27,16 @@ public enum LicenseState
     Invalid,
     /// <summary>Срок и отсрочка истекли.</summary>
     Expired,
+    /// <summary>Backend подтвердил отзыв или блокировку ключа.</summary>
+    Revoked,
+    /// <summary>Backend недоступен дольше разрешённого lease/grace.</summary>
+    RemoteUnavailable,
 }
 
 /// <summary>Итог проверки: состояние, данные и действующий лимит игроков.</summary>
 public sealed record LicenseStatus(LicenseState State, LicenseInfo? Info, string Message, int PlayerLimit)
 {
-    public bool IsLicensed => State is LicenseState.Valid or LicenseState.Grace;
+    public bool IsLicensed => State is LicenseState.Valid;
 }
 
 /// <summary>
@@ -41,11 +45,13 @@ public sealed record LicenseStatus(LicenseState State, LicenseInfo? Info, string
 /// подпись RSA-2048 PKCS#1 v1.5 / SHA-256 над байтами payload.
 ///
 /// Проверяется полностью локально: подпись открытым ключом портала, водяной
-/// знак, срок. Сервер без доступа к интернету работает, а подделать файл или
-/// продлить срок без закрытого ключа портала нельзя.
+/// знак, срок. Online lease и bounded offline grace добавляют управляемый
+/// отзыв; подделать файл или продлить срок без закрытого ключа портала нельзя.
 ///
-/// Без действующей лицензии сервер НЕ останавливается — работает с лимитом
-/// <see cref="UnlicensedPlayerLimit"/> игроков (разработка, тесты).
+/// Без действующей лицензии игровой вход запрещается. Ограниченный
+/// <see cref="UnlicensedPlayerLimit"/> оставлен только для совместимости с
+/// диагностикой и старым API; production-путь не должен использовать его как
+/// разрешение на вход.
 /// </summary>
 public static class LicenseFile
 {
@@ -54,7 +60,7 @@ public static class LicenseFile
     /// <summary>Сколько игроков пускает сервер без действующей лицензии.</summary>
     public const int UnlicensedPlayerLimit = 32;
 
-    /// <summary>Отсрочка после окончания срока — как на портале (7 дней).</summary>
+    /// <summary>Историческое значение grace-периода; production-вход после expiry запрещён.</summary>
     public static readonly TimeSpan GracePeriod = TimeSpan.FromDays(7);
 
     /// <summary>
@@ -100,7 +106,7 @@ public static class LicenseFile
         if (path is null || !File.Exists(path))
         {
             return new LicenseStatus(LicenseState.Missing, null,
-                $"license.flv не найден — сервер работает без лицензии (до {UnlicensedPlayerLimit} игроков)",
+                "license.flv не найден — вход на сервер запрещён до установки действующей лицензии",
                 UnlicensedPlayerLimit);
         }
 
@@ -127,9 +133,7 @@ public static class LicenseFile
 
         try
         {
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(publicKeyPem ?? AuthorityPublicKeyPem);
-            if (!rsa.VerifyData(payload, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+            if (!VerifyAuthoritySignature(payload, signature, publicKeyPem))
                 return Invalid("подпись license.flv не сходится — файл изменён или выдан не порталом FloV:MP");
         }
         catch (Exception ex)
@@ -187,19 +191,19 @@ public static class LicenseFile
                 limit);
         }
 
-        if (nowUtc <= info.ExpiresAtUtc + GracePeriod)
-        {
-            return new LicenseStatus(LicenseState.Grace, info,
-                $"срок лицензии {info.LicenseKey} истёк {info.ExpiresAtUtc:dd.MM.yyyy}; отсрочка до {(info.ExpiresAtUtc + GracePeriod):dd.MM.yyyy} — продлите в личном кабинете",
-                limit);
-        }
-
         return new LicenseStatus(LicenseState.Expired, info,
-            $"лицензия {info.LicenseKey} истекла {info.ExpiresAtUtc:dd.MM.yyyy} — сервер работает без лицензии (до {UnlicensedPlayerLimit} игроков)",
+            $"срок лицензии {info.LicenseKey} истёк {info.ExpiresAtUtc:dd.MM.yyyy} — вход на сервер запрещён, продлите лицензию в личном кабинете",
             UnlicensedPlayerLimit);
     }
 
     private static LicenseStatus Invalid(string message) =>
-        new(LicenseState.Invalid, null, message + $" — сервер работает без лицензии (до {UnlicensedPlayerLimit} игроков)",
+        new(LicenseState.Invalid, null, message + " — вход на сервер запрещён до установки действующей лицензии",
             UnlicensedPlayerLimit);
+
+    public static bool VerifyAuthoritySignature(byte[] payload, byte[] signature, string? publicKeyPem = null)
+    {
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(publicKeyPem ?? AuthorityPublicKeyPem);
+        return rsa.VerifyData(payload, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    }
 }

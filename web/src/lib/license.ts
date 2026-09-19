@@ -67,11 +67,15 @@ export function createSignedLicenseFlv(params: {
   maxPlayers?: number;
   maxServers?: number;
   days?: number;
+  expiresAt?: string | Date;
 }): { payload: Record<string, any>; flvJson: string } {
   if (!isValidLicenseKeyFormat(params.licenseKey)) throw new Error('Invalid license key format');
   const { licenseKey, project, issuedTo, plan = 'enterprise', maxPlayers = 5000, maxServers = 10, days = 365 } = params;
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  const expiresAt = params.expiresAt ? new Date(params.expiresAt) : new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= now) {
+    throw new Error('License expiry must be a valid future date');
+  }
   const watermark = crypto.createHash('sha256').update(`${issuedTo}|${licenseKey}`).digest('hex').substring(0, 16);
   const payload = { licenseKey, project, issuedTo, plan, maxPlayers: Number(maxPlayers), maxServers: Number(maxServers), issuedAt: now.toISOString(), expiresAt: expiresAt.toISOString(), watermark };
   const payloadBuffer = Buffer.from(JSON.stringify(payload));
@@ -81,4 +85,29 @@ export function createSignedLicenseFlv(params: {
   sign.end();
   const signature = sign.sign(privateKey);
   return { payload, flvJson: JSON.stringify({ payload_b64: payloadBuffer.toString('base64'), signature: signature.toString('base64') }, null, 2) };
+}
+
+/** Подписанный короткоживущий lease для online-проверки сервером. */
+export function createSignedLicenseLease(params: {
+  licenseKey: string;
+  validUntil: string;
+  reason?: string;
+}): { leasePayloadB64: string; leaseSignature: string } {
+  if (!isValidLicenseKeyFormat(params.licenseKey)) throw new Error('Invalid license key format');
+  const payload = {
+    licenseKey: params.licenseKey,
+    valid: true,
+    issuedAt: new Date().toISOString(),
+    validUntil: params.validUntil,
+    reason: params.reason || '',
+  };
+  const payloadBuffer = Buffer.from(JSON.stringify(payload));
+  const sign = crypto.createSign('SHA256');
+  sign.update(payloadBuffer);
+  sign.end();
+  const signature = sign.sign(requiredSecret('FLOVMP_AUTHORITY_PRIVATE_KEY'));
+  return {
+    leasePayloadB64: payloadBuffer.toString('base64'),
+    leaseSignature: signature.toString('base64'),
+  };
 }

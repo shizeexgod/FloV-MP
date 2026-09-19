@@ -22,6 +22,8 @@ launcher/electron/native-dist/
 secrets.local.md
 *.env
 appsettings.*.local.json
+license.flv
+license.lease
 
 # OS junk
 .DS_Store

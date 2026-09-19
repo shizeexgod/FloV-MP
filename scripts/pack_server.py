@@ -54,6 +54,7 @@ USER_OWNED = [
     "server/resources/<свои ресурсы>",
     "sql/migrations/100+",
     "license.flv",
+    "license.lease",
     "gamemode/",
     "server/resources/gamemode/",
     "backups/",
@@ -61,7 +62,7 @@ USER_OWNED = [
 
 FORBIDDEN_IN_PACKAGE = [
     "config/flovmp.env", "server/server.toml", "voice/voice.toml",
-    "server/config/admins.json", "config/admins.json", "license.flv",
+    "server/config/admins.json", "config/admins.json", "license.flv", "license.lease",
 ]
 
 def load_private_markers():

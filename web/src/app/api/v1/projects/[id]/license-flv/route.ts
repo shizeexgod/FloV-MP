@@ -21,8 +21,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
     assertProjectAccess(session, project);
 
+    if (!project.is_active) {
+      return NextResponse.json({ success: false, error: 'Проектная лицензия отозвана или приостановлена' }, { status: 403 });
+    }
+
     const expiresDate = new Date(project.expires_at || Date.now() + 365 * 24 * 3600 * 1000);
     const now = new Date();
+    if (!Number.isFinite(expiresDate.getTime()) || now.getTime() > expiresDate.getTime()) {
+      return NextResponse.json({ success: false, error: 'Срок действия проектной лицензии истёк' }, { status: 403 });
+    }
     const remainingDays = Math.max(1, Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 3600 * 24)));
 
     const { flvJson } = createSignedLicenseFlv({
@@ -33,6 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       maxPlayers: project.max_players || 5000,
       maxServers: 10,
       days: remainingDays,
+      expiresAt: expiresDate,
     });
 
     return new NextResponse(flvJson, {

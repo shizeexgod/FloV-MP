@@ -690,6 +690,10 @@ function mockQueryFallback(sql: string, params: any[]): any {
 
   // 16. Projects queries
   if (s.includes('from portal_projects')) {
+    if (/license_key\s*=/i.test(s)) {
+      const key = String(params[0]);
+      return (store.projects || []).filter((p) => p.license_key === key);
+    }
     if (/user_id\s*=/i.test(s)) {
       const uid = Number(params[0]);
       return (store.projects || []).filter((p) => p.user_id === uid);

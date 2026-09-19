@@ -8,14 +8,14 @@ const BODY = {
   ru: [
     ['1. Предмет', 'FloV:MP предоставляет лицензию на использование мультиплеерного движка и доступ к веб-панели управления игровыми проектами. Лицензия закрепляется за одним проектом.'],
     ['2. Использование', 'Клиент разворачивает движок на собственной инфраструктуре (VDS / Dedicated). Запрещены перепродажа лицензии, обход механизмов верификации и распространение бинарных файлов третьим лицам.'],
-    ['3. Оплата', 'Лицензия приобретается один раз (Lifetime) за фиксированную стоимость через платёжный сервис Robokassa. Ежемесячной платы и автопродления нет. При недоступности портала сервер продолжает работу до 7 дней (grace period). Полные условия — в публичной оферте.'],
+    ['3. Оплата', 'Лицензия приобретается один раз (Lifetime) за фиксированную стоимость через платёжный сервис Robokassa. Ежемесячной платы и автопродления нет. При краткой недоступности портала сервер использует ограниченный offline grace; после отзыва или истечения лицензии вход запрещается. Полные условия — в публичной оферте.'],
     ['4. Ответственность', 'Платформа предоставляется «как есть». FloV:MP не несёт ответственности за контент игровых проектов клиентов и решения их администраций.'],
     ['5. Расторжение', 'Клиент может прекратить использование в любой момент. При нарушении условий доступ к панели и верификации ключа может быть приостановлен.'],
   ],
   en: [
     ['1. Subject', 'FloV:MP grants a license to use the multiplayer engine and access to the web management panel for game projects. A license is tied to a single project.'],
     ['2. Usage', 'The client deploys the engine on their own infrastructure (VDS / Dedicated). Reselling the license, bypassing verification and distributing binaries to third parties are prohibited.'],
-    ['3. Payment', 'The license is bought once (Lifetime) for a fixed price via the Robokassa payment service. There is no monthly fee and no auto-renewal. If the portal is unreachable, the server keeps running for up to 7 days (grace period). Full terms are in the public offer.'],
+    ['3. Payment', 'The license is bought once (Lifetime) for a fixed price via the Robokassa payment service. There is no monthly fee and no auto-renewal. During a brief portal outage the server uses a bounded offline grace; after revocation or expiry, connections are denied. Full terms are in the public offer.'],
     ['4. Liability', 'The platform is provided "as is". FloV:MP is not responsible for the content of client game projects or the decisions of their administrations.'],
     ['5. Termination', 'The client may stop using the service at any time. In case of a breach, access to the panel and key verification may be suspended.'],
   ],

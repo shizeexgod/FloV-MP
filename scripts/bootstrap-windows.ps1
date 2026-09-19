@@ -6,6 +6,7 @@ param(
     [ValidatePattern('^[0-9a-fA-F]{64}$')]
     [string]$Sha256,
     [string]$LicenseKey = '',
+    [string]$PortalUrl = '',
     [string]$InstallDir = (Join-Path (Get-Location) 'FloVMP'),
     [switch]$Force,
     [switch]$NoStart
@@ -33,9 +34,13 @@ try {
     if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) {
         throw 'В runtime-пакете отсутствует install.ps1.'
     }
+    if ([string]::IsNullOrWhiteSpace($PortalUrl)) {
+        $PortalUrl = $PackageUrl.GetLeftPart([UriPartial]::Authority)
+    }
     Write-Host '[2/3] Проверка и установка платформы...' -ForegroundColor Cyan
     $arguments = @{ InstallDir = $InstallDir }
     if ($LicenseKey) { $arguments.LicenseKey = $LicenseKey }
+    if ($PortalUrl) { $arguments.PortalUrl = $PortalUrl }
     if ($Force) { $arguments.Force = $true }
     if ($NoStart) { $arguments.NoStart = $true }
     & $installer @arguments

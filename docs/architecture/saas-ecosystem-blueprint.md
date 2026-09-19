@@ -103,8 +103,8 @@ Starting with distributed microservices for day one is an anti-pattern that slow
 **Answer:** **Hybrid Asymmetric Lease with Offline Grace Period.**
 - True cloud-only licensing is catastrophic: if the cloud portal or Cloudflare drops for 10 minutes, hundreds of active game servers with thousands of players would crash.
 - Solution: When the game server boots, it contacts the FloV:MP Cloud API and obtains a **signed Ed25519 / HMAC cryptographic lease** valid for **72 hours**.
-- The server caches this lease locally (`flovmp-data/license.lease`).
-- The server re-validates the lease every 12 hours in the background. If the cloud is unreachable, the server continues running uninterrupted during the 72-hour grace period while logging a warning.
+- The server caches this lease locally (`license.lease` next to `license.flv`).
+- The current runtime re-validates the lease in the background about every 5 minutes. If the cloud is unreachable, the server continues only within the bounded offline grace (24 hours by default); after an explicit revoke, lease expiry, or grace expiry, new connections are denied and existing players are kicked.
 
 ### Q9: How should updates be distributed?
 **Answer:** **Differential Content Addressing via FastDL CDN.**
@@ -247,7 +247,7 @@ Starting with distributed microservices for day one is an anti-pattern that slow
   ```
   Server Startup -> POST /api/v1/license/verify
   Response: Signed Lease Token { ProjectId, Plan, MaxSlots, ValidUntil, Signature }
-  Local Cache: flovmp-data/license.lease (72h validity)
+  Local Cache: license.lease next to license.flv (up to 24h validity)
   ```
 
 ### 10. Scaling Strategy

@@ -27,8 +27,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Нет доступа к этой лицензии' }, { status: 403 });
     }
 
+    if (!lic.is_active) {
+      return NextResponse.json({ error: 'Лицензия отозвана или приостановлена' }, { status: 403 });
+    }
+
     const expiresDate = new Date(lic.expires_at);
     const now = new Date();
+    if (!Number.isFinite(expiresDate.getTime()) || now.getTime() > expiresDate.getTime()) {
+      return NextResponse.json({ error: 'Срок действия лицензии истёк' }, { status: 403 });
+    }
     const remainingDays = Math.max(1, Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 3600 * 24)));
 
     const { flvJson } = createSignedLicenseFlv({
@@ -39,6 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       maxPlayers: lic.max_players || 5000,
       maxServers: lic.plan === 'enterprise' ? 10 : 3,
       days: remainingDays,
+      expiresAt: expiresDate,
     });
 
     return new NextResponse(flvJson, {

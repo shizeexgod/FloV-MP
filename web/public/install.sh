@@ -95,10 +95,12 @@ HTTP_CODE=$(curl -sSL -w "%{http_code}" -o "$TMP_LIC" "${PORTAL_URL}/api/v1/lice
 
 if [ "$HTTP_CODE" -eq 200 ] && [ -s "$TMP_LIC" ]; then
   cp "$TMP_LIC" "${INSTALL_DIR}/license.flv"
+  chmod 600 "${INSTALL_DIR}/license.flv"
   echo -e "${GREEN}✓ Лицензия успешно получена и верифицирована!${NC}"
 else
-  echo -e "${YELLOW}! Предупреждение: Портал недоступен или ключ не найден (HTTP $HTTP_CODE).${NC}"
-  echo -e "${YELLOW}  Сервер будет запущен в автономном/демо-режиме, ключ сохранён в flovmp.env.${NC}"
+  echo -e "${RED}[Ошибка] Портал недоступен или ключ не найден (HTTP $HTTP_CODE).${NC}"
+  echo -e "${YELLOW}  Установка остановлена: без действующего license.flv вход игроков запрещён.${NC}"
+  exit 1
 fi
 rm -f "$TMP_LIC"
 

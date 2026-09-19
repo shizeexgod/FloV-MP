@@ -217,7 +217,7 @@ const ru = {
           ['Серверный античит', 'Спидхак, godmode, silent aim, подмена урона и нелегальное оружие отсекаются на стороне сервера, а не клиентскими проверками.'],
           ['Бан по железу и Social Club', 'FloV:ID определяет ПК игрока. Баны по аккаунту, IP, лицензии Rockstar и железу, лимит аккаунтов на одну машину.'],
           ['Анти-VPN', 'VPN и прокси отсекаются на входе, для доверенных игроков — белый список.'],
-          ['Контроль лицензии', 'Ключ привязывается к IP сервера и проверяется автоматически. Если портал недоступен — сервер работает ещё 7 дней без остановки.'],
+          ['Контроль лицензии', 'Ключ привязывается к проекту и при необходимости к IP сервера. Подпись проверяется локально, а короткий online lease позволяет сразу увидеть отзыв; при кратком сбое действует ограниченный offline grace.'],
         ],
       },
       {
@@ -1818,7 +1818,7 @@ const en: typeof ru = {
         heading: 'What FloV:MP is',
         body: [
           'FloV:MP is a standalone multiplayer engine for GTA V and the web platform used to manage it. The engine handles networking, player and vehicle synchronization, server-side logic and the client interface. The platform — this site and the dashboard — handles licensing, server accounting, the cloud console, telemetry, launcher builds and billing.',
-          'The core idea is full autonomy. A project depends on no master lists, no third-party backends and no external services. One node equals one VDS equals one server of yours: you run it on your own machine, and the platform only confirms the license and collects statistics. If the portal goes offline, the server keeps running through a grace period and does not shut down.',
+          'The core idea is local control with a bounded license check. Your project runs on its own VDS and keeps its game data locally; the platform confirms the license and collects statistics. A short signed lease protects against fraudulent use, while a bounded offline grace covers brief portal outages.',
           'This approach is a direct response to context. RAGE:MP and alt:V were shut down as services under pressure from Take-Two, and relying on someone else’s infrastructure became risky. FloV:MP moves every critical piece under the project owner’s control: the network runtime runs locally, and file delivery goes through your own CDN.',
         ],
       },
@@ -1850,7 +1850,7 @@ const en: typeof ru = {
         heading: 'How the server launches and runs',
         body: [
           'Launch is a single command — ./start.sh. The script brings up the engine, loads your C# assembly, passes online license verification and starts accepting players. The console shows which project is activated, how many slots are allowed and the key’s expiry date.',
-          'If the portal becomes unreachable while the server runs, it will not go down: a 7-day grace period kicks in, during which the node operates on the last confirmed response. As soon as the connection is restored, the countdown resets. This protects against downtime from network issues or platform maintenance.',
+          'If the portal becomes unreachable while the server runs, the last verified lease or the bounded offline grace covers a brief outage. If the lease/grace expires, or the key is revoked, new connections are denied and existing players are disconnected with a license warning. A successful check resets the outage window.',
           'The server has two consoles. The in-game one opens with F8 right in the client and is meant for on-the-spot debugging. The web console lives in the dashboard: a small agent on the server polls a command queue from the portal and streams output back to the browser live. Through it you can restart the node, stop it, broadcast a message to all players, reload a single resource or run an arbitrary command — without an SSH session.',
           'Telemetry is sent once a minute: online count, tick rate, FPS, memory usage. History is stored on the platform and turned into charts in the analytics section, so load trends and drops are visible.',
         ],
@@ -1872,7 +1872,7 @@ const en: typeof ru = {
         heading: 'What lives in the dashboard',
         body: [
           'Projects and servers are the root of everything. A project ties together a license, a set of servers (production, dev, test), a shared SDK and API keys. Inside a project you see each node’s status, online count and last ping.',
-          'Keys and license status — the key itself, which IP it is bound to, the active-until date and its state (active, grace period, blocked). This is also where you change the IP binding when moving to another server.',
+          'Keys and license status — the key itself, its optional IP binding, the active-until date and its state (active, offline grace, revoked or blocked). This is also where you change the IP binding when moving to another server.',
           'The cloud console, telemetry and analytics — live server output, online and load charts, telemetry packet history. The watchdog monitors the node and logs crashes and auto-restarts.',
           'API and webhooks — the project’s public endpoints (status, player list, donation intake), issuing and rotating the agent key, wiring up Discord and Telegram notifications. The SDK section has ready snippets for the C# gamemode and server scripts.',
           'The launcher builder, billing, affiliate program and settings — building the branded installer, payment and invoice history, referral stats, plus account security: TOTP two-factor authentication and roles for team members.',

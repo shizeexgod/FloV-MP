@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
       maxPlayers: lic.max_players || 5000,
       maxServers: lic.plan === 'enterprise' || lic.plan === 'lifetime' ? 10 : 3,
       days: remainingDays,
+      expiresAt: expiresDate,
     });
 
     return new NextResponse(flvJson, {
