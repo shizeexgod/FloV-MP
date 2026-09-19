@@ -1,6 +1,28 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-18 (профиль GTA Legacy 3889, RP-режим удалён, новая модель прав, античит, муты, установщик)
+Updated: 2026-09-19 (Linux/Windows delivery hardening, source-kit boundary, b3889 guard)
+
+### 2026-09-19 — коммерческая поставка отделена от launcher/web, распаковка усилена
+
+- Зафиксировано решение владельца: продаваемый source-kit и серверные runtime-пакеты
+  включают только сервер, клиентские ресурсы, SDK и инструменты; `web/` и
+  `launcher/` остаются внутренними компонентами рабочего репозитория.
+- Windows-пакет теперь по умолчанию не собирает и не включает `FloVMP.Connect`;
+  `--with-connector` оставлен только для внутренней диагностики.
+- Добавлены `scripts/package-templates/windows/install.ps1` и `install.cmd`:
+  проверка SHA-256 до копирования, запрет абсолютных/`..` путей, staging,
+  резервная копия и восстановление при ошибке, повторная проверка после установки.
+  `smoke_windows.ps1` использует этот путь вместо ручного `Expand-Archive` поверх.
+- Linux `install.sh` теперь восстанавливает прежнюю платформу при ошибке копирования
+  или post-copy hash check, а не только после неудачного запуска службы.
+- CDN/AssetPacker отвергают traversal, дубли путей, неверные SHA-256 и размер после
+  загрузки; добавлены регрессионные тесты. Server Core: **398 тестов**.
+- Профиль `config/client-profiles/legacy-3889.json` синхронизирован с runtime-профилем;
+  `verify-legacy-3889.ps1` теперь явно отказывает неполному профилю.
+- Проверки на Mac: Python syntax, bash syntax, launcher Core build с
+  `EnableWindowsTargeting`, server Core **398/398**, client-sim **26/26**.
+  Launcher Windows E2E и GTA b3889 native adapter требуют Windows hardware gate;
+  адаптер всё ещё отсутствует, поэтому `GtaLaunchGuard` блокирует запуск честно.
 
 ### 2026-09-18 — native bootstrap Legacy 3889: CDN-протокол исправлен, разрыв локализован
 
