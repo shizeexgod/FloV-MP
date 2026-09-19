@@ -50,6 +50,7 @@ INCLUDE = [
     "scripts/patch_coreclr_host.py",
     "scripts/patch_exe_icon.py",
     "scripts/verify-legacy-3889.ps1",
+    "scripts/collect-legacy-3889-e2e.ps1",
     "scripts/verify_source.py",
     "scripts/smoke_windows.ps1",
     "scripts/smoke_linux.sh",

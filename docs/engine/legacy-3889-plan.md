@@ -99,6 +99,18 @@ mismatch и не используется как путь поддержки.
 powershell -ExecutionPolicy Bypass -File C:\FloV-MP\scripts\verify-legacy-3889.ps1
 ```
 
+Для следующего Windows-прогона используется отдельный сборщик отчёта. Он
+явно включает только диагностический `--allow-unsupported`, не объявляет
+поддержку автоматически и сохраняет `machine-report.json` вместе с stdout/stderr:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\FloV-MP\scripts\collect-legacy-3889-e2e.ps1 `
+  -GtaDir 'C:\Program Files\9d2d0eb64d5c44529cece33fe2a46482' `
+  -ClientDir 'C:\FloV-MP\runtime\client' `
+  -Connector 'C:\FloV-MP\launcher\native-dist\FloVMP.Connect.exe' `
+  -Server '127.0.0.1:7788'
+```
+
 Сейчас она завершается кодом `2` именно потому, что адаптер отсутствует. Это
 ожидаемый защитный результат, а не ошибка проверки файлов.
 
