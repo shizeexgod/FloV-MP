@@ -91,6 +91,21 @@ try {
         }
         Copy-Item -LiteralPath (Join-Path $target 'manifest.txt') -Destination (Join-Path $backup 'manifest.txt') -Force
         if (Test-Path -LiteralPath (Join-Path $target 'manifest.json')) { Copy-Item (Join-Path $target 'manifest.json') (Join-Path $backup 'manifest.json') -Force }
+
+        # Удаляем только платформенные файлы, которые исчезли из новой версии.
+        # Пользовательские файлы в manifest.txt не перечисляются и потому не
+        # затрагиваются. Резервная копия уже создана выше, поэтому catch может
+        # восстановить и удалённые устаревшие файлы.
+        $newPaths = @{}
+        foreach ($entry in $entries) { $newPaths[$entry.Path.ToLowerInvariant()] = $true }
+        foreach ($entry in $oldEntries) {
+            if (-not $newPaths.ContainsKey($entry.Path.ToLowerInvariant())) {
+                $obsolete = Get-ContainedPath $target $entry.Path
+                if (Test-Path -LiteralPath $obsolete -PathType Leaf) {
+                    Remove-Item -LiteralPath $obsolete -Force
+                }
+            }
+        }
     }
     New-Item -ItemType Directory -Path $target -Force | Out-Null
     foreach ($entry in $entries) {
