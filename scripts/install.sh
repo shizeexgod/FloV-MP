@@ -59,6 +59,42 @@ validate_manifest_file() {
   [ "${#seen[@]}" -gt 0 ] || die "manifest.txt пуст: $file"
 }
 
+validate_archive_members() {
+  local archive="$1" entry part top="" type line
+  [ -f "$archive" ] || die "архив не найден: $archive"
+
+  # Проверяем имена до распаковки: даже корректный после извлечения
+  # manifest.txt не может защитить от ../, абсолютных путей или подмены
+  # нескольких корневых каталогов архива.
+  while IFS= read -r entry || [ -n "$entry" ]; do
+    [ -n "$entry" ] || continue
+    entry="${entry%/}"
+    [ -n "$entry" ] || die "архив содержит пустой путь"
+    [[ "$entry" != /* && "$entry" != -* && "$entry" != *:* ]] || \
+      die "небезопасный путь в архиве: $entry"
+    IFS='/' read -r -a parts <<< "$entry"
+    for part in "${parts[@]}"; do
+      [[ -n "$part" && "$part" != "." && "$part" != ".." ]] || \
+        die "небезопасный путь в архиве: $entry"
+    done
+    if [ -z "$top" ]; then
+      top="${parts[0]}"
+    elif [ "$top" != "${parts[0]}" ]; then
+      die "архив должен содержать один корневой каталог"
+    fi
+  done < <(tar -tzf "$archive")
+  [ -n "$top" ] || die "архив пуст"
+
+  # Ссылки и специальные файлы могут выйти из каталога установки даже при
+  # безопасном имени. Пакеты FloV:MP содержат только обычные файлы и каталоги.
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    type="${line:0:1}"
+    [ "$type" = "-" ] || [ "$type" = "d" ] || \
+      die "архив содержит запрещённый тип файла: $line"
+  done < <(tar -tvzf "$archive")
+}
+
 usage() {
   cat <<'USAGE'
 FloV:MP — установщик игрового сервера
@@ -344,9 +380,13 @@ if [ -z "$SRC_DIR" ] || [ -n "$PACKAGE_FILE" ] || [ -n "$PACKAGE_URL" ]; then
     [ "$GOT" = "${PACKAGE_SHA256,,}" ] || die "хэш архива не совпал (ожидали $PACKAGE_SHA256, получили $GOT) — архив повреждён или подменён"
     ok "хэш архива совпал"
   fi
-  tar -xzf "$WORK/package.tar.gz" -C "$WORK" || die "архив повреждён — не распаковывается"
-  INNER="$(find "$WORK" -maxdepth 2 -name manifest.txt -printf '%h\n' | head -1)"
-  [ -n "$INNER" ] && [ -f "$INNER/install.sh" ] || die "в архиве нет пакета сервера FloV:MP (manifest.txt/install.sh)"
+  validate_archive_members "$WORK/package.tar.gz"
+  tar --no-same-owner --no-same-permissions --no-overwrite-dir -xzf "$WORK/package.tar.gz" -C "$WORK" || \
+    die "архив повреждён — не распаковывается"
+  mapfile -t PACKAGE_ROOTS < <(find "$WORK" -maxdepth 2 -type f -name manifest.txt -printf '%h\n')
+  [ "${#PACKAGE_ROOTS[@]}" -eq 1 ] || die "в архиве должен быть ровно один manifest.txt"
+  INNER="${PACKAGE_ROOTS[0]}"
+  [ -f "$INNER/install.sh" ] || die "в архиве нет пакета сервера FloV:MP (manifest.txt/install.sh)"
   validate_manifest_file "$INNER/manifest.txt"
   # Без --package/--package-url, иначе вложенный установщик снова уйдёт качать.
   PASS_ARGS=()
@@ -391,6 +431,12 @@ elif [ -d "$INSTALL_DIR" ] && [ "$SAME_DIR" -eq 0 ] && [ -n "$(ls -A "$INSTALL_D
   die "папка $INSTALL_DIR не пуста и не похожа на установку этого пакета (нет manifest.txt).
        Это может быть сервер, установленный вручную. Чтобы ничего не сломать, установка остановлена.
        Выберите другую папку (--dir) или подтвердите установку поверх (--force)"
+fi
+
+if [ "$UPGRADE" -eq 1 ]; then
+  # Не останавливаем службу и не создаём резервную копию, пока старый
+  # manifest.txt не прошёл те же проверки, что и новый пакет.
+  validate_manifest_file "$INSTALL_DIR/manifest.txt"
 fi
 
 if [ "$UPGRADE" -eq 1 ]; then
@@ -462,6 +508,18 @@ mkdir -p "$INSTALL_DIR"
 if [ "$SAME_DIR" -eq 0 ]; then
   NEW_LIST="$(mktemp)"; OLD_LIST="$(mktemp)"
   cut -d' ' -f3- "$SRC_DIR/manifest.txt" | sort > "$NEW_LIST"
+  validate_target_components() {
+    local rel="$1" current="$INSTALL_DIR" part
+    [ ! -L "$current" ] || die "папка установки является symlink: $current"
+    IFS='/' read -r -a target_parts <<< "$rel"
+    for part in "${target_parts[@]}"; do
+      current="$current/$part"
+      [ ! -L "$current" ] || die "путь платформы проходит через symlink: $rel"
+    done
+  }
+  while IFS= read -r f; do
+    [ -n "$f" ] && validate_target_components "$f"
+  done < "$NEW_LIST"
   restore_platform() {
     # Called only after a failed replacement. Restore the old platform without
     # touching user-owned config, gamemode, data, or resources.
@@ -474,7 +532,6 @@ if [ "$SAME_DIR" -eq 0 ]; then
     tar -xzpf "$BACKUP_ARCHIVE" -C "$INSTALL_DIR" || die "не удалось восстановить резервную копию платформы"
   }
   if [ "$UPGRADE" -eq 1 ]; then
-    validate_manifest_file "$INSTALL_DIR/manifest.txt"
     cut -d' ' -f3- "$INSTALL_DIR/manifest.txt" | sort > "$OLD_LIST"
     mkdir -p "$INSTALL_DIR/backups"
     chmod 700 "$INSTALL_DIR/backups"

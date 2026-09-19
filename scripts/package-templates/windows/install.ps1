@@ -28,15 +28,21 @@ function Get-ContainedPath([string]$Root, [string]$Relative) {
     return $full
 }
 
-$entries = @()
-foreach ($line in Get-Content -LiteralPath $manifestPath -Encoding UTF8) {
-    if ([string]::IsNullOrWhiteSpace($line)) { continue }
-    if ($line -notmatch '^([0-9a-fA-F]{64})\s{2,}(.+)$') { throw "Неверная строка manifest.txt: $line" }
-    $hash = $Matches[1].ToLowerInvariant(); $rel = Get-SafeRelativePath $Matches[2].Trim()
-    if ($entries | Where-Object { $_.Path -eq $rel }) { throw "Повторный путь в manifest.txt: $rel" }
-    $entries += [pscustomobject]@{ Hash = $hash; Path = $rel }
+function Read-Manifest([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Не найден manifest.txt: $Path" }
+    $result = @()
+    foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -notmatch '^([0-9a-fA-F]{64})\s{2,}(.+)$') { throw "Неверная строка manifest.txt: $line" }
+        $hash = $Matches[1].ToLowerInvariant(); $rel = Get-SafeRelativePath $Matches[2].Trim()
+        if ($result | Where-Object { $_.Path.Equals($rel, [StringComparison]::OrdinalIgnoreCase) }) { throw "Повторный путь в manifest.txt: $rel" }
+        $result += [pscustomobject]@{ Hash = $hash; Path = $rel }
+    }
+    if ($result.Count -eq 0) { throw "manifest.txt пуст: $Path" }
+    return $result
 }
-if ($entries.Count -eq 0) { throw 'manifest.txt пуст.' }
+
+$entries = @(Read-Manifest $manifestPath)
 
 Write-Host "[1/4] Проверка исходного пакета ($($entries.Count) файлов)..." -ForegroundColor Cyan
 foreach ($entry in $entries) {
@@ -74,13 +80,11 @@ try {
     Write-Host '[3/4] Резервная копия старой платформы и установка...' -ForegroundColor Cyan
     if (Test-Path -LiteralPath (Join-Path $target 'manifest.txt')) {
         New-Item -ItemType Directory -Path $backup -Force | Out-Null
-        $old = Get-Content -LiteralPath (Join-Path $target 'manifest.txt') -Encoding UTF8
-        foreach ($line in $old) {
-            if ($line -notmatch '^([0-9a-fA-F]{64})\s{2,}(.+)$') { continue }
-            $oldEntries += [pscustomobject]@{ Hash = $Matches[1].ToLowerInvariant(); Path = (Get-SafeRelativePath $Matches[2].Trim()) }
-            $oldPath = Get-ContainedPath $target $oldEntries[-1].Path
+        $oldEntries = @(Read-Manifest (Join-Path $target 'manifest.txt'))
+        foreach ($entry in $oldEntries) {
+            $oldPath = Get-ContainedPath $target $entry.Path
             if (Test-Path -LiteralPath $oldPath -PathType Leaf) {
-                $backupPath = Get-ContainedPath $backup $oldEntries[-1].Path
+                $backupPath = Get-ContainedPath $backup $entry.Path
                 New-Item -ItemType Directory -Path (Split-Path -Parent $backupPath) -Force | Out-Null
                 Copy-Item -LiteralPath $oldPath -Destination $backupPath -Force
             }

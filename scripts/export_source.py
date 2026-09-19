@@ -39,15 +39,18 @@ INCLUDE = [
     "client/resources/flovmp-client",
     "sql/migrations",
     "config/server.toml",
+    "config/client-profiles/legacy-3889.json",
     "assets/branding/app.ico",
     "scripts/pack_server.py",
     "scripts/install.sh",
     "scripts/package-templates",
     "scripts/patch_coreclr_host.py",
     "scripts/patch_exe_icon.py",
+    "scripts/verify-legacy-3889.ps1",
     "scripts/smoke_windows.ps1",
     "scripts/smoke_linux.sh",
     "scripts/client-sim",
+    "runtime/compat/legacy-3889",
 ]
 
 SKIP_DIRS = {"bin", "obj", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}

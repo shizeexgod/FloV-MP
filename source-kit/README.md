@@ -54,7 +54,9 @@ python scripts/pack_server.py --os all
 | `config/server.toml` | эталонная конфигурация сервера (из неё собирается `server.toml.example`) |
 | `scripts/pack_server.py` | сборка пакетов |
 | `scripts/install.sh` | установщик для Linux |
+| `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
 | `scripts/package-templates` | файлы, которые кладутся в пакет: README, шаблоны настроек, SDK для своего сервера |
+| `runtime/compat/legacy-3889` | профиль отпечатков и E2E-гейты для будущего native-адаптера b3889 |
 | `engine/` | движок alt:V 16.4.39 (release, Windows и Linux) — нужен сборщику пакетов |
 | `docs/` | архитектура и разработка |
 
