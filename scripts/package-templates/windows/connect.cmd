@@ -3,7 +3,8 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 title FloV:MP
 
-rem Connect to the server from this PC: connect.cmd [host:port]
+rem Optional helper for an externally installed client connector:
+rem connect.cmd [host:port]
 rem Without an argument the port is read from server\server.toml: the owner may
 rem change it, and a hardcoded 7788 would point at a server that is not there.
 rem NOTE: keep this file pure ASCII. cmd.exe parses the whole IF (...) block
@@ -34,6 +35,8 @@ if exist "%APPDATA_CONNECTOR%" (
     exit /b %errorlevel%
 )
 
-echo [FloV:MP] Клиент FloV:MP не найден. Установите лаунчер и подключитесь через него.
+echo [FloV:MP] Клиентский connector не входит в серверный пакет.
+echo [FloV:MP] Установите и настройте собственный совместимый клиент/launcher.
+echo [FloV:MP] Необязательный путь connector: %LOCALAPPDATA%\FloVMP\engine\FloVMP.Connect.exe
 pause
 exit /b 1
