@@ -17,6 +17,8 @@
   6. упаковывает в zip.
 """
 import argparse
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -179,6 +181,38 @@ def run(cmd, cwd):
         fail("команда завершилась с кодом {}".format(r.returncode))
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_source_manifest(dest, version):
+    entries = []
+    for root, _, files in os.walk(dest):
+        for name in files:
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, dest).replace(os.sep, "/")
+            if rel == "SOURCE-MANIFEST.json":
+                continue
+            entries.append({
+                "path": rel,
+                "sha256": sha256_file(path),
+                "size": os.path.getsize(path),
+            })
+    entries.sort(key=lambda item: item["path"])
+    manifest = {
+        "product": "FloV:MP source kit",
+        "version": version,
+        "files": entries,
+    }
+    with open(os.path.join(dest, "SOURCE-MANIFEST.json"), "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True, help="папка, в которую выгрузить")
@@ -237,6 +271,8 @@ def main():
     else:
         log("[4/5] проверка сборки пропущена (--no-verify)")
 
+    write_source_manifest(dest, version)
+
     if not args.no_zip:
         log("[5/5] архив")
         zpath = os.path.join(args.out, name + ".zip")
@@ -245,6 +281,10 @@ def main():
                 for f in files:
                     p = os.path.join(root, f)
                     z.write(p, os.path.join(name, os.path.relpath(p, dest)))
+        digest = sha256_file(zpath)
+        with open(zpath + ".sha256", "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("{}  {}\n".format(digest, os.path.basename(zpath)))
+        log("  sha256 {}".format(digest))
         log("  " + zpath)
 
     log("Готово: " + dest)

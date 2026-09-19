@@ -38,6 +38,11 @@ python scripts/pack_server.py --os all
 - `flovmp-server-<версия>-windows.zip` — установка через `install.cmd`, затем запуск `FloVMP-Server.exe`;
 - `flovmp-server-<версия>-linux.tar.gz` — установка `sudo ./install.sh`.
 
+При выгрузке исходников экспортёр добавляет `SOURCE-MANIFEST.json` с размером и
+SHA-256 каждого файла, а рядом с ZIP пишет файл `<архив>.sha256`. Перед передачей
+проверьте архив командой `sha256sum -c <архив>.sha256` (Linux) или
+`Get-FileHash <архив> -Algorithm SHA256` (Windows).
+
 Как ставить и настраивать пакет — `README.md` внутри пакета
 (исходник: `scripts/package-templates/common/README.md`).
 
