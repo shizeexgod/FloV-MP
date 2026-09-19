@@ -2,7 +2,8 @@
 param(
     [string]$InstallDir = 'C:\FloVMP',
     [switch]$Force,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [string]$LicenseKey = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,31 @@ function Read-Manifest([string]$Path) {
     }
     if ($result.Count -eq 0) { throw "manifest.txt пуст: $Path" }
     return $result
+}
+
+function Set-FlovmpEnvValue([string]$Path, [string]$Key, [string]$Value) {
+    $parent = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $lines = [Collections.Generic.List[string]]::new()
+        foreach ($line in [IO.File]::ReadAllLines($Path)) { [void]$lines.Add($line) }
+    } else {
+        $example = Join-Path $source 'config\flovmp.env.example'
+        $lines = [Collections.Generic.List[string]]::new()
+        if (Test-Path -LiteralPath $example -PathType Leaf) {
+            foreach ($line in [IO.File]::ReadAllLines($example)) { [void]$lines.Add($line) }
+        }
+    }
+    $prefix = $Key + '='
+    $found = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].StartsWith($prefix, [StringComparison]::Ordinal)) {
+            $lines[$i] = $prefix + $Value
+            $found = $true
+        }
+    }
+    if (-not $found) { [void]$lines.Add($prefix + $Value) }
+    [IO.File]::WriteAllLines($Path, $lines, [Text.UTF8Encoding]::new($false))
 }
 
 $entries = @(Read-Manifest $manifestPath)
@@ -122,6 +148,10 @@ try {
         $dst = Get-ContainedPath $target $entry.Path
         $actual = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actual -ne $entry.Hash) { throw "Проверка после копирования не пройдена: $($entry.Path)" }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($LicenseKey)) {
+        Set-FlovmpEnvValue (Join-Path $target 'config\flovmp.env') 'FLOVMP_LICENSE_KEY' $LicenseKey
+        Write-Host 'Лицензионный ключ сохранён в config\flovmp.env.' -ForegroundColor Green
     }
     Write-Host "Готово: $target" -ForegroundColor Green
     $committed = $true

@@ -41,6 +41,8 @@ jobs:
           Write-Host 'collect-legacy-3889-e2e.ps1: syntax OK'
           [scriptblock]::Create((Get-Content scripts/verify-enhanced-1158.ps1 -Raw)) | Out-Null
           [scriptblock]::Create((Get-Content scripts/collect-enhanced-1158-e2e.ps1 -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content scripts/verify-windows-native.ps1 -Raw)) | Out-Null
+          [scriptblock]::Create((Get-Content scripts/bootstrap-windows.ps1 -Raw)) | Out-Null
           Write-Host 'Enhanced 1.0.1158.13 diagnostic scripts: syntax OK'
 
   portable-safety:
@@ -57,6 +59,7 @@ jobs:
           python3 scripts/verify-legacy-3889-contract.py
           python3 scripts/verify-enhanced-1158-contract.py
           python3 scripts/verify-player-sync-contract.py
+          python3 scripts/prepare_engine.py --help > /dev/null
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
           grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py
@@ -101,6 +104,9 @@ jobs:
           assert meta['webIncluded'] is False
           assert not (root / 'launcher').exists()
           assert not (root / 'web').exists()
+          assert (root / 'scripts' / 'prepare_engine.py').exists()
+          assert (root / 'scripts' / 'verify-windows-native.ps1').exists()
+          assert (root / 'docs' / 'installation-and-delivery.md').exists()
           print('source product export: OK')
           PY
 

@@ -38,11 +38,35 @@ dotnet test server/FloVMP.sln
 # готовые пакеты для установки (dist/server/): только если владелец отдельно
 # добавил разрешённый runtime alt:V в `engine/`
 python scripts/pack_server.py --os all
+
+# импорт разрешённого runtime из папки или ZIP/TAR.GZ:
+python scripts/prepare_engine.py --source /path/to/altv-backup --dest engine --platform all
 ```
 
 Обычная выгрузка исходников намеренно не содержит `engine/`, поэтому без
 разрешённого стороннего runtime эта последняя команда должна быть отложена;
 сборка и тесты собственного кода при этом работают без него.
+
+Для Windows-покупателя, который получил URL и SHA-256 готового ZIP, установка
+из пустой папки выполняется одной командой-шаблоном:
+
+```powershell
+& ([scriptblock]::Create((irm https://YOUR-DISTRIBUTION-HOST/bootstrap-windows.ps1))) `
+  -PackageUrl 'https://YOUR-DISTRIBUTION-HOST/flovmp-server-1.0.0-windows.zip' `
+  -Sha256 '64-символьный-SHA256' -LicenseKey 'FLV-XXXX-XXXX-XXXX' `
+  -InstallDir "$PWD\FloVMP"
+```
+
+В production лучше сначала скачать `bootstrap-windows.ps1`, проверить его
+SHA-256 и затем запустить локально. Linux уже поддерживает тот же сценарий:
+
+```bash
+curl -fsSL https://YOUR-DISTRIBUTION-HOST/install.sh -o install.sh
+chmod +x install.sh
+sudo ./install.sh \
+  --package-url 'https://YOUR-DISTRIBUTION-HOST/flovmp-server-1.0.0-linux.tar.gz' \
+  --sha256 '64-символьный-SHA256' --key 'FLV-XXXX-XXXX-XXXX'
+```
 
 Пакеты:
 
@@ -74,8 +98,12 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `config/server.toml` | эталонная конфигурация сервера (из неё собирается `server.toml.example`) |
 | `scripts/pack_server.py` | сборка пакетов |
 | `scripts/install.sh` | установщик для Linux |
+| `scripts/bootstrap-windows.ps1` | скачивание ZIP по URL, SHA-256 и установка в пустую папку Windows |
 | `scripts/verify-legacy-3889.ps1` | Windows-проверка профиля GTA V Legacy b3889 |
 | `scripts/verify-enhanced-1158.ps1` | Windows-сбор отпечатка GTA V Enhanced 1.0.1158.13 |
+| `scripts/verify-windows-native.ps1` | итоговая Windows-проверка GTA fingerprint, native adapter и E2E |
+| `docs/installation-and-delivery.md` | команды установки Windows/Linux/VDS и структура двух поставок |
+| `scripts/prepare_engine.py` | импорт разрешённого внешнего alt:V runtime в локальную `engine/` |
 | `scripts/collect-legacy-3889-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов b3889 |
 | `scripts/collect-enhanced-1158-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов Enhanced |
 | `scripts/verify-legacy-3889-contract.py` | Mac/Linux-проверка контракта b3889 без запуска GTA |
