@@ -45,8 +45,9 @@ python scripts/pack_server.py --os all
 
 При выгрузке исходников экспортёр добавляет `SOURCE-MANIFEST.json` с размером и
 SHA-256 каждого файла, а рядом с ZIP пишет файл `<архив>.sha256`. Перед передачей
-проверьте архив командой `sha256sum -c <архив>.sha256` (Linux) или
-`Get-FileHash <архив> -Algorithm SHA256` (Windows).
+в Linux перейдите в каталог с архивом и выполните `sha256sum -c <архив>.sha256`
+(имя ZIP в sidecar хранится относительно этого каталога); в Windows используйте
+`Get-FileHash <архив> -Algorithm SHA256`.
 После распаковки полной папки выполните `python scripts/verify_source.py` —
 скрипт проверит пути, размеры и хэши исходников на обеих ОС.
 
