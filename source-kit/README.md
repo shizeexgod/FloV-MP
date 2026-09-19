@@ -42,6 +42,8 @@ python scripts/pack_server.py --os all
 SHA-256 каждого файла, а рядом с ZIP пишет файл `<архив>.sha256`. Перед передачей
 проверьте архив командой `sha256sum -c <архив>.sha256` (Linux) или
 `Get-FileHash <архив> -Algorithm SHA256` (Windows).
+После распаковки полной папки выполните `python scripts/verify_source.py` —
+скрипт проверит пути, размеры и хэши исходников на обеих ОС.
 
 Как ставить и настраивать пакет — `README.md` внутри пакета
 (исходник: `scripts/package-templates/common/README.md`).
