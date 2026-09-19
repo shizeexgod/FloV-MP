@@ -34,6 +34,12 @@ jobs:
       - name: Test launcher
         run: dotnet test launcher/FloVMP.Launcher.slnx -c Release --nologo --no-build
 
+      - name: Parse b3889 diagnostic script
+        shell: pwsh
+        run: |
+          [scriptblock]::Create((Get-Content scripts/collect-legacy-3889-e2e.ps1 -Raw)) | Out-Null
+          Write-Host 'collect-legacy-3889-e2e.ps1: syntax OK'
+
   portable-safety:
     runs-on: ubuntu-latest
     steps:
