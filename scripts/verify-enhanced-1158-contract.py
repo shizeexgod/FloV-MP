@@ -33,7 +33,7 @@ def main():
     client = load(root / "config/client-profiles/enhanced-1158.json")
     native = load(root / "runtime/compat/enhanced-1158/native-profile.json")
 
-    if client.get("id") != native.get("id") != "enhanced-1158":
+    if client.get("id") != "enhanced-1158" or native.get("id") != "enhanced-1158":
         fail("профили имеют разные id")
     for key in ("gameExecutable", "gameFileVersion", "gameSha256", "updateRpfSha256", "update2RpfSha256"):
         if client.get(key) != native.get(key):
@@ -42,7 +42,8 @@ def main():
         fail("профиль не привязан к GTA5_Enhanced.exe")
     if client.get("gameFileVersion") != "1.0.1158.13":
         fail("ожидался известный Enhanced build 1.0.1158.13")
-    if client.get("fingerprintStatus") != native.get("fingerprintStatus") != "pending-windows-capture":
+    if (client.get("fingerprintStatus") != "pending-windows-capture" or
+            native.get("fingerprintStatus") != "pending-windows-capture"):
         fail("fingerprintStatus должен оставаться pending-windows-capture")
     if client.get("supportStatus") != "needs-enhanced-runtime" or native.get("supportStatus") != "needs-enhanced-runtime":
         fail("Enhanced нельзя считать поддержанным до native-адаптера")
