@@ -80,6 +80,7 @@ SHA-256 каждого файла, а рядом с ZIP пишет файл `<а
 | `scripts/collect-enhanced-1158-e2e.ps1` | Windows-диагностический прогон пяти E2E-гейтов Enhanced |
 | `scripts/verify-legacy-3889-contract.py` | Mac/Linux-проверка контракта b3889 без запуска GTA |
 | `scripts/verify-enhanced-1158-contract.py` | Mac/Linux-проверка Enhanced-профиля без запуска GTA |
+| `scripts/verify-player-sync-contract.py` | статическая проверка player streaming без запуска GTA |
 | `scripts/package-templates` | файлы, которые кладутся в пакет: README, шаблоны настроек, SDK для своего сервера |
 | `runtime/compat/legacy-3889` | профиль отпечатков и E2E-гейты для будущего native-адаптера b3889 |
 | `runtime/compat/enhanced-1158` | отдельный provisional-профиль Enhanced и результаты диагностики |

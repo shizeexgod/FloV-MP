@@ -56,6 +56,7 @@ jobs:
           bash -n scripts/install.sh
           python3 scripts/verify-legacy-3889-contract.py
           python3 scripts/verify-enhanced-1158-contract.py
+          python3 scripts/verify-player-sync-contract.py
           grep -q "install.ps1" scripts/pack_server.py
           grep -q "launcher/" scripts/pack_server.py
           grep -q '"deliveryMode": "runtime-license"' scripts/pack_server.py

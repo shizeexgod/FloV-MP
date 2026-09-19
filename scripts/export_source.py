@@ -56,6 +56,7 @@ INCLUDE = [
     "scripts/collect-enhanced-1158-e2e.ps1",
     "scripts/verify-legacy-3889-contract.py",
     "scripts/verify-enhanced-1158-contract.py",
+    "scripts/verify-player-sync-contract.py",
     "scripts/verify_source.py",
     "scripts/smoke_windows.ps1",
     "scripts/smoke_linux.sh",
