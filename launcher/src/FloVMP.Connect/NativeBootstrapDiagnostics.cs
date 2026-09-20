@@ -8,25 +8,30 @@ namespace FloVMP.Connect;
 public static class NativeBootstrapDiagnostics
 {
     private const string LauncherPatchCompleted = "Launcher patch completed";
+    private const string InjectionFinished = "Injection finished";
+    private static readonly TimeSpan StaleAfterInjection = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan StaleAfterPatch = TimeSpan.FromSeconds(90);
 
-    public static bool CompletedWithoutGame(string clientDir, DateTime launchedAt)
+    public static bool IsStalledWithoutGame(string clientDir, DateTime launchedAt, DateTime now)
     {
         try
         {
-            var logDir = Path.Combine(clientDir, "logs");
-            if (!Directory.Exists(logDir)) return false;
-
-            var latest = Directory.EnumerateFiles(logDir, "launcher_*.log")
-                .Select(path => new FileInfo(path))
-                .Where(file => file.LastWriteTime >= launchedAt.AddSeconds(-2))
-                .OrderByDescending(file => file.LastWriteTime)
-                .FirstOrDefault();
+            var latest = FindCurrentLog(clientDir, launchedAt);
             if (latest is null) return false;
 
             using var stream = new FileStream(latest.FullName, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
             using var reader = new StreamReader(stream);
-            return reader.ReadToEnd().Contains(LauncherPatchCompleted, StringComparison.Ordinal);
+            var text = reader.ReadToEnd();
+            var staleFor = now - latest.LastWriteTime;
+
+            // Patch completed is an intermediate phase. The native launcher
+            // still has to inject the client and create GTA5.exe afterwards.
+            if (text.Contains(InjectionFinished, StringComparison.Ordinal))
+                return staleFor >= StaleAfterInjection;
+
+            return text.Contains(LauncherPatchCompleted, StringComparison.Ordinal) &&
+                   staleFor >= StaleAfterPatch;
         }
         catch
         {
@@ -35,11 +40,24 @@ public static class NativeBootstrapDiagnostics
         }
     }
 
+    private static FileInfo? FindCurrentLog(string clientDir, DateTime launchedAt)
+    {
+        var logDir = Path.Combine(clientDir, "logs");
+        if (!Directory.Exists(logDir)) return null;
+
+        return Directory.EnumerateFiles(logDir, "launcher_*.log")
+            .Select(path => new FileInfo(path))
+            .Where(file => file.LastWriteTime >= launchedAt.AddSeconds(-2))
+            .OrderByDescending(file => file.LastWriteTime)
+            .FirstOrDefault();
+    }
+
     public static void PrintFailure()
     {
-        Console.Error.WriteLine("[native] Bootstrap-клиент завершил внедрение, но GTA5.exe не появился.");
+        Console.Error.WriteLine("[native] Native bootstrap остановился, но GTA5.exe не появился.");
         Console.Error.WriteLine("[native] Это не ошибка сервера, лицензии FloV:MP или CDN.");
-        Console.Error.WriteLine("[native] Установленная GTA Legacy 1.0.3889 требует отдельного native-адаптера;");
-        Console.Error.WriteLine("[native] старый bootstrap 16.4.39 нельзя безопасно выдать за поддержку этой версии.");
+        Console.Error.WriteLine("[native] Сохраните launcher_*.log: bootstrap не дошёл до создания процесса игры.");
+        Console.Error.WriteLine("[native] Точный профиль GTA не менялся; дальнейший разбор идёт по этой попытке,");
+        Console.Error.WriteLine("[native] а не через замену GTA5.exe или RPF-файлов.");
     }
 }

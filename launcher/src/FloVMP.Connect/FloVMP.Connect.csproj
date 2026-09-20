@@ -37,11 +37,4 @@
     <ProjectReference Include="..\FloVMP.Launcher.Core\FloVMP.Launcher.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- ServiceController: читаем состояние службы BattlEye, чтобы выдать
-         игроку точную причину незапуска вместо глухого таймаута.
-         Только чтение — ничего не останавливаем и не отключаем. -->
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
-  </ItemGroup>
-
 </Project>

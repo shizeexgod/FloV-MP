@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Principal;
-using System.ServiceProcess;
 
 namespace FloVMP.Connect;
 
@@ -88,15 +87,29 @@ public static class BattlEye
         return false;
     }
 
-    [SupportedOSPlatform("windows")]
     private static bool IsServiceRunning()
     {
         if (!OperatingSystem.IsWindows()) return false;
         try
         {
-            using var sc = new ServiceController(Service);
-            return sc.Status == ServiceControllerStatus.Running ||
-                   sc.Status == ServiceControllerStatus.StartPending;
+            // Не используем System.ServiceProcess.ServiceController: в
+            // framework-dependent архиве он добавляет отдельную runtime DLL и
+            // одна пропущенная зависимость превращает обычную диагностику в
+            // падение коннектора. sc.exe есть в каждой поддерживаемой Windows
+            // и уже применяется ниже для восстановления службы.
+            using var process = Process.Start(new ProcessStartInfo("sc.exe", $"query {Service}")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            });
+            if (process is null) return false;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            return output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase) ||
+                   output.Contains("START_PENDING", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {

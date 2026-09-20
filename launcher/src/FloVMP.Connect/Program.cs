@@ -338,8 +338,8 @@ try
             // Старый native bootstrap может отчитаться об успешной инъекции и
             // оставить свой процесс висеть, хотя GTA уже не была создана.
             // Раньше это выглядело как "ничего не происходит" в течение 240 с.
-            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(20) &&
-                NativeBootstrapDiagnostics.CompletedWithoutGame(clientDir, nativeLaunchedAt))
+            if (waitStopwatch.Elapsed > TimeSpan.FromSeconds(90) &&
+                NativeBootstrapDiagnostics.IsStalledWithoutGame(clientDir, nativeLaunchedAt, DateTime.Now))
             {
                 NativeBootstrapDiagnostics.PrintFailure();
                 try

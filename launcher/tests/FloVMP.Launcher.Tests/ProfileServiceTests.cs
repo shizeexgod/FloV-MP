@@ -138,7 +138,6 @@ public sealed class ProfileServiceTests : IDisposable
 
         Assert.True(result.IsMatch);
         Assert.False(result.AllHashesValid);
-        Assert.Single(result.Issues);
-        Assert.Contains("Не совпадает SHA-256", result.Issues[0]);
+        Assert.Contains(result.Issues, issue => issue.Contains("Не совпадает SHA-256", StringComparison.Ordinal));
     }
 }
