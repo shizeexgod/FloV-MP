@@ -100,6 +100,15 @@ Console.CancelKeyPress += (_, e) =>
 while (true)
 {
     ReadSettings();
+    try
+    {
+        if (Workspace.ApplyPendingGamemode(root))
+            Ok("Подставлена новая сборка вашего сервера (gamemode), собранная пока сервер работал.");
+    }
+    catch (Exception ex)
+    {
+        Error("Не удалось подставить новую сборку gamemode: " + ex.Message + " — запускаю прежнюю.");
+    }
     Workspace.EnsureResourceEnabled(root, "gamemode");
     Console.Title = $"FloV:MP Server — {name} :{port}";
     if (!PreflightOk()) return Pause(1);
