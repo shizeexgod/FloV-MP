@@ -61,7 +61,8 @@ if (gameExe is null)
     return 2;
 }
 
-var launchCheck = GtaLaunchGuard.Evaluate(Path.Combine(gtaDir, gameExe));
+var adapterPath = Path.Combine(clientDir, "flovmp-legacy-native-3889.dll");
+var launchCheck = GtaLaunchGuard.Evaluate(Path.Combine(gtaDir, gameExe), adapterPath);
 if (!launchCheck.Allowed && !args.Contains("--allow-unsupported", StringComparer.OrdinalIgnoreCase))
 {
     Console.Error.WriteLine($"[err] {launchCheck.Message}");

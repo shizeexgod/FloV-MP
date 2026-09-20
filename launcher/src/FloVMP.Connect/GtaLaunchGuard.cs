@@ -38,7 +38,7 @@ public static class GtaLaunchGuard
             [Legacy3889] = (Legacy3889ExeSha256, 47467128, "egs", false),
         };
 
-    public static GtaLaunchCheck Evaluate(string gameExePath)
+    public static GtaLaunchCheck Evaluate(string gameExePath, string? nativeAdapterPath = null)
     {
         if (string.IsNullOrWhiteSpace(gameExePath) || !File.Exists(gameExePath))
             return new(false, "game-executable-missing", "GTA V executable не найден.");
@@ -113,8 +113,20 @@ public static class GtaLaunchGuard
                     "Legacy 3889 найден, но update\\update2.rpf отсутствует или не совпадает с EGS-профилем. Запуск остановлен без изменения файлов.");
             }
 
-            return new(false, "legacy-3889-native-adapter-missing",
-                $"Legacy {version} EGS распознан точно, но native-клиент FloV:MP {NativeClientVersion} ещё не поддерживает RPF b3889. Нужен адаптер 3889; запуск со старым клиентом остановлен.");
+            var adapter = NativeAdapterProbe.Probe(nativeAdapterPath, gameDir);
+            if (!adapter.Found)
+            {
+                return new(false, "legacy-3889-native-adapter-missing",
+                    $"Legacy {version} EGS распознан точно, но native-клиент FloV:MP {NativeClientVersion} ещё не поддерживает RPF b3889. Нужен адаптер 3889; запуск со старым клиентом остановлен.");
+            }
+
+            if (!adapter.FingerprintValid || !adapter.RuntimeBound)
+            {
+                return new(false, $"legacy-3889-{adapter.Code}", adapter.Message);
+            }
+
+            return new(false, "legacy-3889-native-e2e-required",
+                "Native adapter b3889 привязан, но двухклиентский E2E ещё не подтверждён; запуск остановлен до проверки синхронизации.");
         }
 
         return new(false, "legacy-native-adapter-missing",
