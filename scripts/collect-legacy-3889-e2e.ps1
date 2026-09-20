@@ -109,6 +109,12 @@ $report = [ordered]@{
         playerSpawned = $spawned
         twoClientSync = [bool]$TwoClientSyncConfirmed
     }
+    nativeAdapter = [ordered]@{
+        id = 'flovmp-legacy-native-3889'
+        status = 'missing'
+        sha256 = $null
+        path = $null
+    }
     supportStatus = 'needs-native-adapter'
     notes = @(
         'The runner always uses --allow-unsupported for diagnostics; this does not enable release support.',

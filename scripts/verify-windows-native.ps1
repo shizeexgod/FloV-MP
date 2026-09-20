@@ -33,12 +33,13 @@ function Get-ObservedFile([string]$RelativePath) {
         return [ordered]@{ path = $RelativePath; exists = $false }
     }
     $item = Get-Item -LiteralPath $path
+    $fileVersion = [string]$item.VersionInfo.FileVersion
     return [ordered]@{
         path = $RelativePath
         exists = $true
         size = $item.Length
         sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-        fileVersion = $item.VersionInfo.FileVersion.Trim()
+        fileVersion = if ($fileVersion) { $fileVersion.Trim() } else { '' }
     }
 }
 
@@ -48,7 +49,7 @@ function Test-GameFile([System.Collections.IDictionary]$Observed, [string]$Expec
         return
     }
     if ($ExpectedVersion -and $Observed.fileVersion -ne $ExpectedVersion) {
-        $issues.Add("Версия $Label: ожидалась $ExpectedVersion, получена $($Observed.fileVersion)")
+        $issues.Add("Версия ${Label}: ожидалась $ExpectedVersion, получена $($Observed.fileVersion)")
     }
     if ($ExpectedSize.HasValue -and $Observed.size -ne $ExpectedSize.Value) {
         $issues.Add("Размер $Label не совпал")
@@ -120,8 +121,37 @@ if ($ConnectorPath) {
 $e2e = $null
 if ($E2EReport) {
     $e2e = Get-Content -LiteralPath $E2EReport -Raw | ConvertFrom-Json
+    $expectedAdapterId = [string]$profileData.nativeClient.requiredAdapter
+    $e2eProfile = [string]$e2e.profile
+    $profileMatches = $e2eProfile -eq $Profile -or (
+        -not [string]::IsNullOrWhiteSpace($e2eProfile) -and
+        $e2eProfile.StartsWith("$Profile-", [StringComparison]::OrdinalIgnoreCase)
+    )
+    if (-not $profileMatches) {
+        $issues.Add("E2E-отчёт относится к другому профилю: ожидался $Profile, получен $e2eProfile")
+    }
     foreach ($name in @('gameWindowAlive', 'clientConnected', 'resourceLoaded', 'playerSpawned', 'twoClientSync')) {
         if (-not $e2e.e2eGate.$name) { $issues.Add("E2E-гейт не подтверждён: $name") }
+    }
+
+    # A green gameplay report is only meaningful when it proves which native
+    # adapter was loaded. This prevents an old/cached client from being
+    # mistaken for a b3889-compatible runtime.
+    if ($null -eq $e2e.nativeAdapter) {
+        $issues.Add('E2E-отчёт не содержит nativeAdapter evidence')
+    } else {
+        if ([string]$e2e.nativeAdapter.id -ne $expectedAdapterId) {
+            $issues.Add("E2E native adapter id не совпал: ожидался $expectedAdapterId")
+        }
+        if ([string]$e2e.nativeAdapter.status -ne 'verified') {
+            $issues.Add('E2E native adapter не имеет статуса verified')
+        }
+        $e2eAdapterHash = ([string]$e2e.nativeAdapter.sha256).ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($e2eAdapterHash)) {
+            $issues.Add('E2E native adapter evidence не содержит sha256')
+        } elseif (-not $native.exists -or $e2eAdapterHash -ne $native.sha256) {
+            $issues.Add('SHA-256 native adapter из E2E-отчёта не совпал с фактически проверенным файлом')
+        }
     }
 } else {
     $issues.Add('не передан отчёт двухклиентского E2E (-E2EReport)')
@@ -137,6 +167,7 @@ $report = [ordered]@{
     connector = $connector
     observed = [ordered]@{ exe = $exe; update = $update; update2 = $update2 }
     e2eGate = if ($e2e) { $e2e.e2eGate } else { $null }
+    e2eNativeAdapter = if ($e2e) { $e2e.nativeAdapter } else { $null }
     readyForRelease = ($issues.Count -eq 0)
     issues = @($issues)
     note = 'Наличие DLL само по себе не доказывает совместимость; readyForRelease требует успешного двухклиентского Windows E2E.'
