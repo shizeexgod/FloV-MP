@@ -367,11 +367,7 @@ public sealed class NativeSession
     public void OverridePosition(float x, float y, float z)
     {
         lock (_stateLock) _state = _state with { X = x, Y = y, Z = z };
-        TeleportedAtMs = Environment.TickCount64;
     }
-
-    /// <summary>Когда сервер последний раз переместил игрока (телепорт, спавн) — для античита.</summary>
-    public long TeleportedAtMs { get; private set; }
 
     public void OverrideHeading(float heading)
     {

@@ -276,7 +276,6 @@ public partial class StarterResource
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
         _hitWarnedAt.Remove(session.Id);
-        _lastMove.Remove(session.Id);
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
@@ -405,7 +404,6 @@ public partial class StarterResource
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
             _syncStates[id] = (st, np.Session.StateVersion, np.Session.Name, np.DimensionValue);
-            CheckNativeMovement(id, player, np.Session, st, nowMs);
             _nativeGrid.InsertOrUpdate(id, new FloVMP.Core.AntiCheat.Vector3D(st.X, st.Y, st.Z), np.DimensionValue);
         }
 
@@ -475,32 +473,6 @@ public partial class StarterResource
                 np.Session.Send(line);
             }
         }
-    }
-
-    // Античит перемещения: клиент сам сообщает, где он, поэтому сервер ищет
-    // невозможные скачки. Пока только журнал — лаги и падения с высоты не
-    // должны выкидывать честных игроков.
-    private readonly Dictionary<uint, (float X, float Y, float Z, long Ms, long WarnedMs)> _lastMove = new();
-    private const float MaxPlausibleSpeed = 180f; // м/с: быстрее не летает ни один транспорт GTA
-
-    private void CheckNativeMovement(uint id, IPlayer player, NativeSession session, NativePlayerState st, long nowMs)
-    {
-        if (!_lastMove.TryGetValue(id, out var last)) { _lastMove[id] = (st.X, st.Y, st.Z, nowMs, 0); return; }
-        var dtMs = nowMs - last.Ms;
-        if (dtMs < 250) return; // сравниваем отрезки от 250 мс — джиттер сети не в счёт
-        var dx = st.X - last.X; var dy = st.Y - last.Y; var dz = st.Z - last.Z;
-        var dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-        var speed = dist / (dtMs / 1000f);
-        var warned = last.WarnedMs;
-        var serverMoved = Environment.TickCount64 - session.TeleportedAtMs < 3000;
-        if (speed > MaxPlausibleSpeed && dist > 60f && !serverMoved && !MayUse(player, "noclip") &&
-            nowMs - warned > 10_000)
-        {
-            warned = nowMs;
-            Alt.LogWarning($"[FloV:MP Античит] [{id}] {session.Name}: перемещение {dist:F0} м за {dtMs} мс " +
-                           $"({speed:F0} м/с) — возможен телепорт или спидхак.");
-        }
-        _lastMove[id] = (st.X, st.Y, st.Z, nowMs, warned);
     }
 
     private long _syncTick;
