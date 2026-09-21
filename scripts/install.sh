@@ -836,17 +836,18 @@ fi
 if [ "$DO_FIREWALL" -eq 1 ]; then
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
     for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do ufw allow "$p/udp" >/dev/null; ufw allow "$p/tcp" >/dev/null; done
-    ufw allow "$((GAME_PORT + 10))/tcp" >/dev/null
-    ok "ufw: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP), $((GAME_PORT + 10))/TCP (клиенты GTA Legacy 1.0.3889.0)"
+    ufw allow "$((GAME_PORT + 10))/tcp" >/dev/null; ufw allow "$((GAME_PORT + 10))/udp" >/dev/null
+    ok "ufw: открыты порты $GAME_PORT, $VOICE_PUBLIC_PORT и $((GAME_PORT + 10)) (UDP+TCP; последний — клиенты GTA Legacy 1.0.3889.0 и их голос)"
   elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
     for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do
       firewall-cmd --permanent --add-port="$p/udp" >/dev/null; firewall-cmd --permanent --add-port="$p/tcp" >/dev/null
     done
     firewall-cmd --permanent --add-port="$((GAME_PORT + 10))/tcp" >/dev/null
+    firewall-cmd --permanent --add-port="$((GAME_PORT + 10))/udp" >/dev/null
     firewall-cmd --reload >/dev/null
-    ok "firewalld: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP), $((GAME_PORT + 10))/TCP (клиенты GTA Legacy 1.0.3889.0)"
+    ok "firewalld: открыты порты $GAME_PORT, $VOICE_PUBLIC_PORT и $((GAME_PORT + 10)) (UDP+TCP; последний — клиенты GTA Legacy 1.0.3889.0 и их голос)"
   else
-    info "Файрвол не активен. Если у хостинга есть внешний файрвол — откройте $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP) и $((GAME_PORT + 10))/TCP"
+    info "Файрвол не активен. Если у хостинга есть внешний файрвол — откройте $GAME_PORT, $VOICE_PUBLIC_PORT и $((GAME_PORT + 10)) (UDP+TCP)"
   fi
 fi
 
@@ -954,7 +955,7 @@ fi
 echo "${C_GREEN}${C_BOLD}=====================================================================${C_OFF}"
 echo "  Адрес для подключения:  ${C_BOLD}${PUBLIC_HOST:-<IP сервера>}:$GAME_PORT${C_OFF}"
 echo "  Порты (UDP+TCP):        $GAME_PORT (игра), $VOICE_PUBLIC_PORT (голос)"
-echo "  Порт TCP:               $((GAME_PORT + 10)) (клиенты GTA Legacy 1.0.3889.0, комплект client-b3889/)"
+echo "  Порт UDP+TCP:           $((GAME_PORT + 10)) (клиенты GTA Legacy 1.0.3889.0 и их голос)"
 if [ -f "$INSTALL_DIR/client-b3889.zip" ]; then
   echo "  Клиент для игроков:     $INSTALL_DIR/client-b3889.zip (раздайте игрокам)"
 else
