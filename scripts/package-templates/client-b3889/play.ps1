@@ -17,11 +17,15 @@ if (Get-Process GTA5 -ErrorAction SilentlyContinue) {
     Write-Host '[FloV:MP] GTA V уже запущена: нажмите F9 в игре.' -ForegroundColor Yellow
     exit 0
 }
-$gta = ''
+$reg = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto V' -ErrorAction SilentlyContinue
+function Norm($p) { if ($p -and (Test-Path (Join-Path $p 'GTA5.exe'))) { return ([IO.Path]::GetFullPath($p)).TrimEnd([char]92).ToLowerInvariant() } return $null }
+$gta = $null
 $saved = Join-Path $dir 'gta-dir.txt'
-if (Test-Path $saved) { $gta = (Get-Content $saved -Encoding UTF8 | Select-Object -First 1).Trim() }
-$epic = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Rockstar Games\Grand Theft Auto V' -ErrorAction SilentlyContinue).InstallFolderEpic
-if ($epic -and $gta -and ((Resolve-Path $epic).Path -eq (Resolve-Path $gta).Path)) {
+if (Test-Path $saved) { $gta = Norm ((Get-Content $saved -Encoding UTF8 | Select-Object -First 1).Trim()) }
+if (-not $gta -and $reg) { $gta = Norm $reg.InstallFolderEpic; if (-not $gta) { $gta = Norm $reg.InstallFolderSteam }; if (-not $gta) { $gta = Norm $reg.InstallFolder } }
+$epic = if ($reg) { Norm $reg.InstallFolderEpic } else { $null }
+
+if ($gta -and $epic -and $gta -eq $epic) {
     # Epic Games: запуск через лаунчер Epic (он передаёт игре лицензию).
     Start-Process 'com.epicgames.launcher://apps/9d2d0eb64d5c44529cece33fe2a46482?action=launch&silent=true'
 } elseif ($gta -and (Test-Path (Join-Path $gta 'steam_api64.dll'))) {
@@ -29,5 +33,5 @@ if ($epic -and $gta -and ((Resolve-Path $epic).Path -eq (Resolve-Path $gta).Path
 } elseif ($gta -and (Test-Path (Join-Path $gta 'PlayGTAV.exe'))) {
     Start-Process (Join-Path $gta 'PlayGTAV.exe') -WorkingDirectory $gta
 } else {
-    Write-Host '[FloV:MP] Не знаю, где игра: запустите install-client.cmd, затем повторите, или запустите GTA V сами — клиент подключится.' -ForegroundColor Yellow
+    Write-Host '[FloV:MP] GTA V не найдена: запустите install-client.cmd, или запустите игру сами — клиент подключится после загрузки.' -ForegroundColor Yellow
 }

@@ -425,6 +425,18 @@ namespace flov::ui
                 if (g_font) break;
             }
             if (!g_font) g_font = io.Fonts->AddFontDefault();
+            else
+            {
+                // Рамки, стрелки и значки (─ • ► ✓) в основном шрифте есть не всегда —
+                // добираем из Segoe UI Symbol, иначе в чате вместо них «?».
+                static const ImWchar symbols[] = { 0x2190, 0x21FF, 0x2500, 0x25FF, 0x2600, 0x27BF, 0 };
+                ImFontConfig merge;
+                merge.MergeMode = true;
+                merge.OversampleH = 2;
+                for (const char* path : { "C:\\Windows\\Fonts\\seguisym.ttf", "C:\\Windows\\Fonts\\segoeui.ttf" })
+                    if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES && io.Fonts->AddFontFromFileTTF(path, g_fontPx * 1.3f, &merge, symbols))
+                        break;
+            }
 
             ImGui_ImplDX11_Init(g_device, g_context);
             QueryPerformanceFrequency(&g_freq);
