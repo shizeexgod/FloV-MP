@@ -8,52 +8,74 @@
 Клиент получает готовый серверный архив и ключ лицензии. В архиве нет GTA V,
 клиента игрока, лаунчера или `web/`; это серверный runtime с шаблонами ресурсов.
 
-### Windows (PowerShell)
+Два способа — оба с ключом лицензии, оба проверяют целостность сами.
 
-Клиент создаёт пустую папку, открывает PowerShell в ней и запускает команду,
-которую продавец выдаёт вместе с URL и SHA-256 конкретного ZIP-пакета:
+### Способ 1: одной командой (с VDS раздачи FloV:MP)
 
-```powershell
-& ([scriptblock]::Create((irm https://HOST/bootstrap-windows.ps1))) `
-  -PackageUrl 'https://HOST/flovmp-server-VERSION-windows.zip' `
-  -Sha256 '64-символьный-SHA256' `
-  -LicenseKey 'FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX' `
-  -InstallDir "$PWD\FloVMP"
-```
-
-`bootstrap-windows.ps1` скачивает ZIP во временную папку, проверяет SHA-256,
-проверяет манифест и запускает штатный установщик. Ключ записывается только в
-`config/flovmp.env`; его не нужно добавлять в командную строку запуска сервера.
-При указании `-LicenseKey` Windows-установщик также получает подписанный
-`license.flv` с портала; уже существующий файл при обновлении не заменяется.
-Сервер проверяет локальную подпись и периодически получает online lease. При
-кратком сбое сети действует только ограниченный offline grace (по умолчанию
-24 часа); после него вход закрывается.
-При отзыве ключа backend возвращает подписанный отказ: новые подключения
-блокируются сразу, а уже подключённые игроки отключаются с предупреждением.
-Игрок видит это предупреждение в сообщении отключения.
-Для уже скачанного ZIP можно выполнить `install.cmd` или `install.ps1` напрямую.
-
-### Linux/VDS
-
-Для VDS используется тот же принцип, но архив — `tar.gz`:
+**Linux (Ubuntu / Debian):**
 
 ```bash
-mkdir -p ~/flovmp && cd ~/flovmp
-curl -fsSL https://HOST/install.sh -o install.sh
-chmod +x install.sh
-sudo ./install.sh \
-  --package-url https://HOST/flovmp-server-VERSION-linux.tar.gz \
-  --sha256 64-символьный-SHA256 \
-  --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
+curl -fsSLo flovmp-get.sh http://188.127.229.224/cdn/get.sh
+sudo bash flovmp-get.sh --key FLV-XXXX-XXXX-XXXX --owner-sc <SocialClubId владельца>
 ```
 
-Установщик ставит runtime в `/opt/flovmp`, создаёт отдельного системного
-пользователя, применяет миграции и unit systemd. Пользовательские
-`config/flovmp.env`, ресурсы и данные при обновлении сохраняются.
+**Windows (PowerShell):**
 
-После установки владелец настраивает `server/server.toml` и открывает игровые
-порты, указанные в конфигурации (по умолчанию TCP+UDP `7788` и UDP `7895`).
+```powershell
+iwr http://188.127.229.224/cdn/get.ps1 -OutFile flovmp-get.ps1
+powershell -ExecutionPolicy Bypass -File .\flovmp-get.ps1 -Key FLV-XXXX-XXXX-XXXX
+```
+
+Загрузчик по ключу получает описание последнего релиза (`release-<os>.txt`),
+проверяет его **подпись ключом релизов FloV:MP** (открытый ключ вшит в
+загрузчик), скачивает пакет, сверяет SHA-256 и запускает штатный установщик
+из пакета. Раздача идёт по HTTP, но подмена пакета — на сервере раздачи или по
+дороге — не пройдёт: без закрытого ключа релизов (он только на ПК владельца
+платформы) верную подпись не сделать. Параметры `install.sh` (`--public-host`,
+`--owner-sc`, `--no-db`...) передаются как есть.
+
+Сервер раздачи выдаёт пакет только по действующему ключу из своего списка
+(`flovmp-dist keys ...`, см. раздел «Раздача пакетов» ниже). Неверный ключ —
+отказ с понятной причиной; 20 неверных попыток за 10 минут с одного IP — пауза.
+
+### Способ 2: из архива
+
+Покупатель получает архив (`flovmp-server-<версия>-linux.tar.gz` или
+`-windows.zip`) и ключ.
+
+- Linux: `tar -xzf flovmp-server-*-linux.tar.gz && cd flovmp-server-* && sudo ./install.sh --key FLV-... --owner-sc ...`
+- Windows: распаковать ZIP и запустить `install.cmd` (или `install.ps1 -LicenseKey FLV-...`).
+
+Установщик проверяет SHA-256 каждого файла по `manifest.txt`. На Linux он ставит
+сервер в `/opt/flovmp`, создаёт системного пользователя, базу, миграции и unit
+systemd; повторный запуск из пакета новой версии — обновление с резервной
+копией и откатом при неудачном старте. Файлы владельца (`config/flovmp.env`,
+`server/server.toml`, `server/config/*`, ресурсы, данные) не трогаются никогда.
+
+С ключом установщик записывает его в `config/flovmp.env` и получает подписанный
+`license.flv` с портала. Сервер проверяет подпись локально и периодически
+получает online lease; при сбое сети действует ограниченный offline grace
+(по умолчанию 24 часа). При отзыве ключа новые подключения блокируются сразу.
+
+**Порты:** игра — TCP+UDP `7788`; голос alt:V — UDP `7895`; клиенты GTA Legacy
+1.0.3889.0 и их голос — TCP+UDP `7798` (порт игры + 10). Установщик Linux
+открывает их в ufw сам.
+
+### Раздача пакетов (для владельца платформы)
+
+Один раз на VDS: `sudo bash scripts/distribution/setup-vds.sh <папка с flovmp_dist.py, get.sh, get.ps1>`.
+
+Выпуск версии:
+
+1. `python scripts/pack_server.py` — пакеты в `dist/server`.
+2. `python scripts/distribution/sign_release.py` — подписанный релиз в `dist/release`
+   (первый раз: `--init-key`; закрытый ключ `%USERPROFILE%\.flovmp\release-signing.pem`
+   хранить в резервной копии — без него новые релизы загрузчики не примут).
+3. Залить папку на VDS и `sudo flovmp-dist publish <папка>`.
+
+Ключи покупателей: `sudo flovmp-dist keys add FLV-XXXX-XXXX-XXXX --note "Проект" [--expires 2027-09-21] [--os linux]`,
+`keys list`, `keys disable|enable|remove`. Журнал скачиваний —
+`/var/lib/flovmp-dist/downloads.log` (вместо ключа — его отпечаток).
 
 ## 2. Source-kit
 

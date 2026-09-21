@@ -1,8 +1,13 @@
-﻿import urllib.request
 import json
+import os
 import sys
+import urllib.request
 
-TOKEN = "redl_pat_cc34ae236f5348595dd33e2bcb1aa271c2710d6cfa637e0d"
+# Токен доступа к VDS через redl.io — только из переменной окружения REDL_TOKEN:
+# в репозитории секретов быть не должно (прежний токен из истории git отозвать).
+TOKEN = os.environ.get("REDL_TOKEN", "")
+if not TOKEN:
+    sys.exit("задайте REDL_TOKEN (токен redl.io) в переменной окружения")
 HEADERS = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 def run_vds(command, workdir=None, timeout=60):
