@@ -46,9 +46,14 @@ public partial class StarterResource
 
     // Попадания по другим игрокам — клиент сообщает, сервер проверяет и
     // передаёт урон жертве. Лимит против «убить всех одной строкой».
-    private readonly Dictionary<uint, (int Count, long WindowStart)> _hitRate = new();
+    private readonly Dictionary<uint, (int Count, int Damage, long WindowStart)> _hitRate = new();
     private const int MaxHitsPerSecond = 12;
+    private const int MaxDamagePerSecond = 400;   // больше не наносит ни одно оружие GTA
     private const float MaxHitDistance = 300f;
+    private const float MaxMeleeDistance = 6f;
+    private const float MaxRamDistance = 20f;
+    private const uint WeaponUnarmed = 0xA2719263;
+    private readonly Dictionary<uint, long> _hitWarnedAt = new();
 
     private static readonly int PerfNative = FloVMP.Core.Diagnostics.TickProfiler.Register("native-b3889");
 
@@ -270,6 +275,8 @@ public partial class StarterResource
         _nativeReady.Remove(session.Id);
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
+        _hitWarnedAt.Remove(session.Id);
+        _lastMove.Remove(session.Id);
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
@@ -331,18 +338,39 @@ public partial class StarterResource
         if (victim.DimensionValue != attacker.DimensionValue || victim.DeadReported) return;
         if (_godModes.TryGetValue(victimId, out var god) && god) return;
 
-        var now = _clock.ElapsedMilliseconds;
-        var rate = _hitRate.TryGetValue(session.Id, out var r) && now - r.WindowStart < 1000 ? (r.Count + 1, r.WindowStart) : (1, now);
-        _hitRate[session.Id] = rate;
-        if (rate.Item1 > MaxHitsPerSecond) return;
-
         var a = attacker.State;
         var v = victim.State;
+        if (!attacker.Session.HasState || a.Dead) return; // мёртвый не стреляет
+        var weapon = NativeProtocol.UIntOr(p, 2, 0);
         var dx = a.X - v.X; var dy = a.Y - v.Y; var dz = a.Z - v.Z;
-        if (dx * dx + dy * dy + dz * dz > MaxHitDistance * MaxHitDistance)
+        var dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+
+        // Правдоподобие: удар рукой — вплотную и слабый; наезд — рядом; оружие
+        // в сообщении должно совпадать с тем, что у стрелка в руках по STATE.
+        string? why = null;
+        if (dist > MaxHitDistance) why = $"попадание с {dist:F0} м";
+        else if (a.InVehicle) { if (dist > MaxRamDistance && weapon == WeaponUnarmed) why = $"наезд с {dist:F0} м"; }
+        else if (weapon == WeaponUnarmed || weapon == 0)
         {
-            Alt.LogWarning($"[FloV:MP Античит] попадание с {MathF.Sqrt(dx * dx + dy * dy + dz * dz):F0} м: " +
-                           $"[{session.Id}] {session.Name} → [{victimId}] {victim.Session.Name} — отклонено.");
+            if (dist > MaxMeleeDistance) why = $"удар рукой с {dist:F0} м";
+            else damage = Math.Min(damage, 60);
+        }
+        else if (a.Weapon != 0 && a.Weapon != WeaponUnarmed && a.Weapon != weapon) why = "оружие не совпадает с тем, что в руках";
+
+        var now = _clock.ElapsedMilliseconds;
+        var rate = _hitRate.TryGetValue(session.Id, out var r) && now - r.WindowStart < 1000
+            ? (Count: r.Count + 1, Damage: r.Damage + damage, r.WindowStart)
+            : (Count: 1, Damage: damage, WindowStart: now);
+        _hitRate[session.Id] = rate;
+        if (why is null && (rate.Count > MaxHitsPerSecond || rate.Damage > MaxDamagePerSecond)) why = "слишком частый урон";
+        if (why is not null)
+        {
+            // В журнал — не чаще раза в 10 с на игрока: поток поддельных HIT не должен забивать лог.
+            if (!_hitWarnedAt.TryGetValue(session.Id, out var warned) || now - warned > 10_000)
+            {
+                _hitWarnedAt[session.Id] = now;
+                Alt.LogWarning($"[FloV:MP Античит] {why}: [{session.Id}] {session.Name} → [{victimId}] {victim.Session.Name} — отклонено.");
+            }
             return;
         }
         victim.Session.Send("DAMAGE", damage, session.Id, NativeProtocol.UIntOr(p, 2, 0));
@@ -372,7 +400,12 @@ public partial class StarterResource
             var np = (NativePlayerProxy)(object)player;
             if (!np.Session.HasState || !_nativeReady.Contains(id)) continue;
             var st = np.State;
+            // Флаг NoClip прячет игрока у остальных — верим ему только от тех,
+            // кому NoClip разрешён: иначе это невидимость для любого читера.
+            if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
+                st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
             _syncStates[id] = (st, np.Session.StateVersion, np.Session.Name, np.DimensionValue);
+            CheckNativeMovement(id, player, np.Session, st, nowMs);
             _nativeGrid.InsertOrUpdate(id, new FloVMP.Core.AntiCheat.Vector3D(st.X, st.Y, st.Z), np.DimensionValue);
         }
 
@@ -442,6 +475,32 @@ public partial class StarterResource
                 np.Session.Send(line);
             }
         }
+    }
+
+    // Античит перемещения: клиент сам сообщает, где он, поэтому сервер ищет
+    // невозможные скачки. Пока только журнал — лаги и падения с высоты не
+    // должны выкидывать честных игроков.
+    private readonly Dictionary<uint, (float X, float Y, float Z, long Ms, long WarnedMs)> _lastMove = new();
+    private const float MaxPlausibleSpeed = 180f; // м/с: быстрее не летает ни один транспорт GTA
+
+    private void CheckNativeMovement(uint id, IPlayer player, NativeSession session, NativePlayerState st, long nowMs)
+    {
+        if (!_lastMove.TryGetValue(id, out var last)) { _lastMove[id] = (st.X, st.Y, st.Z, nowMs, 0); return; }
+        var dtMs = nowMs - last.Ms;
+        if (dtMs < 250) return; // сравниваем отрезки от 250 мс — джиттер сети не в счёт
+        var dx = st.X - last.X; var dy = st.Y - last.Y; var dz = st.Z - last.Z;
+        var dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        var speed = dist / (dtMs / 1000f);
+        var warned = last.WarnedMs;
+        var serverMoved = Environment.TickCount64 - session.TeleportedAtMs < 3000;
+        if (speed > MaxPlausibleSpeed && dist > 60f && !serverMoved && !MayUse(player, "noclip") &&
+            nowMs - warned > 10_000)
+        {
+            warned = nowMs;
+            Alt.LogWarning($"[FloV:MP Античит] [{id}] {session.Name}: перемещение {dist:F0} м за {dtMs} мс " +
+                           $"({speed:F0} м/с) — возможен телепорт или спидхак.");
+        }
+        _lastMove[id] = (st.X, st.Y, st.Z, nowMs, warned);
     }
 
     private long _syncTick;
