@@ -106,6 +106,8 @@ class Bot:
         if not first or first[0] != "WELCOME":
             raise RuntimeError("вход отклонён: %s" % first)
         self.id = int(first[1])
+        self.voice_token = first[5] if len(first) > 5 else ""
+        self.voice_port = int(first[6]) if len(first) > 6 and first[6] else 0
         self.alive = True
         self.log("[%s] WELCOME id=%s identity=%s" % (self.name, first[1], first[3]))
         threading.Thread(target=self._reader, daemon=True).start()
@@ -175,6 +177,46 @@ class Bot:
                 self.send("CHAT", say)
                 said = True
             time.sleep(0.05)
+
+    def voice(self, seconds, opus_dll):
+        """Голос: шлёт тон 440 Гц (Opus из opus.dll игры) и считает принятые голоса."""
+        import ctypes, struct, socket as so
+        first = [m for m in self.messages if m[0] == "WELCOME"]
+        token, port = self.voice_token, self.voice_port
+        if not token or not port:
+            raise RuntimeError("сервер не выдал токен голоса")
+        opus = ctypes.CDLL(opus_dll)
+        opus.opus_encoder_create.restype = ctypes.c_void_p
+        opus.opus_encode.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+        err = ctypes.c_int()
+        enc = opus.opus_encoder_create(48000, 1, 2048, ctypes.byref(err))
+        udp = so.socket(so.AF_INET, so.SOCK_DGRAM)
+        udp.settimeout(0.001)
+        dest = (self.host, port)
+        tok = struct.pack("<Q", int(token, 16))
+        udp.sendto(tok + struct.pack("<H", 0), dest)
+        self.voice_received = {}
+        frame = (ctypes.c_short * 960)()
+        out = (ctypes.c_ubyte * 400)()
+        t0, seq, phase = time.time(), 0, 0.0
+        self.send("READY")
+        while self.alive and time.time() - t0 < seconds:
+            for i in range(960):
+                frame[i] = int(8000 * math.sin(phase)); phase += 2 * math.pi * 440 / 48000
+            n = opus.opus_encode(enc, frame, 960, out, 400)
+            seq = (seq + 1) & 0xFFFF
+            if n > 0:
+                udp.sendto(tok + struct.pack("<H", seq) + bytes(out[:n]), dest)
+            self.state(0)
+            end = time.time() + 0.02
+            while time.time() < end:
+                try:
+                    data, _ = udp.recvfrom(2000)
+                    sid = struct.unpack("<I", data[:4])[0]
+                    self.voice_received[sid] = self.voice_received.get(sid, 0) + 1
+                except (so.timeout, OSError):
+                    pass
+        return self.voice_received
 
     def close(self):
         self.alive = False
@@ -309,6 +351,7 @@ def main():
     ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
     ap.add_argument("--hit", type=int, default=0, help="ID игрока: нанести урон (проверка PvP)")
+    ap.add_argument("--voice", metavar="OPUS_DLL", help="говорить тоном 440 Гц (opus.dll из папки GTA) и считать чужой голос")
     a = ap.parse_args()
     if a.check:
         sys.exit(0 if check(a.host, a.port) else 1)
@@ -319,6 +362,11 @@ def main():
         sys.exit(0 if moderation(a.host, a.port, a.moderation_test) else 1)
     bot = Bot(a.host, a.port, a.name, a.key)
     bot.connect()
+    if a.voice:
+        got = bot.voice(a.seconds, a.voice)
+        print("голос принят от игроков:", got)
+        bot.close()
+        return
     if a.hit:
         bot.send("READY")
         time.sleep(1)

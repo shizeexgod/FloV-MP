@@ -2456,11 +2456,6 @@ public partial class StarterResource : Resource
 
             case "vmute":
             case "voicemute":
-                if (_spatialVoiceChannel is null)
-                {
-                    SendChatMessage(player, "{ef4444}Голосовой канал не создан — глушить нечего (см. [voice] в server.toml).");
-                    return;
-                }
                 if (parts.Length < 2 || !uint.TryParse(parts[1], out var vmuteId))
                 {
                     SendChatMessage(player, "{fde047}Использование: /vmute <ID> [минут]  (повторный вызов снимает мут)");
@@ -2483,14 +2478,20 @@ public partial class StarterResource : Resource
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
                     return;
                 }
-                if (IsNative(vmuteTarget))
-                {
-                    SendChatMessage(player, "{fde047}У игрока клиент GTA Legacy b3889 без голосового чата — глушить нечего. Для текста: /mute.");
-                    return;
-                }
                 if (!CanActOn(player, vmuteTarget))
                 {
                     SendChatMessage(player, "{ef4444}Нельзя заглушить администратора равного или большего уровня.");
+                    return;
+                }
+                if (IsNative(vmuteTarget))
+                {
+                    // Голос клиента b3889 идёт через шлюз платформы, а не голосовой сервер alt:V.
+                    ToggleNativeVoiceMute(player, vmuteTarget, vmuteMinutes);
+                    break;
+                }
+                if (_spatialVoiceChannel is null)
+                {
+                    SendChatMessage(player, "{ef4444}Голосовой канал alt:V не создан — глушить нечего (см. [voice] в server.toml).");
                     return;
                 }
                 try

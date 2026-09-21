@@ -341,6 +341,18 @@ public sealed class NativeSession
     public string? CloseReason { get; private set; }
     internal CancellationToken CloseToken => _close.Token;
 
+    // --- голос (NativeVoice) -------------------------------------------------
+    public ulong VoiceToken { get; internal set; }
+    private IPEndPoint? _voiceEndpoint;
+    public IPEndPoint? VoiceEndpoint { get => Volatile.Read(ref _voiceEndpoint); internal set => Volatile.Write(ref _voiceEndpoint, value); }
+    /// <summary>Голос заглушён администрацией (/vmute) — сервер его не пересылает.</summary>
+    public volatile bool VoiceMuted;
+    /// <summary>Измерение (виртуальный мир) — голос слышен только в своём.</summary>
+    public volatile int Dimension;
+    internal long VoiceWindowStart;
+    internal int VoicePackets;
+    public long LastVoiceMs { get; internal set; }
+
     public NativePlayerState State { get { lock (_stateLock) return _state; } }
     public long StateVersion => Interlocked.Read(ref _stateVersion);
     public bool HasState => StateVersion > 0;

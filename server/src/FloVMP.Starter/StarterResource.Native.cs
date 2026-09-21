@@ -25,6 +25,7 @@ namespace FloVMP.Starter;
 public partial class StarterResource
 {
     private NativeServer? _native;
+    private NativeVoice? _nativeVoice;
     private readonly Dictionary<uint, IPlayer> _nativePlayers = new();
     private readonly ConcurrentDictionary<uint, byte> _altPlayerIds = new();
     private readonly HashSet<uint> _nativeReady = new();
@@ -107,6 +108,7 @@ public partial class StarterResource
             _native.ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ??
                                  FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(ReadServerTomlValue("name")) ?? "FloV:MP";
             _native.Start();
+            StartNativeVoice(port);
             Alt.Log($"[FloV:MP b3889] Шлюз клиентов GTA V Legacy {NativeProtocol.GameVersion} слушает TCP {port}. " +
                     "Для игроков из интернета откройте этот порт.");
         }
@@ -138,8 +140,58 @@ public partial class StarterResource
         return null;
     }
 
+    /// <summary>Голос клиентов b3889 — UDP на том же порту, что и шлюз.</summary>
+    private void StartNativeVoice(int port)
+    {
+        var mode = (Environment.GetEnvironmentVariable("FLOVMP_NATIVE_VOICE") ?? "on").Trim().ToLowerInvariant();
+        if (mode is "off" or "0" or "false")
+        {
+            Alt.Log("[FloV:MP b3889] Голосовой чат клиентов b3889 выключен (FLOVMP_NATIVE_VOICE=off).");
+            return;
+        }
+        try
+        {
+            _nativeVoice = new NativeVoice(IPAddress.Any, port, () => _native?.Sessions ?? Array.Empty<NativeSession>(),
+                msg => Alt.LogWarning("[FloV:MP b3889] " + msg));
+            if (float.TryParse(Environment.GetEnvironmentVariable("FLOVMP_VOICE_RADIUS"),
+                    System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var radius)
+                && radius is >= 3f and <= 500f)
+                _nativeVoice.Radius = radius;
+            _nativeVoice.Start();
+            Alt.Log($"[FloV:MP b3889] Голосовой чат: UDP {port}, радиус {_nativeVoice.Radius:0} м. Откройте этот UDP-порт вместе с TCP.");
+        }
+        catch (Exception ex)
+        {
+            _nativeVoice = null;
+            Alt.LogError($"[FloV:MP b3889] Голосовой чат НЕ запущен (UDP {port}): {ex.Message}.");
+        }
+    }
+
+    private void ToggleNativeVoiceMute(IPlayer admin, IPlayer target, int? minutes)
+    {
+        var session = ((NativePlayerProxy)(object)target).Session;
+        var sc = target.SocialClubId.ToString();
+        if (session.VoiceMuted)
+        {
+            session.VoiceMuted = false;
+            _voiceMutes?.Unmute(sc);
+            SendChatMessage(admin, $"{{34d399}}Голос игрока {target.Name} восстановлен.");
+            SendChatMessage(target, "{34d399}[FloV:MP] Ваш голос снова слышен.");
+            Alt.Log($"[FloV:MP] [Voice] {admin.Name} снял голосовой мут с {target.Name}");
+            return;
+        }
+        session.VoiceMuted = true;
+        _voiceMutes?.Mute(sc, minutes is null ? null : DateTime.UtcNow.AddMinutes(minutes.Value));
+        var howLong = minutes is null ? "до снятия" : $"на {minutes} мин.";
+        SendChatMessage(admin, $"{{fde047}}Голос игрока {target.Name} заглушён ({howLong}).");
+        SendChatMessage(target, $"{{f59e0b}}[FloV:MP] Ваш голос заглушён администрацией ({howLong}).");
+        Alt.Log($"[FloV:MP] [Voice] {admin.Name} заглушил голос {target.Name} ({howLong})");
+    }
+
     private void StopNativeGateway()
     {
+        _nativeVoice?.Dispose();
+        _nativeVoice = null;
         _native?.Dispose();
         _native = null;
     }
@@ -194,7 +246,11 @@ public partial class StarterResource
             return;
         }
 
-        session.Send("WELCOME", session.Id, session.Name, session.Identity.ToString(), _native!.ServerName);
+        // Токен голоса — в WELCOME: UDP-пакеты без него сервер не принимает.
+        var voiceToken = _nativeVoice?.Register(session) ?? "";
+        session.VoiceMuted = _voiceMutes?.IsMuted(session.Identity.ToString(), DateTime.UtcNow) ?? false;
+        session.Send("WELCOME", session.Id, session.Name, session.Identity.ToString(), _native!.ServerName,
+            voiceToken, _nativeVoice?.Port ?? 0, _nativeVoice?.Radius ?? 0f);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
 
@@ -207,6 +263,7 @@ public partial class StarterResource
         if (!_nativePlayers.TryGetValue(session.Id, out var proxy) ||
             !ReferenceEquals(((NativePlayerProxy)(object)proxy).Session, session)) return;
         _nativePlayers.Remove(session.Id);
+        _nativeVoice?.Unregister(session);
         _nativeReady.Remove(session.Id);
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);

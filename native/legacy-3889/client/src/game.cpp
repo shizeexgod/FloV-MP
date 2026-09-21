@@ -3,6 +3,7 @@
 #include "natives.h"
 #include "net.h"
 #include "ui.h"
+#include "voice.h"
 
 #include <algorithm>
 #include <cmath>
@@ -81,6 +82,8 @@ namespace flov::game
         Hash g_remoteGroup = 0;
         std::string g_host;
         int g_port = 0;
+        float g_voiceRadius = 25.f;
+        bool g_micWarned = false;
         int g_altPort = 0; // запасной порт, если основной не ответил (ввели сразу порт шлюза)
         std::string g_typedAddress;
         std::string g_pendingName;
@@ -752,6 +755,7 @@ namespace flov::game
             g_adminLevel = 0;
             g_espOn = false;
             g_frozen = false;
+            voice::Stop();
             ui::SetChatEnabled(false);
             ui::SetLabels({});
             ui::SetHud("");
@@ -844,6 +848,7 @@ namespace flov::game
             {
                 auto it = g_remotes.find(ToInt(at(1)));
                 if (it != g_remotes.end()) { DestroyRemote(it->second); g_remotes.erase(it); }
+                voice::Forget((uint32_t)ToInt(at(1)));
             }
             else if (type == "MSG") SendChatLine(at(1), at(2), at(3));
             else if (type == "WELCOME")
@@ -855,6 +860,10 @@ namespace flov::game
                 g_welcomeAt = GetTickCount64();
                 PrepareWorldOnce();
                 ui::SetChatEnabled(true);
+                // Голос: токен и порт из WELCOME (старый сервер их не шлёт — голоса нет).
+                g_voiceRadius = std::max(3.f, ToFloat(at(7), 25.f));
+                g_micWarned = false;
+                if (!at(5).empty()) voice::Start(g_host, ToInt(at(6), g_port), at(5), g_voiceRadius);
                 ui::Notify("Добро пожаловать на " + (g_serverName.empty() ? std::string("сервер") : g_serverName) +
                            "! T — чат, /help — команды.", 5000);
                 Log("welcome id=" + at(1) + " identity=" + at(3));
@@ -1125,6 +1134,7 @@ namespace flov::game
                 ui::Label l;
                 l.x = sx; l.y = sy;
                 l.text = "[" + std::to_string(id) + "] " + r.name;
+                if (voice::IsSpeaking((uint32_t)id)) l.text = "\xE2\x99\xAA " + l.text; // ♪ говорит
                 if (g_espOn)
                 {
                     l.text += "  " + std::to_string((int)d) + " м";
@@ -1137,6 +1147,46 @@ namespace flov::game
                 labels.push_back(std::move(l));
             }
             ui::SetLabels(std::move(labels));
+        }
+
+        /// Разговор по N (как в GTA Online), громкость и панорама собеседников.
+        void VoiceTick(Ped me)
+        {
+            if (!voice::Running()) return;
+            DWORD pid = 0;
+            GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+            const bool focused = pid == GetCurrentProcessId();
+            const bool talking = focused && !ui::InputActive() && (GetAsyncKeyState('N') & 0x8000) != 0;
+            voice::SetTalking(talking);
+            if (talking && !voice::MicrophoneOk() && !g_micWarned)
+            {
+                g_micWarned = true;
+                ui::Notify("Микрофон: " + voice::LastError(), 6000);
+            }
+
+            const Vector3 cam = n::GET_GAMEPLAY_CAM_COORD();
+            const Vector3 rot = n::GET_GAMEPLAY_CAM_ROT(2);
+            const float yaw = rot.z * 3.14159265f / 180.f;
+            const float fx = -std::sin(yaw), fy = std::cos(yaw); // взгляд камеры
+            const Vector3 mine = n::GET_ENTITY_COORDS(me, TRUE);
+            for (auto& [id, r] : g_remotes)
+            {
+                float x = r.cur.x, y = r.cur.y, z = r.cur.z;
+                if (r.ped && n::DOES_ENTITY_EXIST(r.ped))
+                {
+                    const Vector3 p = n::GET_ENTITY_COORDS(r.ped, TRUE);
+                    x = p.x; y = p.y; z = p.z;
+                }
+                const float d = std::sqrt(Dist2(x, y, z, mine.x, mine.y, mine.z));
+                float gain = std::clamp(1.f - d / g_voiceRadius, 0.f, 1.f);
+                gain = gain * gain * 1.2f; // ближе — заметно громче
+                // Панорама: собеседник справа от камеры — в правом канале.
+                const float dx = x - cam.x, dy = y - cam.y;
+                const float len = std::sqrt(dx * dx + dy * dy);
+                float pan = 0.f;
+                if (len > 0.5f) pan = std::clamp((dx * fy - dy * fx) / len, -1.f, 1.f) * 0.8f;
+                voice::SetGain((uint32_t)id, gain, pan);
+            }
         }
 
         void HandleHotkeys()
@@ -1242,6 +1292,7 @@ namespace flov::game
             }
 
             if (g_noclip) NoClipTick();
+            VoiceTick(me);
             CheckDeath(me);
             UndoRemoteDamage(me);
             DetectHits(me);
@@ -1267,8 +1318,10 @@ namespace flov::game
                 n::CLEAR_AREA_OF_COPS(p.x, p.y, p.z, 500.f, 0);
             }
             BuildLabels();
+            std::string mic;
+            if (voice::Talking()) mic = voice::MicrophoneOk() ? "  ·  \xE2\x97\x8F ГОВОРИТЕ" : "  ·  нет микрофона";
             ui::SetHud("FloV:MP  ·  " + (g_serverName.empty() ? g_net.Endpoint() : g_serverName) +
-                       "  ·  ID " + std::to_string(g_myId) + "  ·  " + std::to_string(g_net.PingMs()) + " мс");
+                       "  ·  ID " + std::to_string(g_myId) + "  ·  " + std::to_string(g_net.PingMs()) + " мс" + mic);
         }
     }
 

@@ -251,6 +251,80 @@ public sealed class NativeServerTests
         Assert.Equal(2u, (await WaitEventAsync<NativeJoined>(server)).Session.Id);
     }
 
+    private static byte[] VoicePacket(ulong token, ushort seq, int payload)
+    {
+        var p = new byte[10 + payload];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(p, token);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(p.AsSpan(8), seq);
+        for (var i = 0; i < payload; i++) p[10 + i] = (byte)(i + 1);
+        return p;
+    }
+
+    private static async Task<byte[]?> ReceiveOrNull(UdpClient udp, int ms)
+    {
+        var t = udp.ReceiveAsync();
+        return await Task.WhenAny(t, Task.Delay(ms)) == t ? t.Result.Buffer : null;
+    }
+
+    [Fact]
+    public async Task VoiceIsRelayedOnlyToNearbyAndNotWhenMuted()
+    {
+        using var server = StartServer();
+        using var voice = new NativeVoice(IPAddress.Loopback, 0, () => server.Sessions, _ => { });
+        voice.Start();
+        using var a = new FakeClient();
+        using var b = new FakeClient();
+        await a.JoinAsync(server.Port);
+        var sa = (await WaitEventAsync<NativeJoined>(server)).Session;
+        await b.JoinAsync(server.Port);
+        var sb = (await WaitEventAsync<NativeJoined>(server)).Session;
+        var ta = Convert.ToUInt64(voice.Register(sa), 16);
+        var tb = Convert.ToUInt64(voice.Register(sb), 16);
+
+        async Task State(FakeClient c, float x) =>
+            await c.SendAsync(NativeProtocol.Format("STATE", x, 0f, 30f, 0f, 0f, 0f, 0f, 0, 0u, 0, -1, 0f, 0f, 0f, 200, 0, 0u, 0f));
+        await State(a, 0f);
+        await State(b, 10f); // 10 м — в радиусе 25
+        for (var i = 0; i < 50 && !(sa.HasState && sb.HasState); i++) await Task.Delay(20);
+
+        using var ua = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var ub = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var dest = new IPEndPoint(IPAddress.Loopback, voice.Port);
+        await ub.SendAsync(VoicePacket(tb, 0, 0), dest); // «я здесь»
+        await ua.SendAsync(VoicePacket(ta, 0, 0), dest);
+        await Task.Delay(100);
+
+        await ua.SendAsync(VoicePacket(ta, 7, 40), dest);
+        var got = await ReceiveOrNull(ub, 2000);
+        Assert.NotNull(got);
+        Assert.Equal(sa.Id, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(got!));
+        Assert.Equal(7, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(got.AsSpan(4)));
+        Assert.Equal(6 + 40, got.Length);
+
+        // Чужой (неизвестный) токен — тишина.
+        await ua.SendAsync(VoicePacket(0xDEADBEEF, 8, 40), dest);
+        Assert.Null(await ReceiveOrNull(ub, 300));
+
+        // Заглушённый — не пересылается.
+        sa.VoiceMuted = true;
+        await ua.SendAsync(VoicePacket(ta, 9, 40), dest);
+        Assert.Null(await ReceiveOrNull(ub, 300));
+        sa.VoiceMuted = false;
+
+        // Далеко (100 м) — не слышно.
+        await State(b, 100f);
+        await Task.Delay(150);
+        await ua.SendAsync(VoicePacket(ta, 10, 40), dest);
+        Assert.Null(await ReceiveOrNull(ub, 300));
+
+        // Другое измерение — не слышно.
+        await State(b, 5f);
+        sb.Dimension = 3;
+        await Task.Delay(150);
+        await ua.SendAsync(VoicePacket(ta, 11, 40), dest);
+        Assert.Null(await ReceiveOrNull(ub, 300));
+    }
+
     [Fact]
     public void StateParsingClampsAndNormalizes()
     {

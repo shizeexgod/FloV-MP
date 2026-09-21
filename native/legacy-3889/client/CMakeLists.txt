@@ -14,6 +14,7 @@ add_library(flovmp-client SHARED
     src/net.cpp
     src/game.cpp
     src/ui.cpp
+    src/voice.cpp
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
@@ -31,7 +32,7 @@ if (MSVC)
     # Статический CRT: у игрока может не быть нужного VC++ Redistributable.
     set_property(TARGET flovmp-client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
-target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32)
+target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm)
 
 set_target_properties(flovmp-client PROPERTIES
     OUTPUT_NAME "FloVMP"

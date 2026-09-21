@@ -104,6 +104,7 @@ public class NativePlayerProxy : DispatchProxy
             case "get_Dimension": return _dimension;
             case "set_Dimension":
                 _dimension = (int)args[0]!;
+                s.Dimension = _dimension;
                 s.Send("DIM", _dimension);
                 return null;
             case "get_Health": return CurrentHealth();
