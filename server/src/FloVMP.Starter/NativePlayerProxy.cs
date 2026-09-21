@@ -1,0 +1,241 @@
+using System;
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Reflection;
+using System.Text.Json;
+using AltV.Net.Data;
+using AltV.Net.Elements.Entities;
+using AltV.Net.Enums;
+using FloVMP.Core.Native;
+
+namespace FloVMP.Starter;
+
+/// <summary>
+/// Игрок нативного клиента GTA V Legacy b3889 в виде обычного <see cref="IPlayer"/>.
+///
+/// Вся платформа — вход, баны, права, лицензия, чат и админ-команды — написана
+/// против IPlayer. Отдельная копия всего этого для b3889 разъехалась бы с
+/// оригиналом при первой же правке, поэтому нативный игрок притворяется
+/// IPlayer: чтение (позиция, здоровье, ник) берётся из его последнего STATE,
+/// а запись и Emit превращаются в сообщения протокола FLOV/2.
+///
+/// Такой объект НЕЛЬЗЯ передавать в движок alt:V (голосовой канал, Alt.Emit
+/// с игроком в аргументах): у него нет нативного указателя. Эти места в
+/// StarterResource проверяют <see cref="StarterResource.IsNative"/>.
+/// </summary>
+public class NativePlayerProxy : DispatchProxy
+{
+    internal NativeSession Session = null!;
+    internal StarterResource Owner = null!;
+
+    private int _dimension;
+    private uint _model = 0x705E61F2; // mp_m_freemode_01
+    private ushort _maxHealth = 200;
+    private ushort? _healthOverride;
+    private ushort? _armorOverride;
+    private long _overrideStateVersion;
+    internal bool DeadReported;
+    internal readonly ConcurrentDictionary<string, object?> LocalMeta = new();
+
+    internal void Init(NativeSession session, StarterResource owner)
+    {
+        Session = session;
+        Owner = owner;
+    }
+
+    public NativePlayerState State => Session.State;
+    public int DimensionValue => _dimension;
+
+    private ushort CurrentHealth()
+    {
+        if (DeadReported) return 0;
+        if (_healthOverride is { } h && Session.StateVersion <= _overrideStateVersion + 2) return h;
+        _healthOverride = null;
+        return Session.HasState ? (ushort)Math.Clamp(State.Health, 0, 1000) : (ushort)200;
+    }
+
+    private ushort CurrentArmor()
+    {
+        if (_armorOverride is { } a && Session.StateVersion <= _overrideStateVersion + 2) return a;
+        _armorOverride = null;
+        return (ushort)Math.Clamp(State.Armor, 0, 200);
+    }
+
+    protected override object? Invoke(MethodInfo? method, object?[]? args)
+    {
+        if (method is null) return null;
+        args ??= Array.Empty<object?>();
+        var s = Session;
+        switch (method.Name)
+        {
+            case "get_Id": return s.Id;
+            case "get_Name": return s.Name;
+            case "get_Exists":
+            case "get_IsConnected": return s.Joined && !s.Closing;
+            case "get_Type": return BaseObjectType.Player;
+            case "get_NativePointer": return IntPtr.Zero;
+            case "get_SocialClubId": return s.Identity;
+            case "get_Ip": return s.Ip;
+            case "get_HardwareIdHash": return s.HardwareId;
+            case "get_HardwareIdExHash": return s.MacHash;
+            case "get_Position":
+                {
+                    var st = State;
+                    return new Position(st.X, st.Y, st.Z);
+                }
+            case "set_Position":
+                {
+                    var p = (Position)args[0]!;
+                    s.OverridePosition(p.X, p.Y, p.Z);
+                    s.Send("TP", p.X, p.Y, p.Z);
+                    return null;
+                }
+            case "get_Rotation":
+                return new Rotation(0, 0, State.Heading * (float)Math.PI / 180f);
+            case "set_Rotation":
+                {
+                    var r = (Rotation)args[0]!;
+                    // Rotation alt:V — в радианах; клиенту GTA нужен курс в градусах.
+                    var heading = ((r.Yaw * 180f / (float)Math.PI) % 360f + 360f) % 360f;
+                    s.OverrideHeading(heading);
+                    s.Send("HEADING", heading);
+                    return null;
+                }
+            case "get_Dimension": return _dimension;
+            case "set_Dimension":
+                _dimension = (int)args[0]!;
+                s.Send("DIM", _dimension);
+                return null;
+            case "get_Health": return CurrentHealth();
+            case "set_Health":
+                {
+                    var h = (ushort)args[0]!;
+                    _healthOverride = h;
+                    _overrideStateVersion = s.StateVersion;
+                    if (h > 0) DeadReported = false;
+                    s.Send("HEALTH", (int)h);
+                    return null;
+                }
+            case "get_MaxHealth": return _maxHealth;
+            case "set_MaxHealth": _maxHealth = (ushort)args[0]!; return null;
+            case "get_Armor": return CurrentArmor();
+            case "set_Armor":
+                {
+                    var a = (ushort)args[0]!;
+                    _armorOverride = a;
+                    _overrideStateVersion = s.StateVersion;
+                    s.Send("ARMOR", (int)a);
+                    return null;
+                }
+            case "get_IsDead": return DeadReported || (s.HasState && State.Dead);
+            case "get_IsInVehicle": return s.HasState && State.InVehicle;
+            case "get_Vehicle": return null;
+            case "get_Seat": return (byte)0;
+            case "get_Model": return _model;
+            case "set_Model":
+                _model = (uint)args[0]!;
+                s.Send("MODEL", _model);
+                return null;
+            case "get_CurrentWeapon": return State.Weapon;
+            case "Spawn":
+                {
+                    // Spawn(Position, uint) | Spawn(uint model, Position, uint) | Spawn(PedModel, Position, uint)
+                    var posIndex = args.Length == 2 ? 0 : 1;
+                    if (args.Length == 3) _model = Convert.ToUInt32(args[0], CultureInfo.InvariantCulture);
+                    var p = (Position)args[posIndex]!;
+                    DeadReported = false;
+                    _healthOverride = 200;
+                    _overrideStateVersion = s.StateVersion;
+                    s.OverridePosition(p.X, p.Y, p.Z);
+                    s.Send("SPAWN", p.X, p.Y, p.Z, State.Heading, _model);
+                    return null;
+                }
+            case "Kick":
+                s.Close(args.Length > 0 ? args[0] as string ?? "Вы отключены от сервера." : "Вы отключены от сервера.");
+                return null;
+            case "GiveWeapon":
+                s.Send("WEAPON", Convert.ToUInt32(args[0], CultureInfo.InvariantCulture), (int)args[1]!, (bool)args[2]!);
+                return null;
+            case "RemoveAllWeapons":
+                s.Send("DISARM");
+                return null;
+            case "SetLocalMetaData":
+                LocalMeta[(string)args[0]!] = args[1];
+                return null;
+            case "Emit":
+                OnEmit((string)args[0]!, args.Length > 1 ? args[1] as object?[] ?? Array.Empty<object?>() : Array.Empty<object?>());
+                return null;
+            case "GetHashCode": return (int)s.Id;
+            case "Equals": return ReferenceEquals(this, args[0]);
+            case "ToString": return $"NativePlayer[{s.Id}] {s.Name}";
+        }
+
+        Owner.ReportUnsupportedNativeMember(method.Name);
+        var type = method.ReturnType;
+        return type == typeof(void) || !type.IsValueType ? null : Activator.CreateInstance(type);
+    }
+
+    private static string Str(object?[] a, int i) => i < a.Length ? Convert.ToString(a[i], CultureInfo.InvariantCulture) ?? "" : "";
+
+    /// <summary>
+    /// События клиента alt:V → команды нативного клиента. Имена событий те же,
+    /// что шлёт платформа, поэтому код StarterResource не знает, какой у игрока клиент.
+    /// </summary>
+    private void OnEmit(string name, object?[] a)
+    {
+        var s = Session;
+        switch (name)
+        {
+            case "flovmp:chat:msg": s.Send("MSG", Str(a, 0), Str(a, 1), Str(a, 2)); break;
+            case "flovmp:console:setAdmin": s.Send("ADMIN", Str(a, 0)); break;
+            case "flovmp:chat:commands":
+                {
+                    // Клиенту нужны имена: подсказки в чате и доступность F3/F4/F5.
+                    var names = new System.Collections.Generic.List<string>();
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(Str(a, 0));
+                        foreach (var item in doc.RootElement.EnumerateArray())
+                            if (item.TryGetProperty("cmd", out var cmd)) names.Add(cmd.GetString() ?? "");
+                    }
+                    catch (JsonException) { }
+                    s.Send("CMDS", string.Join(",", names));
+                    break;
+                }
+            case "flovmp:admin:roster":
+                {
+                    var pairs = new System.Collections.Generic.List<string>();
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(Str(a, 0));
+                        foreach (var p in doc.RootElement.EnumerateObject())
+                            pairs.Add(p.Name + ":" + p.Value.GetInt32().ToString(CultureInfo.InvariantCulture));
+                    }
+                    catch (JsonException) { }
+                    s.Send("ROSTER", string.Join(",", pairs));
+                    break;
+                }
+            case "starter:setWeather": s.Send("WEATHER", Str(a, 0)); break;
+            case "starter:setTime": s.Send("TIME", Str(a, 0), Str(a, 1)); break;
+            case "starter:setFrozen": s.Send("FREEZE", Str(a, 0) == "True" ? "1" : "0"); break;
+            case "starter:setGodMode": s.Send("GOD", Str(a, 0) == "True" ? "1" : "0"); break;
+            case "starter:setSpeed": s.Send("SPEED", Str(a, 0)); break;
+            case "starter:revive": s.Send("REVIVE"); break;
+            case "starter:toggleNoClip": s.Send("NOCLIP"); break;
+            case "flovmp:admin:toggleEsp": s.Send("ESP", Str(a, 0)); break;
+            case "starter:requestWaypointTp": s.Send("REQTPM"); break;
+            case "flovmp:chat:clear": s.Send("CLEARCHAT"); break;
+            // Для alt:V-клиента: у нативного свой вывод координат и приветствие.
+            case "starter:copyCoords":
+            case "starter:initClient":
+            case "flovmp:client:welcome":
+                break;
+            default:
+                // Событие своего ресурса (gamemode). Клиентских скриптов у
+                // нативного клиента нет — передаём как есть, клиент покажет его
+                // в журнале, а SDK может подписаться на EVENT.
+                s.Send("EVENT", name, JsonSerializer.Serialize(a));
+                break;
+        }
+    }
+}

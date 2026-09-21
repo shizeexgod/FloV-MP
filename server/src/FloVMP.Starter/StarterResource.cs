@@ -20,7 +20,7 @@ namespace FloVMP.Starter;
 /// - Pre-DB архитектура: автосохранение прав в config/admins.json, команды консоли сервера (setadmin/setfounder),
 ///   одноразовый токен первичной настройки (/claimowner).
 /// </summary>
-public class StarterResource : Resource
+public partial class StarterResource : Resource
 {
     // Точка появления (по умолчанию Легион-сквер). Свой ресурс меняет её событием
     //   Alt.Emit("flovmp:settings:spawn", x, y, z, heading)
@@ -116,7 +116,7 @@ public class StarterResource : Resource
         if (_nearbyIndexBuiltMs >= 0 && now - _nearbyIndexBuiltMs < NearbyIndexMaxAgeMs) return;
 
         _nearbyIndex.Clear();
-        foreach (var p in Alt.GetAllPlayers())
+        foreach (var p in AllPlayers())
         {
             if (!p.Exists) continue;
             var pp = p.Position;
@@ -133,7 +133,7 @@ public class StarterResource : Resource
         var dim = origin.Dimension;
         var radiusSq = radius * radius;
 
-        var players = Alt.GetAllPlayers();
+        var players = AllPlayers();
         if (players.Count < NearbyIndexMinPlayers)
         {
             foreach (var p in players)
@@ -157,7 +157,7 @@ public class StarterResource : Resource
 
         foreach (var id in _nearbyCandidates)
         {
-            var p = Alt.GetPlayerById(id);
+            var p = PlayerById(id);
             if (p is null || !p.Exists || p.Dimension != dim) continue;
             // Живая позиция — только у кандидатов: их единицы, а не весь сервер.
             var pp = p.Position;
@@ -234,7 +234,7 @@ public class StarterResource : Resource
         if (_modCommands.TryGetValue(name, out var existing) && existing == entry) return;
         _modCommands[name] = entry;
         // Уже подключённым игрокам — обновлённые подсказки в чате.
-        foreach (var online in Alt.GetAllPlayers())
+        foreach (var online in AllPlayers())
             if (online.Exists && _clientReady.ContainsKey(online.Id)) SendChatCommands(online);
         Alt.Log($"[FloV:MP] [Mods] зарегистрирована команда /{name}" + (minLevel > 0 ? $" (администраторы {minLevel}+)" : ""));
     }
@@ -367,7 +367,7 @@ public class StarterResource : Resource
 
     private void KickPlayersForLicense()
     {
-        foreach (var player in Alt.GetAllPlayers())
+        foreach (var player in AllPlayers())
             if (player.Exists) player.Kick($"[Лицензия] {_license.Message}");
     }
     private FloVMP.Core.Security.MultiTierBanService? _bans;
@@ -454,7 +454,7 @@ public class StarterResource : Resource
         var admins = _adminLevels.Where(kv => kv.Value > 0).ToArray();
         foreach (var (recipientId, own) in admins)
         {
-            var recipient = Alt.GetPlayerById(recipientId);
+            var recipient = PlayerById(recipientId);
             if (recipient is null || !recipient.Exists || !_clientReady.ContainsKey(recipientId)) continue;
 
             var roster = new Dictionary<string, int>();
@@ -537,7 +537,7 @@ public class StarterResource : Resource
         // Секции замера регистрируются лениво, при первом обращении. Без этой
         // строки команда perf сразу после старта показывала «секций 0», хотя
         // сервер уже работал.
-        _ = PerfTick + PerfStoreSync + PerfRespawn + PerfAdminRights + PerfLicense + PerfChatNearby + PerfAntiCheat;
+        _ = PerfTick + PerfStoreSync + PerfRespawn + PerfAdminRights + PerfLicense + PerfChatNearby + PerfAntiCheat + PerfNative;
 
         // Античит движения. «off» — выключить совсем, «strict» — возвращать
         // нарушителя назад и предупреждать его, по умолчанию — только лог.
@@ -643,6 +643,9 @@ public class StarterResource : Resource
         Alt.OnServer<float, float, float, float>("flovmp:settings:spawn", OnSpawnSetting);
         Alt.OnServer<bool>("flovmp:settings:respawn", OnRespawnSetting);
 
+        // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
+        StartNativeGateway();
+
         // Ресурсы, стартовавшие раньше платформы, по этому событию повторяют регистрацию команд.
         Alt.Emit("flovmp:platform:ready");
     }
@@ -650,6 +653,7 @@ public class StarterResource : Resource
     public override void OnStop()
     {
         _licenseRemoteCts.Cancel();
+        StopNativeGateway();
         // Баны на диск до отписки от событий: выданный в последнюю секунду бан
         // обязан пережить перезапуск.
         try { (_banStore as IDisposable)?.Dispose(); }
@@ -676,7 +680,7 @@ public class StarterResource : Resource
 
     public void BroadcastChatMessage(string message, string kind = "system", string author = "")
     {
-        Alt.EmitAllClients("flovmp:chat:msg", kind, author, message);
+        EmitAllClients("flovmp:chat:msg", kind, author, message);
     }
 
     /// <summary>
@@ -719,7 +723,7 @@ public class StarterResource : Resource
     /// </summary>
     private void OnAntiCheatDetection(FloVMP.Core.AntiCheat.AntiCheatDetectionEvent ev)
     {
-        var player = Alt.GetPlayerById((uint)ev.AccountId);
+        var player = PlayerById((uint)ev.AccountId);
         Alt.LogWarning($"[FloV:MP Античит] {ev.DetectionType}: {(player?.Name ?? ev.Username)} " +
                        $"(ID {ev.AccountId}) — {ev.Details}");
 
@@ -744,7 +748,7 @@ public class StarterResource : Resource
         if (_antiCheat is null || nowMs < _nextAntiCheatMs) return;
         _nextAntiCheatMs = nowMs + AntiCheatIntervalMs;
 
-        foreach (var player in Alt.GetAllPlayers())
+        foreach (var player in AllPlayers())
         {
             if (!player.Exists || !_clientReady.ContainsKey(player.Id)) continue;
 
@@ -756,7 +760,7 @@ public class StarterResource : Resource
             var exempt = _adminLevels.TryGetValue(player.Id, out var lvl) && lvl > 0;
             if (state.IsAdminExempt != exempt) _antiCheat.SetAdminExemption(id, exempt);
 
-            _antiCheat.CheckMovement(id, vec, player.Vehicle is not null);
+            _antiCheat.CheckMovement(id, vec, InAnyVehicle(player));
         }
     }
 
@@ -779,9 +783,9 @@ public class StarterResource : Resource
     /// лаунчера все «Игрок»), и «kick Игрок» выкидывал первого попавшегося.
     /// При нескольких совпадениях команда просит ID и пишет, из кого выбирать.
     /// </summary>
-    private static IPlayer? FindByUniqueName(string name, Action<string> say)
+    private IPlayer? FindByUniqueName(string name, Action<string> say)
     {
-        var matches = Alt.GetAllPlayers()
+        var matches = AllPlayers()
             .Where(p => p.Exists && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (matches.Count <= 1) return matches.FirstOrDefault();
@@ -853,7 +857,7 @@ public class StarterResource : Resource
             return;
         }
 
-        var target = Alt.GetPlayerById(targetId);
+        var target = PlayerById(targetId);
         if (target == null)
         {
             SendChatMessage(admin, "{ef4444}Игрок с таким ID не найден.");
@@ -935,6 +939,18 @@ public class StarterResource : Resource
 
     private void OnPlayerConnect(IPlayer player, string reason)
     {
+        if (!IsNative(player))
+        {
+            _altPlayerIds[player.Id] = 0;
+            // ID общие для клиентов alt:V и b3889. Совпадение почти невозможно
+            // (шлюз выдаёт только свободные), но если движок всё же выдал
+            // занятый номер — команды по ID попали бы не в того игрока.
+            if (_nativePlayers.ContainsKey(player.Id))
+            {
+                player.Kick("Повторите подключение.");
+                return;
+            }
+        }
         Alt.Log($"[FloV:MP] Игрок {FloVMP.Core.Chat.PlayerNamePolicy.ForLog(player.Name)} (ID: {player.Id}, SocialClub: {player.SocialClubId}) подключается...");
 
         // Ник задаёт клиент, а сервер вставляет его в системные строки чата и
@@ -965,7 +981,7 @@ public class StarterResource : Resource
         }
 
         // Лимит игроков по действующей лицензии.
-        var online = Alt.GetAllPlayers().Count;
+        var online = AllPlayers().Count;
         // `online` already contains the connecting player. Use >= so a limit
         // of 32 admits exactly 32 players, not an accidental 33rd slot.
         if (online >= _license.PlayerLimit)
@@ -978,7 +994,8 @@ public class StarterResource : Resource
         // Чистый спавн игрока
         player.Model = DefaultPlayerModel;
         player.Spawn(_spawnPosition, 0);
-        player.Rotation = new Rotation(0, 0, _spawnHeading);
+        // Rotation в alt:V — в радианах, _spawnHeading — в градусах.
+        player.Rotation = new Rotation(0, 0, _spawnHeading * MathF.PI / 180f);
         player.Health = 200;
         player.MaxHealth = 200;
         player.Armor = 100;
@@ -1006,7 +1023,9 @@ public class StarterResource : Resource
             _adminLevels[player.Id] = GetAssignedAdminRank(player);
         }
 
-        // Активация 3D войс-канала
+        // Активация 3D войс-канала. У клиента b3889 голоса alt:V нет, а его
+        // объект нельзя передавать в движок — нет нативного указателя.
+        if (!IsNative(player))
         try
         {
             _spatialVoiceChannel?.AddPlayer(player);
@@ -1067,7 +1086,10 @@ public class StarterResource : Resource
         if (_worldWeather is not null) player.Emit("starter:setWeather", _worldWeather);
         if (_worldTime is { } wt) player.Emit("starter:setTime", wt.Hour, wt.Minute);
 
-        Alt.Emit("flovmp:player:ready", player);
+        if (IsNative(player))
+            Alt.Emit("flovmp:native:ready", (int)player.Id, player.Name);
+        else
+            Alt.Emit("flovmp:player:ready", player);
 
         // Приветствие — здесь, а не в OnPlayerConnect: при подключении
         // клиентский скрипт ещё не загружен, и отправленные туда сообщения
@@ -1120,11 +1142,11 @@ public class StarterResource : Resource
                 IPlayer? matchedPlayer = null;
                 if (!explicitSc && uint.TryParse(targetArg, out var targetId))
                 {
-                    matchedPlayer = Alt.GetPlayerById(targetId);
+                    matchedPlayer = PlayerById(targetId);
                 }
                 if (explicitSc && ulong.TryParse(targetArg, out var scId))
                 {
-                    matchedPlayer = Alt.GetAllPlayers().FirstOrDefault(p => p.SocialClubId == scId);
+                    matchedPlayer = AllPlayers().FirstOrDefault(p => p.SocialClubId == scId);
                 }
                 if (matchedPlayer == null && !explicitSc)
                 {
@@ -1193,7 +1215,7 @@ public class StarterResource : Resource
                 }
                 Alt.Log("─── АДМИНИСТРАТОРЫ ОНЛАЙН ───");
                 var onlineCount = 0;
-                foreach (var p in Alt.GetAllPlayers())
+                foreach (var p in AllPlayers())
                 {
                     if (IsAdmin(p, 1))
                     {
@@ -1232,7 +1254,7 @@ public class StarterResource : Resource
                 Alt.Log("[Console] " + FloVMP.Core.Admin.AdminCommandLevels.LoadOrCreate(
                     Path.Combine(Directory.GetCurrentDirectory(), "config"), Alt.LogWarning));
                 ApplyRevokedAdminRights();
-                foreach (var onlinePlayer in Alt.GetAllPlayers())
+                foreach (var onlinePlayer in AllPlayers())
                     if (onlinePlayer.Exists && _clientReady.ContainsKey(onlinePlayer.Id)) SendChatCommands(onlinePlayer);
                 Alt.Log(_adminManager.HasStore
                     ? "[Console] Права перечитаны из базы (таблица admins) и config/admins.json."
@@ -1269,7 +1291,7 @@ public class StarterResource : Resource
                     return;
                 }
                 IPlayer? kickTarget = null;
-                if (uint.TryParse(args[0], out var kId)) kickTarget = Alt.GetPlayerById(kId);
+                if (uint.TryParse(args[0], out var kId)) kickTarget = PlayerById(kId);
                 var kickAmbiguous = false;
                 kickTarget ??= FindByUniqueName(args[0], m => { kickAmbiguous = true; Alt.Log("[Console] " + m); });
                 if (kickAmbiguous) return;
@@ -1305,7 +1327,7 @@ public class StarterResource : Resource
                 IPlayer? banTarget = null;
                 if (banOfflineSc is null)
                 {
-                    if (uint.TryParse(args[0], out var bId)) banTarget = Alt.GetPlayerById(bId);
+                    if (uint.TryParse(args[0], out var bId)) banTarget = PlayerById(bId);
                     var banAmbiguous = false;
                     banTarget ??= FindByUniqueName(args[0], m => { banAmbiguous = true; Alt.Log("[Console] " + m); });
                     if (banAmbiguous) return;
@@ -1420,7 +1442,7 @@ public class StarterResource : Resource
                 break;
 
             case "online":
-                var players = Alt.GetAllPlayers();
+                var players = AllPlayers();
                 Alt.Log($"[Console] Онлайн: {players.Count} игроков");
                 foreach (var p in players)
                 {
@@ -1457,7 +1479,9 @@ public class StarterResource : Resource
         _sessionAdminRanks.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
+        if (!IsNative(player)) _altPlayerIds.TryRemove(player.Id, out _);
 
+        if (!IsNative(player))
         try
         {
             _spatialVoiceChannel?.RemovePlayer(player);
@@ -1473,7 +1497,10 @@ public class StarterResource : Resource
     {
         if (player == null || !player.Exists) return;
         Alt.Log($"[FloV:MP Starter] Игрок {player.Name} (ID: {player.Id}) погиб.");
-        Alt.Emit("flovmp:player:died", player, killer, weapon);
+        if (IsNative(player))
+            Alt.Emit("flovmp:native:died", (int)player.Id, (long)weapon);
+        else
+            Alt.Emit("flovmp:player:died", player, killer, weapon);
         if (_platformRespawn)
             _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
     }
@@ -1507,7 +1534,7 @@ public class StarterResource : Resource
     /// </summary>
     private void ApplyRevokedAdminRights()
     {
-        foreach (var online in Alt.GetAllPlayers())
+        foreach (var online in AllPlayers())
         {
             if (online.Exists && !_adminLevels.ContainsKey(online.Id))
                 _adminLevels[online.Id] = 0;
@@ -1515,7 +1542,7 @@ public class StarterResource : Resource
 
         foreach (var (playerId, current) in _adminLevels.ToArray())
         {
-            var p = Alt.GetPlayerById(playerId);
+            var p = PlayerById(playerId);
             if (p is null || !p.Exists) { _adminLevels.TryRemove(playerId, out _); continue; }
 
             var assigned = GetAssignedAdminRank(p);
@@ -1629,6 +1656,8 @@ public class StarterResource : Resource
         using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAntiCheat))
             TickAntiCheat(nowMs);
 
+        TickNative(nowMs);
+
         if (FloVMP.Core.Diagnostics.TickProfiler.Enabled && nowMs >= _nextPerfReportMs)
         {
             _nextPerfReportMs = nowMs + PerfReportIntervalMs;
@@ -1733,6 +1762,7 @@ public class StarterResource : Resource
                 SendChatMessage(player, $"{{ef4444}}[FloV:MP] Команда /{cmd} доступна с уровня администратора {cmdDef.MinLevel}.");
                 return;
             }
+        if (IsNative(player) && HandleNativeVehicleCommand(player, cmd, parts)) return;
         switch (cmd)
         {
             case "help":
@@ -1826,7 +1856,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{fde047}Использование: /w <ID игрока> <сообщение>");
                     return;
                 }
-                var wTarget = Alt.GetPlayerById(wId);
+                var wTarget = PlayerById(wId);
                 if (wTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -1846,7 +1876,7 @@ public class StarterResource : Resource
                 }
                 var aMsg = string.Join(' ', parts.Skip(1));
                 var adminLvl = _adminLevels.TryGetValue(player.Id, out var al) ? al : 1;
-                foreach (var p in Alt.GetAllPlayers())
+                foreach (var p in AllPlayers())
                 {
                     if (IsAdmin(p, 1))
                     {
@@ -1888,7 +1918,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{fde047}Использование: /setadmin <ID> <Уровень 0-8>");
                     return;
                 }
-                var target = Alt.GetPlayerById(targetId);
+                var target = PlayerById(targetId);
                 if (target == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -1949,7 +1979,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{fde047}Использование: /goto <ID игрока>");
                     return;
                 }
-                var gotoTarget = Alt.GetPlayerById(gotoId);
+                var gotoTarget = PlayerById(gotoId);
                 if (gotoTarget == null || !gotoTarget.Exists)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -1976,7 +2006,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{fde047}Использование: /gethere <ID игрока>");
                     return;
                 }
-                var gethereTarget = Alt.GetPlayerById(gethereId);
+                var gethereTarget = PlayerById(gethereId);
                 if (gethereTarget == null || !gethereTarget.Exists)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -2009,7 +2039,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, $"{{fde047}}Использование: /{cmd} <ID игрока>");
                     return;
                 }
-                var frzTarget = Alt.GetPlayerById(frzId);
+                var frzTarget = PlayerById(frzId);
                 if (frzTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок не найден.");
@@ -2130,7 +2160,7 @@ public class StarterResource : Resource
                 IPlayer disarmTarget = player;
                 if (parts.Length > 1 && uint.TryParse(parts[1], out var dId))
                 {
-                    var foundD = Alt.GetPlayerById(dId);
+                    var foundD = PlayerById(dId);
                     if (foundD == null)
                     {
                         SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -2202,7 +2232,7 @@ public class StarterResource : Resource
                 IPlayer targetRevive = player;
                 if (parts.Length > 1 && uint.TryParse(parts[1], out var revId))
                 {
-                    var foundTarget = Alt.GetPlayerById(revId);
+                    var foundTarget = PlayerById(revId);
                     if (foundTarget == null)
                     {
                         SendChatMessage(player, "{ef4444}Игрок с указанным ID не найден.");
@@ -2275,7 +2305,7 @@ public class StarterResource : Resource
                         return;
                     }
                     _worldWeather = weatherType;
-                    Alt.EmitAllClients("starter:setWeather", weatherType);
+                    EmitAllClients("starter:setWeather", weatherType);
                     BroadcastChatMessage($"{{38bdf8}}[Погода] Администратор установил погоду: {weatherType}");
                 }
                 else
@@ -2296,7 +2326,7 @@ public class StarterResource : Resource
                         return;
                     }
                     _worldTime = (hour, minute);
-                    Alt.EmitAllClients("starter:setTime", hour, minute);
+                    EmitAllClients("starter:setTime", hour, minute);
                     BroadcastChatMessage($"{{38bdf8}}[Время] Администратор установил время: {hour:D2}:{minute:D2}");
                 }
                 else
@@ -2351,7 +2381,7 @@ public class StarterResource : Resource
                     SendChatMessage(player, "{fde047}Использование: /kick <ID> [причина]");
                     return;
                 }
-                var kickTarget = Alt.GetPlayerById(kickId);
+                var kickTarget = PlayerById(kickId);
                 if (kickTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
@@ -2388,7 +2418,7 @@ public class StarterResource : Resource
                         : "{fde047}Использование: /unmute <ID>");
                     return;
                 }
-                var muteTarget = Alt.GetPlayerById(muteId);
+                var muteTarget = PlayerById(muteId);
                 if (muteTarget == null) { SendChatMessage(player, "{ef4444}Игрок с таким ID не найден."); return; }
                 if (!CanActOn(player, muteTarget))
                 {
@@ -2447,10 +2477,15 @@ public class StarterResource : Resource
                     }
                     vmuteMinutes = vm;
                 }
-                var vmuteTarget = Alt.GetPlayerById(vmuteId);
+                var vmuteTarget = PlayerById(vmuteId);
                 if (vmuteTarget == null)
                 {
                     SendChatMessage(player, "{ef4444}Игрок с таким ID не найден.");
+                    return;
+                }
+                if (IsNative(vmuteTarget))
+                {
+                    SendChatMessage(player, "{fde047}У игрока клиент GTA Legacy b3889 без голосового чата — глушить нечего. Для текста: /mute.");
                     return;
                 }
                 if (!CanActOn(player, vmuteTarget))
@@ -2542,7 +2577,10 @@ public class StarterResource : Resource
                         break;
                     }
                     var argsLine = parts.Length > 1 ? string.Join(' ', parts.Skip(1)) : "";
-                    Alt.Emit("flovmp:command", player, cmd, argsLine);
+                    if (IsNative(player))
+                        Alt.Emit("flovmp:native:command", (int)player.Id, player.Name, cmd, argsLine);
+                    else
+                        Alt.Emit("flovmp:command", player, cmd, argsLine);
                     break;
                 }
                 SendChatMessage(player, $"{{a1a1aa}}Неизвестная команда: /{cmd}. Введите /help для списка доступных команд.");

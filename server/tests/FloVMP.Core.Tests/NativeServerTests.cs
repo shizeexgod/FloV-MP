@@ -1,0 +1,235 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using FloVMP.Core.Native;
+using Xunit;
+
+namespace FloVMP.Core.Tests;
+
+public sealed class NativeServerTests
+{
+    /// <summary>Имитация нативного клиента: тот же протокол и подпись, что в ASI.</summary>
+    internal sealed class FakeClient : IDisposable
+    {
+        public readonly TcpClient Tcp = new();
+        public readonly ECDsa Key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        private StreamReader _reader = null!;
+        private NetworkStream _stream = null!;
+
+        public byte[] PublicKey
+        {
+            get
+            {
+                var p = Key.ExportParameters(false);
+                return p.Q.X!.Concat(p.Q.Y!).ToArray();
+            }
+        }
+
+        public async Task ConnectAsync(int port)
+        {
+            await Tcp.ConnectAsync(IPAddress.Loopback, port);
+            _stream = Tcp.GetStream();
+            _reader = new StreamReader(_stream, Encoding.UTF8, false, 1024, leaveOpen: true);
+        }
+
+        public Task SendAsync(string line) => _stream.WriteAsync(Encoding.UTF8.GetBytes(line + "\n")).AsTask();
+
+        public async Task<string?> ReadAsync(int timeoutMs = 5000)
+        {
+            var read = _reader.ReadLineAsync();
+            return await Task.WhenAny(read, Task.Delay(timeoutMs)) == read ? read.Result : throw new TimeoutException();
+        }
+
+        public async Task<string> ReadUntilAsync(string prefix, int timeoutMs = 5000)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                var line = await ReadAsync((int)Math.Max(1, (deadline - DateTime.UtcNow).TotalMilliseconds));
+                if (line is null) throw new IOException("closed");
+                if (line.StartsWith(prefix, StringComparison.Ordinal)) return line;
+            }
+            throw new TimeoutException(prefix);
+        }
+
+        public async Task<string> JoinAsync(int port, string name = "Tester", string game = NativeProtocol.GameVersion,
+                                            bool badSignature = false)
+        {
+            await ConnectAsync(port);
+            await SendAsync(NativeProtocol.Format("HELLO", NativeProtocol.Version, game, "test", name,
+                Convert.ToBase64String(PublicKey), "00000000000000AA", "00000000000000BB"));
+            var challenge = NativeProtocol.Parse(await ReadAsync() ?? "");
+            if (challenge[0] != "CHALLENGE") return string.Join('\t', challenge);
+            var nonce = Convert.FromBase64String(challenge[1]);
+            var data = NativeProtocol.AuthMessage(nonce, PublicKey);
+            if (badSignature) data[0] ^= 1;
+            var sig = Key.SignData(data, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+            await SendAsync(NativeProtocol.Format("AUTH", Convert.ToBase64String(sig)));
+            // WELCOME шлёт игровой поток после проверок бана и лицензии, а не транспорт.
+            return "AUTH-SENT";
+        }
+
+        public void Dispose() { Tcp.Dispose(); Key.Dispose(); }
+    }
+
+    private static NativeServer StartServer()
+    {
+        var server = new NativeServer(IPAddress.Loopback, 0, _ => { });
+        server.Start();
+        return server;
+    }
+
+    private static async Task<T> WaitEventAsync<T>(NativeServer server, int timeoutMs = 5000) where T : NativeEvent
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            while (server.Events.TryDequeue(out var ev))
+                if (ev is T t) return t;
+            await Task.Delay(10);
+        }
+        throw new TimeoutException(typeof(T).Name);
+    }
+
+    [Fact]
+    public void EscapingRoundTripsTabsAndNewlines()
+    {
+        var text = "a\tb\nc\\d\re";
+        var line = NativeProtocol.Format("MSG", "player", text);
+        Assert.DoesNotContain('\n', line);
+        var parts = NativeProtocol.Parse(line);
+        Assert.Equal(3, parts.Length);
+        Assert.Equal(text, parts[2]);
+    }
+
+    [Fact]
+    public async Task SignedClientJoinsWithStableIdentity()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        Assert.Equal("AUTH-SENT", await client.JoinAsync(server.Port));
+
+        var joined = await WaitEventAsync<NativeJoined>(server);
+        Assert.Equal("Tester", joined.Session.Name);
+        Assert.Equal(NativeIdentity.IdFor(client.PublicKey), joined.Session.Identity);
+        Assert.True(NativeIdentity.IsNativeIdentity(joined.Session.Identity));
+        Assert.Equal(0xAAUL, joined.Session.HardwareId);
+    }
+
+    [Fact]
+    public async Task ForgedSignatureIsRejected()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        Assert.Equal("AUTH-SENT", await client.JoinAsync(server.Port, badSignature: true));
+        Assert.StartsWith("REJECT", await client.ReadAsync());
+        Assert.Equal(0, server.Count);
+    }
+
+    [Fact]
+    public async Task WrongGameVersionIsRejectedWithReason()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        var reply = await client.JoinAsync(server.Port, game: "1.0.3521.0");
+        Assert.StartsWith("REJECT", reply);
+        Assert.Contains("1.0.3889.0", reply);
+    }
+
+    [Fact]
+    public async Task BadNameIsRejected()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        var reply = await client.JoinAsync(server.Port, name: "{ff0000}Admin");
+        Assert.StartsWith("REJECT", reply);
+    }
+
+    [Fact]
+    public async Task StateIsStoredAndChatIsQueued()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var joined = await WaitEventAsync<NativeJoined>(server);
+        joined.Session.Send("WELCOME", joined.Session.Id);
+        await client.ReadUntilAsync("WELCOME");
+
+        await client.SendAsync(NativeProtocol.Format("STATE", 100f, 200f, 30f, 90f, 0f, 0f, 0f, 0, 0u, 0, -1,
+            0f, 0f, 0f, 200, 0, 0u, 1f));
+        await client.SendAsync(NativeProtocol.Format("CHAT", "привет\tвсем"));
+        var msg = await WaitEventAsync<NativeMessage>(server);
+        Assert.Equal("CHAT", msg.Parts[0]);
+        Assert.Equal("привет\tвсем", msg.Parts[1]);
+        Assert.True(joined.Session.HasState);
+        Assert.Equal(100f, joined.Session.State.X);
+        Assert.Equal(90f, joined.Session.State.Heading);
+    }
+
+    [Fact]
+    public async Task OutOfWorldStateIsIgnored()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var joined = await WaitEventAsync<NativeJoined>(server);
+        await client.SendAsync(NativeProtocol.Format("STATE", 1e9f, 0f, 0f, 0f, 0f, 0f, 0f, 0, 0u, 0, -1,
+            0f, 0f, 0f, 200, 0, 0u, 0f));
+        await client.SendAsync("PING\t1");
+        await client.ReadUntilAsync("PONG");
+        Assert.False(joined.Session.HasState);
+    }
+
+    [Fact]
+    public async Task OversizedLineDisconnects()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+        await client.SendAsync("CHAT\t" + new string('x', NativeProtocol.MaxLineBytes * 3));
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Contains("длинное", left.Reason);
+    }
+
+    [Fact]
+    public async Task KickDeliversReasonBeforeDisconnect()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var joined = await WaitEventAsync<NativeJoined>(server);
+        joined.Session.Close("тестовый кик");
+        var kick = await client.ReadUntilAsync("KICK");
+        Assert.Contains("тестовый кик", kick);
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Equal("тестовый кик", left.Reason);
+    }
+
+    [Fact]
+    public async Task IdsSkipThoseUsedByOtherPlayers()
+    {
+        using var server = new NativeServer(IPAddress.Loopback, 0, _ => { }, id => id is 1 or 2);
+        server.Start();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var joined = await WaitEventAsync<NativeJoined>(server);
+        Assert.Equal(3u, joined.Session.Id);
+    }
+
+    [Fact]
+    public void StateParsingClampsAndNormalizes()
+    {
+        var parts = NativeProtocol.Parse(NativeProtocol.Format("STATE", 1f, 2f, 3f, -90f, 9999f, 0f, 0f, 0x1FFFF,
+            123u, 0, 99, 0f, 0f, 0f, 5000, -5, 0u, 9f));
+        Assert.True(NativePlayerState.TryParse(parts, out var s));
+        Assert.Equal(270f, s.Heading);
+        Assert.Equal(300f, s.Vx);
+        Assert.Equal(0xFFFF, s.Flags);
+        Assert.Equal(16, s.Seat);
+        Assert.Equal(1000, s.Health);
+        Assert.Equal(0, s.Armor);
+        Assert.Equal(3f, s.Speed);
+    }
+}
