@@ -16,7 +16,7 @@ namespace FloVMP.Core.Native;
 ///   клиент → AUTH  signature(b64)              (ECDSA P-256 над AuthMessage)
 ///   сервер → WELCOME  id  name  identity  serverName   |   REJECT  причина
 /// Дальше клиент шлёт READY, STATE, CHAT, DIED, HIT, TPM, NOCLIP, PING,
-/// а сервер — SPAWN, PSTATE, PDEL, MSG, ADMIN, TP и команды из <see cref="NativeServerCommand"/>.
+/// а сервер — SPAWN, PADD, PSTATE, PDEL, MSG, ADMIN, TP и команды администрирования.
 /// </summary>
 public static class NativeProtocol
 {
@@ -122,7 +122,8 @@ public static class NativeProtocol
 
 /// <summary>
 /// Состояние игрока, которое клиент шлёт ~20 раз в секунду.
-/// Поля STATE: x y z heading vx vy vz flags vehModel vehOwner seat rx ry rz health armor weapon speed.
+/// Поля STATE: x y z heading vx vy vz flags vehModel vehOwner seat rx ry rz health armor weapon speed pedModel.
+/// Пешком rx ry rz — точка прицеливания, в транспорте — его поворот (градусы).
 /// </summary>
 public readonly record struct NativePlayerState(
     float X, float Y, float Z, float Heading,
@@ -130,7 +131,7 @@ public readonly record struct NativePlayerState(
     int Flags,
     uint VehicleModel, int VehicleOwner, int Seat,
     float Rx, float Ry, float Rz,
-    int Health, int Armor, uint Weapon, float Speed)
+    int Health, int Armor, uint Weapon, float Speed, uint PedModel = 0)
 {
     public const int FlagInVehicle = 1;
     public const int FlagDead = 2;
@@ -161,14 +162,15 @@ public readonly record struct NativePlayerState(
             Clamp(NativeProtocol.FloatOr(p, 7, 0), 300),
             NativeProtocol.IntOr(p, 8, 0) & 0xFFFF,
             NativeProtocol.UIntOr(p, 9, 0), NativeProtocol.IntOr(p, 10, 0), Math.Clamp(NativeProtocol.IntOr(p, 11, -1), -1, 16),
-            Clamp(NativeProtocol.FloatOr(p, 12, 0), 360), Clamp(NativeProtocol.FloatOr(p, 13, 0), 360),
-            Clamp(NativeProtocol.FloatOr(p, 14, 0), 360),
+            Clamp(NativeProtocol.FloatOr(p, 12, 0), 25000), Clamp(NativeProtocol.FloatOr(p, 13, 0), 25000),
+            Clamp(NativeProtocol.FloatOr(p, 14, 0), 25000),
             Math.Clamp(NativeProtocol.IntOr(p, 15, 200), 0, 1000), Math.Clamp(NativeProtocol.IntOr(p, 16, 0), 0, 200),
-            NativeProtocol.UIntOr(p, 17, 0), Math.Clamp(NativeProtocol.FloatOr(p, 18, 0), 0, 3));
+            NativeProtocol.UIntOr(p, 17, 0), Math.Clamp(NativeProtocol.FloatOr(p, 18, 0), 0, 3),
+            NativeProtocol.UIntOr(p, 19, 0));
         return true;
     }
 
     /// <summary>PSTATE для остальных игроков: тот же набор полей с ID владельца впереди.</summary>
     public string FormatFor(uint id) => NativeProtocol.Format("PSTATE", id, X, Y, Z, Heading, Vx, Vy, Vz, Flags,
-        VehicleModel, VehicleOwner, Seat, Rx, Ry, Rz, Health, Armor, Weapon, Speed);
+        VehicleModel, VehicleOwner, Seat, Rx, Ry, Rz, Health, Armor, Weapon, Speed, PedModel);
 }

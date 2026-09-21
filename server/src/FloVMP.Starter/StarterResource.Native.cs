@@ -100,7 +100,7 @@ public partial class StarterResource
         {
             _native = new NativeServer(IPAddress.Any, port, msg => Alt.Log("[FloV:MP b3889] " + msg),
                 id => _altPlayerIds.ContainsKey(id));
-            _native.ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ?? "FloV:MP";
+            _native.ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ?? ReadServerTomlName() ?? "FloV:MP";
             _native.Start();
             Alt.Log($"[FloV:MP b3889] Шлюз клиентов GTA V Legacy {NativeProtocol.GameVersion} слушает TCP {port}. " +
                     "Для игроков из интернета откройте этот порт.");
@@ -111,6 +111,25 @@ public partial class StarterResource
             Alt.LogError($"[FloV:MP b3889] Шлюз НЕ запущен (TCP {port}): {ex.Message}. " +
                          "Порт занят другим процессом? Задайте FLOVMP_NATIVE_PORT.");
         }
+    }
+
+    /// <summary>name = "..." из server.toml (рабочая папка сервера) — его видят игроки в HUD.</summary>
+    private static string? ReadServerTomlName()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "server.toml");
+            if (!System.IO.File.Exists(path)) return null;
+            foreach (var raw in System.IO.File.ReadLines(path))
+            {
+                var line = raw.Trim();
+                if (line.StartsWith('[')) break; // только верхний уровень
+                var m = System.Text.RegularExpressions.Regex.Match(line, "^name\\s*=\\s*[\"'](.+?)[\"']");
+                if (m.Success) return FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(m.Groups[1].Value) ?? null;
+            }
+        }
+        catch (Exception) { }
+        return null;
     }
 
     private void StopNativeGateway()
@@ -275,7 +294,7 @@ public partial class StarterResource
             var pos = alt.Position;
             var heading = alt.Rotation.Yaw * 180f / MathF.PI;
             var st = new NativePlayerState(pos.X, pos.Y, pos.Z, (heading % 360f + 360f) % 360f, 0, 0, 0,
-                alt.IsDead ? NativePlayerState.FlagDead : 0, 0, 0, -1, 0, 0, 0, alt.Health, alt.Armor, alt.CurrentWeapon, 1f);
+                alt.IsDead ? NativePlayerState.FlagDead : 0, 0, 0, -1, 0, 0, 0, alt.Health, alt.Armor, alt.CurrentWeapon, 1f, alt.Model);
             states[alt.Id] = (st, _altSnapshotVersion, alt.Name, alt.Dimension);
             _nativeGrid.InsertOrUpdate(alt.Id, new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z), alt.Dimension);
         }

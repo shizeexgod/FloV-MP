@@ -131,7 +131,7 @@ public class NativePlayerProxy : DispatchProxy
             case "get_IsInVehicle": return s.HasState && State.InVehicle;
             case "get_Vehicle": return null;
             case "get_Seat": return (byte)0;
-            case "get_Model": return _model;
+            case "get_Model": return s.HasState && State.PedModel != 0 ? State.PedModel : _model;
             case "set_Model":
                 _model = (uint)args[0]!;
                 s.Send("MODEL", _model);
