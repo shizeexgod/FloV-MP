@@ -218,6 +218,15 @@ namespace flov
 
         bool welcomed = false;
         std::string kickReason;
+        // Меню паузы останавливает скрипты игры, а с ними STATE и PING. Без
+        // отдельного пульса сервер через 30 с счёл бы игрока пропавшим.
+        std::thread keepalive([this] {
+            for (int tick = 0; !_stop; ++tick)
+            {
+                Sleep(250);
+                if (tick % 20 == 19 && !SendRaw("KEEPALIVE")) break;
+            }
+        });
         while (!_stop && reader.ReadLine(line))
         {
             auto msg = Parse(line);
@@ -238,6 +247,7 @@ namespace flov
 
         const bool userStop = _stop.load();
         Disconnect("поток завершён");
+        if (keepalive.joinable()) keepalive.join();
         _state = NetState::Failed;
         const auto why = !kickReason.empty() ? kickReason
                        : userStop ? std::string("Отключено.")

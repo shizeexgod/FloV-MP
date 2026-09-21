@@ -194,6 +194,10 @@ public sealed class NativeServer : IDisposable
                     case "PING":
                         session.Send(NativeProtocol.Format("PONG", parts.Length > 1 ? parts[1] : ""));
                         break;
+                    case "KEEPALIVE":
+                        // Сетевой поток клиента шлёт его и тогда, когда игра стоит на
+                        // паузе (меню, карта) и скрипты, а с ними STATE, не работают.
+                        break;
                     default:
                         Events.Enqueue(new NativeMessage(session, parts));
                         break;

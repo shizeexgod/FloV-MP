@@ -347,7 +347,7 @@ namespace flov::game
             if (r.inVehicleSeat || n::IS_PED_IN_ANY_VEHICLE(ped, FALSE))
             {
                 n::CLEAR_PED_TASKS_IMMEDIATELY(ped);
-                n::SET_ENTITY_COORDS_NO_OFFSET(ped, s.x, s.y, s.z - 1.f, FALSE, FALSE, FALSE);
+                n::SET_ENTITY_COORDS_NO_OFFSET(ped, s.x, s.y, s.z, FALSE, FALSE, FALSE);
                 r.inVehicleSeat = false;
             }
             const Vector3 p = n::GET_ENTITY_COORDS(ped, TRUE);
@@ -355,7 +355,7 @@ namespace flov::game
             const float err2 = Dist2(p.x, p.y, p.z, tx, ty, tz);
             if (err2 > 8.f * 8.f)
             {
-                n::SET_ENTITY_COORDS_NO_OFFSET(ped, tx, ty, tz - 1.f, FALSE, FALSE, FALSE);
+                n::SET_ENTITY_COORDS_NO_OFFSET(ped, tx, ty, tz, FALSE, FALSE, FALSE);
                 n::SET_ENTITY_HEADING(ped, s.heading);
                 r.nextTask = 0;
             }
