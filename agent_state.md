@@ -1,6 +1,29 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-19 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
+Updated: 2026-09-21 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
+
+### 2026-09-21 — GTA V Legacy 1.0.3889.0: собственный клиент, проверен вживую
+
+- Клиент `native/legacy-3889/client` (FloVMP.asi на ScriptHookV 3889.0/1158.13):
+  вход по ключу ECDSA (DPAPI), остановка сюжета, синхронизация пешком/в
+  транспорте, PvP через сервер, оверлей ImGui (чат с кириллицей, ники, ESP,
+  F3/F4/F5, окно F9), пульс KEEPALIVE на паузе.
+- Сервер: шлюз `FloVMP.Core/Native` (TCP, порт игры + 10) внутри
+  flovmp-starter; игрок b3889 — IPlayer-прокси, все системы платформы общие.
+- Живой тест на Epic Legacy 1.0.3889.0 + боты (`tools/bot.py --check`,
+  `--moderation-test`, `--drive`, `--hit`): вход, спавн, чат, права из БД,
+  /claimowner на свежей установке, /car, F3, F4, погода/время/скин/оружие,
+  синхронизация пешком и машины, смерть/возрождение, урон, kick/mute/ban/unban.
+- Поставка: `client-b3889/` в пакете (install-client, play.cmd), коннектор
+  сам выбирает путь по версии игры. Тесты: server 419, launcher 96, healthcheck 62.
+- Найдено и исправлено: гонка выдачи ID, разрыв на паузе, лимит слотов
+  (регрессия aa1d2d9), отказ во входе до WELCOME.
+- ОТКРЫТО (владелец): портал flovmp.ru подписывает лицензии СТАРЫМ ключом и
+  отдаёт мастер-лицензию по любому ключу; в сервере переходный режим обоих
+  ключей. Ключ прода FLV-34C6-24FA-1E9F не найден в базе портала → с новой
+  сборкой прод закрывает вход; прод оставлен на прежней сборке (откат).
+  F5 (телепорт на метку) вживую не подтверждён — не удалось поставить метку
+  автоматикой; голоса у клиента b3889 нет.
 
 ### 2026-09-21 — native bridge state replication milestone
 
