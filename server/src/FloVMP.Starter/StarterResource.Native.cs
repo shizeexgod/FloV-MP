@@ -32,7 +32,7 @@ public partial class StarterResource
     private readonly HashSet<string> _reportedUnsupported = new();
 
     // Кого из игроков уже видит нативный клиент и какую версию состояния ему отправили.
-    private readonly Dictionary<uint, Dictionary<uint, long>> _nativeVisible = new();
+    private readonly Dictionary<uint, Dictionary<uint, (long Version, long Tick)>> _nativeVisible = new();
     private readonly FloVMP.Core.Spatial.SpatialHashGrid<uint> _nativeGrid =
         new(FloVMP.Core.Spatial.SpatialHashGrid<uint>.RecommendedCellSize(NativeStreamRadius));
     private readonly List<uint> _nativeCandidates = new();
@@ -247,10 +247,13 @@ public partial class StarterResource
         }
 
         // Токен голоса — в WELCOME: UDP-пакеты без него сервер не принимает.
-        var voiceToken = _nativeVoice?.Register(session) ?? "";
+        var voiceOn = _nativeVoice is not null && _settings.Bool("voice.enabled");
+        var voiceToken = voiceOn ? _nativeVoice!.Register(session) : "";
         session.VoiceMuted = _voiceMutes?.IsMuted(session.Identity.ToString(), DateTime.UtcNow) ?? false;
         session.Send("WELCOME", session.Id, session.Name, session.Identity.ToString(), _native!.ServerName,
-            voiceToken, _nativeVoice?.Port ?? 0, _nativeVoice?.Radius ?? 0f);
+            voiceToken, voiceOn ? _nativeVoice!.Port : 0, _settings.Float("voice.radius"));
+        // Настройки владельца (client.cfg) — до спавна: HUD, мир, ники, клавиши.
+        SendClientSettings(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
 
@@ -346,28 +349,35 @@ public partial class StarterResource
     }
 
     /// <summary>
-    /// Рассылка состояний: каждому нативному клиенту — игроки в радиусе
-    /// <see cref="NativeStreamRadius"/> в его измерении. Неизменившееся
-    /// состояние повторно не отправляется.
+    /// Рассылка состояний: каждому нативному клиенту — ближайшие игроки в
+    /// радиусе sync.stream_radius его измерения, не больше sync.max_streamed.
+    ///
+    /// Под большой онлайн: частота по дальности (до 60 м — каждые 50 мс, до
+    /// 150 м — каждые 100 мс, дальше — каждые 200 мс), неизменившееся не
+    /// шлётся, строка PSTATE собирается один раз на игрока за тик, а не на
+    /// каждого получателя.
     /// </summary>
     private void SyncNativeWorld(long nowMs)
     {
         if (_nativePlayers.Count == 0) return;
+        _syncTick++;
+        var radius = _settings.Float("sync.stream_radius");
+        var maxStreamed = _settings.Int("sync.max_streamed");
 
         _nativeGrid.Clear();
-        var states = new Dictionary<uint, (NativePlayerState State, long Version, string Name, int Dimension)>();
+        _syncStates.Clear();
+        _syncLines.Clear();
         foreach (var (id, player) in _nativePlayers)
         {
             var np = (NativePlayerProxy)(object)player;
             if (!np.Session.HasState || !_nativeReady.Contains(id)) continue;
             var st = np.State;
-            states[id] = (st, np.Session.StateVersion, np.Session.Name, np.DimensionValue);
+            _syncStates[id] = (st, np.Session.StateVersion, np.Session.Name, np.DimensionValue);
             _nativeGrid.InsertOrUpdate(id, new FloVMP.Core.AntiCheat.Vector3D(st.X, st.Y, st.Z), np.DimensionValue);
         }
 
         // Игроки клиента alt:V (если такие есть) — снимок раз в 100 мс.
-        var altSnapshot = nowMs >= _nextAltSnapshotMs;
-        if (altSnapshot) { _nextAltSnapshotMs = nowMs + 100; _altSnapshotVersion++; }
+        if (nowMs >= _nextAltSnapshotMs) { _nextAltSnapshotMs = nowMs + 100; _altSnapshotVersion++; }
         foreach (var alt in Alt.GetAllPlayers())
         {
             if (!alt.Exists || !_clientReady.ContainsKey(alt.Id)) continue;
@@ -375,7 +385,7 @@ public partial class StarterResource
             var heading = alt.Rotation.Yaw * 180f / MathF.PI;
             var st = new NativePlayerState(pos.X, pos.Y, pos.Z, (heading % 360f + 360f) % 360f, 0, 0, 0,
                 alt.IsDead ? NativePlayerState.FlagDead : 0, 0, 0, -1, 0, 0, 0, alt.Health, alt.Armor, alt.CurrentWeapon, 1f, alt.Model);
-            states[alt.Id] = (st, _altSnapshotVersion, alt.Name, alt.Dimension);
+            _syncStates[alt.Id] = (st, _altSnapshotVersion, alt.Name, alt.Dimension);
             _nativeGrid.InsertOrUpdate(alt.Id, new FloVMP.Core.AntiCheat.Vector3D(pos.X, pos.Y, pos.Z), alt.Dimension);
         }
 
@@ -384,36 +394,62 @@ public partial class StarterResource
             if (!_nativeReady.Contains(id)) continue;
             var np = (NativePlayerProxy)(object)player;
             if (!_nativeVisible.TryGetValue(id, out var visible))
-                _nativeVisible[id] = visible = new Dictionary<uint, long>();
+                _nativeVisible[id] = visible = new Dictionary<uint, (long Version, long Tick)>();
 
-            _nativeCandidates.Clear();
-            if (states.TryGetValue(id, out var own))
+            _syncNear.Clear();
+            if (_syncStates.TryGetValue(id, out var own))
+            {
+                _nativeCandidates.Clear();
                 _nativeGrid.FindInRadius(new FloVMP.Core.AntiCheat.Vector3D(own.State.X, own.State.Y, own.State.Z),
-                    NativeStreamRadius, np.DimensionValue, _nativeCandidates, use3D: false);
+                    radius, np.DimensionValue, _nativeCandidates, use3D: false);
+                foreach (var other in _nativeCandidates)
+                {
+                    if (other == id || !_syncStates.TryGetValue(other, out var o)) continue;
+                    var dx = o.State.X - own.State.X; var dy = o.State.Y - own.State.Y;
+                    _syncNear.Add((other, dx * dx + dy * dy));
+                }
+                if (_syncNear.Count > maxStreamed)
+                {
+                    _syncNear.Sort((a, b) => a.D2.CompareTo(b.D2));
+                    _syncNear.RemoveRange(maxStreamed, _syncNear.Count - maxStreamed);
+                }
+            }
 
-            var inRange = new HashSet<uint>(_nativeCandidates);
-            inRange.Remove(id);
-
-            foreach (var gone in visible.Keys.Where(k => !inRange.Contains(k)).ToList())
+            _syncInRange.Clear();
+            foreach (var (other, _) in _syncNear) _syncInRange.Add(other);
+            _syncGone.Clear();
+            foreach (var k in visible.Keys) if (!_syncInRange.Contains(k)) _syncGone.Add(k);
+            foreach (var gone in _syncGone)
             {
                 visible.Remove(gone);
                 np.Session.Send("PDEL", gone);
             }
 
-            foreach (var other in inRange)
+            foreach (var (other, d2) in _syncNear)
             {
-                if (!states.TryGetValue(other, out var info)) continue;
-                if (!visible.TryGetValue(other, out var sentVersion))
+                var info = _syncStates[other];
+                if (!visible.TryGetValue(other, out var sent))
                 {
                     np.Session.Send("PADD", other, info.Name);
-                    sentVersion = -1;
+                    sent = (-1, 0);
                 }
-                if (sentVersion == info.Version) continue;
-                visible[other] = info.Version;
-                np.Session.Send(info.State.FormatFor(other));
+                if (sent.Version == info.Version) continue;
+                var every = d2 < 60 * 60 ? 1 : d2 < 150 * 150 ? 2 : 4;
+                if (sent.Version >= 0 && _syncTick - sent.Tick < every) continue;
+                visible[other] = (info.Version, _syncTick);
+                if (!_syncLines.TryGetValue(other, out var line))
+                    _syncLines[other] = line = info.State.FormatFor(other);
+                np.Session.Send(line);
             }
         }
     }
+
+    private long _syncTick;
+    private readonly Dictionary<uint, (NativePlayerState State, long Version, string Name, int Dimension)> _syncStates = new();
+    private readonly Dictionary<uint, string> _syncLines = new();
+    private readonly List<(uint Id, float D2)> _syncNear = new();
+    private readonly HashSet<uint> _syncInRange = new();
+    private readonly List<uint> _syncGone = new();
 
     /// <summary>
     /// Транспорт у клиента b3889 создаётся в его игре и синхронизируется

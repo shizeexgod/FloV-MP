@@ -564,6 +564,7 @@ public partial class StarterResource : Resource
         // образец со значениями по умолчанию.
         Alt.Log("[FloV:MP] " + FloVMP.Core.Admin.AdminCommandLevels.LoadOrCreate(
             Path.Combine(Directory.GetCurrentDirectory(), "config"), Alt.LogWarning));
+        LoadSettings(broadcast: false);
 
         // Хранилище банов: общая таблица MariaDB, если база настроена, иначе
         // локальный файл. Фабрика сама печатает выбранный режим — владелец
@@ -991,14 +992,15 @@ public partial class StarterResource : Resource
             return;
         }
 
-        // Чистый спавн игрока
-        player.Model = DefaultPlayerModel;
-        player.Spawn(_spawnPosition, 0);
-        // Rotation в alt:V — в радианах, _spawnHeading — в градусах.
-        player.Rotation = new Rotation(0, 0, _spawnHeading * MathF.PI / 180f);
-        player.Health = 200;
+        // Чистый спавн игрока — точка, модель, здоровье и броня из config/client.cfg.
+        var (spawnPos, spawnHeading) = NextSpawn();
+        player.Model = SpawnModel();
+        player.Spawn(spawnPos, 0);
+        // Rotation в alt:V — в радианах, курс — в градусах.
+        player.Rotation = new Rotation(0, 0, spawnHeading * MathF.PI / 180f);
+        player.Health = (ushort)_settings.Int("spawn.health");
         player.MaxHealth = 200;
-        player.Armor = 100;
+        player.Armor = (ushort)_settings.Int("spawn.armor");
 
         // Автоматическое распознавание Основателя (8)
         // БЕЗ БЭКДОРОВ. Раньше здесь были: захардкоженный ник (любой
@@ -1094,7 +1096,8 @@ public partial class StarterResource : Resource
         // Приветствие — здесь, а не в OnPlayerConnect: при подключении
         // клиентский скрипт ещё не загружен, и отправленные туда сообщения
         // (включая подсказку /claimowner владельцу) терялись.
-        SendChatMessage(player, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!");
+        var welcome = _settings.Get("chat.welcome");
+        if (welcome.Length > 0) SendChatMessage(player, welcome);
         if (!_license.IsLicensed && GetAssignedAdminRank(player) > 0)
             SendChatMessage(player, $"{{f59e0b}}[Лицензия]{{ffffff}} {_license.Message}");
 
@@ -1247,6 +1250,10 @@ public partial class StarterResource : Resource
                 foreach (var line in FloVMP.Core.Diagnostics.TickProfiler.Report()) Alt.Log("  " + line);
                 if (!FloVMP.Core.Diagnostics.TickProfiler.Enabled)
                     Alt.Log("  Включить: perf on (или FLOVMP_PERF=1 в config/flovmp.env)");
+                break;
+
+            case "reloadsettings":
+                LoadSettings(broadcast: true);
                 break;
 
             case "reloadadmins":
@@ -1501,8 +1508,8 @@ public partial class StarterResource : Resource
             Alt.Emit("flovmp:native:died", (int)player.Id, (long)weapon);
         else
             Alt.Emit("flovmp:player:died", player, killer, weapon);
-        if (_platformRespawn)
-            _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + 3000));
+        if (_platformRespawn && _settings.Bool("spawn.respawn"))
+            _pendingRespawns.Add((player, _clock.ElapsedMilliseconds + _settings.Int("spawn.respawn_delay")));
     }
 
     private void OnSpawnSetting(float x, float y, float z, float heading)
@@ -1515,6 +1522,7 @@ public partial class StarterResource : Resource
         }
         _spawnPosition = new Position(x, y, z);
         _spawnHeading = heading;
+        _spawnOverridden = true;
         Alt.Log(FormattableString.Invariant($"[FloV:MP] [Mods] точка появления: {x:F1}, {y:F1}, {z:F1}"));
     }
 
@@ -1681,10 +1689,12 @@ public partial class StarterResource : Resource
 
                     try
                     {
-                        p.Spawn(_spawnPosition, 0);
-                    NotifyTeleport(p);
-                        p.Health = 200;
-                        p.Armor = 100;
+                        var (rp, rh) = NextSpawn();
+                        p.Spawn(rp, 0);
+                        p.Rotation = new Rotation(0, 0, rh * MathF.PI / 180f);
+                        NotifyTeleport(p);
+                        p.Health = (ushort)_settings.Int("spawn.health");
+                        p.Armor = (ushort)_settings.Int("spawn.armor");
                         p.Emit("starter:revive");
                         SendChatMessage(p, "{ef4444}Вы погибли и возродились на спавне.");
                     }
@@ -1712,8 +1722,9 @@ public partial class StarterResource : Resource
             return;
         }
 
-        if (message.Length > 256)
-            message = message[..256];
+        var maxLength = _settings.Int("chat.max_length");
+        if (message.Length > maxLength)
+            message = message[..maxLength];
 
         // Раньше здесь стоял комментарий «удаление управляющих символов», но сам
         // код их не удалял — только обрезал длину. Очистка вынесена в
@@ -1740,7 +1751,7 @@ public partial class StarterResource : Resource
             return;
         }
 
-        BroadcastChatMessage(message, "player", $"[{player.Id}] {player.Name}");
+        BroadcastChatMessage(message, "player", ChatTag(player));
     }
 
     private void HandleCommand(IPlayer player, string commandLine)
@@ -1763,6 +1774,12 @@ public partial class StarterResource : Resource
                 return;
             }
         if (IsNative(player) && HandleNativeVehicleCommand(player, cmd, parts)) return;
+        if (!_settings.Bool("chat.rp_commands") && cmd is "me" or "do" or "b" or "ooc" or "s" or "shout" or "w" or "whisper"
+            && !_modCommands.ContainsKey(cmd))
+        {
+            SendChatMessage(player, $"{{a1a1aa}}Команда /{cmd} на этом сервере выключена.");
+            return;
+        }
         switch (cmd)
         {
             case "help":
@@ -1835,7 +1852,7 @@ public partial class StarterResource : Resource
                     return;
                 }
                 var oocText = string.Join(' ', parts.Skip(1));
-                BroadcastChatMessage(oocText, "ooc", $"[{player.Id}] {player.Name}");
+                BroadcastChatMessage(oocText, "ooc", ChatTag(player));
                 break;
 
             case "s":
@@ -1846,7 +1863,7 @@ public partial class StarterResource : Resource
                     return;
                 }
                 var shoutText = string.Join(' ', parts.Skip(1));
-                SendNearby(player, ShoutRadius, shoutText, "shout", $"[{player.Id}] {player.Name}");
+                SendNearby(player, ShoutRadius, shoutText, "shout", ChatTag(player));
                 break;
 
             case "w":
@@ -1863,8 +1880,8 @@ public partial class StarterResource : Resource
                     return;
                 }
                 var wMsg = string.Join(' ', parts.Skip(2));
-                SendChatMessage(wTarget, wMsg, "whisper", $"[{player.Id}] {player.Name}");
-                SendChatMessage(player, $"[для [{wTarget.Id}] {wTarget.Name}]: {wMsg}", "whisper", "Вы");
+                SendChatMessage(wTarget, wMsg, "whisper", ChatTag(player));
+                SendChatMessage(player, $"[для {ChatTag(wTarget)}]: {wMsg}", "whisper", "Вы");
                 break;
 
             case "a":
@@ -1880,7 +1897,7 @@ public partial class StarterResource : Resource
                 {
                     if (IsAdmin(p, 1))
                     {
-                        SendChatMessage(p, aMsg, "admin", $"[{player.Id}] {player.Name} (Ур.{adminLvl})");
+                        SendChatMessage(p, aMsg, "admin", $"{ChatTag(player)} · ур.{adminLvl}");
                     }
                 }
                 break;
