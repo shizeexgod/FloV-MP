@@ -13,10 +13,13 @@ The bridge is an ASI-compatible DLL. When loaded into the GTA process it:
 
 This milestone proves the version-gated native process boundary and a
 long-lived server connection. It does not yet provide entity replication,
-game-thread native calls, input capture, or a game HUD. The server's existing
-alt:V protocol cannot consume this session automatically; the entity adapter
-must be implemented on top of the verified 3889 entry point before this can be
-called a working multiplayer client.
+game-thread native calls, input capture, or a game HUD by itself. When an
+official ScriptHookV runtime for `1.0.3889.0` is already present in the game
+directory, the bridge registers a script-thread adapter through its documented
+exports: it reads the local player's coordinates and creates/moves streamed
+remote peds. Without that optional runtime the transport remains available,
+but no game native calls are attempted. The server's existing alt:V protocol
+cannot consume this session automatically.
 
 The server rejects a different game version with an explicit
 `unsupported-game-version` reason. This is intentional: loading the old
