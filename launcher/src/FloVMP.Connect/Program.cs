@@ -46,12 +46,24 @@ if (opts is null) return 1;
 
 var (connect, clientDir, gtaDir, port, debug, keepOpen, noDirectLaunch, platformOverride, nickname, gameArgs, priority, fpsLimit, gfxPreset) = opts.Value;
 
-// Emergency Legacy b3889 path. This deliberately bypasses the old alt:V
-// launcher: its 16.4.39 client is tied to GTA b3521 and cannot be used as a
-// compatibility layer for b3889. The bridge mode launches the verified GTA
-// executable and injects only the version-specific native bootstrap.
-if (args.Contains("--bridge-3889", StringComparer.OrdinalIgnoreCase))
-    return await RunLegacy3889BridgeAsync(connect, gtaDir, gameArgs, priority, fpsLimit);
+// GTA V Legacy 1.0.3889.0 — собственный клиент FloV:MP (FloVMP.asi на
+// ScriptHookV). Клиент alt:V 16.4.39 привязан к b3521 и для b3889 не годится,
+// поэтому версия игры определяет путь запуска сама, без флагов.
+if (Legacy3889.IsLegacy3889(gtaDir) || args.Contains("--legacy-3889", StringComparer.OrdinalIgnoreCase))
+{
+    int? nativePort = null;
+    for (var i = 0; i < args.Length - 1; i++)
+        if (args[i] == "--native-port" && int.TryParse(args[i + 1], out var np)) nativePort = np;
+    return await Legacy3889.RunAsync(connect, gtaDir, nickname, gameArgs,
+        installScriptHook: args.Contains("--install-scripthook", StringComparer.OrdinalIgnoreCase),
+        nativePort, noLaunch: args.Contains("--no-launch", StringComparer.OrdinalIgnoreCase));
+}
+
+if (string.IsNullOrEmpty(clientDir) || !Directory.Exists(clientDir))
+{
+    Console.Error.WriteLine("[err] Не найдена папка клиента FloV:MP (runtime/client). Задайте путь через --client <dir>");
+    return 2;
+}
 
 var flovmpExe = Path.Combine(clientDir, "flovmp.exe");
 var clientExe = File.Exists(flovmpExe) ? flovmpExe : Path.Combine(clientDir, "altv.exe");
@@ -383,95 +395,6 @@ finally
 if (keepOpen) { Console.WriteLine("Нажмите Enter для выхода..."); Console.ReadLine(); }
 return 0;
 
-static async Task<int> RunLegacy3889BridgeAsync(
-    string connect,
-    string gtaDir,
-    string? gameArgs,
-    string? priority,
-    int fpsLimit)
-{
-    var gamePath = Path.Combine(gtaDir, "GTA5.exe");
-    if (!File.Exists(gamePath))
-    {
-        Console.Error.WriteLine($"[bridge] Не найден Legacy GTA5.exe в {gtaDir}");
-        return 2;
-    }
-
-    var identity = GtaLaunchGuard.Inspect(gamePath);
-    if (!string.Equals(identity.FileVersion, "1.0.3889.0", StringComparison.OrdinalIgnoreCase))
-    {
-        Console.Error.WriteLine($"[bridge] Нужен GTA Legacy 1.0.3889.0, обнаружено: {identity.FileVersion}");
-        return 2;
-    }
-
-    var bridgeCandidates = new[]
-    {
-        Path.Combine(AppContext.BaseDirectory, "flovmp-legacy-3889-bridge.asi"),
-        Path.Combine(AppContext.BaseDirectory, "native", "legacy-3889", "bridge", "build", "bin", "Release", "flovmp-legacy-3889-bridge.asi"),
-        Path.Combine(Environment.CurrentDirectory, "native", "legacy-3889", "bridge", "build", "bin", "Release", "flovmp-legacy-3889-bridge.asi"),
-        @"C:\FloV-MP\native\legacy-3889\bridge\build\bin\Release\flovmp-legacy-3889-bridge.asi",
-    };
-    var bridgePath = bridgeCandidates.FirstOrDefault(File.Exists);
-    if (bridgePath is null)
-    {
-        Console.Error.WriteLine("[bridge] Не найден native bridge b3889. Соберите native/legacy-3889/bridge.");
-        return 2;
-    }
-
-    var serverHost = connect;
-    var colon = serverHost.LastIndexOf(':');
-    if (colon > 0) serverHost = serverHost[..colon];
-    var prepared = PrepareGameCommandLine(gtaDir, gameArgs, fpsLimit);
-    try
-    {
-        var args = string.IsNullOrWhiteSpace(gameArgs) ? "-nobattleye" : gameArgs;
-        if (!args.Contains("-nobattleye", StringComparison.OrdinalIgnoreCase)) args += " -nobattleye";
-
-        var psi = new ProcessStartInfo(gamePath, args)
-        {
-            WorkingDirectory = gtaDir,
-            UseShellExecute = false,
-        };
-        psi.Environment["FLOVMP_BRIDGE_HOST"] = serverHost;
-        psi.Environment["FLOVMP_BRIDGE_PORT"] = "7798";
-
-        using var game = Process.Start(psi);
-        if (game is null)
-        {
-            Console.Error.WriteLine("[bridge] Не удалось запустить GTA5.exe.");
-            return 3;
-        }
-        Console.WriteLine($"[bridge] GTA Legacy b3889 запущена (PID {game.Id}).");
-
-        var injected = false;
-        for (var i = 0; i < 120 && !game.HasExited; i++)
-        {
-            await Task.Delay(500);
-            // GTA can stay windowless during RGL/Epic bootstrap. The process
-            // handle is sufficient for LoadLibraryW; waiting for a window
-            // made the old emergency path time out on fullscreen installs.
-            if (!game.HasExited && i >= 3)
-            {
-                injected = Injector.InjectDll(game.Handle, bridgePath);
-                Console.WriteLine(injected
-                    ? "[bridge] Native bridge загружен в GTA5.exe; ждём handshake сервера."
-                    : "[bridge] Не удалось загрузить native bridge в GTA5.exe.");
-                break;
-            }
-        }
-
-        if (!injected) return 4;
-        ApplyGamePriority(priority);
-        await game.WaitForExitAsync();
-        Console.WriteLine("[bridge] GTA5.exe завершён.");
-        return 0;
-    }
-    finally
-    {
-        CleanupGameCommandLine(gtaDir, prepared);
-    }
-}
-
 // --- helpers ---------------------------------------------------------
 
 [DllImport("user32.dll", EntryPoint = "SetWindowTextW", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -622,12 +545,8 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
     if (connect.StartsWith("altv://connect/", StringComparison.OrdinalIgnoreCase))
         connect = connect["altv://connect/".Length..];
 
-    client ??= ResolveClientDir();
-    if (client is null)
-    {
-        Console.Error.WriteLine("[err] Не найдена папка клиента FloV:MP (runtime/client). Задайте путь через --client <dir>");
-        return null;
-    }
+    // Папка клиента alt:V нужна только для GTA b3521; для b3889 её может не быть.
+    client ??= ResolveClientDir() ?? "";
 
     gta ??= ResolveGtaDir(client);
     if (gta is null)
@@ -643,7 +562,7 @@ static (string connect, string clientDir, string gtaDir, int port, bool debug, b
         return null;
     }
 
-    return (connect, Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride, nickname, gameArgs, priority, fpsLimit, gfxPreset);
+    return (connect, client.Length == 0 ? "" : Path.GetFullPath(client), Path.GetFullPath(gta), port, debug, keepOpen, noDirectLaunch, platformOverride, nickname, gameArgs, priority, fpsLimit, gfxPreset);
 }
 
 static string? ResolveClientDir()

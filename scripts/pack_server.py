@@ -227,7 +227,35 @@ def publish_dotnet(publish_root, skip_build, with_connector, with_host):
     return starter, (connector if with_connector else None), (host if with_host else None)
 
 
-def stage_package(target_os, stage, args, version, starter_dir, connector_dir, host_dir=None):
+def find_cmake():
+    exe = shutil.which("cmake")
+    if exe:
+        return exe
+    for base in (r"C:\Program Files (x86)\Microsoft Visual Studio", r"C:\Program Files\Microsoft Visual Studio"):
+        for root, _dirs, files in os.walk(base):
+            if "cmake.exe" in files and "CMake" in root:
+                return os.path.join(root, "cmake.exe")
+    return None
+
+
+def build_native_client(skip_build):
+    """Клиент игроков для GTA V Legacy 1.0.3889.0 (FloVMP.asi). Собирается только
+    на Windows (MSVC); на другой машине берётся готовая сборка из build/."""
+    src = os.path.join(REPO, "native", "legacy-3889", "client")
+    asi = os.path.join(src, "build", "bin", "Release", "FloVMP.asi")
+    if not skip_build and os.name == "nt":
+        cmake = find_cmake()
+        if not cmake:
+            fail("нет cmake (Visual Studio Build Tools) — не собрать клиент b3889")
+        log("[build] клиент b3889 (FloVMP.asi)")
+        run([cmake, "-S", src, "-B", os.path.join(src, "build"), "-A", "x64"])
+        run([cmake, "--build", os.path.join(src, "build"), "--config", "Release"])
+    if not os.path.isfile(asi):
+        fail("нет собранного клиента b3889: " + asi)
+    return asi
+
+
+def stage_package(target_os, stage, args, version, starter_dir, connector_dir, host_dir=None, client_asi=None):
     altv = args.altv_backup
     br = args.branch
     plat = "x64_linux" if target_os == "linux" else "x64_win32"
@@ -321,6 +349,11 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
         if connector_dir:
             copy_tree(connector_dir, S("tools", "connector"))
 
+    # Комплект для игроков: владелец сервера раздаёт его своим игрокам.
+    if client_asi:
+        copy_tree(os.path.join(TEMPLATES, "client-b3889"), S("client-b3889"))
+        copy(client_asi, S("client-b3889", "FloVMP.asi"))
+
     with open(S("VERSION"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(version + "\n")
     with open(S("delivery.json"), "w", encoding="utf-8", newline="\n") as fh:
@@ -334,7 +367,7 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
             "webIncluded": False,
             "connectorIncluded": bool(connector_dir),
             "nativeProfiles": {
-                "legacy-3889": "needs-native-adapter",
+                "legacy-3889": "native-client" if client_asi else "not-included",
                 "enhanced-1158": "needs-enhanced-runtime",
             },
         }, fh, ensure_ascii=False, indent=2)
@@ -436,7 +469,9 @@ def verify_stage(stage, target_os, entries):
                 "server/resources/flovmp-starter/resource.toml",
                 "server/resources/flovmp-client/resource.toml", "delivery.json",
                 "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/template/Gamemode.csproj",
-                "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md"]
+                "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md",
+                "client-b3889/FloVMP.asi", "client-b3889/install-client.cmd", "client-b3889/play.cmd",
+                "client-b3889/README.md"]
     if target_os == "linux":
         required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",
                      "server/flovmp-server", "voice/altv-voice-server", "server/modules/libcsharp-module.so"]
@@ -556,9 +591,10 @@ def main():
                                               "windows" in targets and args.with_connector,
                                               "windows" in targets)
 
+    client_asi = build_native_client(args.skip_build)
     for t in targets:
         stage = os.path.join(args.out, "flovmp-server-{}-{}".format(version, t))
-        stage_package(t, stage, args, version, starter, connector, host)
+        stage_package(t, stage, args, version, starter, connector, host, client_asi)
         normalize_text_files(stage)
         entries = write_manifests(stage, t, version)
         verify_stage(stage, t, entries)

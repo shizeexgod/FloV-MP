@@ -446,12 +446,12 @@ else
   # Порты новой установки не должны быть заняты (например, другим сервером на
   # этой машине): иначе сервер не стартует, и ошибка видна только в логе.
   if command -v ss >/dev/null 2>&1; then
-    for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT" "$VOICE_INTERNAL_PORT"; do
+    for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT" "$VOICE_INTERNAL_PORT" "$((GAME_PORT + 10))"; do
       if ss -H -lnu "sport = :$p" 2>/dev/null | grep -q . || ss -H -lnt "sport = :$p" 2>/dev/null | grep -q .; then
         die "порт $p уже занят другой программой (возможно, другим сервером). Укажите свободные: --port, --voice-port, --voice-internal-port"
       fi
     done
-    ok "порты $GAME_PORT, $VOICE_PUBLIC_PORT, $VOICE_INTERNAL_PORT свободны"
+    ok "порты $GAME_PORT, $VOICE_PUBLIC_PORT, $VOICE_INTERNAL_PORT, $((GAME_PORT + 10)) свободны"
   fi
 fi
 
@@ -836,15 +836,17 @@ fi
 if [ "$DO_FIREWALL" -eq 1 ]; then
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
     for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do ufw allow "$p/udp" >/dev/null; ufw allow "$p/tcp" >/dev/null; done
-    ok "ufw: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+    ufw allow "$((GAME_PORT + 10))/tcp" >/dev/null
+    ok "ufw: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP), $((GAME_PORT + 10))/TCP (клиенты GTA Legacy 1.0.3889.0)"
   elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
     for p in "$GAME_PORT" "$VOICE_PUBLIC_PORT"; do
       firewall-cmd --permanent --add-port="$p/udp" >/dev/null; firewall-cmd --permanent --add-port="$p/tcp" >/dev/null
     done
+    firewall-cmd --permanent --add-port="$((GAME_PORT + 10))/tcp" >/dev/null
     firewall-cmd --reload >/dev/null
-    ok "firewalld: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+    ok "firewalld: открыты порты $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP), $((GAME_PORT + 10))/TCP (клиенты GTA Legacy 1.0.3889.0)"
   else
-    info "Файрвол не активен. Если у хостинга есть внешний файрвол — откройте $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP)"
+    info "Файрвол не активен. Если у хостинга есть внешний файрвол — откройте $GAME_PORT и $VOICE_PUBLIC_PORT (UDP+TCP) и $((GAME_PORT + 10))/TCP"
   fi
 fi
 
@@ -943,6 +945,7 @@ fi
 echo "${C_GREEN}${C_BOLD}=====================================================================${C_OFF}"
 echo "  Адрес для подключения:  ${C_BOLD}${PUBLIC_HOST:-<IP сервера>}:$GAME_PORT${C_OFF}"
 echo "  Порты (UDP+TCP):        $GAME_PORT (игра), $VOICE_PUBLIC_PORT (голос)"
+echo "  Порт TCP:               $((GAME_PORT + 10)) (клиенты GTA Legacy 1.0.3889.0, комплект client-b3889/)"
 echo "  Папка:                  $INSTALL_DIR"
 echo "  Настройки:              $INSTALL_DIR/server/server.toml, $INSTALL_DIR/config/flovmp.env"
 echo "  Лог:                    tail -f $INSTALL_DIR/server/server.log"

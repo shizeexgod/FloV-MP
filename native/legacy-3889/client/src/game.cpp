@@ -81,7 +81,8 @@ namespace flov::game
         Hash g_remoteGroup = 0;
         std::string g_host;
         int g_port = 0;
-        bool g_triedAltPort = false;
+        int g_altPort = 0; // запасной порт, если основной не ответил (ввели сразу порт шлюза)
+        std::string g_typedAddress;
         std::string g_pendingName;
 
         float Dist2(float ax, float ay, float az, float bx, float by, float bz)
@@ -756,12 +757,14 @@ namespace flov::game
             ui::SetHud("");
         }
 
-        void StartConnect(std::string host, int port, const std::string& name)
+        void StartConnect(std::string host, int port, const std::string& name, int altPort = 0,
+                          const std::string& typed = "")
         {
             ResetSession();
             g_host = host;
             g_port = port;
-            g_triedAltPort = false;
+            g_altPort = altPort;
+            g_typedAddress = typed.empty() ? host + ":" + std::to_string(port) : typed;
             g_pendingName = SanitizeName(name.empty() ? std::string(n::GET_PLAYER_NAME(n::PLAYER_ID())) : name);
             g_myName = g_pendingName;
             ui::Notify("FloV:MP: подключение к " + host + ":" + std::to_string(port) + "...", 6000);
@@ -771,14 +774,19 @@ namespace flov::game
             FILE* f = nullptr;
             if (_wfopen_s(&f, (DataDir() + L"\\last-server.txt").c_str(), L"wb") == 0 && f)
             {
-                fprintf(f, "%s:%d\n%s\n", host.c_str(), port, g_pendingName.c_str());
+                fprintf(f, "%s\n%s\n", g_typedAddress.c_str(), g_pendingName.c_str());
                 fclose(f);
             }
         }
 
-        /// "host", "host:port" → адрес шлюза. Без порта — 7798 (порт игры + 10).
-        bool ParseAddress(const std::string& text, std::string& host, int& port)
+        /// Адрес, который вводит игрок, — адрес игры ("host" или "host:7788"):
+        /// шлюз клиентов b3889 слушает порт игры + 10. altPort — введённый порт
+        /// как есть, на случай если игроку дали сразу порт шлюза.
+        /// gameAddress = false — адрес уже указывает на шлюз (connect.txt от коннектора).
+        bool ParseAddress(const std::string& text, std::string& host, int& port, int* altPort = nullptr,
+                          bool gameAddress = true)
         {
+            if (altPort) *altPort = 0;
             std::string t = text;
             t.erase(std::remove_if(t.begin(), t.end(), [](char c) { return c == ' '; }), t.end());
             if (t.rfind("flovmp://", 0) == 0) t = t.substr(9);
@@ -791,6 +799,12 @@ namespace flov::game
                 t = t.substr(0, colon);
             }
             if (port <= 0 || port > 65535 || t.empty()) return false;
+            if (gameAddress && colon != std::string::npos && t.find(':') == std::string::npos)
+            {
+                if (altPort) *altPort = port;
+                port += 10;
+                if (port > 65535) return false;
+            }
             host = t;
             return true;
         }
@@ -1015,11 +1029,13 @@ namespace flov::game
             {
                 const bool kicked = type == "NET_CLOSED" && at(2) == "1";
                 const bool refused = type == "NET_FAILED" && at(1).find("не отвечает") != std::string::npos;
-                // Игрок ввёл порт игры (7788) — пробуем порт шлюза рядом (+10).
-                if (refused && !g_triedAltPort && g_port != kDefaultNativePort && !g_welcomed)
+                const bool notFlov = type == "NET_FAILED" && (at(1).find("не сервер FloV:MP") != std::string::npos ||
+                                                                 at(1).find("закрыл соединение при входе") != std::string::npos);
+                // Порт игры + 10 не ответил — возможно, игроку дали сразу порт шлюза.
+                if ((refused || notFlov) && g_altPort > 0 && !g_welcomed)
                 {
-                    g_triedAltPort = true;
-                    g_port += 10;
+                    g_port = g_altPort;
+                    g_altPort = 0;
                     Log("пробую порт шлюза " + std::to_string(g_port));
                     g_net.Connect(g_host, g_port, g_pendingName);
                     return;
@@ -1155,7 +1171,8 @@ namespace flov::game
             {
                 int port = 0;
                 std::string h;
-                if (ParseAddress(host, h, port)) StartConnect(h, port, name);
+                int alt = 0;
+                if (ParseAddress(host, h, port, &alt)) StartConnect(h, port, name, alt, host);
                 else ui::Notify("Неверный адрес сервера. Пример: 127.0.0.1:7788", 4000);
             }
 
@@ -1171,7 +1188,7 @@ namespace flov::game
         bool ReadConnectRequest(std::string& host, int& port, std::string& name)
         {
             char env[256]{};
-            if (GetEnvironmentVariableA("FLOVMP_CONNECT", env, sizeof env) > 0 && ParseAddress(env, host, port))
+            if (GetEnvironmentVariableA("FLOVMP_CONNECT", env, sizeof env) > 0 && ParseAddress(env, host, port, nullptr, true))
             {
                 char nm[128]{};
                 if (GetEnvironmentVariableA("FLOVMP_NAME", nm, sizeof nm) > 0) name = nm;
@@ -1202,7 +1219,7 @@ namespace flov::game
                 Log("connect.txt устарел — игнорирую");
                 return false;
             }
-            return ParseAddress(address, host, port);
+            return ParseAddress(address, host, port, nullptr, false); // коннектор пишет адрес шлюза
         }
 
         void Tick()

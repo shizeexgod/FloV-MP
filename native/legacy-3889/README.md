@@ -1,28 +1,78 @@
-# FloV:MP native adapter — Legacy b3889
+# FloV:MP — клиент для GTA V Legacy 1.0.3889.0
 
-This directory is the native boundary for Epic GTA V Legacy `1.0.3889.0`.
+Клиент alt:V 16.4.39, на котором построен сервер, работает только с GTA b3521.
+У игроков сейчас Legacy **1.0.3889.0**, поэтому у платформы собственный клиент:
+ASI-плагин `FloVMP.asi` на ScriptHookV. Сервер тот же — шлюз клиентов b3889
+встроен в ресурс `flovmp-starter` (TCP, порт игры + 10, по умолчанию 7798).
 
-The first checked-in implementation is a strict fingerprint preflight. It
-validates the three version-sensitive game files and deliberately reports
-`preflight-only-native-binding-pending` until the client runtime is actually
-bound to the b3889 executable. A DLL that only validates hashes must not be
-advertised as a working multiplayer adapter.
+## Как устроено
 
-## Build
-
-```powershell
-cmake -S native/legacy-3889 -B native/legacy-3889/build -A x64
-cmake --build native/legacy-3889/build --config Release
+```
+GTA5.exe 1.0.3889.0
+ └─ dinput8.dll (ASI-загрузчик ScriptHookV)
+     └─ FloVMP.asi ── ScriptHookV.dll (вызов нативных функций игры)
+          ├─ net      TCP-поток: FLOV/2, вход по подписи ECDSA P-256
+          ├─ game     поток скриптов: сюжет выкл., спавн, синхронизация, команды
+          └─ ui       DX11-оверлей (ImGui): чат, ники, ESP, окно F9, HUD
+                    │
+                    ▼ TCP :7798
+flovmp-starter (alt:V server, C#)
+ └─ NativeServer (FloVMP.Core/Native) → NativePlayerProxy : IPlayer
+      вход, баны, права, лицензия, чат, админ-команды — общий код платформы
 ```
 
-The output is `flovmp-legacy-native-3889.dll`. The exported ABI is consumed by
-the launcher/diagnostic harness; `FlovMpLegacy3889_IsRuntimeBound()` remains
-false until the actual GTA client binding is implemented and tested.
+- **Вход.** Ключ игрока создаётся на его компьютере (`%LOCALAPPDATA%\FloVMP\identity.key`,
+  защищён DPAPI). Сервер присылает nonce, клиент подписывает. ID игрока
+  (`SocialClubId` в платформе, со старшим битом) — хэш открытого ключа, его
+  нельзя присвоить, зная только число. Права и баны привязаны к нему.
+- **Сюжет.** При входе на сервер клиент останавливает все потоки скриптов
+  одиночной игры (миссии, катсцены, смена персонажа, «больница»), убирает
+  полицию, прохожих и транспорт. До подключения игра не меняется.
+- **Синхронизация.** 20 раз в секунду клиент шлёт STATE (позиция, скорость,
+  курс, транспорт, место, поворот, прицел, оружие, здоровье, модель). Сервер
+  рассылает PSTATE игрокам в радиусе 400 м того же измерения. Пешком чужой
+  игрок двигается задачами движения (анимации ходьбы/бега), в транспорте —
+  коррекцией скорости (без рывков, физика сохраняется).
+- **Урон.** Попадание по чужому игроку клиент сообщает серверу (HIT), сервер
+  проверяет дистанцию и частоту и передаёт жертве (DAMAGE). Локальный урон от
+  копий чужих игроков откатывается — урон не считается дважды.
 
-## Required next native work
+## Сборка
 
-The missing implementation is the version-dependent client binding: load the
-FloV:MP client runtime into the b3889 GTA process, resolve b3889 signatures,
-and establish the client connection without replacing the Epic executable or
-RPF files. Only a Windows process-level E2E test can change
-`FlovMpLegacy3889_IsRuntimeBound()` to return `1`.
+Нужны Visual Studio Build Tools (MSVC, CMake):
+
+```powershell
+cmake -S native/legacy-3889/client -B native/legacy-3889/client/build -A x64
+cmake --build native/legacy-3889/client/build --config Release
+```
+
+Результат — `client/build/bin/Release/FloVMP.asi`. `scripts/pack_server.py`
+собирает его сам и кладёт в пакет сервера в папку `client-b3889/` вместе с
+установщиком для игроков.
+
+`src/natives.h` генерируется из натив-заголовка ScriptHookV SDK
+(`python client/tools/gen_natives.py <SDK>/inc/natives.h`). ScriptHookV и его
+SDK в репозиторий и пакеты не кладутся — автор запрещает их распространение;
+установщик игрока скачивает ScriptHookV с официального сайта и сверяет SHA-256.
+
+## Проверка без GTA
+
+`client/tools/bot.py` — тестовый игрок на том же протоколе:
+
+```bash
+python native/legacy-3889/client/tools/bot.py --check            # вход, спавн, чат, /help, выход
+python native/legacy-3889/client/tools/bot.py --name Bot --seconds 600   # ходит у спавна
+python native/legacy-3889/client/tools/bot.py --drive 0xB779A091  # едет на Adder
+python native/legacy-3889/client/tools/bot.py --hit <ID>          # урон игроку (PvP)
+```
+
+## Ограничения версии 1.0
+
+- Голосового чата у клиента b3889 нет (голос alt:V работает только в его клиенте).
+- Клиентских скриптов своего ресурса (JS в `gamemode`) клиент b3889 не
+  исполняет. Серверная часть gamemode получает события
+  `flovmp:native:ready (id, ник)`, `flovmp:native:died (id, оружие)`,
+  `flovmp:native:command (id, ник, команда, аргументы)`; прочие `player.Emit`
+  к такому игроку приходят в клиент как событие EVENT (журнал).
+- Внешность — стандартная модель `mp_m_freemode_01` или модель из `/skin`.
+- Режим без BattlEye: моды в GTA работают только в сюжетном режиме.

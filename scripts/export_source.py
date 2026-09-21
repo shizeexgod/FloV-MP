@@ -40,6 +40,8 @@ INCLUDE = [
     "server/tools/FloVMP.LoadTest",
     "server/resources/flovmp-starter",
     "client/resources/flovmp-client",
+    "native/legacy-3889/client",
+    "native/legacy-3889/README.md",
     "docs/engine/native-adapter-contract.md",
     "docs/engine/native-client-gap.md",
     "docs/engine/legacy-3889-plan.md",
@@ -76,7 +78,7 @@ INCLUDE = [
     "runtime/compat/enhanced-1158",
 ]
 
-SKIP_DIRS = {"bin", "obj", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}
+SKIP_DIRS = {"bin", "obj", "build", ".vs", ".idea", "node_modules", "__pycache__", "TestResults"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
 FORBIDDEN_TOP_LEVEL = {"web", "launcher", "archive"}
 

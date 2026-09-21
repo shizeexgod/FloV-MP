@@ -92,7 +92,11 @@ public partial class StarterResource
             return;
         }
 
-        var port = NativeProtocol.DefaultPort;
+        // Порт шлюза — порт игры + 10 (7788 → 7798): так его находят клиент и
+        // коннектор по одному адресу сервера. FLOVMP_NATIVE_PORT — явная замена.
+        var port = int.TryParse(ReadServerTomlValue("port"), out var gamePort) && gamePort is > 0 and < 65526
+            ? gamePort + 10
+            : NativeProtocol.DefaultPort;
         if (int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_NATIVE_PORT"), out var p) && p is > 0 and < 65536)
             port = p;
 
@@ -100,7 +104,8 @@ public partial class StarterResource
         {
             _native = new NativeServer(IPAddress.Any, port, msg => Alt.Log("[FloV:MP b3889] " + msg),
                 id => _altPlayerIds.ContainsKey(id));
-            _native.ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ?? ReadServerTomlName() ?? "FloV:MP";
+            _native.ServerName = Environment.GetEnvironmentVariable("FLOVMP_SERVER_NAME") ??
+                                 FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(ReadServerTomlValue("name")) ?? "FloV:MP";
             _native.Start();
             Alt.Log($"[FloV:MP b3889] Шлюз клиентов GTA V Legacy {NativeProtocol.GameVersion} слушает TCP {port}. " +
                     "Для игроков из интернета откройте этот порт.");
@@ -113,8 +118,8 @@ public partial class StarterResource
         }
     }
 
-    /// <summary>name = "..." из server.toml (рабочая папка сервера) — его видят игроки в HUD.</summary>
-    private static string? ReadServerTomlName()
+    /// <summary>Значение верхнего уровня из server.toml (рабочая папка сервера): name, port.</summary>
+    private static string? ReadServerTomlValue(string key)
     {
         try
         {
@@ -124,8 +129,9 @@ public partial class StarterResource
             {
                 var line = raw.Trim();
                 if (line.StartsWith('[')) break; // только верхний уровень
-                var m = System.Text.RegularExpressions.Regex.Match(line, "^name\\s*=\\s*[\"'](.+?)[\"']");
-                if (m.Success) return FloVMP.Core.Chat.ChatSanitizer.CleanPlayerText(m.Groups[1].Value) ?? null;
+                var m = System.Text.RegularExpressions.Regex.Match(line,
+                    "^" + key + "\\s*=\\s*(?:[\"'](?<v>.+?)[\"']|(?<v>[0-9]+))");
+                if (m.Success) return m.Groups["v"].Value;
             }
         }
         catch (Exception) { }
