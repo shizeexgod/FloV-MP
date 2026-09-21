@@ -36,14 +36,20 @@ if (Test-Path $built) {
     try { $fs = [IO.File]::Open($built, "Open", "ReadWrite", "None"); $fs.Close() }
     catch { $locked = $true }
 }
+# Сервер запущен — собираем в gamemode\.pending: FloVMP-Server.exe подставит
+# сборку сам при следующем запуске. Ждать остановки сервера ради сборки не нужно.
+$outDir = $null
 if ($locked) {
-    Write-Host "[FloV:MP] Сервер сейчас запущен и держит файлы gamemode." -ForegroundColor Yellow
-    Write-Host "          Остановите его (Ctrl+C или закройте окно FloVMP-Server.exe) и запустите сборку снова." -ForegroundColor Yellow
-    exit 1
+    $outDir = Join-Path $gamemode ".pending"
+    if (Test-Path $outDir) { Remove-Item $outDir -Recurse -Force }
 }
 
 Write-Host "[FloV:MP] Сборка gamemode..." -ForegroundColor Cyan
-& dotnet build $project -c Release -nologo
+if ($outDir) {
+    & dotnet build $project -c Release -nologo "-p:OutputPath=$outDir\"
+} else {
+    & dotnet build $project -c Release -nologo
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[FloV:MP] Сборка не удалась — ошибки выше." -ForegroundColor Red
     exit $LASTEXITCODE
@@ -63,4 +69,9 @@ if (Test-Path $toml) {
     }
 }
 
-Write-Host "[FloV:MP] Готово: server\resources\gamemode. Перезапустите сервер (FloVMP-Server.exe)." -ForegroundColor Green
+if ($outDir) {
+    Write-Host "[FloV:MP] Сборка готова. Сервер сейчас запущен — новая версия подставится сама" -ForegroundColor Green
+    Write-Host "          при следующем запуске: закройте окно FloVMP-Server.exe и запустите снова." -ForegroundColor Green
+} else {
+    Write-Host "[FloV:MP] Готово: server\resources\gamemode. Перезапустите сервер (FloVMP-Server.exe)." -ForegroundColor Green
+}

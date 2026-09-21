@@ -201,3 +201,43 @@ public sealed class DailyBackupTests : IDisposable
         Assert.True(FloVMP.ServerHost.DailyBackup.IsDue(_root, withDb, now));
     }
 }
+
+public sealed class PendingGamemodeTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "flovmp-pending-tests", Guid.NewGuid().ToString("N"));
+
+    public PendingGamemodeTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, true); } catch { }
+    }
+
+    [Fact]
+    public void Pending_build_replaces_running_one_on_next_start()
+    {
+        // Пока сервер работал, build.cmd собрал новую версию в gamemode/.pending.
+        var live = Directory.CreateDirectory(Path.Combine(_root, "server", "resources", "gamemode")).FullName;
+        File.WriteAllText(Path.Combine(live, "Gamemode.dll"), "старая");
+        var pending = Directory.CreateDirectory(FloVMP.ServerHost.Workspace.PendingDir(_root)).FullName;
+        File.WriteAllText(Path.Combine(pending, "Gamemode.dll"), "новая");
+        Directory.CreateDirectory(Path.Combine(pending, "client"));
+        File.WriteAllText(Path.Combine(pending, "client", "index.js"), "// клиент");
+
+        Assert.True(FloVMP.ServerHost.Workspace.ApplyPendingGamemode(_root));
+
+        Assert.Equal("новая", File.ReadAllText(Path.Combine(live, "Gamemode.dll")));
+        Assert.True(File.Exists(Path.Combine(live, "client", "index.js")));
+        Assert.False(Directory.Exists(pending)); // применённая сборка не подставляется повторно
+    }
+
+    [Fact]
+    public void Nothing_pending_changes_nothing()
+    {
+        Assert.False(FloVMP.ServerHost.Workspace.ApplyPendingGamemode(_root));
+
+        // Папка без Gamemode.dll — незаконченная сборка, её не подставляем.
+        Directory.CreateDirectory(FloVMP.ServerHost.Workspace.PendingDir(_root));
+        Assert.False(FloVMP.ServerHost.Workspace.ApplyPendingGamemode(_root));
+    }
+}

@@ -54,3 +54,4 @@ launcher/electron/pw_*.png
 .claude/
 
 __pycache__/
+.work/

@@ -174,6 +174,33 @@ public static class Workspace
         return true;
     }
 
+    /// <summary>Папка отложенной сборки: сюда собирает build.cmd, пока сервер запущен.</summary>
+    public static string PendingDir(string root) => Path.Combine(root, "gamemode", ".pending");
+
+    /// <summary>
+    /// Подставить отложенную сборку своего сервера перед запуском. Пока сервер
+    /// работает, его Gamemode.dll занята, и сборка кладёт результат в
+    /// gamemode/.pending. При следующем запуске он переносится в
+    /// server/resources/gamemode — владельцу не нужно ловить момент, когда
+    /// сервер остановлен, чтобы собрать свой код.
+    /// Возвращает true, если сборка была подставлена.
+    /// </summary>
+    public static bool ApplyPendingGamemode(string root)
+    {
+        var pending = PendingDir(root);
+        if (!File.Exists(Path.Combine(pending, "Gamemode.dll"))) return false;
+
+        var target = Path.Combine(root, "server", "resources", "gamemode");
+        Directory.CreateDirectory(target);
+        foreach (var dir in Directory.GetDirectories(pending, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(target, Path.GetRelativePath(pending, dir)));
+        foreach (var file in Directory.GetFiles(pending, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(target, Path.GetRelativePath(pending, file)), overwrite: true);
+
+        Directory.Delete(pending, recursive: true);
+        return true;
+    }
+
     private static void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
