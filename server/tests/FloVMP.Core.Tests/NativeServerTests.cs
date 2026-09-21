@@ -219,6 +219,39 @@ public sealed class NativeServerTests
     }
 
     [Fact]
+    public async Task ParallelJoinsGetUniqueIds()
+    {
+        using var server = new NativeServer(IPAddress.Loopback, 0, _ => { });
+        server.Start();
+        // С одного IP пускается не больше MaxConnectionsPerIp — столько и проверяем.
+        var clients = Enumerable.Range(0, NativeServer.MaxConnectionsPerIp).Select(_ => new FakeClient()).ToList();
+        try
+        {
+            await Task.WhenAll(clients.Select(c => c.JoinAsync(server.Port)));
+            var ids = new List<uint>();
+            for (var i = 0; i < clients.Count; i++) ids.Add((await WaitEventAsync<NativeJoined>(server)).Session.Id);
+            Assert.Equal(ids.Count, ids.Distinct().Count());
+        }
+        finally { foreach (var c in clients) c.Dispose(); }
+    }
+
+    [Fact]
+    public async Task FreedIdIsNotReusedImmediately()
+    {
+        using var server = StartServer();
+        using (var first = new FakeClient())
+        {
+            await first.JoinAsync(server.Port);
+            Assert.Equal(1u, (await WaitEventAsync<NativeJoined>(server)).Session.Id);
+        }
+        await WaitEventAsync<NativeLeft>(server);
+        using var second = new FakeClient();
+        await second.JoinAsync(server.Port);
+        // «/kick 1», набранный сразу после выхода игрока 1, не должен попасть в нового.
+        Assert.Equal(2u, (await WaitEventAsync<NativeJoined>(server)).Session.Id);
+    }
+
+    [Fact]
     public void StateParsingClampsAndNormalizes()
     {
         var parts = NativeProtocol.Parse(NativeProtocol.Format("STATE", 1f, 2f, 3f, -90f, 9999f, 0f, 0f, 0x1FFFF,

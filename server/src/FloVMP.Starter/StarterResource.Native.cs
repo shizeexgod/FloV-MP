@@ -204,7 +204,9 @@ public partial class StarterResource
 
     private void OnNativeLeft(NativeSession session, string reason)
     {
-        if (!_nativePlayers.Remove(session.Id, out var proxy)) return;
+        if (!_nativePlayers.TryGetValue(session.Id, out var proxy) ||
+            !ReferenceEquals(((NativePlayerProxy)(object)proxy).Session, session)) return;
+        _nativePlayers.Remove(session.Id);
         _nativeReady.Remove(session.Id);
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
@@ -218,6 +220,7 @@ public partial class StarterResource
     {
         if (!_nativePlayers.TryGetValue(session.Id, out var player)) return;
         var np = (NativePlayerProxy)(object)player;
+        if (!ReferenceEquals(np.Session, session)) return; // хвост сообщений ушедшей сессии
         switch (p[0])
         {
             case "READY":

@@ -27,7 +27,8 @@ public sealed record NativeLeft(NativeSession Session, string Reason) : NativeEv
 /// </summary>
 public sealed class NativeServer : IDisposable
 {
-    public const int MaxConnectionsPerIp = 4;
+    // За одним IP бывает много игроков: CGNAT мобильных операторов, семьи, клубы.
+    public const int MaxConnectionsPerIp = 12;
     public const int MaxMessagesPerSecond = 120;
     public static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
@@ -78,12 +79,38 @@ public sealed class NativeServer : IDisposable
         }
     }
 
+    // ID занят с выдачи до события ухода; после ухода номер 30 с не выдаётся
+    // снова — иначе «/kick 3», набранный сразу после выхода игрока 3,
+    // попал бы в только что вошедшего с тем же номером.
+    private readonly HashSet<uint> _reservedIds = new();
+    private readonly Dictionary<uint, DateTime> _releasedIds = new();
+    public static readonly TimeSpan IdReuseDelay = TimeSpan.FromSeconds(30);
+
     private uint AllocateId()
     {
         lock (_idLock)
         {
+            var now = DateTime.UtcNow;
             for (uint id = 1; ; id++)
-                if (!_sessions.ContainsKey(id) && !_idInUse(id)) return id;
+            {
+                if (_reservedIds.Contains(id) || _idInUse(id)) continue;
+                if (_releasedIds.TryGetValue(id, out var at))
+                {
+                    if (now - at < IdReuseDelay) continue;
+                    _releasedIds.Remove(id);
+                }
+                _reservedIds.Add(id);
+                return id;
+            }
+        }
+    }
+
+    private void ReleaseId(uint id)
+    {
+        lock (_idLock)
+        {
+            _reservedIds.Remove(id);
+            _releasedIds[id] = DateTime.UtcNow;
         }
     }
 
@@ -187,6 +214,9 @@ public sealed class NativeServer : IDisposable
             {
                 session.MarkClosed();
                 Events.Enqueue(new NativeLeft(session, session.CloseReason ?? leaveReason));
+                // Номер освобождается только после события ухода: вход нового
+                // игрока с тем же ID встанет в очередь позже, не раньше.
+                ReleaseId(session.Id);
             }
             // Дать уйти последнему сообщению (KICK/REJECT) до разрыва.
             try { await Task.Delay(200); } catch { }
