@@ -932,6 +932,15 @@ else
   [ "$HAS_SYSTEMD" -eq 1 ] && info "Запуск: systemctl start $SERVICE-voice $SERVICE"
 fi
 
+# Комплект клиента для игроков: адрес сервера — чтобы у игрока после
+# установки сразу был ярлык на этот сервер.
+if [ -d "$INSTALL_DIR/client-b3889" ] && [ -n "${PUBLIC_HOST:-}" ]; then
+  printf '# Адрес сервера для игроков (заполнен установщиком сервера).\naddress=%s:%s\nname=%s\n' \
+    "$PUBLIC_HOST" "$GAME_PORT" "$SERVER_NAME" > "$INSTALL_DIR/client-b3889/server.txt"
+  ( cd "$INSTALL_DIR" && rm -f client-b3889.zip && \
+    { command -v zip >/dev/null 2>&1 && zip -qr client-b3889.zip client-b3889; } ) || true
+fi
+
 # ---------------------------------------------------------------------
 # Итог
 # ---------------------------------------------------------------------
@@ -946,6 +955,11 @@ echo "${C_GREEN}${C_BOLD}=======================================================
 echo "  Адрес для подключения:  ${C_BOLD}${PUBLIC_HOST:-<IP сервера>}:$GAME_PORT${C_OFF}"
 echo "  Порты (UDP+TCP):        $GAME_PORT (игра), $VOICE_PUBLIC_PORT (голос)"
 echo "  Порт TCP:               $((GAME_PORT + 10)) (клиенты GTA Legacy 1.0.3889.0, комплект client-b3889/)"
+if [ -f "$INSTALL_DIR/client-b3889.zip" ]; then
+  echo "  Клиент для игроков:     $INSTALL_DIR/client-b3889.zip (раздайте игрокам)"
+else
+  echo "  Клиент для игроков:     $INSTALL_DIR/client-b3889/ (раздайте игрокам)"
+fi
 echo "  Папка:                  $INSTALL_DIR"
 echo "  Настройки:              $INSTALL_DIR/server/server.toml, $INSTALL_DIR/config/flovmp.env"
 echo "  Лог:                    tail -f $INSTALL_DIR/server/server.log"
