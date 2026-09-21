@@ -156,4 +156,34 @@ public sealed class LicenseFileTests : IDisposable
         Assert.Equal("FLV-TEST-0001-0001", s.Info!.LicenseKey);
         Assert.Equal(500, s.PlayerLimit);
     }
+
+    [Fact]
+    public void License_from_live_portal_with_previous_key_is_accepted_during_transition()
+    {
+        // Лицензия, выданная действующим порталом (ещё старым ключом): без
+        // переходного периода ни один проданный сервер не пустил бы игроков.
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license-legacy-key.flv");
+        var s = LicenseFile.Evaluate(path, Now);
+        Assert.Equal(LicenseState.Valid, s.State);
+        Assert.Equal("FLV-34C6-24FA-1E9F", s.Info!.LicenseKey);
+    }
+
+    [Fact]
+    public void Previous_key_can_be_switched_off_after_portal_rotation()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license-legacy-key.flv");
+        var before = Environment.GetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY");
+        try
+        {
+            Environment.SetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY", "off");
+            Assert.Equal(LicenseState.Invalid, LicenseFile.Evaluate(path, Now).State);
+            // Новым ключом подписанная — по-прежнему действует.
+            var fresh = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license.flv");
+            Assert.Equal(LicenseState.Valid, LicenseFile.Evaluate(fresh, Now).State);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY", before);
+        }
+    }
 }

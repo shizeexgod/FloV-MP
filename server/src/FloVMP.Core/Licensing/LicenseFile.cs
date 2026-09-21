@@ -200,10 +200,42 @@ public static class LicenseFile
         new(LicenseState.Invalid, null, message + " — вход на сервер запрещён до установки действующей лицензии",
             UnlicensedPlayerLimit);
 
+    /// <summary>
+    /// Прежний ключ портала. Действующий портал flovmp.ru на 21.09.2026 всё ещё
+    /// подписывает лицензии и lease им, а новый ключ (AuthorityPublicKeyPem)
+    /// заведён в коде раньше, чем на портале. Без переходного периода ни один
+    /// сервер не принял бы выданную порталом лицензию. Поддельная лицензия со
+    /// старым ключом не проходит онлайн-проверку портала (ключа нет в базе —
+    /// вход закрывается). После перевода портала на новый ключ переходный
+    /// период выключается: FLOVMP_LICENSE_LEGACY_KEY=off, затем ключ удаляется.
+    /// </summary>
+    public const string LegacyAuthorityPublicKeyPem = """
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuKirQxSjX3hcS80XVFA8
+        oOZPEfa2ZzSOMj1B3QgpcmjU/lI++TOKpmvhx/JGleQth1uQygJ8prFYuD3wTNvR
+        4ZTO8lrSNS4T/J+gIQQZiXZofJCXrOnf3Bzx5e/1+XCthJkyBZyQUFI0Xs/eIEtn
+        gbqsdHpzsTwUIZhhjZv3Y72G9dV6vRcXXu2nZRbA1AjOMRR6BnNh5ByUjt5aUSt2
+        avAWjPd5YZMFNvaVvcponjbhK4cxhV1W3a0JuXE/3gNYGBE+3/6I+lN+fylJQkKj
+        5kz7MTFu7zhlIU7NfHA10hdKibdLRiDjAUXV9bhKL1mrYnWJUSkUctgunOUuxxOQ
+        HQIDAQAB
+        -----END PUBLIC KEY-----
+        """;
+
+    public static bool LegacyKeyAccepted =>
+        !string.Equals(Environment.GetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY")?.Trim(), "off",
+            StringComparison.OrdinalIgnoreCase);
+
     public static bool VerifyAuthoritySignature(byte[] payload, byte[] signature, string? publicKeyPem = null)
     {
+        if (publicKeyPem is not null) return Verify(publicKeyPem, payload, signature);
+        return Verify(AuthorityPublicKeyPem, payload, signature) ||
+               (LegacyKeyAccepted && Verify(LegacyAuthorityPublicKeyPem, payload, signature));
+    }
+
+    private static bool Verify(string pem, byte[] payload, byte[] signature)
+    {
         using var rsa = RSA.Create();
-        rsa.ImportFromPem(publicKeyPem ?? AuthorityPublicKeyPem);
+        rsa.ImportFromPem(pem);
         return rsa.VerifyData(payload, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
     }
 }
