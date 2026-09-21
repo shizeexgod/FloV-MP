@@ -47,6 +47,7 @@ namespace flov::ui
         std::string g_notice;
         ULONGLONG g_noticeUntil = 0, g_noticeAt = 0;
         uint32_t g_accent = 0xFFFFFF;
+        std::string g_brand = "FloV:MP";
 
         bool g_chatEnabled = false, g_chatOpen = false;
         std::wstring g_input;
@@ -897,8 +898,9 @@ namespace flov::ui
                 dl->AddLine(ImVec2(x + 4 * s, cy), ImVec2(x, cy + 4 * s), Rgba(244, 244, 245, 1), 1.6f * s);
                 dl->AddLine(ImVec2(x + 6 * s, cy + 5 * s), ImVec2(x + 12 * s, cy + 5 * s), Rgba(244, 244, 245, 1), 1.6f * s);
                 x += 18 * s;
-                Text(dl, g_bold, ImVec2(x, cy - Px(g_bold) / 2), Rgba(244, 244, 245, 1), "FloV:MP");
-                x += Measure(g_bold, "FloV:MP").x + 10 * s;
+                const std::string brand = Fit(g_bold, g_brand, 160 * s);
+                Text(dl, g_bold, ImVec2(x, cy - Px(g_bold) / 2), Rgba(244, 244, 245, 1), brand);
+                x += Measure(g_bold, brand).x + 10 * s;
                 const std::string role = g_adminLevel >= 8 ? "ОСНОВАТЕЛЬ" : g_adminLevel > 0 ? "АДМИН " + std::to_string(g_adminLevel) : "ИГРОК";
                 const ImVec2 rs = Measure(g_monoSm, role);
                 const ImU32 rc = g_adminLevel >= 8 ? Rgba(255, 199, 64, 1) : g_adminLevel > 0 ? Rgba(248, 113, 113, 1) : Rgba(161, 161, 170, 1);
@@ -1198,7 +1200,8 @@ namespace flov::ui
 
             // Бренд: квадратик + FLOV:MP вразрядку.
             {
-                const std::string brand = "FLOV:MP";
+                std::string brand = g_brand;
+                for (auto& c : brand) c = (char)toupper((unsigned char)c); // латиница — прописными, как раньше
                 const float track = 2.1f * s;
                 float bw = 0;
                 for (char c : brand) bw += Measure(g_bold, std::string(1, c), 13 * s).x + track;
@@ -1661,6 +1664,12 @@ namespace flov::ui
     {
         std::lock_guard lock(g_mutex);
         g_accent = rgb;
+    }
+
+    void SetBrand(const std::string& name)
+    {
+        std::lock_guard lock(g_mutex);
+        g_brand = name.empty() ? "FloV:MP" : name.substr(0, 40);
     }
 
     // --- загрузочный экран ------------------------------------------------------------------------

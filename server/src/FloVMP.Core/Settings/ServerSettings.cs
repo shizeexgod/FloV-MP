@@ -94,7 +94,9 @@ public sealed class ServerSettings
             "{a1a1aa}Первый вход{71717a} дольше обычного: игра подгружает город.",
             true, "Загрузка", "подсказки на загрузочном экране через « | »; {rrggbb} — цвет"),
         new("window.title", Kind.Text, "FloV Multiplayer — {server}", true, "Загрузка",
-            "заголовок окна игры (панель задач, Alt+Tab, диспетчер задач); {server} — имя сервера"),
+            "заголовок окна игры (панель задач, Alt+Tab, диспетчер задач); {server} — имя сервера. Только Source Kit"),
+        new("branding.name", Kind.Text, "FloV:MP", true, "Загрузка",
+            "название платформы на загрузочном экране и в консоли F8. Только Source Kit"),
 
         // --- Голос ----------------------------------------------------------------------------
         new("voice.enabled", Kind.Bool, "on", true, "Голос", "голосовой чат клиентов b3889"),
@@ -129,9 +131,21 @@ public sealed class ServerSettings
     public int Int(string key) => int.Parse(Get(key), CultureInfo.InvariantCulture);
     public float Float(string key) => float.Parse(Get(key), CultureInfo.InvariantCulture);
 
-    /// <summary>Настройки для клиента: «ключ=значение» через табуляцию-разделитель протокола.</summary>
-    public IEnumerable<(string Key, string Value)> ClientValues() =>
-        Schema.Where(d => d.Client).Select(d => (d.Key, Get(d.Key)));
+    /// <summary>Ключи оформления платформы: менять их можно только с Source Kit.</summary>
+    public static readonly IReadOnlySet<string> BrandingKeys =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "window.title", "branding.name" };
+
+    /// <summary>
+    /// Настройки для клиента. Без права на свой бренд ключи оформления
+    /// уходят со значениями по умолчанию, что бы ни стояло в файле.
+    /// </summary>
+    public IEnumerable<(string Key, string Value)> ClientValues(bool brandingAllowed = true) =>
+        Schema.Where(d => d.Client).Select(d =>
+            (d.Key, !brandingAllowed && BrandingKeys.Contains(d.Key) ? d.Default : Get(d.Key)));
+
+    /// <summary>Ключи оформления, изменённые владельцем (для предупреждения без Source Kit).</summary>
+    public IEnumerable<string> CustomizedBrandingKeys() =>
+        Schema.Where(d => BrandingKeys.Contains(d.Key) && Get(d.Key) != d.Default).Select(d => d.Key);
 
     /// <summary>Точки появления: x, y, z, курс. Пустые/битые пропускаются.</summary>
     public List<(float X, float Y, float Z, float Heading)> SpawnPoints()

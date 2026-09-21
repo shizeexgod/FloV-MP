@@ -69,6 +69,8 @@ namespace flov::ui
     void SetMicIndicator(int state); // 0 — нет, 1 — говорю, 2 — нет микрофона
     void Notify(const std::string& text, int ms = 4000);
     void SetAccent(uint32_t rgb);
+    /// Название платформы на загрузочном экране и в консоли (branding.name).
+    void SetBrand(const std::string& name);
 
     // --- загрузочный экран -----------------------------------------------------------
     /// Экран от подключения до появления в мире: вместо «зависшей» игры видно шаг.

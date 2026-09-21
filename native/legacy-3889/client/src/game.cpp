@@ -1043,6 +1043,7 @@ namespace flov::game
             ui::SetConsoleEnabled(Bool("console.enabled"));
             ui::SetConsoleTheme(Get("console.theme"));
             ui::SetAccent(Rgb("hud.accent"));
+            ui::SetBrand(Get("branding.name"));
             ui::SetLoadingStyle(SplitTips(Get("loading.tips")), Rgb("loading.accent", 0xFBBF24));
             if (!g_welcomed) return;
 

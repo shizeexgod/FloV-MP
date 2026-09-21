@@ -1,3 +1,4 @@
+using FloVMP.Core.Licensing;
 using FloVMP.Core.Settings;
 using Xunit;
 
@@ -14,6 +15,40 @@ public sealed class ServerSettingsTests
         Assert.False(s.Bool("world.peds"));
         Assert.Equal("#ffffff", s.Get("hud.accent"));
         Assert.Single(s.SpawnPoints());
+    }
+
+    [Fact]
+    public void ClientReceivesLoadingWindowAndKeySettings()
+    {
+        var (s, problems, _) = ServerSettings.Parse(
+            "window.title = Мой сервер — {server}\nloading.tips = {ffffff}Раз | Два\nkeys.console = F10\nconsole.theme = slate\n");
+        Assert.Empty(problems);
+        var client = s.ClientValues().ToDictionary(kv => kv.Key, kv => kv.Value);
+        Assert.Equal("Мой сервер — {server}", client["window.title"]);
+        Assert.Equal("{ffffff}Раз | Два", client["loading.tips"]);
+        Assert.Equal("F10", client["keys.console"]);
+        Assert.Equal("slate", client["console.theme"]);
+        Assert.Equal("256", client["chat.max_length"]);
+        Assert.Equal("#fbbf24", client["loading.accent"]);
+    }
+
+    [Fact]
+    public void BrandingNeedsSourceKit()
+    {
+        var (s, _, _) = ServerSettings.Parse("window.title = Мой RP\nbranding.name = MyRP\nhud.accent = #ff0000\n");
+        Assert.Equal(new[] { "window.title", "branding.name" }, s.CustomizedBrandingKeys().OrderByDescending(k => k).ToArray());
+        var locked = s.ClientValues(brandingAllowed: false).ToDictionary(kv => kv.Key, kv => kv.Value);
+        Assert.Equal("FloV Multiplayer — {server}", locked["window.title"]);
+        Assert.Equal("FloV:MP", locked["branding.name"]);
+        Assert.Equal("#ff0000", locked["hud.accent"]); // остальное владелец меняет свободно
+        Assert.Equal("MyRP", s.ClientValues(brandingAllowed: true).First(kv => kv.Key == "branding.name").Value);
+
+        LicenseInfo Lic(string plan) => new("FLV-1", "p", "o", plan, 100, 1, DateTime.UtcNow, DateTime.UtcNow.AddDays(1));
+        Assert.False(Edition.BrandingAllowed(null));
+        Assert.False(Edition.BrandingAllowed(Lic("business")));
+        Assert.False(Edition.BrandingAllowed(Lic("enterprise")));
+        Assert.True(Edition.BrandingAllowed(Lic("source-kit")));
+        Assert.True(Edition.BrandingAllowed(Lic(" Source ")));
     }
 
     [Fact]

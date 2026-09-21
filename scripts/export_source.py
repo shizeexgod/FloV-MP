@@ -270,6 +270,17 @@ def main():
             d = os.path.join(dest, os.path.relpath(s, kit))
             os.makedirs(os.path.dirname(d), exist_ok=True)
             shutil.copy2(s, d)
+    # Сборка из исходников — Source Kit: свой бренд (заголовок окна игры,
+    # название на загрузочном экране) разрешён без отдельного тарифа.
+    edition = os.path.join(dest, "server", "src", "FloVMP.Core", "Licensing", "Edition.cs")
+    with open(edition, encoding="utf-8") as fh:
+        text = fh.read()
+    marker = "public const bool SourceKitBuild = false;"
+    if marker not in text:
+        fail("Edition.cs: не найден флаг SourceKitBuild")
+    with open(edition, "w", encoding="utf-8", newline="
+") as fh:
+        fh.write(text.replace(marker, "public const bool SourceKitBuild = true;"))
     leaked = sorted(name for name in FORBIDDEN_TOP_LEVEL if os.path.exists(os.path.join(dest, name)))
     if leaked:
         fail("в source-kit попали внутренние компоненты: " + ", ".join(leaked))

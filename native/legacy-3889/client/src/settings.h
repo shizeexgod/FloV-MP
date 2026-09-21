@@ -26,7 +26,7 @@ namespace flov::settings
         { "voice.enabled", "on" }, { "voice.radius", "25" }, { "voice.key", "N" },
         { "keys.esp", "F3" }, { "keys.noclip", "F4" }, { "keys.waypoint", "F5" },
         { "keys.chat", "T" }, { "keys.console", "F8" }, { "console.theme", "obsidian" }, { "chat.max_length", "256" },
-        { "window.title", "FloV Multiplayer — {server}" },
+        { "window.title", "FloV Multiplayer — {server}" }, { "branding.name", "FloV:MP" },
         { "loading.enabled", "on" }, { "loading.title", "" }, { "loading.accent", "#fbbf24" },
         { "loading.tips", "{a1a1aa}Голос:{71717a} удерживайте N, чтобы говорить. Вас слышат те, кто рядом. | "
                           "{a1a1aa}Чат:{71717a} клавиша T. Команды начинаются с «/», список — /help. | "

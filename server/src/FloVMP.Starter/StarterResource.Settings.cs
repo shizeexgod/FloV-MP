@@ -43,6 +43,9 @@ public partial class StarterResource
         }
 
         if (_nativeVoice is not null) _nativeVoice.Radius = _settings.Float("voice.radius");
+        var branding = _settings.CustomizedBrandingKeys().ToList();
+        if (branding.Count > 0 && !FloVMP.Core.Licensing.Edition.BrandingAllowed(_license.Info))
+            Alt.LogWarning($"[FloV:MP] client.cfg: {string.Join(", ", branding)} — свой бренд доступен только с Source Kit; игрокам уходит оформление FloV:MP");
 
         if (!broadcast) return;
         foreach (var p in _nativePlayers.Values)
@@ -55,7 +58,8 @@ public partial class StarterResource
     /// <summary>Клиентские настройки одним сообщением: CFG ключ значение ключ значение ...</summary>
     private void SendClientSettings(NativeSession session)
     {
-        var fields = _settings.ClientValues().SelectMany(kv => new object?[] { kv.Key, kv.Value }).ToArray();
+        var branding = FloVMP.Core.Licensing.Edition.BrandingAllowed(_license.Info);
+        var fields = _settings.ClientValues(branding).SelectMany(kv => new object?[] { kv.Key, kv.Value }).ToArray();
         session.Send("CFG", fields);
     }
 
