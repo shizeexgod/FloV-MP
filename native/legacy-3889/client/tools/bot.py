@@ -145,6 +145,9 @@ class Bot:
             time.sleep(0.05)
         self.send("READY")
         cx, cy, cz = self.spawn or self.pos
+        # Точка спавна — высота персонажа (~1 м над землёй), а игра шлёт для
+        # машины координату её корпуса (~0.5 м): иначе машина бота «висит».
+        cz -= 0.5
         w = 0.4
         while self.alive and time.time() - t0 < seconds:
             a = (time.time() - t0) * w

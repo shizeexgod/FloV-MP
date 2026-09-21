@@ -97,7 +97,6 @@ namespace flov::game
         // Загрузочный экран: от подключения до появления в мире.
         bool g_loadingActive = false;
         ULONGLONG g_loadStart = 0, g_spawnAt = 0;
-        int g_minimapMovie = 0;
 
         // Показатели для консоли и netgraph.
         ULONGLONG g_statsAt = 0;
@@ -599,16 +598,11 @@ namespace flov::game
             n::PAUSE_CLOCK(g_cfg.freezeTime);
         }
 
-        /// Полоска способности под мини-картой. Мини-карта — scaleform «minimap»:
-        /// раскладка 1 (как в GTA Online) — здоровье и броня без полоски способности.
+        /// Полоска способности под мини-картой. (Scaleform «minimap» здесь не
+        /// трогать: свой экземпляр этого фильма гасит карту в мини-карте.)
         void HideAbilityBar()
         {
             n::SET_ABILITY_BAR_VISIBILITY(FALSE);
-            if (!g_minimapMovie) g_minimapMovie = (int)n::REQUEST_SCALEFORM_MOVIE(const_cast<char*>("minimap"));
-            if (!g_minimapMovie || !n::HAS_SCALEFORM_MOVIE_LOADED(g_minimapMovie)) return;
-            n::BEGIN_SCALEFORM_MOVIE_METHOD(g_minimapMovie, const_cast<char*>("SETUP_HEALTH_ARMOUR"));
-            n::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(1);
-            n::END_SCALEFORM_MOVIE_METHOD();
         }
 
         /// Однопользовательский мир под мультиплеер: без сюжета, полиции,

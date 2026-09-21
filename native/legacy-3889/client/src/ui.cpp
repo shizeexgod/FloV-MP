@@ -211,10 +211,33 @@ namespace flov::ui
             while (g_log.size() > kLogHistory) g_log.pop_front();
         }
 
+        /// Набрано в русской раскладке («/рудз» вместо «/help»): буквы той же
+        /// клавиши латиницей. Нужно только для имени команды — текст сообщения
+        /// не трогаем.
+        std::wstring FromRussianLayout(const std::wstring& text)
+        {
+            static const wchar_t ru[] = L"йцукенгшщзхъфывапролджэячсмитьбюё";
+            static const char en[] = "qwertyuiop[]asdfghjkl;'zxcvbnm,.`";
+            std::wstring out = text;
+            for (auto& ch : out)
+            {
+                const wchar_t lower = (ch >= L'А' && ch <= L'Я') ? ch + 32 : ch == L'Ё' ? L'ё' : ch;
+                for (size_t i = 0; ru[i]; ++i)
+                    if (ru[i] == lower) { ch = (wchar_t)en[i]; break; }
+            }
+            return out;
+        }
+
+        bool HasCyrillic(const std::wstring& t)
+        {
+            return std::any_of(t.begin(), t.end(), [](wchar_t c) { return c >= 0x400 && c <= 0x4FF; });
+        }
+
         /// Подходящие команды для строки после «/» (или без неё — в консоли).
-        std::vector<Command> Matches(const std::wstring& typed, bool withLocal)
+        std::vector<Command> Matches(const std::wstring& typedRaw, bool withLocal)
         {
             std::vector<Command> out;
+            const std::wstring typed = HasCyrillic(typedRaw) ? FromRussianLayout(typedRaw) : typedRaw;
             const auto t = ToUtf8(typed);
             if (t.find(' ') != std::string::npos) return out;
             auto consider = [&](const Command& c) {
@@ -225,6 +248,21 @@ namespace flov::ui
             if (withLocal) for (const auto& c : kLocalCommands) consider(c);
             for (const auto& c : g_commands) consider(c);
             return out;
+        }
+
+        /// «/рудз привет» → «/help привет», если так набрана известная команда.
+        void FixCommandLayout(std::wstring& line, bool slash)
+        {
+            if (slash && (line.empty() || line[0] != L'/')) return;
+            const size_t start = slash ? 1 : 0;
+            const size_t end = std::min(line.find(L' ', start), line.size());
+            const std::wstring name = line.substr(start, end - start);
+            if (name.empty() || !HasCyrillic(name)) return;
+            const auto latin = ToUtf8(FromRussianLayout(name));
+            auto known = [&](const Command& c) { return c.name == latin; };
+            if (std::any_of(g_commands.begin(), g_commands.end(), known) ||
+                (!slash && std::any_of(std::begin(kLocalCommands), std::end(kLocalCommands), known)))
+                line.replace(start, name.size(), FromUtf8(latin));
         }
 
         void CycleAutocomplete(std::wstring& field, bool slash)
@@ -342,6 +380,7 @@ namespace flov::ui
                 {
                 case VK_RETURN:
                     if (g_consoleField == 1) { g_consoleField = 0; g_caret = g_consoleInput.size(); return true; }
+                    FixCommandLayout(g_consoleInput, false);
                     Remember(g_consoleHistory, g_consoleInput);
                     RunConsoleCommand(ToUtf8(g_consoleInput));
                     g_consoleInput.clear();
@@ -373,6 +412,7 @@ namespace flov::ui
                 case VK_RETURN:
                     if (!g_input.empty())
                     {
+                        FixCommandLayout(g_input, true);
                         g_submitted.push_back(ToUtf8(g_input));
                         Remember(g_history, g_input);
                     }
