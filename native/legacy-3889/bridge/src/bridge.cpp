@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <winver.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -14,6 +15,7 @@ namespace {
 
 constexpr wchar_t kGameModule[] = L"GTA5.exe";
 constexpr char kProtocol[] = "FLOVMP-BRIDGE/1";
+constexpr char kExpectedGameVersion[] = "1.0.3889.0";
 
 std::string ModuleDirectory() {
     char path[MAX_PATH]{};
@@ -28,6 +30,30 @@ void Log(const std::string& text) {
     std::ofstream out(ModuleDirectory() + "\\flovmp-bridge.log", std::ios::app);
     if (!out) return;
     out << text << "\n";
+}
+
+std::string GameVersion() {
+    char path[MAX_PATH]{};
+    const auto length = GetModuleFileNameA(GetModuleHandleW(kGameModule), path, MAX_PATH);
+    if (length == 0 || length >= MAX_PATH) return {};
+
+    DWORD ignored = 0;
+    const auto size = GetFileVersionInfoSizeA(path, &ignored);
+    if (size == 0) return {};
+    std::string data(size, '\0');
+    if (!GetFileVersionInfoA(path, 0, size, data.data())) return {};
+
+    VS_FIXEDFILEINFO* info = nullptr;
+    UINT infoSize = 0;
+    if (!VerQueryValueA(data.data(), "\\", reinterpret_cast<void**>(&info), &infoSize) ||
+        info == nullptr || infoSize < sizeof(VS_FIXEDFILEINFO)) return {};
+
+    std::ostringstream version;
+    version << HIWORD(info->dwFileVersionMS) << '.'
+            << LOWORD(info->dwFileVersionMS) << '.'
+            << HIWORD(info->dwFileVersionLS) << '.'
+            << LOWORD(info->dwFileVersionLS);
+    return version.str();
 }
 
 std::string Env(const char* name, const char* fallback) {
@@ -71,7 +97,15 @@ bool SendHello() {
     if (socketHandle == INVALID_SOCKET) return false;
 
     std::ostringstream hello;
-    hello << kProtocol << " build=3889 pid=" << GetCurrentProcessId() << "\n";
+    const auto version = GameVersion();
+    if (version != kExpectedGameVersion) {
+        Log("unsupported-game-version=" + (version.empty() ? "unknown" : version));
+        closesocket(socketHandle);
+        return false;
+    }
+
+    hello << kProtocol << " hello build=3889 version=" << version
+          << " pid=" << GetCurrentProcessId() << "\n";
     const auto payload = hello.str();
     const auto sent = send(socketHandle, payload.data(), static_cast<int>(payload.size()), 0);
     char response[128]{};
@@ -86,9 +120,30 @@ bool SendHello() {
         return false;
     }
     response[received] = '\0';
-    const auto accepted = std::string(response).find("FLOVMP-BRIDGE/1 OK") != std::string::npos;
+    const auto accepted = std::string(response).find("FLOVMP-BRIDGE/1 WELCOME") != std::string::npos;
     Log(std::string("server-response=") + (accepted ? "ok" : "reject"));
-    return accepted;
+    if (!accepted) return false;
+
+    // Keep the transport alive. The native game-thread/entity protocol is
+    // layered on this session; a one-shot hello cannot carry player state.
+    for (;;) {
+        const char heartbeat[] = "FLOVMP-BRIDGE/1 heartbeat\n";
+        if (send(socketHandle, heartbeat, static_cast<int>(sizeof(heartbeat) - 1), 0) !=
+            static_cast<int>(sizeof(heartbeat) - 1)) {
+            Log("heartbeat-send-failed code=" + std::to_string(WSAGetLastError()));
+            break;
+        }
+        char event[256]{};
+        const auto eventLength = recv(socketHandle, event, sizeof(event) - 1, 0);
+        if (eventLength <= 0) {
+            Log("session-closed code=" + std::to_string(WSAGetLastError()));
+            break;
+        }
+        event[eventLength] = '\0';
+        Log(std::string("server-event=") + event);
+        Sleep(1000);
+    }
+    return true;
 }
 
 void Run() {

@@ -62,15 +62,38 @@ public sealed class BridgeListener : IDisposable
             await using var stream = client.GetStream();
             using var reader = new StreamReader(stream, Encoding.UTF8, false, 256, leaveOpen: true);
             var hello = await reader.ReadLineAsync(_stop.Token);
-            if (hello is null || !hello.StartsWith("FLOVMP-BRIDGE/1 build=3889 ", StringComparison.Ordinal))
+            if (hello is null || !hello.StartsWith("FLOVMP-BRIDGE/1 hello build=3889 ", StringComparison.Ordinal))
             {
-                await WriteAsync(stream, "FLOVMP-BRIDGE/1 REJECT\n");
+                await WriteAsync(stream, "FLOVMP-BRIDGE/1 REJECT reason=unsupported-hello\n");
                 _log("Отклонён native bridge с неподдерживаемым hello.");
                 return;
             }
 
-            await WriteAsync(stream, "FLOVMP-BRIDGE/1 OK\n");
+            if (!hello.Contains("version=1.0.3889.0", StringComparison.Ordinal))
+            {
+                await WriteAsync(stream, "FLOVMP-BRIDGE/1 REJECT reason=unsupported-game-version\n");
+                _log("Отклонён native bridge: GTA имеет не Legacy 1.0.3889.0.");
+                return;
+            }
+
+            await WriteAsync(stream, "FLOVMP-BRIDGE/1 WELCOME build=3889\n");
             _log("Native bridge Legacy 3889 подключён: " + hello);
+
+            while (!_stop.IsCancellationRequested)
+            {
+                var message = await reader.ReadLineAsync(_stop.Token);
+                if (message is null) break;
+                if (message.Equals("FLOVMP-BRIDGE/1 heartbeat", StringComparison.Ordinal))
+                {
+                    await WriteAsync(stream, "FLOVMP-BRIDGE/1 heartbeat-ack\n");
+                    continue;
+                }
+
+                await WriteAsync(stream, "FLOVMP-BRIDGE/1 REJECT reason=unknown-message\n");
+                _log("Native bridge прислал неизвестное сообщение: " + message);
+            }
+
+            _log("Native bridge Legacy 3889 отключён.");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

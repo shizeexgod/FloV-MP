@@ -2,6 +2,18 @@
 
 Updated: 2026-09-19 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
 
+### 2026-09-21 — Legacy 3889 bridge session hardening
+
+- Native bridge теперь получает фактическую PE file version загруженного
+  `GTA5.exe` и отправляет hello только для `1.0.3889.0`; другая версия
+  отклоняется до любого игрового протокола.
+- BridgeListener принимает новый versioned hello, отвечает `WELCOME` и
+  удерживает TCP-сессию heartbeat/ack вместо одноразового подтверждения.
+- ASI Release пересобран без ошибок; server tests: **404/404**.
+- Это всё ещё transport boundary, а не завершённый multiplayer: game-thread
+  native calls, entity replication, input и два клиента на Windows остаются
+  обязательными E2E-гейтами.
+
 ### 2026-09-19 — коммерческая поставка отделена от launcher/web, распаковка усилена
 
 - Зафиксировано решение владельца: продаваемый source-kit и серверные runtime-пакеты
