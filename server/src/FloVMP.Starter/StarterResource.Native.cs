@@ -180,6 +180,20 @@ public partial class StarterResource
         ((NativePlayerProxy)(object)proxy).Init(session, this);
         _nativePlayers[session.Id] = proxy;
 
+        // Бан, лицензия и слоты — до WELCOME: иначе клиент успевает войти в
+        // режим сервера (остановить сюжет игры) и только потом узнаёт об отказе.
+        string? refusal = null;
+        if (RejectIfBanned(proxy)) refusal = "бан";
+        else if (!_license.IsLicensed) refusal = "[Лицензия] " + _license.Message;
+        else if (AllPlayers().Count > _license.PlayerLimit) refusal = $"Сервер заполнен ({_license.PlayerLimit} игроков).";
+        if (refusal is not null)
+        {
+            if (refusal != "бан") proxy.Kick(refusal);
+            Alt.Log($"[FloV:MP b3889] вход {session.Name} ({session.Ip}) отклонён: {refusal}");
+            _nativePlayers.Remove(session.Id);
+            return;
+        }
+
         session.Send("WELCOME", session.Id, session.Name, session.Identity.ToString(), _native!.ServerName);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");

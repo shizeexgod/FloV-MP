@@ -213,6 +213,89 @@ def check(host, port):
     return ok
 
 
+def identity_of(key_path):
+    """ID игрока (как его видит сервер) по файлу ключа бота."""
+    import hashlib
+    b = Bot("-", 0, "-", key_path, log=lambda s: None)
+    h = hashlib.sha256(b.public_raw()).digest()
+    return (1 << 63) | (int.from_bytes(h[:8], "little") & ((1 << 63) - 1))
+
+
+def wait_for(bot, pred, timeout=5):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        for m in list(bot.messages):
+            if pred(m):
+                return m
+        time.sleep(0.05)
+    return None
+
+
+def moderation(host, port, admin_key):
+    """Модерация глазами игроков: kick, ban, отказ при входе, unban, mute."""
+    ok = True
+
+    def check(name, cond):
+        nonlocal ok
+        ok &= bool(cond)
+        print(("OK   " if cond else "FAIL ") + name)
+
+    admin = Bot(host, port, "AdminBot", admin_key, log=lambda s: None)
+    admin.connect()
+    admin.send("READY")
+    check("админ-бот получил уровень 8", wait_for(admin, lambda m: m[0] == "ADMIN" and m[1] == "8"))
+
+    victim_key = os.path.join(os.path.dirname(admin_key), "victim.pem")
+    if os.path.exists(victim_key):
+        os.remove(victim_key)
+    victim = Bot(host, port, "Victim", victim_key, log=lambda s: None)
+    victim.connect()
+    victim.send("READY")
+    time.sleep(0.5)
+
+    admin.send("CHAT", "/kick %d проверка кика" % victim.id)
+    check("кик доходит до игрока с причиной", wait_for(victim, lambda m: m[0] == "KICK" and "проверка кика" in m[1]))
+    time.sleep(1)
+
+    victim = Bot(host, port, "Victim", victim_key, log=lambda s: None)
+    victim.connect()
+    victim.send("READY")
+    time.sleep(0.5)
+    admin.send("CHAT", "/mute %d 5" % victim.id)
+    time.sleep(0.5)
+    victim.send("CHAT", "это сообщение не должно дойти")
+    time.sleep(0.8)
+    check("мут: сообщение не разослано", not any(m[0] == "MSG" and "не должно дойти" in m[-1] for m in admin.messages))
+    check("мут: игрок предупреждён", wait_for(victim, lambda m: m[0] == "MSG" and "заглушён" in m[-1]))
+    admin.send("CHAT", "/unmute %d" % victim.id)
+    time.sleep(0.5)
+
+    admin.send("CHAT", "/ban %d 1 проверка бана" % victim.id)
+    check("бан кикает с причиной", wait_for(victim, lambda m: m[0] == "KICK" and "проверка бана" in m[1]))
+    time.sleep(1)
+
+    again = Bot(host, port, "Victim", victim_key, log=lambda s: None)
+    try:
+        again.connect()
+        check("забаненный не входит", False)
+        again.close()
+    except RuntimeError as e:
+        check("забаненный не входит (до WELCOME)", "заблокирован" in str(e))
+
+    admin.send("CHAT", "/unban Victim")
+    check("unban подтверждён", wait_for(admin, lambda m: m[0] == "MSG" and "Снято блокировок" in m[-1]))
+    time.sleep(0.5)
+    back = Bot(host, port, "Victim", victim_key, log=lambda s: None)
+    try:
+        back.connect()
+        check("после unban вход открыт", True)
+        back.close()
+    except RuntimeError as e:
+        check("после unban вход открыт: " + str(e), False)
+    admin.close()
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -222,11 +305,18 @@ def main():
     ap.add_argument("--say", default=None)
     ap.add_argument("--seconds", type=float, default=30)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--moderation-test", metavar="ADMIN_KEY", help="сценарий модерации; ключ бота-владельца")
+    ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
     ap.add_argument("--hit", type=int, default=0, help="ID игрока: нанести урон (проверка PvP)")
     a = ap.parse_args()
     if a.check:
         sys.exit(0 if check(a.host, a.port) else 1)
+    if a.identity:
+        print(identity_of(a.identity))
+        return
+    if a.moderation_test:
+        sys.exit(0 if moderation(a.host, a.port, a.moderation_test) else 1)
     bot = Bot(a.host, a.port, a.name, a.key)
     bot.connect()
     if a.hit:

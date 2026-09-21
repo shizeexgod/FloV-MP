@@ -982,9 +982,9 @@ public partial class StarterResource : Resource
 
         // Лимит игроков по действующей лицензии.
         var online = AllPlayers().Count;
-        // `online` already contains the connecting player. Use >= so a limit
-        // of 32 admits exactly 32 players, not an accidental 33rd slot.
-        if (online >= _license.PlayerLimit)
+        // Подключающийся уже в списке, поэтому «больше», а не «больше или
+        // равно»: с >= при лимите 32 пускался только 31-й игрок.
+        if (online > _license.PlayerLimit)
         {
             Alt.LogWarning($"[FloV:MP] [License] вход {player.Name} отклонён: достигнут предел {_license.PlayerLimit} игроков ({_license.State}).");
             player.Kick($"Сервер заполнен ({_license.PlayerLimit} игроков).");
