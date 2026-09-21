@@ -2,6 +2,19 @@
 
 Updated: 2026-09-19 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
 
+### 2026-09-21 — native bridge state replication milestone
+
+- Bridge теперь не только подтверждает загрузку: при наличии официального
+  ScriptHookV runtime для `1.0.3889.0` регистрирует script-thread callback,
+  читает координаты локального игрока и создаёт/перемещает remote peds.
+- `BridgeListener` получил отдельные сессии, ID игроков, проверку состояния,
+  рассылку координат и очистку отключившихся клиентов. Это отдельный FloV
+  transport, не подмена alt:V wire protocol.
+- Добавлен интеграционный тест двух TCP-клиентов: **405/405**.
+- ASI Release собран. Полный Windows E2E с настоящим GTA и двумя клиентами
+  ещё не зафиксирован; для native calls требуется установленный официальный
+  ScriptHookV b3889 runtime либо следующий самостоятельный game-thread hook.
+
 ### 2026-09-21 — Legacy 3889 bridge session hardening
 
 - Native bridge теперь получает фактическую PE file version загруженного
