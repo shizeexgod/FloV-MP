@@ -2,6 +2,7 @@
 #include "common.h"
 #include "natives.h"
 #include "net.h"
+#include "settings.h"
 #include "ui.h"
 #include "voice.h"
 
@@ -72,7 +73,10 @@ namespace flov::game
         std::map<int, int> g_roster;
         bool g_welcomed = false, g_readySent = false, g_spawnedOnce = false;
         ULONGLONG g_welcomeAt = 0, g_nextState = 0, g_nextPing = 0, g_nextClean = 0;
-        bool g_espOn = false, g_noclip = false, g_god = false, g_frozen = false;
+        int g_espMode = 0; // 0 — выкл, 1 — игроки, 2 — транспорт, 3 — всё
+        bool g_noclip = false, g_god = false, g_frozen = false;
+        int g_spectateTarget = 0;
+        Entity g_spectateAttached = 0;
         bool g_localDead = false;
         int g_lastAttacker = 0;
         ULONGLONG g_lastAttackAt = 0;
@@ -87,6 +91,35 @@ namespace flov::game
         int g_altPort = 0; // запасной порт, если основной не ответил (ввели сразу порт шлюза)
         std::string g_typedAddress;
         std::string g_pendingName;
+        std::string g_voiceToken;
+        int g_voicePort = 0;
+
+        // Загрузочный экран: от подключения до появления в мире.
+        bool g_loadingActive = false;
+        ULONGLONG g_loadStart = 0, g_spawnAt = 0;
+        int g_minimapMovie = 0;
+
+        // Показатели для консоли и netgraph.
+        ULONGLONG g_statsAt = 0;
+        int g_statsFrames = 0;
+        float g_statsFrameSum = 0.f;
+        uint64_t g_lastIn = 0, g_lastOut = 0;
+
+        /// Настройки владельца сервера (client.cfg), разобранные один раз при
+        /// получении CFG, — чтобы не искать строки в словаре каждый кадр.
+        struct Cfg
+        {
+            bool peds = false, traffic = false, parked = false, police = false, ambient = false, freezeTime = false;
+            bool minimap = true, abilityBar = false, areaNames = false, vehicleNames = false, weaponWheel = false;
+            bool pauseMenu = false, playerBlips = false, watermark = false;
+            bool tags = true, tagId = true, tagHealth = true, tagArmor = true, tagVoice = true, tagAdmin = false, tagSpace = true;
+            float tagDistance = 30.f;
+            uint32_t tagColor = 0xFFFFFF;
+            bool chat = true, voice = true, loading = true;
+            int voiceKey = 'N', espKey = VK_F3, noclipKey = VK_F4, waypointKey = VK_F5;
+        } g_cfg;
+
+        void NotifyEsp();
 
         float Dist2(float ax, float ay, float az, float bx, float by, float bz)
         {
@@ -127,13 +160,14 @@ namespace flov::game
 
         void SendChatLine(const std::string& kind, const std::string& author, const std::string& text)
         {
-            if (kind == "player") Chat("{d4d4d8}" + author + ": {ffffff}" + text);
+            // Обычная реплика — как в прежнем чате: жирный автор и текст.
+            if (kind == "player") ui::AddChat(text, author);
             else if (kind == "me") Chat("{c084fc}* " + author + " " + text);
             else if (kind == "do") Chat("{c084fc}* " + text + " (" + author + ")");
             else if (kind == "ooc") Chat("{a1a1aa}(( " + author + ": " + text + " ))");
             else if (kind == "shout") Chat("{fbbf24}" + author + " кричит: " + text);
             else if (kind == "whisper") Chat("{f9a8d4}" + author + " шепчет: " + text);
-            else if (kind == "admin") Chat("{34d399}[A] " + author + ": {ffffff}" + text);
+            else if (kind == "admin") ui::AddChat(text, "[A] " + author, 0x34D399);
             else if (!author.empty()) Chat("{ff3d8a}[" + author + "]{ffffff} " + text);
             else Chat("{ffffff}" + text);
         }
@@ -162,6 +196,16 @@ namespace flov::game
             r.blip = 0;
         }
 
+        void AddRemoteBlip(Remote& r)
+        {
+            if (r.blip || !r.ped) return;
+            r.blip = n::ADD_BLIP_FOR_ENTITY(r.ped);
+            n::SET_BLIP_SPRITE(r.blip, 1);
+            n::SET_BLIP_COLOUR(r.blip, 0);
+            n::SET_BLIP_SCALE(r.blip, 0.75f);
+            n::SET_BLIP_AS_SHORT_RANGE(r.blip, TRUE);
+        }
+
         void ConfigureRemotePed(Remote& r)
         {
             const Ped ped = r.ped;
@@ -186,11 +230,7 @@ namespace flov::game
             if (r.pedModel == kFreemodeMale || r.pedModel == 0x9C9EFFD8)
                 n::SET_PED_HEAD_BLEND_DATA(ped, 0, 0, 0, 0, 0, 0, 0.5f, 0.5f, 0.f, FALSE);
             n::SET_PED_DEFAULT_COMPONENT_VARIATION(ped);
-            r.blip = n::ADD_BLIP_FOR_ENTITY(ped);
-            n::SET_BLIP_SPRITE(r.blip, 1);
-            n::SET_BLIP_COLOUR(r.blip, 0);
-            n::SET_BLIP_SCALE(r.blip, 0.75f);
-            n::SET_BLIP_AS_SHORT_RANGE(r.blip, TRUE);
+            if (g_cfg.playerBlips) AddRemoteBlip(r);
             r.weapon = 0;
         }
 
@@ -249,6 +289,7 @@ namespace flov::game
             r.vehModel = s.vehModel;
             Log("игрок [" + std::to_string(r.id) + "] " + r.name + ": создан транспорт " + std::to_string(s.vehModel));
             n::SET_ENTITY_AS_MISSION_ENTITY(r.veh, TRUE, TRUE);
+            n::SET_VEHICLE_ON_GROUND_PROPERLY(r.veh);
             n::SET_VEHICLE_HAS_BEEN_OWNED_BY_PLAYER(r.veh, TRUE);
             n::SET_VEHICLE_NEEDS_TO_BE_HOTWIRED(r.veh, FALSE);
             n::SET_VEHICLE_IS_STOLEN(r.veh, FALSE);
@@ -258,10 +299,17 @@ namespace flov::game
             return true;
         }
 
-        void UpdateRemote(Remote& r, ULONGLONG now)
+        void UpdateRemote(Remote& r, ULONGLONG now, const Vector3& me)
         {
             if (!r.hasState) return;
             const State& s = r.cur;
+            // Дальних игроков в мире не держим: персонаж и машина за 350 м не
+            // видны, а каждый стоит кадру. Состояние остаётся — вернутся мгновенно.
+            if (Dist2(s.x, s.y, s.z, me.x, me.y, me.z) > 350.f * 350.f && r.id != g_spectateTarget)
+            {
+                if (r.ped || r.veh) DestroyRemote(r);
+                return;
+            }
             if (!EnsureRemotePed(r)) return;
             const Ped ped = r.ped;
 
@@ -319,12 +367,23 @@ namespace flov::game
                     else
                     {
                         // Коррекция скоростью, а не телепортом: физика машины сохраняется,
-                        // движение без рывков.
-                        n::SET_ENTITY_VELOCITY(veh, s.vx + (tx - p.x) * 4.f, s.vy + (ty - p.y) * 4.f, s.vz + (tz - p.z) * 4.f);
+                        // движение без рывков. Высоту на земле ведут колёса и подвеска:
+                        // вертикальную скорость трогаем только в воздухе или при заметном
+                        // расхождении — иначе машина «висела» в паре сантиметров над дорогой.
+                        const bool air = n::IS_ENTITY_IN_AIR(veh) != 0;
+                        const float ez = tz - p.z;
+                        const Vector3 cur = n::GET_ENTITY_VELOCITY(veh);
+                        const float vz = air || std::fabs(ez) > 0.75f ? s.vz + ez * 4.f : cur.z;
+                        n::SET_ENTITY_VELOCITY(veh, s.vx + (tx - p.x) * 4.f, s.vy + (ty - p.y) * 4.f, vz);
                     }
                     const Vector3 rot = n::GET_ENTITY_ROTATION(veh, 2);
-                    n::SET_ENTITY_ROTATION(veh, AngleLerp(rot.x, s.rx, 0.5f), AngleLerp(rot.y, s.ry, 0.5f),
-                                           AngleLerp(rot.z, s.rz, 0.5f), 2, TRUE);
+                    auto diff = [](float a, float b) { return std::fabs(std::fmod(b - a + 540.f, 360.f) - 180.f); };
+                    // Наклон (тангаж, крен) на земле тоже задаёт подвеска: правим его
+                    // только при большом расхождении (перевернулся, прыжок).
+                    const bool tilt = n::IS_ENTITY_IN_AIR(veh) || diff(rot.x, s.rx) > 12.f || diff(rot.y, s.ry) > 12.f;
+                    if (tilt || diff(rot.z, s.rz) > 0.5f)
+                        n::SET_ENTITY_ROTATION(veh, tilt ? AngleLerp(rot.x, s.rx, 0.5f) : rot.x, tilt ? AngleLerp(rot.y, s.ry, 0.5f) : rot.y,
+                                               AngleLerp(rot.z, s.rz, 0.5f), 2, TRUE);
                     const bool engine = (s.flags & FEngine) != 0;
                     if ((bool)n::GET_IS_VEHICLE_ENGINE_RUNNING(veh) != engine) n::SET_VEHICLE_ENGINE_ON(veh, engine, TRUE, TRUE);
                     const bool siren = (s.flags & FSiren) != 0;
@@ -524,62 +583,125 @@ namespace flov::game
             if (n::IS_SCREEN_FADED_OUT()) n::DO_SCREEN_FADE_IN(300);
         }
 
+        /// Мир по настройкам сервера: прохожие, трафик, полиция, поезда и т.п.
+        void ApplyWorldSettings()
+        {
+            n::SET_MAX_WANTED_LEVEL(g_cfg.police ? 5 : 0);
+            n::SET_CREATE_RANDOM_COPS(g_cfg.police);
+            for (int i = 1; i <= 15; ++i) n::ENABLE_DISPATCH_SERVICE(i, g_cfg.police);
+            n::SET_RANDOM_TRAINS(g_cfg.ambient);
+            n::SET_RANDOM_BOATS(g_cfg.ambient);
+            n::SET_GARBAGE_TRUCKS(g_cfg.ambient);
+            n::SET_PED_POPULATION_BUDGET(g_cfg.peds ? 3 : 0);
+            n::SET_VEHICLE_POPULATION_BUDGET(g_cfg.traffic ? 3 : 0);
+            n::SET_NUMBER_OF_PARKED_VEHICLES(g_cfg.parked ? -1 : 0);
+            n::PAUSE_CLOCK(g_cfg.freezeTime);
+        }
+
+        /// Полоска способности под мини-картой. Мини-карта — scaleform «minimap»:
+        /// раскладка 1 (как в GTA Online) — здоровье и броня без полоски способности.
+        void HideAbilityBar()
+        {
+            n::SET_ABILITY_BAR_VISIBILITY(FALSE);
+            if (!g_minimapMovie) g_minimapMovie = (int)n::REQUEST_SCALEFORM_MOVIE(const_cast<char*>("minimap"));
+            if (!g_minimapMovie || !n::HAS_SCALEFORM_MOVIE_LOADED(g_minimapMovie)) return;
+            n::BEGIN_SCALEFORM_MOVIE_METHOD(g_minimapMovie, const_cast<char*>("SETUP_HEALTH_ARMOUR"));
+            n::SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(1);
+            n::END_SCALEFORM_MOVIE_METHOD();
+        }
+
         /// Однопользовательский мир под мультиплеер: без сюжета, полиции,
         /// прохожих и автоматического «возрождения в больнице».
         void PrepareWorldOnce()
         {
             StopStoryScripts();
             RestoreGameplayView();
+            // Сюжетное сохранение открывает карту по мере прохождения — на сервере
+            // вся карта должна быть видна сразу (меню паузы и метки для F5).
+            n::SET_MINIMAP_HIDE_FOW(TRUE);
             n::PAUSE_DEATH_ARREST_RESTART(TRUE);
             n::IGNORE_NEXT_RESTART(TRUE);
             n::SET_FADE_OUT_AFTER_DEATH(FALSE);
             n::SET_FADE_OUT_AFTER_ARREST(FALSE);
             n::SET_FADE_IN_AFTER_DEATH_ARREST(FALSE);
-            n::SET_MAX_WANTED_LEVEL(0);
-            n::SET_CREATE_RANDOM_COPS(FALSE);
-            n::SET_RANDOM_TRAINS(FALSE);
-            n::SET_RANDOM_BOATS(FALSE);
-            n::SET_GARBAGE_TRUCKS(FALSE);
-            n::SET_PED_POPULATION_BUDGET(0);
-            n::SET_VEHICLE_POPULATION_BUDGET(0);
-            n::SET_NUMBER_OF_PARKED_VEHICLES(0);
-            for (int i = 1; i <= 15; ++i) n::ENABLE_DISPATCH_SERVICE(i, FALSE);
+            ApplyWorldSettings();
             if (!g_remoteGroup)
                 n::ADD_RELATIONSHIP_GROUP(const_cast<char*>("FLOVMP_REMOTE"), &g_remoteGroup);
             n::SET_RELATIONSHIP_BETWEEN_GROUPS(3, g_remoteGroup, kPlayerGroup);
             n::SET_RELATIONSHIP_BETWEEN_GROUPS(3, kPlayerGroup, g_remoteGroup);
             n::SET_CAN_ATTACK_FRIENDLY(n::PLAYER_PED_ID(), TRUE, FALSE);
             const Vector3 p = n::GET_ENTITY_COORDS(n::PLAYER_PED_ID(), TRUE);
-            n::CLEAR_AREA_OF_PEDS(p.x, p.y, p.z, 1500.f, TRUE);
-            n::CLEAR_AREA_OF_VEHICLES(p.x, p.y, p.z, 1500.f, FALSE, FALSE, FALSE, FALSE, FALSE);
+            if (!g_cfg.peds) n::CLEAR_AREA_OF_PEDS(p.x, p.y, p.z, 1500.f, TRUE);
+            if (!g_cfg.traffic && !g_cfg.parked) n::CLEAR_AREA_OF_VEHICLES(p.x, p.y, p.z, 1500.f, FALSE, FALSE, FALSE, FALSE, FALSE);
         }
 
         void WorldEveryFrame()
         {
-            n::SET_PED_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
-            n::SET_SCENARIO_PED_DENSITY_MULTIPLIER_THIS_FRAME(0.f, 0.f);
-            n::SET_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
-            n::SET_RANDOM_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
-            n::SET_PARKED_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
+            if (!g_cfg.peds)
+            {
+                n::SET_PED_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
+                n::SET_SCENARIO_PED_DENSITY_MULTIPLIER_THIS_FRAME(0.f, 0.f);
+            }
+            if (!g_cfg.traffic)
+            {
+                n::SET_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
+                n::SET_RANDOM_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
+            }
+            if (!g_cfg.parked) n::SET_PARKED_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
             const Player pl = n::PLAYER_ID();
-            n::SET_MAX_WANTED_LEVEL(0);
-            n::CLEAR_PLAYER_WANTED_LEVEL(pl);
-            n::SET_POLICE_IGNORE_PLAYER(pl, TRUE);
-            n::SET_DISPATCH_COPS_FOR_PLAYER(pl, FALSE);
+            if (!g_cfg.police)
+            {
+                n::SET_MAX_WANTED_LEVEL(0);
+                n::CLEAR_PLAYER_WANTED_LEVEL(pl);
+                n::SET_POLICE_IGNORE_PLAYER(pl, TRUE);
+                n::SET_DISPATCH_COPS_FOR_PLAYER(pl, FALSE);
+                n::HIDE_HUD_COMPONENT_THIS_FRAME(1); // звёзды розыска
+            }
+
+            // Интерфейс GTA: только то, что владелец сервера оставил включённым.
+            n::DISPLAY_RADAR(g_cfg.minimap && !ui::LoadingVisible());
+            if (!g_cfg.abilityBar) HideAbilityBar();
+            if (!g_cfg.areaNames) { n::HIDE_HUD_COMPONENT_THIS_FRAME(7); n::HIDE_HUD_COMPONENT_THIS_FRAME(9); }
+            if (!g_cfg.vehicleNames) { n::HIDE_HUD_COMPONENT_THIS_FRAME(6); n::HIDE_HUD_COMPONENT_THIS_FRAME(8); }
+            for (int c : { 3, 4, 13 }) n::HIDE_HUD_COMPONENT_THIS_FRAME(c); // деньги сюжета — не наши
+            if (!g_cfg.weaponWheel)
+            {
+                n::DISABLE_CONTROL_ACTION(0, 37, TRUE); // Tab — колесо оружия
+                n::HIDE_HUD_COMPONENT_THIS_FRAME(19);
+                n::HIDE_HUD_COMPONENT_THIS_FRAME(20);
+            }
+            if (!g_cfg.pauseMenu)
+            {
+                // В сюжетной GTA меню паузы останавливает мир — на сервере это рассинхрон.
+                n::DISABLE_CONTROL_ACTION(0, 199, TRUE);
+                n::DISABLE_CONTROL_ACTION(0, 200, TRUE);
+            }
             n::DISABLE_CONTROL_ACTION(0, 19, TRUE);  // колесо смены персонажа
             n::DISABLE_CONTROL_ACTION(0, 166, TRUE); // F5..F8 — выбор персонажа в сюжете
             n::DISABLE_CONTROL_ACTION(0, 167, TRUE);
             n::DISABLE_CONTROL_ACTION(0, 168, TRUE);
             n::DISABLE_CONTROL_ACTION(0, 169, TRUE);
             if (g_frozen) n::DISABLE_ALL_CONTROL_ACTIONS(0);
-            if (ui::InputActive() || ui::MsSinceInputClosed() < 300)
+        }
+
+        /// Пока открыт чат, консоль или окно F9 — игре не нужны ни клавиши, ни Esc.
+        void InputEveryFrame()
+        {
+            if (ui::InputActive() || ui::MsSinceInputClosed() < 300 || ui::LoadingVisible())
             {
                 n::DISABLE_ALL_CONTROL_ACTIONS(0);
-                n::DISABLE_CONTROL_ACTION(2, 199, TRUE); // пауза не должна открываться Esc из чата
-                n::DISABLE_CONTROL_ACTION(2, 200, TRUE);
-                n::DISABLE_CONTROL_ACTION(0, 199, TRUE);
-                n::DISABLE_CONTROL_ACTION(0, 200, TRUE);
+                for (int g : { 0, 2 }) { n::DISABLE_CONTROL_ACTION(g, 199, TRUE); n::DISABLE_CONTROL_ACTION(g, 200, TRUE); }
             }
+            if (ui::ConsoleOpen())
+            {
+                n::SET_MOUSE_CURSOR_ACTIVE_THIS_FRAME();
+                int wheel = 0;
+                if (n::IS_DISABLED_CONTROL_JUST_PRESSED(0, 241)) wheel += 1;
+                if (n::IS_DISABLED_CONTROL_JUST_PRESSED(0, 242)) wheel -= 1;
+                ui::SetCursor(n::GET_DISABLED_CONTROL_NORMAL(0, 239), n::GET_DISABLED_CONTROL_NORMAL(0, 240),
+                              n::IS_DISABLED_CONTROL_PRESSED(0, 237) != 0, wheel);
+            }
+            if (ui::LoadingVisible()) n::HIDE_HUD_AND_RADAR_THIS_FRAME();
         }
 
         void ApplyModel(Hash model)
@@ -744,6 +866,59 @@ namespace flov::game
 
         bool Allowed(const char* command) { return g_allowed.count(command) > 0; }
 
+        /// Заголовок окна игры: window.title из client.cfg, {server} — имя сервера.
+        std::string WindowTitle()
+        {
+            if (!g_welcomed) return "FloV Multiplayer";
+            std::string t = settings::Get("window.title");
+            if (t.empty()) t = "FloV Multiplayer";
+            const auto at = t.find("{server}");
+            if (at != std::string::npos) t.replace(at, 8, g_serverName.empty() ? std::string("сервер") : g_serverName);
+            return t.empty() ? "FloV Multiplayer" : t;
+        }
+
+        /// Наблюдение администратора (/sp): мы невидимы и привязаны за спиной цели.
+        void StopSpectate()
+        {
+            const Ped me = n::PLAYER_PED_ID();
+            n::DETACH_ENTITY(me, TRUE, TRUE);
+            n::FREEZE_ENTITY_POSITION(me, FALSE);
+            n::SET_ENTITY_COLLISION(me, TRUE, TRUE);
+            n::SET_ENTITY_VISIBLE(me, TRUE, FALSE);
+            n::RESET_ENTITY_ALPHA(me);
+            n::SET_ENTITY_INVINCIBLE(me, g_god);
+            g_spectateTarget = 0;
+            g_spectateAttached = 0;
+        }
+
+        void StartSpectate(int id)
+        {
+            auto it = g_remotes.find(id);
+            if (it == g_remotes.end() || !it->second.hasState) { ui::Notify("Игрок не найден рядом.", 2500); return; }
+            const Ped me = n::PLAYER_PED_ID();
+            g_spectateTarget = id;
+            const auto& st = it->second.cur;
+            n::SET_ENTITY_COORDS_NO_OFFSET(me, st.x, st.y, st.z + 2.f, FALSE, FALSE, FALSE);
+            n::FREEZE_ENTITY_POSITION(me, TRUE);
+            n::SET_ENTITY_COLLISION(me, FALSE, FALSE);
+            n::SET_ENTITY_VISIBLE(me, FALSE, FALSE);
+            n::SET_ENTITY_ALPHA(me, 0, FALSE);
+            n::SET_ENTITY_INVINCIBLE(me, TRUE);
+        }
+
+        void SpectateTick()
+        {
+            auto it = g_remotes.find(g_spectateTarget);
+            if (it == g_remotes.end()) { StopSpectate(); return; }
+            const Ped me = n::PLAYER_PED_ID();
+            const Remote& r = it->second;
+            const Entity target = r.veh && n::DOES_ENTITY_EXIST(r.veh) && (r.cur.flags & FInVehicle) ? r.veh : r.ped;
+            if (!target || !n::DOES_ENTITY_EXIST(target)) return; // догружается
+            if (g_spectateAttached == target) return;
+            g_spectateAttached = target; // цель пересела в машину или пересоздана — привязываемся заново
+            n::ATTACH_ENTITY_TO_ENTITY(me, target, 0, 0.f, -1.8f, 1.2f, 0.f, 0.f, 0.f, FALSE, FALSE, FALSE, FALSE, 2, TRUE);
+        }
+
         void ResetSession()
         {
             for (auto& [id, r] : g_remotes) DestroyRemote(r);
@@ -751,14 +926,23 @@ namespace flov::game
             g_roster.clear();
             g_allowed.clear();
             if (g_noclip) SetNoClip(false, false);
+            if (g_spectateTarget) StopSpectate();
             g_welcomed = g_readySent = g_spawnedOnce = false;
             g_adminLevel = 0;
-            g_espOn = false;
+            g_espMode = 0;
             g_frozen = false;
+            g_serverName.clear();
+            g_voiceToken.clear();
             voice::Stop();
             ui::SetChatEnabled(false);
+            ui::SetAdminLevel(0);
             ui::SetLabels({});
-            ui::SetHud("");
+            ui::SetWatermark("");
+            ui::SetMicIndicator(0);
+            ui::HideLoading();
+            g_loadingActive = false;
+            g_spawnAt = 0;
+            ui::SetWindowTitle(WindowTitle());
         }
 
         void StartConnect(std::string host, int port, const std::string& name, int altPort = 0,
@@ -771,7 +955,14 @@ namespace flov::game
             g_typedAddress = typed.empty() ? host + ":" + std::to_string(port) : typed;
             g_pendingName = SanitizeName(name.empty() ? std::string(n::GET_PLAYER_NAME(n::PLAYER_ID())) : name);
             g_myName = g_pendingName;
-            ui::Notify("FloV:MP: подключение к " + host + ":" + std::to_string(port) + "...", 6000);
+            if (g_cfg.loading)
+            {
+                ui::ShowLoading(g_typedAddress);
+                ui::LoadingStep("Устанавливаем соединение…", 10);
+                g_loadingActive = true;
+                g_loadStart = GetTickCount64();
+            }
+            else ui::Notify("FloV:MP: подключение к " + host + ":" + std::to_string(port) + "…", 6000);
             g_net.Connect(host, port, g_pendingName);
 
             // Запомнить сервер для окна F9.
@@ -811,6 +1002,61 @@ namespace flov::game
             }
             host = t;
             return true;
+        }
+
+        std::vector<std::string> SplitTips(const std::string& text)
+        {
+            std::vector<std::string> out;
+            std::string cur;
+            for (char c : text + "|")
+            {
+                if (c != '|') { cur += c; continue; }
+                while (!cur.empty() && cur.front() == ' ') cur.erase(cur.begin());
+                while (!cur.empty() && cur.back() == ' ') cur.pop_back();
+                if (!cur.empty()) out.push_back(cur);
+                cur.clear();
+            }
+            return out;
+        }
+
+        /// Применить настройки владельца (CFG при входе и после reloadsettings).
+        void ApplySettings()
+        {
+            using namespace settings;
+            auto& c = g_cfg;
+            c.peds = Bool("world.peds"); c.traffic = Bool("world.traffic"); c.parked = Bool("world.parked_vehicles");
+            c.police = Bool("world.police"); c.ambient = Bool("world.ambient_events"); c.freezeTime = Bool("world.freeze_time");
+            c.minimap = Bool("hud.minimap"); c.abilityBar = Bool("hud.ability_bar"); c.areaNames = Bool("hud.area_names");
+            c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel"); c.pauseMenu = Bool("hud.pause_menu");
+            c.playerBlips = Bool("hud.player_blips"); c.watermark = Bool("hud.watermark");
+            c.tags = Bool("nametags.enabled"); c.tagDistance = std::clamp(Float("nametags.distance", 30.f), 3.f, 500.f);
+            c.tagId = Bool("nametags.show_id"); c.tagHealth = Bool("nametags.health"); c.tagArmor = Bool("nametags.armor");
+            c.tagVoice = Bool("nametags.voice_icon"); c.tagAdmin = Bool("nametags.admin_badge");
+            c.tagColor = Rgb("nametags.color"); c.tagSpace = Bool("nametags.underscore_to_space");
+            c.chat = Bool("chat.enabled"); c.voice = Bool("voice.enabled"); c.loading = Bool("loading.enabled");
+            c.voiceKey = Key("voice.key", 'N'); c.espKey = Key("keys.esp", VK_F3);
+            c.noclipKey = Key("keys.noclip", VK_F4); c.waypointKey = Key("keys.waypoint", VK_F5);
+
+            ui::SetInputKeys(Key("keys.chat", 'T'), Key("keys.console", VK_F8));
+            ui::SetHotkeys({ c.espKey, c.noclipKey, c.waypointKey });
+            ui::SetConsoleEnabled(Bool("console.enabled"));
+            ui::SetConsoleTheme(Get("console.theme"));
+            ui::SetAccent(Rgb("hud.accent"));
+            ui::SetLoadingStyle(SplitTips(Get("loading.tips")), Rgb("loading.accent", 0xFBBF24));
+            if (!g_welcomed) return;
+
+            ui::SetChatEnabled(c.chat);
+            ui::SetWindowTitle(WindowTitle());
+            ApplyWorldSettings();
+            for (auto& [id, r] : g_remotes)
+            {
+                if (c.playerBlips) AddRemoteBlip(r);
+                else if (r.blip) { n::REMOVE_BLIP(&r.blip); r.blip = 0; }
+            }
+            g_voiceRadius = std::clamp(Float("voice.radius", g_voiceRadius), 3.f, 500.f);
+            if (!c.voice && voice::Running()) voice::Stop();
+            else if (c.voice && !voice::Running() && !g_voiceToken.empty())
+                voice::Start(g_host, g_voicePort, g_voiceToken, g_voiceRadius);
         }
 
         void HandleMessage(const std::vector<std::string>& m)
@@ -859,13 +1105,22 @@ namespace flov::game
                 g_welcomed = true;
                 g_welcomeAt = GetTickCount64();
                 PrepareWorldOnce();
-                ui::SetChatEnabled(true);
+                ui::SetChatEnabled(g_cfg.chat);
+                ui::SetWindowTitle(WindowTitle());
                 // Голос: токен и порт из WELCOME (старый сервер их не шлёт — голоса нет).
                 g_voiceRadius = std::max(3.f, ToFloat(at(7), 25.f));
                 g_micWarned = false;
-                if (!at(5).empty()) voice::Start(g_host, ToInt(at(6), g_port), at(5), g_voiceRadius);
-                ui::Notify("Добро пожаловать на " + (g_serverName.empty() ? std::string("сервер") : g_serverName) +
-                           "! T — чат, /help — команды.", 5000);
+                g_voiceToken = at(5);
+                g_voicePort = ToInt(at(6), g_port);
+                if (!g_voiceToken.empty() && g_cfg.voice) voice::Start(g_host, g_voicePort, g_voiceToken, g_voiceRadius);
+                if (g_loadingActive)
+                {
+                    const auto title = settings::Get("loading.title");
+                    ui::ShowLoading(title.empty() ? (g_serverName.empty() ? std::string("Сервер FloV:MP") : g_serverName) : title);
+                    ui::LoadingStep("Готовим мир…", 55);
+                }
+                else ui::Notify("Добро пожаловать на " + (g_serverName.empty() ? std::string("сервер") : g_serverName) +
+                                "! T — чат, /help — команды.", 5000);
                 Log("welcome id=" + at(1) + " identity=" + at(3));
             }
             else if (type == "SPAWN")
@@ -875,6 +1130,11 @@ namespace flov::game
                 if (n::GET_ENTITY_MODEL(n::PLAYER_PED_ID()) != model) ApplyModel(model);
                 Resurrect(x, y, z, h);
                 g_spawnedOnce = true;
+                if (g_loadingActive && !g_spawnAt)
+                {
+                    g_spawnAt = GetTickCount64();
+                    ui::LoadingStep("Загружаем окрестности…", 80);
+                }
             }
             else if (type == "TP") Teleport(ToFloat(at(1)), ToFloat(at(2)), ToFloat(at(3)));
             else if (type == "HEADING") n::SET_ENTITY_HEADING(n::PLAYER_PED_ID(), ToFloat(at(1)));
@@ -934,31 +1194,37 @@ namespace flov::game
             }
             else if (type == "ESP")
             {
-                g_espOn = at(1).empty() ? !g_espOn : ToInt(at(1)) > 0;
-                ui::Notify(g_espOn ? "ESP включён" : "ESP выключен", 1500);
+                g_espMode = at(1).empty() ? (g_espMode ? 0 : 1) : std::clamp(ToInt(at(1)), 0, 3);
+                NotifyEsp();
             }
             else if (type == "REQTPM") TeleportToWaypoint();
             else if (type == "CLEARCHAT") ui::ClearChat();
             else if (type == "ADMIN")
             {
                 g_adminLevel = ToInt(at(1));
+                ui::SetAdminLevel(g_adminLevel);
                 if (g_adminLevel <= 0 && g_noclip) SetNoClip(false, false);
-                if (g_adminLevel <= 0) g_espOn = false;
+                if (g_adminLevel <= 0) g_espMode = 0;
+                if (g_adminLevel <= 0 && g_spectateTarget) StopSpectate();
             }
             else if (type == "CMDS")
             {
+                // CMDS имена,через,запятую [имя описание имя описание ...] —
+                // описания для подсказок чата и консоли (старый сервер их не шлёт).
                 g_allowed.clear();
-                std::vector<std::string> list;
+                std::vector<ui::Command> list;
+                std::map<std::string, std::string> descs;
+                for (size_t i = 2; i + 1 < m.size(); i += 2) descs[m[i]] = m[i + 1];
                 std::string cur;
                 for (char c : at(1) + ",")
                 {
-                    if (c == ',') { if (!cur.empty()) { g_allowed.insert(cur); list.push_back(cur); } cur.clear(); }
+                    if (c == ',') { if (!cur.empty()) { g_allowed.insert(cur); list.push_back({ cur, descs[cur] }); } cur.clear(); }
                     else cur += c;
                 }
-                ui::SetCommands(list);
+                ui::SetCommands(std::move(list));
                 // Права сняли — выключить то, что было включено по праву.
                 if (!Allowed("noclip") && !Allowed("fly") && g_noclip) SetNoClip(false, false);
-                if (!Allowed("esp")) g_espOn = false;
+                if (!Allowed("esp")) g_espMode = 0;
             }
             else if (type == "ROSTER")
             {
@@ -1053,6 +1319,18 @@ namespace flov::game
                 Chat(std::string(kicked ? "{ef4444}" : "{fde047}") + "[FloV:MP] " + at(1));
                 ui::Notify(at(1) + "  (F9 — подключиться снова)", 9000);
             }
+            else if (type == "CFG")
+            {
+                for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
+                ApplySettings();
+                Log("настройки сервера получены (" + std::to_string((m.size() - 1) / 2) + ")");
+            }
+            else if (type == "SPECTATE")
+            {
+                const int id = ToInt(at(1));
+                if (at(2) == "1" && id > 0) StartSpectate(id);
+                else if (g_spectateTarget) StopSpectate();
+            }
             else if (type == "EVENT") Log("событие сервера " + at(1));
         }
 
@@ -1112,52 +1390,120 @@ namespace flov::game
             }
         }
 
+        void NotifyEsp()
+        {
+            static const char* names[] = { "выключен", "игроки", "транспорт", "игроки и транспорт" };
+            ui::Notify(std::string("ESP: ") + names[std::clamp(g_espMode, 0, 3)], 1500);
+        }
+
+        void CycleEsp()
+        {
+            g_espMode = (g_espMode + 1) % 4;
+            NotifyEsp();
+        }
+
+        std::string DisplayName(const std::string& name)
+        {
+            if (!g_cfg.tagSpace) return name;
+            std::string out = name;
+            std::replace(out.begin(), out.end(), '_', ' ');
+            return out;
+        }
+
+        int RosterLevel(int id)
+        {
+            auto it = g_roster.find(id);
+            return it != g_roster.end() ? it->second : 0;
+        }
+
+        /// Ники над игроками («Nick Name (ID)», полоски, микрофон) и ESP администратора.
         void BuildLabels()
         {
             std::vector<ui::Label> labels;
+            const bool espPlayers = g_espMode == 1 || g_espMode == 3;
+            const bool espVehicles = g_espMode == 2 || g_espMode == 3;
+            if (!g_cfg.tags && !g_espMode) { ui::SetLabels({}); return; }
             const Vector3 cam = n::GET_GAMEPLAY_CAM_COORD();
+            const float tagDist = g_cfg.tagDistance;
             for (auto& [id, r] : g_remotes)
             {
                 if (!r.hasState) continue;
                 const bool hidden = (r.cur.flags & FNoClip) != 0;
                 float x = r.cur.x, y = r.cur.y, z = r.cur.z;
-                if (r.ped && n::DOES_ENTITY_EXIST(r.ped))
+                const bool spawned = r.ped && n::DOES_ENTITY_EXIST(r.ped);
+                if (spawned)
                 {
                     const Vector3 p = n::GET_ENTITY_COORDS(r.ped, TRUE);
                     x = p.x; y = p.y; z = p.z;
                 }
                 const float d = std::sqrt(Dist2(x, y, z, cam.x, cam.y, cam.z));
-                const bool nametag = !hidden && d < 30.f;
-                if (!nametag && !g_espOn) continue;
+                const int level = RosterLevel(id);
+                // Основатель (-1) скрыт от младших администраторов, как в alt:V-клиенте.
+                const bool espShow = espPlayers && d < 250.f && level >= 0 && !(g_adminLevel < 8 && level >= 8);
+                const bool nametag = g_cfg.tags && !hidden && d < tagDist && spawned &&
+                                     n::HAS_ENTITY_CLEAR_LOS_TO_ENTITY(n::PLAYER_PED_ID(), r.ped, 17);
+                if (!nametag && !espShow) continue;
                 float sx = 0, sy = 0;
                 if (!n::GET_SCREEN_COORD_FROM_WORLD_COORD(x, y, z + 1.05f, &sx, &sy)) continue;
                 ui::Label l;
                 l.x = sx; l.y = sy;
-                l.text = "[" + std::to_string(id) + "] " + r.name;
-                if (voice::IsSpeaking((uint32_t)id)) l.text = "\xE2\x99\xAA " + l.text; // ♪ говорит
-                if (g_espOn)
+                l.name = DisplayName(r.name);
+                l.id = g_cfg.tagId || espShow ? id : -1;
+                l.rgb = g_cfg.tagColor;
+                const bool dead = (r.cur.flags & FDead) != 0;
+                if (g_cfg.tagHealth || espShow) l.health = dead ? 0.f : std::clamp((r.cur.health - 100) / 100.f, 0.f, 1.f);
+                if (g_cfg.tagArmor || espShow) l.armor = std::clamp(r.cur.armor / 100.f, 0.f, 1.f);
+                l.speaking = g_cfg.tagVoice && voice::IsSpeaking((uint32_t)id);
+                l.adminLevel = g_cfg.tagAdmin ? level : 0;
+                // Ближе 40% дистанции — полный размер, дальше плавно меньше и прозрачнее.
+                const float k = std::clamp((d - tagDist * 0.4f) / std::max(1.f, tagDist * 0.6f), 0.f, 1.f);
+                l.scale = 1.f - 0.2f * k;
+                l.alpha = 1.f - 0.45f * k;
+                if (espShow)
                 {
-                    l.text += "  " + std::to_string((int)d) + " м";
-                    auto adm = g_roster.find(id);
-                    if (adm != g_roster.end() && adm->second > 0) { l.text += "  A" + std::to_string(adm->second); l.color = 0xFF99D334u; }
-                    if (hidden) l.text += "  (NoClip)";
+                    l.scale = std::max(l.scale, 0.8f);
+                    l.alpha = std::max(l.alpha, 0.85f);
+                    if (level >= 8) l.rgb = 0xFFC740;
+                    else if (level > 0) l.rgb = 0xF87171;
+                    l.extra = std::to_string(std::max(0, r.cur.health - 100)) + " HP · " + std::to_string(r.cur.armor) + " AR · " +
+                              std::to_string((int)d) + " м" + (hidden ? " · NoClip" : "") + (dead ? " · мёртв" : "");
                 }
-                l.health = (r.cur.flags & FDead) ? 0.f : std::clamp((r.cur.health - 100) / 100.f, 0.f, 1.f);
-                l.scale = std::clamp(1.1f - d / 60.f, 0.7f, 1.f);
                 labels.push_back(std::move(l));
+            }
+            if (espVehicles)
+            {
+                for (auto& [id, r] : g_remotes)
+                {
+                    if (!r.veh || !n::DOES_ENTITY_EXIST(r.veh)) continue;
+                    const Vector3 p = n::GET_ENTITY_COORDS(r.veh, TRUE);
+                    const float d = std::sqrt(Dist2(p.x, p.y, p.z, cam.x, cam.y, cam.z));
+                    if (d > 180.f) continue;
+                    float sx = 0, sy = 0;
+                    if (!n::GET_SCREEN_COORD_FROM_WORLD_COORD(p.x, p.y, p.z + 0.6f, &sx, &sy)) continue;
+                    ui::Label l;
+                    l.x = sx; l.y = sy;
+                    l.name = "Транспорт игрока " + DisplayName(r.name);
+                    l.rgb = 0x7DD3FC;
+                    const char* plate = n::GET_VEHICLE_NUMBER_PLATE_TEXT(r.veh);
+                    l.extra = std::string(plate ? plate : "") + " · " + std::to_string((int)n::GET_VEHICLE_ENGINE_HEALTH(r.veh)) + " HP · " +
+                              std::to_string((int)(n::GET_ENTITY_SPEED(r.veh) * 3.6f)) + " км/ч · " + std::to_string((int)d) + " м";
+                    l.scale = 0.85f;
+                    labels.push_back(std::move(l));
+                }
             }
             ui::SetLabels(std::move(labels));
         }
 
-        /// Разговор по N (как в GTA Online), громкость и панорама собеседников.
+        /// Разговор кнопкой из настроек (N), громкость и панорама собеседников.
         void VoiceTick(Ped me)
         {
-            if (!voice::Running()) return;
+            if (!voice::Running()) { ui::SetMicIndicator(0); return; }
             DWORD pid = 0;
             GetWindowThreadProcessId(GetForegroundWindow(), &pid);
             const bool focused = pid == GetCurrentProcessId();
-            const bool talking = focused && !ui::InputActive() && (GetAsyncKeyState('N') & 0x8000) != 0;
+            const bool talking = focused && !ui::InputActive() && (GetAsyncKeyState(g_cfg.voiceKey) & 0x8000) != 0;
             voice::SetTalking(talking);
+            ui::SetMicIndicator(talking ? (voice::MicrophoneOk() ? 1 : 2) : 0);
             if (talking && !voice::MicrophoneOk() && !g_micWarned)
             {
                 g_micWarned = true;
@@ -1189,32 +1535,96 @@ namespace flov::game
             }
         }
 
+        void CopyToClipboard(const std::string& text)
+        {
+            const auto w = FromUtf8(text);
+            if (!OpenClipboard(nullptr)) return;
+            EmptyClipboard();
+            if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (w.size() + 1) * sizeof(wchar_t)))
+            {
+                memcpy(GlobalLock(h), w.c_str(), (w.size() + 1) * sizeof(wchar_t));
+                GlobalUnlock(h);
+                if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+            }
+            CloseClipboard();
+        }
+
+        void OpenConnectWindow()
+        {
+            std::string host, name;
+            FILE* f = nullptr;
+            if (_wfopen_s(&f, (DataDir() + L"\\last-server.txt").c_str(), L"rb") == 0 && f)
+            {
+                char a[256]{}, b[128]{};
+                if (fgets(a, sizeof a, f)) host = a;
+                if (fgets(b, sizeof b, f)) name = b;
+                fclose(f);
+            }
+            auto trim = [](std::string& s) { while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back(); };
+            trim(host); trim(name);
+            if (name.empty()) name = n::GET_PLAYER_NAME(n::PLAYER_ID());
+            ui::OpenConnectDialog(host, name);
+        }
+
+        /// Команды консоли F8: свои — здесь, остальные уходят на сервер как «/команда».
+        void HandleConsoleCommand(const std::string& line)
+        {
+            std::string name = line.substr(0, line.find(' '));
+            std::transform(name.begin(), name.end(), name.begin(), [](char c) { return (char)tolower((unsigned char)c); });
+            if (name == "netgraph")
+            {
+                ui::SetNetgraph(!ui::Netgraph());
+                ui::ConsoleLog("DEV", ui::Netgraph() ? "Netgraph включён" : "Netgraph выключен");
+            }
+            else if (name == "pos" || name == "coords")
+            {
+                const Ped ped = n::PLAYER_PED_ID();
+                const Vector3 p = n::GET_ENTITY_COORDS(ped, TRUE);
+                char buf[128];
+                sprintf_s(buf, "%.2f, %.2f, %.2f, %.2f", p.x, p.y, p.z, n::GET_ENTITY_HEADING(ped));
+                CopyToClipboard(buf);
+                ui::ConsoleLog("DEV", std::string("Координаты скопированы в буфер: ") + buf);
+            }
+            else if (name == "reconnect")
+            {
+                if (g_host.empty()) { ui::ConsoleLog("WARN", "Сервер ещё не выбран — F9, чтобы подключиться."); return; }
+                const std::string host = g_host, nm = g_myName;
+                const int port = g_port;
+                g_net.Disconnect("переподключение");
+                StartConnect(host, port, nm);
+            }
+            else if (name == "connect") OpenConnectWindow();
+            else if (name == "quit" || name == "exit" || name == "q")
+            {
+                g_net.Disconnect("выход из игры");
+                Log("выход из игры по команде консоли");
+                Sleep(150);
+                TerminateProcess(GetCurrentProcess(), 0);
+            }
+            else if (name == "tpm" && Allowed("tpm")) TeleportToWaypoint();
+            else if ((name == "noclip" || name == "fly") && (Allowed("noclip") || Allowed("fly"))) SetNoClip(!g_noclip, true);
+            else if (name == "esp" && Allowed("esp"))
+            {
+                const auto sp = line.find(' ');
+                if (sp != std::string::npos) { g_espMode = std::clamp(ToInt(line.substr(sp + 1)), 0, 3); NotifyEsp(); }
+                else CycleEsp();
+            }
+            else if (!g_welcomed) ui::ConsoleLog("WARN", "Нет подключения к серверу — команда «" + name + "» не отправлена.");
+            else g_net.Send({ "CHAT", ("/" + line).substr(0, 256) });
+        }
+
         void HandleHotkeys()
         {
             for (int key : ui::TakeHotkeys())
             {
-                if (key == ui::KeyConnect)
-                {
-                    std::string host, name;
-                    FILE* f = nullptr;
-                    if (_wfopen_s(&f, (DataDir() + L"\\last-server.txt").c_str(), L"rb") == 0 && f)
-                    {
-                        char a[256]{}, b[128]{};
-                        if (fgets(a, sizeof a, f)) host = a;
-                        if (fgets(b, sizeof b, f)) name = b;
-                        fclose(f);
-                    }
-                    auto trim = [](std::string& s) { while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back(); };
-                    trim(host); trim(name);
-                    if (name.empty()) name = n::GET_PLAYER_NAME(n::PLAYER_ID());
-                    ui::OpenConnectDialog(host, name);
-                    continue;
-                }
+                if (key == ui::KeyConnect) { OpenConnectWindow(); continue; }
                 if (!g_welcomed) continue;
-                if (key == ui::KeyEsp && Allowed("esp")) { g_espOn = !g_espOn; ui::Notify(g_espOn ? "ESP включён" : "ESP выключен", 1500); }
-                else if (key == ui::KeyNoClip && (Allowed("noclip") || Allowed("fly"))) SetNoClip(!g_noclip, true);
-                else if (key == ui::KeyWaypoint && Allowed("tpm")) TeleportToWaypoint();
+                if (key == g_cfg.espKey && Allowed("esp")) CycleEsp();
+                else if (key == g_cfg.noclipKey && (Allowed("noclip") || Allowed("fly"))) SetNoClip(!g_noclip, true);
+                else if (key == g_cfg.waypointKey && Allowed("tpm")) TeleportToWaypoint();
             }
+
+            for (const auto& line : ui::TakeConsoleCommands()) HandleConsoleCommand(line);
 
             std::string host, name;
             if (ui::TakeConnectRequest(host, name))
@@ -1226,10 +1636,11 @@ namespace flov::game
                 else ui::Notify("Неверный адрес сервера. Пример: 127.0.0.1:7788", 4000);
             }
 
+            const size_t maxLen = (size_t)std::clamp(settings::Int("chat.max_length", 256), 16, 1024);
             for (const auto& line : ui::TakeSubmittedChat())
             {
                 if (!g_welcomed) continue;
-                g_net.Send({ "CHAT", line.substr(0, 256) });
+                g_net.Send({ "CHAT", line.substr(0, maxLen) });
             }
         }
 
@@ -1272,6 +1683,70 @@ namespace flov::game
             return ParseAddress(address, host, port, nullptr, false); // коннектор пишет адрес шлюза
         }
 
+        /// Загрузочный экран: закрыть, когда персонаж стоит в загруженном мире.
+        void LoadingTick(ULONGLONG now)
+        {
+            if (!g_loadingActive) return;
+            const bool timeout = now - g_loadStart > 30000;
+            bool done = false;
+            if (g_spawnAt)
+            {
+                const bool ground = n::HAS_COLLISION_LOADED_AROUND_ENTITY(n::PLAYER_PED_ID()) != 0;
+                done = (ground && now - g_spawnAt > 700) || now - g_spawnAt > 6000;
+            }
+            else if (g_welcomed && g_readySent && now - g_welcomeAt > 5000) done = true; // сервер не прислал спавн
+            if (!done && !timeout) return;
+            if (timeout && !done) Log("загрузка не завершилась за 30 с — показываю игру как есть");
+            ui::LoadingStep("Готово", 100);
+            ui::HideLoading();
+            g_loadingActive = false;
+            ui::SetChatEnabled(g_welcomed && g_cfg.chat);
+            if (g_welcomed)
+                ui::Notify("Добро пожаловать на " + (g_serverName.empty() ? std::string("сервер") : g_serverName) + "! T — чат, /help — команды.", 5000);
+        }
+
+        /// Показатели для консоли F8 и netgraph (раз в полсекунды).
+        void StatsTick(ULONGLONG now)
+        {
+            ++g_statsFrames;
+            g_statsFrameSum += n::GET_FRAME_TIME();
+            if (now - g_statsAt < 500) return;
+            const float elapsed = g_statsAt ? (now - g_statsAt) / 1000.f : 0.5f;
+            g_statsAt = now;
+            ui::Stats st;
+            st.fps = g_statsFrames / std::max(0.001f, elapsed);
+            st.frameMs = g_statsFrames ? g_statsFrameSum / g_statsFrames * 1000.f : 0.f;
+            g_statsFrames = 0;
+            g_statsFrameSum = 0;
+            const uint64_t in = g_bytesIn.load(), out = g_bytesOut.load();
+            st.bytesIn = (uint64_t)((in - g_lastIn) / elapsed);
+            st.bytesOut = (uint64_t)((out - g_lastOut) / elapsed);
+            g_lastIn = in; g_lastOut = out;
+            st.ping = g_net.PingMs();
+            st.connected = g_welcomed;
+            st.server = g_serverName;
+            st.endpoint = g_net.Endpoint();
+            st.online = g_welcomed ? (int)g_remotes.size() + 1 : 0;
+            st.state = g_welcomed ? "в игре" : g_net.State() == NetState::Connecting ? "подключение…" : "нет подключения";
+            const bool console = ui::ConsoleOpen();
+            const Vector3 me = n::GET_ENTITY_COORDS(n::PLAYER_PED_ID(), TRUE);
+            for (auto& [id, r] : g_remotes)
+            {
+                if (!r.ped) continue;
+                ++st.streamed;
+                if (!console) continue;
+                const int dist = (int)std::sqrt(Dist2(r.cur.x, r.cur.y, r.cur.z, me.x, me.y, me.z));
+                st.entities.push_back("[" + std::to_string(id) + "] " + r.name + " — " + std::to_string(dist) + " м · " +
+                                      ((r.cur.flags & FInVehicle) ? "в транспорте" : "пешком") + " · " +
+                                      std::to_string(std::max(0, r.cur.health - 100)) + " HP");
+            }
+            ui::SetStats(st);
+            if (g_cfg.watermark && g_welcomed)
+                ui::SetWatermark("FloV:MP  ·  " + (g_serverName.empty() ? g_net.Endpoint() : g_serverName) +
+                                 "  ·  ID " + std::to_string(g_myId) + "  ·  " + std::to_string(g_net.PingMs()) + " мс");
+            else ui::SetWatermark("");
+        }
+
         void Tick()
         {
             const ULONGLONG now = GetTickCount64();
@@ -1280,7 +1755,13 @@ namespace flov::game
             for (const auto& m : g_net.Poll())
                 if (!m.empty()) HandleMessage(m);
 
-            if (!g_welcomed) return;
+            InputEveryFrame();
+            StatsTick(now);
+            if (!g_welcomed)
+            {
+                if (g_loadingActive && now - g_loadStart > 30000) LoadingTick(now);
+                return;
+            }
             const Ped me = n::PLAYER_PED_ID();
             WorldEveryFrame();
 
@@ -1290,13 +1771,16 @@ namespace flov::game
                 g_readySent = true;
                 g_net.Send({ "READY" });
             }
+            LoadingTick(now);
 
             if (g_noclip) NoClipTick();
+            if (g_spectateTarget) SpectateTick();
             VoiceTick(me);
             CheckDeath(me);
             UndoRemoteDamage(me);
             DetectHits(me);
-            for (auto& [id, r] : g_remotes) UpdateRemote(r, now);
+            const Vector3 myPos = n::GET_ENTITY_COORDS(me, TRUE);
+            for (auto& [id, r] : g_remotes) UpdateRemote(r, now, myPos);
 
             if (now >= g_nextState && g_readySent)
             {
@@ -1314,20 +1798,21 @@ namespace flov::game
                 // Сюжет мог запустить новый скрипт (например, после смерти) — снова остановить.
                 if (StopStoryScripts() > 0) RestoreGameplayView();
                 g_nextClean = now + 3000;
-                const Vector3 p = n::GET_ENTITY_COORDS(me, TRUE);
-                n::CLEAR_AREA_OF_COPS(p.x, p.y, p.z, 500.f, 0);
+                if (!g_cfg.police)
+                {
+                    const Vector3 p = n::GET_ENTITY_COORDS(me, TRUE);
+                    n::CLEAR_AREA_OF_COPS(p.x, p.y, p.z, 500.f, 0);
+                }
             }
             BuildLabels();
-            std::string mic;
-            if (voice::Talking()) mic = voice::MicrophoneOk() ? "  ·  \xE2\x97\x8F ГОВОРИТЕ" : "  ·  нет микрофона";
-            ui::SetHud("FloV:MP  ·  " + (g_serverName.empty() ? g_net.Endpoint() : g_serverName) +
-                       "  ·  ID " + std::to_string(g_myId) + "  ·  " + std::to_string(g_net.PingMs()) + " мс" + mic);
         }
     }
 
     void ScriptMain()
     {
         Log("скрипт запущен, GTA5.exe " + GameVersion());
+        ApplySettings(); // значения по умолчанию до первого CFG от сервера
+        ui::SetWindowTitle("FloV Multiplayer");
         while (n::GET_IS_LOADING_SCREEN_ACTIVE() || !n::DOES_ENTITY_EXIST(n::PLAYER_PED_ID())) WAIT(250);
 
         if (GameVersion() != kGameVersion)

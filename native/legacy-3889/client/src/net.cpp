@@ -33,6 +33,7 @@ namespace flov
                     char tmp[8192];
                     const int n = recv(_s, tmp, sizeof tmp, 0);
                     if (n <= 0) return false;
+                    g_bytesIn += (uint64_t)n;
                     _buf.append(tmp, n);
                 }
             }
@@ -109,6 +110,7 @@ namespace flov
             const int n = send((SOCKET)s, data.data() + sent, (int)(data.size() - sent), 0);
             if (n <= 0) return false;
             sent += n;
+            g_bytesOut += (uint64_t)n;
         }
         return true;
     }

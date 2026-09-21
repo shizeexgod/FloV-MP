@@ -48,7 +48,6 @@ public sealed class ServerSettings
 
         // --- Интерфейс ----------------------------------------------------------------
         new("hud.minimap", Kind.Bool, "on", true, "Интерфейс", "мини-карта"),
-        new("hud.health_bars", Kind.Bool, "on", true, "Интерфейс", "полоски здоровья и брони под мини-картой"),
         new("hud.ability_bar", Kind.Bool, "off", true, "Интерфейс", "полоска способности персонажа (оранжевая)"),
         new("hud.area_names", Kind.Bool, "off", true, "Интерфейс", "названия районов и улиц"),
         new("hud.vehicle_names", Kind.Bool, "off", true, "Интерфейс", "название машины при посадке"),
@@ -75,13 +74,27 @@ public sealed class ServerSettings
         new("chat.fade_seconds", Kind.Int, "15", true, "Чат", "через сколько секунд гаснут строки (0 — не гаснут)", 0, 600),
         new("chat.timestamps", Kind.Bool, "on", true, "Чат", "время у сообщений"),
         new("chat.width", Kind.Int, "540", true, "Чат", "ширина, пикселей при 1080p", 300, 1200),
-        new("chat.max_length", Kind.Int, "256", false, "Чат", "максимум символов в сообщении", 16, 1024),
+        new("chat.max_length", Kind.Int, "256", true, "Чат", "максимум символов в сообщении", 16, 1024),
         new("chat.rp_commands", Kind.Bool, "on", false, "Чат", "команды /me /do /b /s /w"),
         new("chat.welcome", Kind.Text, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!", false, "Чат",
             "приветствие при входе; {rrggbb} — цвет. Пусто — без приветствия"),
 
         // --- Консоль ------------------------------------------------------------------------
         new("console.enabled", Kind.Bool, "on", true, "Консоль", "консоль F8 (журнал, сеть и FPS; админам — инструменты)"),
+        new("console.theme", Kind.Text, "obsidian", true, "Консоль", "оформление консоли: obsidian, slate или glass"),
+
+        // --- Загрузка и окно игры ------------------------------------------------------------
+        new("loading.enabled", Kind.Bool, "on", true, "Загрузка", "загрузочный экран от подключения до появления в мире"),
+        new("loading.title", Kind.Text, "", true, "Загрузка", "заголовок загрузочного экрана. Пусто — имя сервера"),
+        new("loading.accent", Kind.Color, "#fbbf24", true, "Загрузка", "цвет полосы загрузки и логотипа"),
+        new("loading.tips", Kind.Text,
+            "{a1a1aa}Голос:{71717a} удерживайте N, чтобы говорить. Вас слышат те, кто рядом. | " +
+            "{a1a1aa}Чат:{71717a} клавиша T. Команды начинаются с «/», список — /help. | " +
+            "{a1a1aa}Консоль:{71717a} клавиша F8 — там видно, что происходит, если что-то пошло не так. | " +
+            "{a1a1aa}Первый вход{71717a} дольше обычного: игра подгружает город.",
+            true, "Загрузка", "подсказки на загрузочном экране через « | »; {rrggbb} — цвет"),
+        new("window.title", Kind.Text, "FloV Multiplayer — {server}", true, "Загрузка",
+            "заголовок окна игры (панель задач, Alt+Tab, диспетчер задач); {server} — имя сервера"),
 
         // --- Голос ----------------------------------------------------------------------------
         new("voice.enabled", Kind.Bool, "on", true, "Голос", "голосовой чат клиентов b3889"),
@@ -92,6 +105,8 @@ public sealed class ServerSettings
         new("keys.esp", Kind.Key, "F3", true, "Клавиши", "ESP (администраторам)"),
         new("keys.noclip", Kind.Key, "F4", true, "Клавиши", "NoClip (администраторам)"),
         new("keys.waypoint", Kind.Key, "F5", true, "Клавиши", "телепорт на метку (администраторам)"),
+        new("keys.chat", Kind.Key, "T", true, "Клавиши", "открыть чат"),
+        new("keys.console", Kind.Key, "F8", true, "Клавиши", "консоль"),
 
         // --- Производительность ------------------------------------------------------------------
         new("sync.stream_radius", Kind.Float, "400", false, "Производительность", "дальность, в которой видно других игроков, м", 50, 1500),

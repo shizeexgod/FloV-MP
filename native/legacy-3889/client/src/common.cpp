@@ -3,6 +3,7 @@
 #include <shlobj.h>
 #include <cstdio>
 #include <ctime>
+#include <atomic>
 #include <mutex>
 #include <sstream>
 #include <iomanip>
@@ -28,7 +29,17 @@ namespace flov
         return cached;
     }
 
+    namespace { std::atomic<LogHook> g_logHook{ nullptr }; }
+
+    void SetLogHook(LogHook hook) { g_logHook = hook; }
+
     void Log(const std::string& text)
+    {
+        WriteLog(text);
+        if (auto hook = g_logHook.load()) hook(text); // консоль F8 видит тот же журнал
+    }
+
+    void WriteLog(const std::string& text)
     {
         static std::mutex mutex;
         std::lock_guard lock(mutex);

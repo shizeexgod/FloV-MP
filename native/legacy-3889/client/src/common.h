@@ -17,6 +17,10 @@ namespace flov
     /// Папка игры (Program Files) обычно недоступна для записи.
     std::wstring DataDir();
     void Log(const std::string& text);
+    /// Только в файл журнала (без копии в консоль F8).
+    void WriteLog(const std::string& text);
+    using LogHook = void (*)(const std::string&);
+    void SetLogHook(LogHook hook);
 
     std::string ToUtf8(const std::wstring& text);
     std::wstring FromUtf8(const std::string& text);

@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -8,6 +9,9 @@
 
 namespace flov
 {
+    /// Счётчики трафика соединения с сервером (для netgraph и консоли).
+    inline std::atomic<uint64_t> g_bytesIn{ 0 }, g_bytesOut{ 0 };
+
     enum class NetState { Idle, Connecting, Connected, Failed };
 
     /// Соединение с сервером FloV:MP (FLOV/2 поверх TCP).

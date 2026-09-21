@@ -2,49 +2,100 @@
 #include <windows.h>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace flov::ui
 {
-    /// Подпись на экране (ник над игроком, ESP). Координаты — доли экрана 0..1.
+    /// Ник над игроком. Координаты — доли экрана 0..1 (точка над головой).
     struct Label
     {
         float x = 0, y = 0;
-        std::string text;
-        uint32_t color = 0xFFFFFFFF; // ABGR (как ImU32)
-        float health = -1;           // 0..1 — полоска здоровья, <0 — без неё
-        float scale = 1.f;
+        std::string name;          // уже с пробелом вместо «_», если так настроено
+        int id = -1;               // <0 — не показывать ID
+        float health = -1;         // 0..1, <0 — без полоски
+        float armor = -1;          // 0..1, <=0 — без полоски
+        bool speaking = false;
+        int adminLevel = 0;        // >0 и включено в настройках — метка ADMIN
+        std::string extra;         // ESP: дистанция и т.п.
+        uint32_t rgb = 0xFFFFFF;
+        float scale = 1.f;         // уменьшение вдали
+        float alpha = 1.f;         // затухание вдали
     };
 
-    enum Hotkey : int
+    struct Command { std::string name, desc; };
+
+    struct Stats
     {
-        KeyEsp = VK_F3,
-        KeyNoClip = VK_F4,
-        KeyWaypoint = VK_F5,
-        KeyConnect = VK_F9,
+        float fps = 0, frameMs = 0;
+        int ping = 0, streamed = 0, online = 0;
+        std::string server, endpoint;
+        bool connected = false;
+        uint64_t bytesIn = 0, bytesOut = 0;   // байт в секунду
+        std::string state;                     // «в игре», «подключение…»
+        std::vector<std::string> entities;     // вкладка «Сущности»: строка на игрока
     };
 
     void Init();
     void Shutdown();
 
-    // --- из игрового потока -------------------------------------------------
-    void AddChat(const std::string& textWithColors);
+    // --- чат ---------------------------------------------------------------
+    /// Строка чата: author (может быть пустым) и текст с цветами {rrggbb}.
+    void AddChat(const std::string& textWithColors, const std::string& author = "", uint32_t authorRgb = 0xFFFFFF);
     void ClearChat();
-    void SetLabels(std::vector<Label>&& labels);
-    void SetHud(const std::string& topRight);
-    void Notify(const std::string& text, int ms = 4000);
-    /// Чат доступен только на сервере: в одиночной игре T остаётся за игрой.
     void SetChatEnabled(bool enabled);
-    /// Подсказки команд (Tab дополняет).
-    void SetCommands(const std::vector<std::string>& commands);
-    void OpenConnectDialog(const std::string& host, const std::string& name);
-
-    /// Открыт ли ввод (чат или окно подключения) — игре нужно отключить управление.
-    bool InputActive();
-    /// Мс с момента закрытия ввода: Esc/Enter не должны дойти до игры.
-    uint32_t MsSinceInputClosed();
-
+    void SetCommands(std::vector<Command> commands);
     std::vector<std::string> TakeSubmittedChat();
+
+    // --- консоль F8 -----------------------------------------------------------
+    void ConsoleLog(const std::string& tag, const std::string& text);
+    void SetConsoleEnabled(bool enabled);
+    void SetAdminLevel(int level);
+    bool ConsoleOpen();
+    /// Команды, набранные в консоли (без «/»), и кнопки вкладки «Инструменты».
+    std::vector<std::string> TakeConsoleCommands();
+    void SetStats(const Stats& stats);
+    void SetNetgraph(bool on);
+    /// Тема консоли: obsidian, slate, glass (настройка console.theme).
+    void SetConsoleTheme(const std::string& name);
+    bool Netgraph();
+
+    /// Курсор мыши для консоли (игровой поток читает управление GTA).
+    void SetCursor(float nx, float ny, bool left, int wheel);
+
+    // --- мир и HUD --------------------------------------------------------------
+    void SetLabels(std::vector<Label>&& labels);
+    void SetWatermark(const std::string& text);
+    void SetMicIndicator(int state); // 0 — нет, 1 — говорю, 2 — нет микрофона
+    void Notify(const std::string& text, int ms = 4000);
+    void SetAccent(uint32_t rgb);
+
+    // --- загрузочный экран -----------------------------------------------------------
+    /// Экран от подключения до появления в мире: вместо «зависшей» игры видно шаг.
+    void ShowLoading(const std::string& title);
+    /// percent < 0 — неизвестный прогресс (бегущая полоса).
+    void LoadingStep(const std::string& text, float percent = -1.f);
+    void HideLoading();
+    bool LoadingVisible();
+    /// Подсказки внизу загрузочного экрана ({rrggbb} — цвет) и цвет акцента.
+    void SetLoadingStyle(std::vector<std::string> tips, uint32_t accent);
+
+    // --- окно игры ------------------------------------------------------------------
+    /// Заголовок окна (панель задач, Alt+Tab, диспетчер задач) и значок FloV:MP.
+    void SetWindowTitle(const std::string& title);
+
+    // --- ввод ---------------------------------------------------------------------
+    /// Клавиши, о нажатии которых сообщать игре (вне чата и консоли).
+    void SetHotkeys(std::vector<int> vks);
     std::vector<int> TakeHotkeys();
+    void OpenConnectDialog(const std::string& host, const std::string& name);
     bool TakeConnectRequest(std::string& host, std::string& name);
+
+    /// Открыт ввод (чат, консоль, окно подключения) — игре выключить управление.
+    bool InputActive();
+    uint32_t MsSinceInputClosed();
+    /// Клавиши чата и консоли (настройки сервера keys.chat / keys.console).
+    void SetInputKeys(int chatVk, int consoleVk);
+
+    enum Hotkey : int { KeyConnect = VK_F9 };
 }

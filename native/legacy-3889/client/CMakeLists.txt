@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(flovmp_client_3889 LANGUAGES CXX)
+project(flovmp_client_3889 LANGUAGES CXX RC)
 
 # Клиент FloV:MP для GTA V Legacy 1.0.3889.0 — ASI на ScriptHookV.
 # ScriptHookV SDK для сборки не нужен: экспорты берутся во время работы,
@@ -15,6 +15,7 @@ add_library(flovmp-client SHARED
     src/game.cpp
     src/ui.cpp
     src/voice.cpp
+    res/client.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp

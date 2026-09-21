@@ -191,16 +191,27 @@ public class NativePlayerProxy : DispatchProxy
             case "flovmp:console:setAdmin": s.Send("ADMIN", Str(a, 0)); break;
             case "flovmp:chat:commands":
                 {
-                    // Клиенту нужны имена: подсказки в чате и доступность F3/F4/F5.
+                    // CMDS имена,через,запятую имя описание имя описание ...: имена —
+                    // доступность F3/F4/F5, пары — подсказки чата и консоли.
+                    // Старый клиент читает только первое поле.
                     var names = new System.Collections.Generic.List<string>();
+                    var fields = new System.Collections.Generic.List<object?>();
                     try
                     {
                         using var doc = JsonDocument.Parse(Str(a, 0));
                         foreach (var item in doc.RootElement.EnumerateArray())
-                            if (item.TryGetProperty("cmd", out var cmd)) names.Add(cmd.GetString() ?? "");
+                        {
+                            if (!item.TryGetProperty("cmd", out var cmd)) continue;
+                            var cmdName = cmd.GetString() ?? "";
+                            if (cmdName.Length == 0 || cmdName.Contains(',')) continue;
+                            names.Add(cmdName);
+                            fields.Add(cmdName);
+                            fields.Add(item.TryGetProperty("desc", out var desc) ? desc.GetString() ?? "" : "");
+                        }
                     }
                     catch (JsonException) { }
-                    s.Send("CMDS", string.Join(",", names));
+                    fields.Insert(0, string.Join(",", names));
+                    s.Send("CMDS", fields.ToArray());
                     break;
                 }
             case "flovmp:admin:roster":
@@ -226,6 +237,10 @@ public class NativePlayerProxy : DispatchProxy
             case "flovmp:admin:toggleEsp": s.Send("ESP", Str(a, 0)); break;
             case "starter:requestWaypointTp": s.Send("REQTPM"); break;
             case "flovmp:chat:clear": s.Send("CLEARCHAT"); break;
+            // Привычные события чата из ресурсов alt:V — тот же чат у клиента 3889.
+            case "chat:addMessage": s.Send("MSG", "system", "", Str(a, 0)); break;
+            case "chat:message": s.Send("MSG", "player", Str(a, 0), Str(a, 1)); break;
+            case "flovmp:admin:spectate": s.Send("SPECTATE", Str(a, 0), Str(a, 1) == "True" ? "1" : "0"); break;
             // Для alt:V-клиента: у нативного свой вывод координат и приветствие.
             case "starter:copyCoords":
             case "starter:initClient":

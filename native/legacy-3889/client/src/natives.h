@@ -215,6 +215,15 @@ inline void DESTROY_MOBILE_PHONE() { nv::invoke<void>(0x3BC861DF703E5097); }
 inline void SET_AUDIO_FLAG(char* flagName, BOOL toggle) { nv::invoke<void>(0xB9EFD5C25018725A, flagName, toggle); }
 inline void SET_CAN_ATTACK_FRIENDLY(Ped ped, BOOL toggle, BOOL p2) { nv::invoke<void>(0xB3B1CB349FF9C75D, ped, toggle, p2); }
 inline BOOL IS_PAUSE_MENU_ACTIVE() { return nv::invoke<BOOL>(0xB0034A223497FFCB); }
+inline void SET_MOUSE_CURSOR_ACTIVE_THIS_FRAME() { nv::invoke<void>(0xAAE7CE1D63167423); }
+inline void DISPLAY_AREA_NAME(BOOL toggle) { nv::invoke<void>(0x276B6CE369C33678, toggle); }
+inline void SPECIAL_ABILITY_DEACTIVATE_FAST(Player player) { nv::invoke<void>(0x9CB5CE07A3968D5A, player); }
+inline void SET_PLAYER_HEALTH_RECHARGE_MULTIPLIER(Player player, float regenRate) { nv::invoke<void>(0x5DB660B38DD98A31, player, regenRate); }
+inline BOOL IS_DISABLED_CONTROL_JUST_PRESSED(int index, int control) { return nv::invoke<BOOL>(0x91AEF906BCA88877, index, control); }
+inline BOOL IS_DISABLED_CONTROL_JUST_RELEASED(int index, int control) { return nv::invoke<BOOL>(0x305C8DCD79DA8B0F, index, control); }
+inline BOOL IS_ENTITY_ON_SCREEN(Entity entity) { return nv::invoke<BOOL>(0xE659E47AF827484B, entity); }
+inline BOOL HAS_ENTITY_CLEAR_LOS_TO_ENTITY(Entity entity1, Entity entity2, int traceType) { return nv::invoke<BOOL>(0xFCDFF7B72D23A1AC, entity1, entity2, traceType); }
+inline BOOL IS_ENTITY_IN_AIR(Entity entity) { return nv::invoke<BOOL>(0x886E37EC497200B6, entity); }
 inline void TERMINATE_THREAD(int id) { nv::invoke<void>(0xC8B189ED9138BCD4, id); }
 inline BOOL IS_THREAD_ACTIVE(int threadId) { return nv::invoke<BOOL>(0x46E9AE36D8FA6417, threadId); }
 inline char* GET_NAME_OF_SCRIPT_WITH_THIS_ID(int threadId) { return nv::invoke<char*>(0x05A42BA9FC8DA96B, threadId); }
@@ -236,6 +245,18 @@ inline void CLEAR_ALL_HELP_MESSAGES() { nv::invoke<void>(0x6178F68A87A4D3A0); }
 inline void SET_CINEMATIC_MODE_ACTIVE(BOOL p0) { nv::invoke<void>(0xDCF0754AC3D6FD4E, p0); }
 inline BOOL IS_PLAYER_CONTROL_ON(Player player) { return nv::invoke<BOOL>(0x49C32D60007AFA47, player); }
 inline void STOP_AUDIO_SCENES() { nv::invoke<void>(0xBAC7FC81A75EC1A1); }
+inline BOOL HAS_COLLISION_LOADED_AROUND_ENTITY(Entity entity) { return nv::invoke<BOOL>(0xE9676F61BC0B3321, entity); }
+inline Any REQUEST_SCALEFORM_MOVIE(char* scaleformName) { return nv::invoke<Any>(0x11FE353CF9733E6F, scaleformName); }
+inline BOOL HAS_SCALEFORM_MOVIE_LOADED(int scaleform) { return nv::invoke<BOOL>(0x85F01B8D5B90570E, scaleform); }
+inline BOOL BEGIN_SCALEFORM_MOVIE_METHOD(int scaleform, char* functionName) { return nv::invoke<BOOL>(0xF6E48914C7A8694E, scaleform, functionName); }
+inline void SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(int value) { nv::invoke<void>(0xC3D0841A0CC546A6, value); }
+inline void END_SCALEFORM_MOVIE_METHOD() { nv::invoke<void>(0xC6796A8FFA375E53); }
+inline void ATTACH_ENTITY_TO_ENTITY(Entity entity1, Entity entity2, int boneIndexEnt2, float posX, float posY, float posZ, float rotX, float rotY, float rotZ, BOOL p9, BOOL isRelative, BOOL collision, BOOL allowRotation, int boneIndexEnt1, BOOL fixedRot) { nv::invoke<void>(0x6B9BBD38AB0796DF, entity1, entity2, boneIndexEnt2, posX, posY, posZ, rotX, rotY, rotZ, p9, isRelative, collision, allowRotation, boneIndexEnt1, fixedRot); }
+inline void DETACH_ENTITY(Entity entity, BOOL p1, BOOL p2) { nv::invoke<void>(0x961AC54BF0613F5D, entity, p1, p2); }
+inline char* GET_VEHICLE_NUMBER_PLATE_TEXT(Vehicle vehicle) { return nv::invoke<char*>(0x7CE1CCB9B293020E, vehicle); }
+inline float GET_VEHICLE_ENGINE_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xC45D23BAF168AAB8, vehicle); }
 inline void ENABLE_DISPATCH_SERVICE(int dispatchService, BOOL toggle) { nv::invoke<void>(0xDC0F817884CDD856, dispatchService, toggle); }
+inline void SET_MINIMAP_HIDE_FOW(BOOL toggle) { nv::invoke<void>(0xF8DEE0A5600CBB93, toggle); }
+inline void SET_ABILITY_BAR_VISIBILITY(BOOL visible) { nv::invoke<void>(0x1DFEDD15019315A9, visible); }
 
 } // namespace n
