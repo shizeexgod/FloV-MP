@@ -120,6 +120,7 @@ namespace flov::game
         } g_cfg;
 
         void NotifyEsp();
+        void CopyToClipboard(const std::string& text);
 
         float Dist2(float ax, float ay, float az, float bx, float by, float bz)
         {
@@ -1324,6 +1325,11 @@ namespace flov::game
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
                 ApplySettings();
                 Log("настройки сервера получены (" + std::to_string((m.size() - 1) / 2) + ")");
+            }
+            else if (type == "COPY")
+            {
+                CopyToClipboard(at(1).substr(0, 256));
+                ui::Notify("Скопировано в буфер обмена: " + at(1), 2500);
             }
             else if (type == "SPECTATE")
             {

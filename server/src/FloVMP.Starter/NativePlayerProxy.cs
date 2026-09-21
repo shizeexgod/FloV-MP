@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
 using AltV.Net.Data;
@@ -241,8 +242,11 @@ public class NativePlayerProxy : DispatchProxy
             case "chat:addMessage": s.Send("MSG", "system", "", Str(a, 0)); break;
             case "chat:message": s.Send("MSG", "player", Str(a, 0), Str(a, 1)); break;
             case "flovmp:admin:spectate": s.Send("SPECTATE", Str(a, 0), Str(a, 1) == "True" ? "1" : "0"); break;
-            // Для alt:V-клиента: у нативного свой вывод координат и приветствие.
             case "starter:copyCoords":
+                s.Send("COPY", string.Join(", ", Enumerable.Range(0, 4).Select(i =>
+                    Convert.ToDouble(i < a.Length ? a[i] : 0, CultureInfo.InvariantCulture).ToString("F2", CultureInfo.InvariantCulture))));
+                break;
+            // Для alt:V-клиента: у нативного своё приветствие.
             case "starter:initClient":
             case "flovmp:client:welcome":
                 break;
