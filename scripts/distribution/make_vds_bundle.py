@@ -19,6 +19,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HERE = os.path.dirname(os.path.abspath(__file__))
+CRLF = bytes([13, 10])
+LF = bytes([10])
 
 
 def main():
@@ -37,9 +39,7 @@ def main():
     for f in ("setup-vds.sh", "check-vds.sh", "get.sh", "get.ps1"):
         data = open(os.path.join(HERE, f), "rb").read()
         if f.endswith(".sh"):
-            data = data.replace(b"
-", b"
-")  # bash на VDS не переносит CRLF
+            data = data.replace(CRLF, LF)  # bash на VDS не переносит CRLF
         with open(os.path.join(args.out, f), "wb") as fh:
             fh.write(data)
     if args.with_key:
