@@ -338,6 +338,14 @@ def check_event_contract(rep):
     server_listens = scan(server_dir, {".cs"}, r'OnClient(?:<[^>]*>)?\(\s*"([^"]+)"')
     client_emits = scan(client_dir, {".js"}, r"emitServer\(\s*'([^']+)'")
     client_listens = scan(client_dir, {".js"}, r"onServer\(\s*'([^']+)'")
+    # В b3889 часть UI работает без JS-клиента: NativePlayerProxy принимает
+    # серверное событие и переводит его в собственный wire-протокол ASI.
+    native_proxy = server_dir / "FloVMP.Starter" / "NativePlayerProxy.cs"
+    if native_proxy.exists():
+        client_listens.update(re.findall(
+            r'case\s+"(flovmp:[^"]+)"\s*:',
+            native_proxy.read_text(encoding="utf-8", errors="ignore"),
+        ))
 
     rep.add(PASS, "событий найдено",
             "сервер шлёт {}, слушает {}; клиент шлёт {}, слушает {}".format(
