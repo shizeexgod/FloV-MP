@@ -29,7 +29,8 @@ TOKEN = os.environ.get("REDL_TOKEN", "").strip()
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUNDLE = os.path.join(REPO, "dist", "vds")
 REMOTE = "/root/flovmp-vds"
-CHUNK = 90_000
+# REDL надёжно принимает тело до ~100 КБ (замер старого загрузчика): 45 КБ с запасом.
+CHUNK = 45_000
 
 
 def call(path, payload, timeout=180):
@@ -58,31 +59,40 @@ def run(cmd, t=600, quiet=False):
 def upload(local, remote):
     data = open(local, "rb").read()
     digest = hashlib.sha256(data).hexdigest()
+    # Уже залит (повторный запуск после обрыва) — не гоняем заново.
+    have = (run("sha256sum '{}' 2>/dev/null | cut -d' ' -f1".format(remote), quiet=True).get("output") or "").strip()
+    if have == digest:
+        print("  {} — уже на VDS".format(os.path.relpath(local, BUNDLE)), flush=True)
+        return
     b64 = base64.b64encode(data).decode()
     parts = [b64[i:i + CHUNK] for i in range(0, len(b64), CHUNK)] or [""]
     stage = "/tmp/fu-" + hashlib.sha1(remote.encode()).hexdigest()[:12]
     run("rm -rf {s}.d {s}.bin && mkdir -p {s}.d".format(s=stage), quiet=True)
 
+    last_error = [""]
+
     def put(i):
         for attempt in range(5):
             try:
-                if "bytes" in call("/write", {"machine": MACHINE, "path": "{}.d/{:05d}".format(stage, i), "content": parts[i]}):
+                r = call("/write", {"machine": MACHINE, "path": "{}.d/{:05d}".format(stage, i), "content": parts[i]})
+                if "bytes" in r:
                     return True
-            except Exception:
-                pass
-            time.sleep(1 + attempt)
+                last_error[0] = json.dumps(r, ensure_ascii=False)[:200]
+            except Exception as e:
+                last_error[0] = str(e)[:200]
+            time.sleep(1 + attempt * 2)
         return False
 
     todo = list(range(len(parts)))
     for _ in range(6):
-        with ThreadPoolExecutor(8) as ex:
+        with ThreadPoolExecutor(3) as ex:
             list(ex.map(put, todo))
         have = {int(x) for x in (run("ls {}.d".format(stage), quiet=True).get("output") or "").split() if x.isdigit()}
         todo = [i for i in range(len(parts)) if i not in have]
         if not todo:
             break
     if todo:
-        sys.exit("не залит {}".format(local))
+        sys.exit("не залит {} ({} из {} кусков): {}".format(local, len(parts) - len(todo), len(parts), last_error[0]))
     got = (run("cat {s}.d/* | base64 -d > {s}.bin && sha256sum {s}.bin | cut -d' ' -f1".format(s=stage), quiet=True).get("output") or "").strip()
     if got != digest:
         sys.exit("SHA-256 не совпал: {}".format(local))
@@ -107,7 +117,6 @@ def main():
         sys.exit("нет комплекта: python scripts/distribution/make_vds_bundle.py --with-key")
 
     step("Заливка комплекта на VDS")
-    run("rm -rf " + REMOTE, quiet=True)
     for root, _, files in os.walk(BUNDLE):
         for f in files:
             local = os.path.join(root, f)
