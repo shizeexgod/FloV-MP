@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Установить сервер лицензий на VDS через REDL и проверить его на живой базе.
+
+  $env:REDL_TOKEN = "redl_pat_..."        # PowerShell (токен из панели redl.io)
+  python scripts/distribution/deploy_vds.py
+
+Что делает:
+  1. заливает dist/vds (make_vds_bundle.py) в /root/flovmp-vds, сверяя SHA-256;
+  2. запускает setup-vds.sh: .NET 8, база flovmp_licensing, служба, nginx;
+  3. проверяет весь путь ключа на живой базе: выдан → активация сервера →
+     второй сервер упирается в лимит → приостановка → проверка отклонена →
+     возобновление → отзыв. Тестовый ключ остаётся в базе отозванным
+     (проект «ПРОВЕРКА УСТАНОВКИ»), чтобы было видно, что проверка шла.
+"""
+import base64
+import hashlib
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+MACHINE = os.environ.get("REDL_MACHINE", "avds-rg1s7j")
+TOKEN = os.environ.get("REDL_TOKEN", "")
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BUNDLE = os.path.join(REPO, "dist", "vds")
+REMOTE = "/root/flovmp-vds"
+CHUNK = 90_000
+
+
+def call(path, payload, timeout=180):
+    req = urllib.request.Request("https://redl.io/api/ext" + path, data=json.dumps(payload).encode(),
+                                 headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def run(cmd, t=600, quiet=False):
+    for attempt in range(6):
+        try:
+            r = call("/run", {"machine": MACHINE, "command": cmd, "timeoutSec": t}, timeout=t + 30)
+            if "exitCode" in r:
+                if not quiet:
+                    out = (r.get("output") or "") + (r.get("stderr") or "")
+                    if out.strip():
+                        print(out.rstrip())
+                return r
+        except Exception as e:
+            print("  REDL: {} — повтор".format(e), flush=True)
+        time.sleep(3 + attempt * 3)
+    sys.exit("REDL не отвечает")
+
+
+def upload(local, remote):
+    data = open(local, "rb").read()
+    digest = hashlib.sha256(data).hexdigest()
+    b64 = base64.b64encode(data).decode()
+    parts = [b64[i:i + CHUNK] for i in range(0, len(b64), CHUNK)] or [""]
+    stage = "/tmp/fu-" + hashlib.sha1(remote.encode()).hexdigest()[:12]
+    run("rm -rf {s}.d {s}.bin && mkdir -p {s}.d".format(s=stage), quiet=True)
+
+    def put(i):
+        for attempt in range(5):
+            try:
+                if "bytes" in call("/write", {"machine": MACHINE, "path": "{}.d/{:05d}".format(stage, i), "content": parts[i]}):
+                    return True
+            except Exception:
+                pass
+            time.sleep(1 + attempt)
+        return False
+
+    todo = list(range(len(parts)))
+    for _ in range(6):
+        with ThreadPoolExecutor(8) as ex:
+            list(ex.map(put, todo))
+        have = {int(x) for x in (run("ls {}.d".format(stage), quiet=True).get("output") or "").split() if x.isdigit()}
+        todo = [i for i in range(len(parts)) if i not in have]
+        if not todo:
+            break
+    if todo:
+        sys.exit("не залит {}".format(local))
+    got = (run("cat {s}.d/* | base64 -d > {s}.bin && sha256sum {s}.bin | cut -d' ' -f1".format(s=stage), quiet=True).get("output") or "").strip()
+    if got != digest:
+        sys.exit("SHA-256 не совпал: {}".format(local))
+    run("mkdir -p '{d}' && mv {s}.bin '{r}' && rm -rf {s}.d".format(d=os.path.dirname(remote), s=stage, r=remote), quiet=True)
+    print("  {} ({} КБ)".format(os.path.relpath(local, BUNDLE), len(data) // 1024), flush=True)
+
+
+def step(title):
+    print("\n==> " + title, flush=True)
+
+
+def check(cond, ok, fail):
+    print(("  ✓ " if cond else "  ✗ ") + (ok if cond else fail), flush=True)
+    return cond
+
+
+def main():
+    sys.stdout.reconfigure(encoding="utf-8")
+    if not TOKEN:
+        sys.exit("задайте REDL_TOKEN (токен из панели redl.io)")
+    if not os.path.isfile(os.path.join(BUNDLE, "flovmp-license", "flovmp-license.dll")):
+        sys.exit("нет комплекта: python scripts/distribution/make_vds_bundle.py --with-key")
+
+    step("Заливка комплекта на VDS")
+    run("rm -rf " + REMOTE, quiet=True)
+    for root, _, files in os.walk(BUNDLE):
+        for f in files:
+            local = os.path.join(root, f)
+            upload(local, REMOTE + "/" + os.path.relpath(local, BUNDLE).replace(os.sep, "/"))
+
+    step("Установка службы")
+    r = run("bash {0}/setup-vds.sh {0} 2>&1 | tail -30".format(REMOTE), t=900)
+    if r.get("exitCode") != 0:
+        sys.exit("setup-vds.sh завершился с ошибкой")
+    if os.path.exists(os.path.join(BUNDLE, "authority.pem")):
+        os.remove(os.path.join(BUNDLE, "authority.pem"))  # ключ уже на VDS, копия в %USERPROFILE%\.flovmp
+
+    step("Проверка на живой базе")
+    ok = True
+    out = run("flovmp-license new --project 'ПРОВЕРКА УСТАНОВКИ' --owner 'deploy_vds.py' --servers 1 --days 1", quiet=True).get("output") or ""
+    m = re.search(r"FLV-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}", out)
+    if not check(m is not None, "ключ выдан", "ключ не выдан: " + out[-300:]):
+        sys.exit(1)
+    key = m.group(0)
+    base = "http://127.0.0.1"
+
+    def http(cmd):
+        o = run(cmd + " -s -o /tmp/la-body -w '%{http_code}'; echo; head -c 400 /tmp/la-body", quiet=True).get("output") or ""
+        code, _, body = o.partition("\n")
+        return code.strip(), body
+
+    code, body = http("curl '{}/api/v1/licenses/download-by-key?key={}&server=deploy-test-a'".format(base, key))
+    ok &= check(code == "200" and "payload_b64" in body, "сервер A активировал ключ и получил license.flv", "активация: {} {}".format(code, body))
+    status = run("flovmp-license show {} | head -3".format(key), quiet=True).get("output") or ""
+    ok &= check("активирован" in status, "статус в базе — «активирован»", "статус: " + status)
+
+    code, body = http("curl '{}/api/v1/licenses/download-by-key?key={}&server=deploy-test-b'".format(base, key))
+    ok &= check(code == "403" and "1 из 1" in body, "сервер B отклонён: лимит серверов", "лимит: {} {}".format(code, body))
+
+    verify = "curl -X POST -H 'Content-Type: application/json' -d '{{\"licenseKey\":\"{}\",\"serverId\":\"deploy-test-a\",\"slots\":10}}' '{}/api/v1/license/verify'".format(key, base)
+    code, body = http(verify)
+    ok &= check(code == "200" and "leaseSignature" in body, "проверка сервера A — подтверждение выдано", "verify: {} {}".format(code, body))
+
+    run("flovmp-license suspend {} --reason 'проверка установки'".format(key), quiet=True)
+    code, body = http(verify)
+    ok &= check(code == "403" and "приостановлен" in body, "после suspend проверка отклонена", "suspend: {} {}".format(code, body))
+
+    run("flovmp-license resume {}".format(key), quiet=True)
+    code, _ = http(verify)
+    ok &= check(code == "200", "после resume ключ снова действует", "resume: " + code)
+
+    run("flovmp-license revoke {} --reason 'тестовый ключ проверки установки'".format(key), quiet=True)
+    code, body = http(verify)
+    ok &= check(code == "403" and "отозван" in body, "после revoke проверка отклонена", "revoke: {} {}".format(code, body))
+
+    code, body = http("curl '{}/api/v1/licenses/download-by-key?key=FLV-00000000-00000000-00000000-00000000&server=x'".format(base))
+    ok &= check(code == "403" and "не найден" in body, "неизвестный ключ отклонён", "unknown: {} {}".format(code, body))
+
+    code, _ = http("curl http://188.127.229.224/api/v1/license/health")
+    ok &= check(code == "200", "служба доступна снаружи: http://188.127.229.224", "снаружи: " + code)
+
+    step("Журнал тестового ключа")
+    run("flovmp-license events {} --limit 20".format(key))
+    print("\n" + ("ВСЁ ПРОШЛО. " if ok else "ЕСТЬ ОШИБКИ (см. ✗ выше). ") +
+          "Выдать ключ клиенту: flovmp-license new --project \"...\" --owner \"...\" --days 365")
+    sys.exit(0 if ok else 1)
+
+
+if __name__ == "__main__":
+    main()
