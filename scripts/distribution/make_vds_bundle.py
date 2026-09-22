@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+r"""
 Комплект для VDS: сервер лицензий, загрузчики и (при первой установке) ключ подписи.
 
   python scripts/distribution/make_vds_bundle.py              # dist/vds
@@ -35,7 +35,13 @@ def main():
         if f.endswith(".pdb"):
             os.remove(os.path.join(app, f))
     for f in ("setup-vds.sh", "check-vds.sh", "get.sh", "get.ps1"):
-        shutil.copy2(os.path.join(HERE, f), os.path.join(args.out, f))
+        data = open(os.path.join(HERE, f), "rb").read()
+        if f.endswith(".sh"):
+            data = data.replace(b"
+", b"
+")  # bash на VDS не переносит CRLF
+        with open(os.path.join(args.out, f), "wb") as fh:
+            fh.write(data)
     if args.with_key:
         key = os.path.join(os.path.expanduser("~"), ".flovmp", "license-authority.pem")
         if not os.path.isfile(key):
