@@ -44,12 +44,17 @@ def run(cmd, t=600, quiet=False):
     for attempt in range(6):
         try:
             r = call("/run", {"machine": MACHINE, "command": cmd, "timeoutSec": t}, timeout=t + 30)
-            if "exitCode" in r:
+            # REDL always includes exitCode.  A null value means the command
+            # never reached a shell (for example while SSH is temporarily
+            # unavailable) and must not be treated as a completed command.
+            if isinstance(r.get("exitCode"), int):
                 if not quiet:
                     out = (r.get("output") or "") + (r.get("stderr") or "")
                     if out.strip():
                         print(out.rstrip())
                 return r
+            detail = r.get("error") or r.get("output") or "команда не завершилась"
+            print("  REDL: {} — повтор".format(str(detail).strip()[:200]), flush=True)
         except Exception as e:
             print("  REDL: {} — повтор".format(e), flush=True)
         time.sleep(3 + attempt * 3)

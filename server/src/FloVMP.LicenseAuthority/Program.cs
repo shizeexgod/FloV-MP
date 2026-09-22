@@ -7,7 +7,7 @@ using FloVMP.LicenseAuthority;
 //   FLOVMP_LA_DB=Server=127.0.0.1;Database=flovmp_licensing;User ID=...;Password=...
 //   FLOVMP_LA_KEY=/etc/flovmp-license/authority.pem   (закрытый ключ подписи)
 //   FLOVMP_LA_DATA=/var/lib/flovmp-license            (релизы для раздачи)
-//   FLOVMP_LA_LISTEN=http://127.0.0.1:7799/
+//   FLOVMP_LA_LISTEN=http://127.0.0.1:7800/
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 try { return Cli.Run(args); }
@@ -286,7 +286,7 @@ sealed class Config
     public string Db = "";
     public string KeyFile = "/etc/flovmp-license/authority.pem";
     public string Data = "/var/lib/flovmp-license";
-    public string Listen = "http://127.0.0.1:7799/";
+    public string Listen = "http://127.0.0.1:7800/";
 
     public static Config Load()
     {

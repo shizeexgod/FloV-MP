@@ -10,7 +10,7 @@
 #
 # Ставит: .NET 8 Runtime (если нет), базу flovmp_licensing и пользователя в
 # MariaDB (случайный пароль), /etc/flovmp-license/license.env (600),
-# /opt/flovmp-license, службу flovmp-license (127.0.0.1:7799, пользователь
+# /opt/flovmp-license, службу flovmp-license (127.0.0.1:7800, пользователь
 # flovmp-license), в nginx — внутреннюю папку для отдачи пакетов.
 set -euo pipefail
 SRC="$(cd "${1:-.}" && pwd)"
@@ -66,10 +66,13 @@ SQL
 FLOVMP_LA_DB=Server=127.0.0.1;Port=3306;Database=$DB;User ID=$DBUSER;Password=$PASS
 FLOVMP_LA_KEY=$ETC/authority.pem
 FLOVMP_LA_DATA=$DATA
-FLOVMP_LA_LISTEN=http://127.0.0.1:7799/
+FLOVMP_LA_LISTEN=http://127.0.0.1:7800/
 EOF
   chown root:flovmp-license "$ETC/license.env"; chmod 0640 "$ETC/license.env"
 fi
+# 7799 принадлежит игровому API FloV:MP. Мигрируем только прежнее значение
+# по умолчанию, не перезаписывая явно выбранный владельцем нестандартный порт.
+sed -i 's|^FLOVMP_LA_LISTEN=http://127\.0\.0\.1:7799/$|FLOVMP_LA_LISTEN=http://127.0.0.1:7800/|' "$ETC/license.env"
 
 cat > /usr/local/bin/flovmp-license <<'EOF'
 #!/bin/sh
@@ -111,18 +114,37 @@ systemctl enable flovmp-license >/dev/null
 systemctl restart flovmp-license
 
 echo "==> nginx"
-# /api/ уже проксируется на 127.0.0.1:7799; нужна только внутренняя папка
-# для отдачи пакетов после проверки ключа (X-Accel-Redirect).
+# Общий /api/ уже принадлежит игровому API на 127.0.0.1:7799. Только четыре
+# префикса лицензирования отправляем в отдельную службу на 127.0.0.1:7800.
+# Внутренняя папка нужна для X-Accel-Redirect после проверки ключа.
 # Копии конфига — вне sites-enabled: nginx читает оттуда все файлы подряд.
 install -d -m 0700 /root/nginx-backups
+# Предыдущий прерванный запуск мог оставить в sites-enabled только резервную
+# копию. Сначала восстанавливаем рабочее имя, иначе перенос копий отключит сайт.
+if [ ! -e "$SITE" ]; then
+  RECOVERY="$(find /etc/nginx/sites-enabled -maxdepth 1 -type f -name 'default.bak-*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [ -n "$RECOVERY" ] && [ -f "$RECOVERY" ]; then
+    cp "$RECOVERY" "$SITE"
+  elif [ -f /etc/nginx/sites-available/default ]; then
+    ln -s /etc/nginx/sites-available/default "$SITE"
+  else
+    echo "нет nginx-конфига $SITE и нет копии для восстановления"
+    exit 1
+  fi
+fi
 for old in /etc/nginx/sites-enabled/*.bak-*; do [ -e "$old" ] && mv "$old" /root/nginx-backups/; done
-if [ -f "$SITE" ] && ! grep -q "_flovmp_dist_files" "$SITE"; then
+if [ -f "$SITE" ] && { ! grep -q "_flovmp_dist_files" "$SITE" || ! grep -q "_flovmp_license_api" "$SITE"; }; then
   cp "$SITE" "/root/nginx-backups/default.bak-license-$(date +%s)"
   python3 - "$SITE" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-block = """    location /_flovmp_dist_files/ {
+anchor = "    location /api/ {"
+if anchor not in s:
+    raise SystemExit("не найден nginx location /api/ для вставки маршрутов лицензирования")
+blocks = ""
+if "_flovmp_dist_files" not in s:
+    blocks += """    location /_flovmp_dist_files/ {
         internal;
         alias /var/lib/flovmp-license/releases/current/;
         sendfile on;
@@ -130,8 +152,26 @@ block = """    location /_flovmp_dist_files/ {
         add_header Cache-Control "no-store" always;
     }
 """
-i = s.index("    location /api/ {")
-open(p, "w", encoding="utf-8").write(s[:i] + block + s[i:])
+if "_flovmp_license_api" not in s:
+    blocks += """    # _flovmp_license_api: лицензирование отдельно от игрового API :7799
+    location ^~ /api/v1/license/ {
+        limit_req zone=flovmp_api burst=20 nodelay;
+        limit_conn flovmp_conn 12;
+        client_max_body_size 16k;
+        proxy_pass http://127.0.0.1:7800;
+        proxy_set_header Host 127.0.0.1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 10s;
+    }
+    location ^~ /api/v1/licenses/ { proxy_pass http://127.0.0.1:7800; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+    location ^~ /api/v1/distribution/ { proxy_pass http://127.0.0.1:7800; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+    location = /api/v1/telemetry/heartbeat { proxy_pass http://127.0.0.1:7800; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; }
+
+"""
+i = s.index(anchor)
+open(p, "w", encoding="utf-8").write(s[:i] + blocks + s[i:])
 PY
 fi
 nginx -t && systemctl reload nginx

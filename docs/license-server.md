@@ -8,7 +8,7 @@
 ```
 вы (SSH на VDS)            VDS 188.127.229.224                       сервер клиента
 flovmp-license new  ──►   MariaDB flovmp_licensing                  config/flovmp.env: FLOVMP_LICENSE_KEY
-                          служба flovmp-license (127.0.0.1:7799) ◄── при запуске: download-by-key → license.flv
+                          служба flovmp-license (127.0.0.1:7800) ◄── при запуске: download-by-key → license.flv
                           nginx :80 /api/ → служба             ◄── каждые 5 мин: verify → подтверждение на 24 ч
 ```
 
