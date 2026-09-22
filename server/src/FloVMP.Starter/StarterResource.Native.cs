@@ -31,6 +31,12 @@ public partial class StarterResource
     private readonly HashSet<uint> _nativeReady = new();
     private readonly HashSet<string> _reportedUnsupported = new();
 
+    /// <summary>Игрока перевели в другое измерение — у него другой набор объектов и меток.</summary>
+    internal void OnNativeDimensionChanged(NativeSession session, int dimension)
+    {
+        if (_nativeReady.Contains(session.Id)) SendWorldSnapshot(session, dimension);
+    }
+
     // Кого из игроков уже видит нативный клиент и какую версию состояния ему отправили.
     private readonly Dictionary<uint, Dictionary<uint, (long Version, long Tick)>> _nativeVisible = new();
     private readonly FloVMP.Core.Spatial.SpatialHashGrid<uint> _nativeGrid =
@@ -276,6 +282,7 @@ public partial class StarterResource
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
         _hitWarnedAt.Remove(session.Id);
+        ForgetNativeUi(session.Id);
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
@@ -290,7 +297,11 @@ public partial class StarterResource
         switch (p[0])
         {
             case "READY":
-                if (_nativeReady.Add(session.Id)) OnClientReady(player);
+                if (_nativeReady.Add(session.Id))
+                {
+                    OnClientReady(player);
+                    SendWorldSnapshot(session, np.DimensionValue);
+                }
                 break;
             case "CHAT":
                 if (p.Length > 1) OnChatMessage(player, p[1]);
@@ -314,6 +325,11 @@ public partial class StarterResource
                 break;
             case "NOCLIP":
                 OnToggleNoClip(player, p.Length > 1 && p[1] == "1");
+                break;
+            case "MENUSEL":
+            case "MENUCLOSED":
+            case "KEY":
+                HandleNativeUi(player, session, p);
                 break;
             case "LOG":
                 // Диагностика клиента в журнал сервера — ограничена по длине.

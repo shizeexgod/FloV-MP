@@ -15,6 +15,7 @@ add_library(flovmp-client SHARED
     src/game.cpp
     src/ui.cpp
     src/voice.cpp
+    src/world.cpp
     res/client.rc
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_draw.cpp

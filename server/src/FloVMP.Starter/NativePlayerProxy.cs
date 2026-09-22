@@ -107,6 +107,7 @@ public class NativePlayerProxy : DispatchProxy
                 _dimension = (int)args[0]!;
                 s.Dimension = _dimension;
                 s.Send("DIM", _dimension);
+                Owner.OnNativeDimensionChanged(s, _dimension);
                 return null;
             case "get_Health": return CurrentHealth();
             case "set_Health":
@@ -228,6 +229,34 @@ public class NativePlayerProxy : DispatchProxy
                     s.Send("ROSTER", string.Join(",", pairs));
                     break;
                 }
+            // Интерфейс без клиентских скриптов: уведомление и меню (см. StarterResource.World).
+            case "flovmp:ui:notify":
+                s.Send("NOTIFY", Str(a, 0), a.Length > 1 ? Str(a, 1) : "4000");
+                break;
+            case "flovmp:ui:menu":
+                {
+                    var menuId = Str(a, 0);
+                    if (menuId.Length is 0 or > 64) break;
+                    var fields = new System.Collections.Generic.List<object?> { menuId, Str(a, 1) };
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(Str(a, 2));
+                        foreach (var item in doc.RootElement.EnumerateArray().Take(200))
+                        {
+                            if (item.ValueKind == JsonValueKind.String) { fields.Add(item.GetString()); fields.Add(""); continue; }
+                            fields.Add(item.TryGetProperty("label", out var l) ? l.GetString() ?? "" : "");
+                            fields.Add(item.TryGetProperty("desc", out var d) ? d.GetString() ?? "" : "");
+                        }
+                    }
+                    catch (JsonException) { AltV.Net.Alt.LogWarning($"[FloV:MP] flovmp:ui:menu «{menuId}»: пункты — JSON-массив строк или {{label, desc}}"); break; }
+                    Owner.NoteMenuOpened(s.Id, menuId);
+                    s.Send("MENU", fields.ToArray());
+                    break;
+                }
+            case "flovmp:ui:closeMenu":
+                Owner.NoteMenuOpened(s.Id, null);
+                s.Send("MENUCLOSE");
+                break;
             case "starter:setWeather": s.Send("WEATHER", Str(a, 0)); break;
             case "starter:setTime": s.Send("TIME", Str(a, 0), Str(a, 1)); break;
             case "starter:setFrozen": s.Send("FREEZE", Str(a, 0) == "True" ? "1" : "0"); break;

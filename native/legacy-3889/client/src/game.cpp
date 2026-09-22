@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "ui.h"
 #include "voice.h"
+#include "world.h"
 
 #include <algorithm>
 #include <cmath>
@@ -914,8 +915,28 @@ namespace flov::game
             n::ATTACH_ENTITY_TO_ENTITY(me, target, 0, 0.f, -1.8f, 1.2f, 0.f, 0.f, 0.f, FALSE, FALSE, FALSE, FALSE, 2, TRUE);
         }
 
+        // Клавиши, о которых просил сервер (flovmp:keys:bind): код клавиши → имя.
+        std::vector<std::pair<int, std::string>> g_serverKeys;
+
+        int KeyFromName(const std::string& v)
+        {
+            if (v.size() == 1 && ((v[0] >= 'A' && v[0] <= 'Z') || (v[0] >= '0' && v[0] <= '9'))) return v[0];
+            if (v.size() >= 2 && v[0] == 'F') { const int k = std::atoi(v.c_str() + 1); if (k >= 1 && k <= 12) return 0x70 + k - 1; }
+            return 0;
+        }
+
+        void ApplyHotkeys()
+        {
+            std::vector<int> keys = { g_cfg.espKey, g_cfg.noclipKey, g_cfg.waypointKey };
+            for (const auto& [vk, name] : g_serverKeys) keys.push_back(vk);
+            ui::SetHotkeys(std::move(keys));
+        }
+
         void ResetSession()
         {
+            world::Clear();
+            ui::CloseMenu();
+            g_serverKeys.clear();
             for (auto& [id, r] : g_remotes) DestroyRemote(r);
             g_remotes.clear();
             g_roster.clear();
@@ -1033,7 +1054,7 @@ namespace flov::game
             c.noclipKey = Key("keys.noclip", VK_F4); c.waypointKey = Key("keys.waypoint", VK_F5);
 
             ui::SetInputKeys(Key("keys.chat", 'T'), Key("keys.console", VK_F8));
-            ui::SetHotkeys({ c.espKey, c.noclipKey, c.waypointKey });
+            ApplyHotkeys();
             ui::SetConsoleEnabled(Bool("console.enabled"));
             ui::SetConsoleTheme(Get("console.theme"));
             ui::SetAccent(Rgb("hud.accent"));
@@ -1059,6 +1080,7 @@ namespace flov::game
         {
             const std::string& type = m[0];
             auto at = [&m](size_t i) -> std::string { return i < m.size() ? m[i] : std::string(); };
+            if (world::Handle(m)) return;
 
             if (type == "PSTATE" && m.size() >= 20)
             {
@@ -1333,6 +1355,29 @@ namespace flov::game
                 else if (g_spectateTarget) StopSpectate();
             }
             else if (type == "EVENT") Log("событие сервера " + at(1));
+            else if (type == "NOTIFY") ui::Notify(at(1).substr(0, 300), std::clamp(ToInt(at(2), 4000), 1000, 20000));
+            else if (type == "MENU")
+            {
+                std::vector<ui::MenuItem> items;
+                for (size_t i = 3; i < m.size() && items.size() < 200; i += 2)
+                    items.push_back({ m[i].substr(0, 80), at(i + 1).substr(0, 300) });
+                ui::OpenMenu(at(1), at(2).substr(0, 60), std::move(items));
+            }
+            else if (type == "MENUCLOSE") ui::CloseMenu();
+            else if (type == "KEYS")
+            {
+                g_serverKeys.clear();
+                size_t start = 0;
+                const std::string list = at(1);
+                while (start <= list.size() && g_serverKeys.size() < 32)
+                {
+                    const size_t end = std::min(list.find(',', start), list.size());
+                    const std::string name = list.substr(start, end - start);
+                    if (const int vk = KeyFromName(name)) g_serverKeys.push_back({ vk, name });
+                    start = end + 1;
+                }
+                ApplyHotkeys();
+            }
         }
 
         /// Попадания по чужим игрокам: урон считаем мы, применяет сервер.
@@ -1423,8 +1468,9 @@ namespace flov::game
             std::vector<ui::Label> labels;
             const bool espPlayers = g_espMode == 1 || g_espMode == 3;
             const bool espVehicles = g_espMode == 2 || g_espMode == 3;
-            if (!g_cfg.tags && !g_espMode) { ui::SetLabels({}); return; }
             const Vector3 cam = n::GET_GAMEPLAY_CAM_COORD();
+            world::AddLabels(labels, cam.x, cam.y, cam.z);
+            if (!g_cfg.tags && !g_espMode) { ui::SetLabels(std::move(labels)); return; }
             const float tagDist = g_cfg.tagDistance;
             for (auto& [id, r] : g_remotes)
             {
@@ -1623,6 +1669,15 @@ namespace flov::game
                 if (key == g_cfg.espKey && Allowed("esp")) CycleEsp();
                 else if (key == g_cfg.noclipKey && (Allowed("noclip") || Allowed("fly"))) SetNoClip(!g_noclip, true);
                 else if (key == g_cfg.waypointKey && Allowed("tpm")) TeleportToWaypoint();
+                for (const auto& [vk, name] : g_serverKeys)
+                    if (vk == key) g_net.Send({ "KEY", name });
+            }
+
+            for (const auto& ev : ui::TakeMenuEvents())
+            {
+                if (!g_welcomed) continue;
+                if (ev.index < 0) g_net.Send({ "MENUCLOSED", ev.id });
+                else g_net.Send({ "MENUSEL", ev.id, std::to_string(ev.index) });
             }
 
             for (const auto& line : ui::TakeConsoleCommands()) HandleConsoleCommand(line);
@@ -1782,6 +1837,7 @@ namespace flov::game
             DetectHits(me);
             const Vector3 myPos = n::GET_ENTITY_COORDS(me, TRUE);
             for (auto& [id, r] : g_remotes) UpdateRemote(r, now, myPos);
+            world::Tick(myPos.x, myPos.y, myPos.z);
 
             if (now >= g_nextState && g_readySent)
             {

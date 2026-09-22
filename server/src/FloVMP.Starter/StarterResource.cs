@@ -644,6 +644,10 @@ public partial class StarterResource : Resource
         Alt.OnServer<float, float, float, float>("flovmp:settings:spawn", OnSpawnSetting);
         Alt.OnServer<bool>("flovmp:settings:respawn", OnRespawnSetting);
 
+        // Мир и интерфейс для клиентов b3889: события ресурсов и файлы карт.
+        RegisterWorldApi();
+        LoadMaps(broadcast: false);
+
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
         StartNativeGateway();
 
@@ -1254,6 +1258,10 @@ public partial class StarterResource : Resource
 
             case "reloadsettings":
                 LoadSettings(broadcast: true);
+                break;
+
+            case "reloadmaps":
+                LoadMaps(broadcast: true);
                 break;
 
             case "reloadadmins":

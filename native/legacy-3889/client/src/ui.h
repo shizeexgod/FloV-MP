@@ -72,6 +72,15 @@ namespace flov::ui
     /// Название платформы на загрузочном экране и в консоли (branding.name).
     void SetBrand(const std::string& name);
 
+    // --- меню сервера ---------------------------------------------------------------
+    struct MenuItem { std::string label, desc; };
+    /// Меню слева: стрелки — выбор, Enter — выбрать, Esc/Backspace — закрыть.
+    void OpenMenu(const std::string& id, const std::string& title, std::vector<MenuItem> items);
+    void CloseMenu();
+    /// Выбор (index >= 0) или закрытие меню игроком (index = -1).
+    struct MenuEvent { std::string id; int index; };
+    std::vector<MenuEvent> TakeMenuEvents();
+
     // --- загрузочный экран -----------------------------------------------------------
     /// Экран от подключения до появления в мире: вместо «зависшей» игры видно шаг.
     void ShowLoading(const std::string& title);

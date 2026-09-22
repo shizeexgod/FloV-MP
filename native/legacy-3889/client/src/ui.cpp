@@ -69,6 +69,13 @@ namespace flov::ui
         std::vector<std::string> g_submitted;
         std::vector<int> g_hotkeys, g_watchKeys = { VK_F9 };
 
+        // Меню сервера.
+        bool g_menuOpen = false;
+        std::string g_menuId, g_menuTitle;
+        std::vector<MenuItem> g_menuItems;
+        int g_menuSel = 0;
+        std::vector<MenuEvent> g_menuEvents;
+
         // Консоль.
         bool g_consoleEnabled = true, g_consoleOpen = false;
         int g_consoleTab = 0, g_consoleFilter = 0, g_consoleField = 0, g_theme = 0;
@@ -426,6 +433,25 @@ namespace flov::ui
                 if (vk == VK_BACK || vk == VK_DELETE) g_acIndex = -1;
                 EditKey(g_input, vk);
                 return true;
+            }
+
+            // Меню сервера забирает только клавиши навигации — ходить и открыть чат можно.
+            if (g_menuOpen && !alt)
+            {
+                const int count = (int)g_menuItems.size();
+                switch (vk)
+                {
+                case VK_UP: if (count) g_menuSel = (g_menuSel + count - 1) % count; return true;
+                case VK_DOWN: if (count) g_menuSel = (g_menuSel + 1) % count; return true;
+                case VK_RETURN:
+                    if (count) g_menuEvents.push_back({ g_menuId, g_menuSel });
+                    return true;
+                case VK_ESCAPE:
+                case VK_BACK:
+                    g_menuEvents.push_back({ g_menuId, -1 });
+                    g_menuOpen = false;
+                    return true;
+                }
             }
 
             // Ничего не открыто: горячие клавиши.
@@ -1379,6 +1405,54 @@ namespace flov::ui
             }
         }
 
+        void DrawMenu(ImDrawList* dl, float w, float h)
+        {
+            if (!g_menuOpen) return;
+            const float s = g_s;
+            const float mw = 380 * s, rowH = Px(g_text) + 16 * s;
+            const int visible = 10, count = (int)g_menuItems.size();
+            const int first = std::clamp(g_menuSel - visible / 2, 0, std::max(0, count - visible));
+            const int shown = std::min(visible, count);
+            const ImVec2 p0(36 * s, h * 0.22f);
+            const float headH = Px(g_title24) + 22 * s;
+            const uint32_t accent = g_accent == 0xFFFFFF ? 0xFF3D8A : g_accent;
+            dl->AddRectFilled(p0, ImVec2(p0.x + mw, p0.y + headH), Rgb(accent, 0.95f), 6 * s, ImDrawFlags_RoundCornersTop);
+            Text(dl, g_title24, ImVec2(p0.x + 16 * s, p0.y + 11 * s), Rgba(255, 255, 255, 1), Fit(g_title24, g_menuTitle, mw - 90 * s));
+            char pos[32];
+            sprintf_s(pos, "%d / %d", count ? g_menuSel + 1 : 0, count);
+            const ImVec2 psz = Measure(g_textSm, pos);
+            Text(dl, g_textSm, ImVec2(p0.x + mw - psz.x - 14 * s, p0.y + (headH - psz.y) / 2), Rgba(255, 255, 255, 0.85f), pos);
+            float y = p0.y + headH;
+            dl->AddRectFilled(ImVec2(p0.x, y), ImVec2(p0.x + mw, y + rowH * shown), Rgba(9, 9, 11, 0.9f));
+            for (int i = first; i < first + shown; ++i)
+            {
+                const bool sel = i == g_menuSel;
+                if (sel) dl->AddRectFilled(ImVec2(p0.x, y), ImVec2(p0.x + mw, y + rowH), Rgba(244, 244, 245, 0.95f));
+                Text(dl, g_text, ImVec2(p0.x + 16 * s, y + 8 * s), sel ? Rgba(9, 9, 11, 1) : Rgba(228, 228, 231, 1),
+                     Fit(g_text, g_menuItems[i].label, mw - 32 * s));
+                y += rowH;
+            }
+            const std::string& desc = count ? g_menuItems[g_menuSel].desc : std::string();
+            float by = y;
+            if (!desc.empty())
+            {
+                const ImVec2 dsz = g_textSm->CalcTextSizeA(Px(g_textSm), FLT_MAX, mw - 32 * s, desc.c_str());
+                dl->AddRectFilled(ImVec2(p0.x, y), ImVec2(p0.x + mw, y + dsz.y + 16 * s), Rgba(18, 18, 22, 0.92f));
+                dl->AddText(g_textSm, Px(g_textSm), ImVec2(p0.x + 16 * s, y + 8 * s), Rgba(161, 161, 170, 1), desc.c_str(), nullptr, mw - 32 * s);
+                by = y + dsz.y + 16 * s;
+            }
+            dl->AddRectFilled(ImVec2(p0.x, by), ImVec2(p0.x + mw, by + 30 * s), Rgba(9, 9, 11, 0.9f), 6 * s, ImDrawFlags_RoundCornersBottom);
+            float hx = p0.x + 12 * s;
+            static const std::pair<const char*, const char*> keys[] = { { "↑↓", "выбор" }, { "Enter", "выбрать" }, { "Esc", "закрыть" } };
+            for (const auto& [k, t] : keys)
+            {
+                hx += Kbd(dl, ImVec2(hx, by + 6 * s), k) + 5 * s;
+                Text(dl, g_textSm, ImVec2(hx, by + 7 * s), Rgba(113, 113, 122, 1), t);
+                hx += Measure(g_textSm, t).x + 12 * s;
+            }
+            (void)w;
+        }
+
         void DrawFrame(float w, float h)
         {
             auto* dl = ImGui::GetBackgroundDrawList();
@@ -1392,6 +1466,7 @@ namespace flov::ui
             }
             DrawLabels(dl, w, h);
             DrawChat(dl, w, h);
+            DrawMenu(dl, w, h);
             DrawHud(dl, w, h);
             if (g_consoleOpen)
             {
@@ -1698,6 +1773,28 @@ namespace flov::ui
             g_noticeUntil = g_noticeAt + ms;
         }
         ConsoleLog("CORE", text);
+    }
+
+    void OpenMenu(const std::string& id, const std::string& title, std::vector<MenuItem> items)
+    {
+        std::lock_guard lock(g_mutex);
+        g_menuOpen = true;
+        g_menuId = id;
+        g_menuTitle = title.empty() ? "Меню" : title;
+        g_menuItems = std::move(items);
+        g_menuSel = 0;
+    }
+
+    void CloseMenu()
+    {
+        std::lock_guard lock(g_mutex);
+        g_menuOpen = false;
+    }
+
+    std::vector<MenuEvent> TakeMenuEvents()
+    {
+        std::lock_guard lock(g_mutex);
+        return std::exchange(g_menuEvents, {});
     }
 
     void SetAccent(uint32_t rgb)

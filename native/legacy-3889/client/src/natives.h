@@ -255,6 +255,13 @@ inline void ATTACH_ENTITY_TO_ENTITY(Entity entity1, Entity entity2, int boneInde
 inline void DETACH_ENTITY(Entity entity, BOOL p1, BOOL p2) { nv::invoke<void>(0x961AC54BF0613F5D, entity, p1, p2); }
 inline char* GET_VEHICLE_NUMBER_PLATE_TEXT(Vehicle vehicle) { return nv::invoke<char*>(0x7CE1CCB9B293020E, vehicle); }
 inline float GET_VEHICLE_ENGINE_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xC45D23BAF168AAB8, vehicle); }
+inline Object CREATE_OBJECT_NO_OFFSET(Hash objectHash, float posX, float posY, float posZ, BOOL networkHandle, BOOL createHandle, BOOL dynamic) { return nv::invoke<Object>(0x9A294B2138ABB884, objectHash, posX, posY, posZ, networkHandle, createHandle, dynamic); }
+inline Blip ADD_BLIP_FOR_COORD(float x, float y, float z) { return nv::invoke<Blip>(0x5A039BB0BCA604B6, x, y, z); }
+inline void BEGIN_TEXT_COMMAND_SET_BLIP_NAME(char* gxtentry) { nv::invoke<void>(0xF9113A30DE5C6670, gxtentry); }
+inline void END_TEXT_COMMAND_SET_BLIP_NAME(Blip blip) { nv::invoke<void>(0xBC38B49BCB83BC9B, blip); }
+inline void ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(char* text) { nv::invoke<void>(0x6C188BE134E074AA, text); }
+inline void DRAW_MARKER(int type, float x, float y, float z, float dirX, float dirY, float dirZ, float rotX, float rotY, float rotZ, float scaleX, float scaleY, float scaleZ, int colorR, int colorG, int colorB, int alpha, BOOL bobUpAndDown, BOOL faceCamera, int p19, BOOL rotate, char* textureDict, char* textureName, BOOL drawOnEnts) { nv::invoke<void>(0x28477EC23D892089, type, x, y, z, dirX, dirY, dirZ, rotX, rotY, rotZ, scaleX, scaleY, scaleZ, colorR, colorG, colorB, alpha, bobUpAndDown, faceCamera, p19, rotate, textureDict, textureName, drawOnEnts); }
+inline void TASK_START_SCENARIO_IN_PLACE(Ped ped, char* scenarioName, int unkDelay, BOOL playEnterAnim) { nv::invoke<void>(0x142A02425FF02BD9, ped, scenarioName, unkDelay, playEnterAnim); }
 inline void ENABLE_DISPATCH_SERVICE(int dispatchService, BOOL toggle) { nv::invoke<void>(0xDC0F817884CDD856, dispatchService, toggle); }
 inline void SET_MINIMAP_HIDE_FOW(BOOL toggle) { nv::invoke<void>(0xF8DEE0A5600CBB93, toggle); }
 inline void SET_ABILITY_BAR_VISIBILITY(BOOL visible) { nv::invoke<void>(0x1DFEDD15019315A9, visible); }
