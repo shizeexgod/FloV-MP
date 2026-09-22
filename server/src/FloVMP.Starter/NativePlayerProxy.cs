@@ -31,6 +31,9 @@ public class NativePlayerProxy : DispatchProxy
 
     private int _dimension;
     private uint _model = 0x705E61F2; // mp_m_freemode_01
+
+    /// <summary>Модель, выданная командой платформы вместе с именем (см. StarterResource.Native).</summary>
+    internal void NoteModel(uint model) => _model = model;
     private ushort _maxHealth = 200;
     private ushort? _healthOverride;
     private ushort? _armorOverride;

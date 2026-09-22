@@ -572,6 +572,7 @@ public partial class StarterResource
     private bool SetModelWithName(IPlayer player, uint hash, string name)
     {
         if (player is not NativePlayerProxy np) return false;
+        np.NoteModel(hash);   // иначе player.Model на сервере остался бы прежним
         np.Session.Send("MODEL", hash, name);
         return true;
     }

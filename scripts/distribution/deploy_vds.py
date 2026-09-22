@@ -63,7 +63,17 @@ def run(cmd, t=600, quiet=False):
     sys.exit("REDL не отвечает")
 
 
-def upload(local, remote):
+def upload(local, remote, attempts=3):
+    """Повтор всей заливки: по нестабильному каналу кусок доходит повреждённым."""
+    for attempt in range(1, attempts + 1):
+        if upload_once(local, remote):
+            return
+        print("  повтор заливки {} ({}/{})".format(os.path.basename(local), attempt, attempts), flush=True)
+        time.sleep(5)
+    sys.exit("не удалось залить {}".format(local))
+
+
+def upload_once(local, remote):
     data = open(local, "rb").read()
     digest = hashlib.sha256(data).hexdigest()
     # Уже залит (повторный запуск после обрыва) — не гоняем заново.
@@ -81,7 +91,7 @@ def upload(local, remote):
         pass
     if have == digest:
         print("  {} — уже на VDS".format(os.path.relpath(local, BUNDLE)), flush=True)
-        return
+        return True
     b64 = base64.b64encode(data).decode()
     parts = [b64[i:i + CHUNK] for i in range(0, len(b64), CHUNK)] or [""]
     # Digest в имени делает staging неизменяемым: старые куски другого файла
@@ -110,12 +120,16 @@ def upload(local, remote):
         if not todo:
             break
     if todo:
-        sys.exit("не залит {} ({} из {} кусков): {}".format(local, len(parts) - len(todo), len(parts), last_error[0]))
+        print("  не залито кусков: {} из {} ({})".format(len(todo), len(parts), last_error[0]), flush=True)
+        return False
     got = (run("cat {s}.d/* | base64 -d > {s}.bin && sha256sum {s}.bin | cut -d' ' -f1".format(s=stage), quiet=True).get("output") or "").strip()
     if got != digest:
-        sys.exit("SHA-256 не совпал: {}".format(local))
+        print("  SHA-256 не совпал: {}".format(os.path.basename(local)), flush=True)
+        run("rm -rf {s}.d {s}.bin".format(s=stage), quiet=True)
+        return False
     run("mkdir -p '{d}' && mv {s}.bin '{r}' && rm -rf {s}.d".format(d=os.path.dirname(remote), s=stage, r=remote), quiet=True)
     print("  {} ({} КБ)".format(os.path.relpath(local, BUNDLE), len(data) // 1024), flush=True)
+    return True
 
 
 def step(title):
