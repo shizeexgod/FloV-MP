@@ -29,6 +29,12 @@ public sealed class NativeVoice : IDisposable
     private readonly Action<string> _log;
     private readonly Func<IEnumerable<NativeSession>> _sessions;
     private readonly ConcurrentDictionary<ulong, NativeSession> _byToken = new();
+    // Кого слышно рядом: клетки размером с радиус слышимости. Иначе на каждый
+    // голосовой пакет пришлось бы перебирать весь онлайн (50 пакетов в секунду
+    // от каждого говорящего — при тысяче игроков это миллионы проверок).
+    private readonly Dictionary<(int X, int Y), List<NativeSession>> _cells = new();
+    private long _cellsBuiltMs;
+    private const int CellRebuildMs = 200;
     private readonly CancellationTokenSource _stop = new();
     private Task? _loop;
 
@@ -109,14 +115,40 @@ public sealed class NativeVoice : IDisposable
 
         var s = sender.State;
         var r2 = Radius * Radius;
+        RebuildCells(now);
+        var cell = Radius > 1f ? Radius : 1f;
+        var cx = (int)MathF.Floor(s.X / cell);
+        var cy = (int)MathF.Floor(s.Y / cell);
+        for (var ox = -1; ox <= 1; ox++)
+        for (var oy = -1; oy <= 1; oy++)
+        {
+            if (!_cells.TryGetValue((cx + ox, cy + oy), out var near)) continue;
+            foreach (var listener in near)
+            {
+                if (listener.Id == sender.Id || listener.VoiceEndpoint is null || !listener.HasState) continue;
+                if (listener.Dimension != sender.Dimension || !listener.Joined) continue;
+                var l = listener.State;
+                var dx = l.X - s.X; var dy = l.Y - s.Y; var dz = l.Z - s.Z;
+                if (dx * dx + dy * dy + dz * dz > r2) continue;
+                try { _udp.Send(packet, listener.VoiceEndpoint); } catch (SocketException) { }
+            }
+        }
+    }
+
+    /// <summary>Раскладка слушателей по клеткам; зовётся из потока приёма, поэтому без блокировок.</summary>
+    private void RebuildCells(long now)
+    {
+        if (now - _cellsBuiltMs < CellRebuildMs) return;
+        _cellsBuiltMs = now;
+        foreach (var list in _cells.Values) list.Clear();
+        var cell = Radius > 1f ? Radius : 1f;
         foreach (var listener in _sessions())
         {
-            if (listener.Id == sender.Id || listener.VoiceEndpoint is null || !listener.HasState) continue;
-            if (listener.Dimension != sender.Dimension) continue;
-            var l = listener.State;
-            var dx = l.X - s.X; var dy = l.Y - s.Y; var dz = l.Z - s.Z;
-            if (dx * dx + dy * dy + dz * dz > r2) continue;
-            try { _udp.Send(packet, listener.VoiceEndpoint); } catch (SocketException) { }
+            if (listener.VoiceEndpoint is null || !listener.HasState || !listener.Joined) continue;
+            var st = listener.State;
+            var key = ((int)MathF.Floor(st.X / cell), (int)MathF.Floor(st.Y / cell));
+            if (!_cells.TryGetValue(key, out var bucket)) _cells[key] = bucket = new List<NativeSession>();
+            bucket.Add(listener);
         }
     }
 

@@ -62,6 +62,7 @@ namespace flov::game
             ULONGLONG nextTask = 0;
             bool dead = false;
             bool inVehicleSeat = false;
+            bool ragdoll = false;                 // сейчас падает (переносим с чужого экрана)
             int adminLevel = 0;
         };
 
@@ -295,7 +296,10 @@ namespace flov::game
             n::SET_VEHICLE_HAS_BEEN_OWNED_BY_PLAYER(r.veh, TRUE);
             n::SET_VEHICLE_NEEDS_TO_BE_HOTWIRED(r.veh, FALSE);
             n::SET_VEHICLE_IS_STOLEN(r.veh, FALSE);
-            n::SET_ENTITY_INVINCIBLE(r.veh, TRUE);
+            // Неуязвимой машину не делаем: тогда пули по ней не доходили бы до
+            // сидящих внутри («нерег» по игрокам в транспорте). Вместо этого
+            // каждый кадр чиним прочность — чужая машина не горит и не взрывается
+            // у нас на экране, а попадания по пассажирам считаются.
             n::SET_VEHICLE_NUMBER_PLATE_TEXT(r.veh, const_cast<char*>("FLOVMP"));
             r.inVehicleSeat = false;
             return true;
@@ -386,6 +390,10 @@ namespace flov::game
                     if (tilt || diff(rot.z, s.rz) > 0.5f)
                         n::SET_ENTITY_ROTATION(veh, tilt ? AngleLerp(rot.x, s.rx, 0.5f) : rot.x, tilt ? AngleLerp(rot.y, s.ry, 0.5f) : rot.y,
                                                AngleLerp(rot.z, s.rz, 0.5f), 2, TRUE);
+                    // Прочность чужой машины держим целой (см. EnsureRemoteVehicle).
+                    n::SET_VEHICLE_ENGINE_HEALTH(veh, 1000.f);
+                    n::SET_VEHICLE_BODY_HEALTH(veh, 1000.f);
+                    n::SET_VEHICLE_PETROL_TANK_HEALTH(veh, 1000.f);
                     const bool engine = (s.flags & FEngine) != 0;
                     if ((bool)n::GET_IS_VEHICLE_ENGINE_RUNNING(veh) != engine) n::SET_VEHICLE_ENGINE_ON(veh, engine, TRUE, TRUE);
                     const bool siren = (s.flags & FSiren) != 0;
@@ -406,6 +414,27 @@ namespace flov::game
                 }
                 return;
             }
+
+            // Падение (сбила машина, упал с высоты): без этого игрок у соседей
+            // «бежит стоя», пока у себя катится по земле.
+            const bool ragdoll = (s.flags & FRagdoll) != 0;
+            if (ragdoll != r.ragdoll)
+            {
+                r.ragdoll = ragdoll;
+                n::SET_PED_CAN_RAGDOLL(ped, ragdoll ? TRUE : FALSE);
+                if (ragdoll) n::SET_PED_TO_RAGDOLL(ped, 2000, 2000, 0, TRUE, TRUE, FALSE);
+                else n::CLEAR_PED_TASKS(ped);
+            }
+            if (ragdoll)
+            {
+                // Пока падает, позицию не правим: иначе тело дёргается на месте.
+                if (n::IS_PED_RAGDOLL(ped)) return;
+                n::SET_PED_TO_RAGDOLL(ped, 2000, 2000, 0, TRUE, TRUE, FALSE);
+                return;
+            }
+            // Приседание.
+            const bool ducking = (s.flags & FDucking) != 0;
+            if ((bool)n::IS_PED_DUCKING(ped) != ducking) n::SET_PED_DUCKING(ped, ducking ? TRUE : FALSE);
 
             // Пешком.
             if (r.inVehicleSeat || n::IS_PED_IN_ANY_VEHICLE(ped, FALSE))

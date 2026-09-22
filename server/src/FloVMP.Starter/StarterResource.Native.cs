@@ -53,8 +53,14 @@ public partial class StarterResource
     // Попадания по другим игрокам — клиент сообщает, сервер проверяет и
     // передаёт урон жертве. Лимит против «убить всех одной строкой».
     private readonly Dictionary<uint, (int Count, int Damage, long WindowStart)> _hitRate = new();
-    private const int MaxHitsPerSecond = 12;
-    private const int MaxDamagePerSecond = 400;   // больше не наносит ни одно оружие GTA
+    // Урон одной жертве от одного стрелка: ограничивает «мгновенную смерть»,
+    // но не мешает быстрому оружию — у игрока 200 здоровья.
+    private readonly Dictionary<(uint Attacker, uint Victim), (int Damage, long WindowStart)> _hitPairRate = new();
+    // Миниган делает ~50 выстрелов в секунду, пистолет-пулемёт ~12: прежний
+    // лимит 12 отбрасывал честные попадания («нерег» автоматическим оружием).
+    private const int MaxHitsPerSecond = 40;
+    private const int MaxDamagePerSecond = 1000;      // суммарно по всем жертвам
+    private const int MaxDamagePerVictimPerSecond = 300;
     private const float MaxHitDistance = 300f;
     private const float MaxMeleeDistance = 6f;
     private const float MaxRamDistance = 20f;
@@ -282,6 +288,8 @@ public partial class StarterResource
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
         _hitWarnedAt.Remove(session.Id);
+        foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
+            _hitPairRate.Remove(key);
         ForgetNativeUi(session.Id);
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
@@ -377,7 +385,12 @@ public partial class StarterResource
             ? (Count: r.Count + 1, Damage: r.Damage + damage, r.WindowStart)
             : (Count: 1, Damage: damage, WindowStart: now);
         _hitRate[session.Id] = rate;
+        var pair = _hitPairRate.TryGetValue((session.Id, victimId), out var pr) && now - pr.WindowStart < 1000
+            ? (Damage: pr.Damage + damage, pr.WindowStart)
+            : (Damage: damage, WindowStart: now);
+        _hitPairRate[(session.Id, victimId)] = pair;
         if (why is null && (rate.Count > MaxHitsPerSecond || rate.Damage > MaxDamagePerSecond)) why = "слишком частый урон";
+        else if (why is null && pair.Damage > MaxDamagePerVictimPerSecond) why = "слишком много урона одной жертве";
         if (why is not null)
         {
             // В журнал — не чаще раза в 10 с на игрока: поток поддельных HIT не должен забивать лог.
