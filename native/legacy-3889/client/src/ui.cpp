@@ -1363,15 +1363,28 @@ namespace flov::ui
                 Text(dl, g_textSm, ImVec2(q0.x + 26 * s, q0.y + 6 * s), Rgba(244, 244, 245, 1), t);
             }
 
+            // Уведомление выезжает снизу и так же уходит вниз: заметно, но не
+            // закрывает центр экрана. Ход — по кривой ease-out, чтобы движение
+            // не выглядело рывком и не «дёргалось» при низком FPS.
             if (!g_notice.empty() && now < g_noticeUntil)
             {
+                constexpr float kSlideMs = 260.f;
                 const float left = (float)(g_noticeUntil - now), age = (float)(now - g_noticeAt);
-                const float a = std::min({ 1.f, left / 300.f, age / 150.f });
+                const float in = std::clamp(age / kSlideMs, 0.f, 1.f);
+                const float out = std::clamp(left / kSlideMs, 0.f, 1.f);
+                auto easeOut = [](float t) { const float u = 1.f - t; return 1.f - u * u * u; };
+                const float a = std::min(easeOut(in), easeOut(out));
                 const float maxW = 900 * s;
                 const ImVec2 sz = g_text->CalcTextSizeA(Px(g_text), FLT_MAX, maxW, g_notice.c_str());
-                const ImVec2 pos((w - sz.x) / 2, h * 0.78f);
-                dl->AddRectFilled(ImVec2(pos.x - 16 * s, pos.y - 10 * s), ImVec2(pos.x + sz.x + 16 * s, pos.y + sz.y + 10 * s), Rgba(9, 9, 11, 0.86f * a), 6 * s);
-                dl->AddRectFilled(ImVec2(pos.x - 16 * s, pos.y - 10 * s), ImVec2(pos.x - 13 * s, pos.y + sz.y + 10 * s),
+                const float padX = 16 * s, padY = 10 * s;
+                const float boxH = sz.y + padY * 2;
+                // Конечное место — над полосой голоса у нижнего края.
+                const float restY = h - 120 * s - boxH;
+                const float hidden = h + 10 * s;                       // старт и финиш за краем экрана
+                const float y = hidden + (restY - hidden) * std::min(easeOut(in), easeOut(out));
+                const ImVec2 pos((w - sz.x) / 2, y + padY);
+                dl->AddRectFilled(ImVec2(pos.x - padX, y), ImVec2(pos.x + sz.x + padX, y + boxH), Rgba(9, 9, 11, 0.86f * a), 6 * s);
+                dl->AddRectFilled(ImVec2(pos.x - padX, y), ImVec2(pos.x - padX + 3 * s, y + boxH),
                                   Rgb(g_accent == 0xFFFFFF ? 0xFF3D8A : g_accent, a));
                 dl->AddText(g_text, Px(g_text), pos, Rgba(244, 244, 245, a), g_notice.c_str(), nullptr, maxW);
             }
