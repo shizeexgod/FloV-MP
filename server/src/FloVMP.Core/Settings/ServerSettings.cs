@@ -82,6 +82,8 @@ public sealed class ServerSettings
         new("chat.width", Kind.Int, "540", true, "Чат", "ширина, пикселей при 1080p", 300, 1200),
         new("chat.max_length", Kind.Int, "256", true, "Чат", "максимум символов в сообщении", 16, 1024),
         new("chat.rp_commands", Kind.Bool, "on", false, "Чат", "команды /me /do /b /s /w"),
+        new("chat.radius", Kind.Float, "0", false, "Чат",
+            "радиус обычного чата в метрах: 0 — слышно всему серверу, 20 — только рядом (для RP)", 0, 1000),
         new("chat.welcome", Kind.Text, "{ff3d8a}[FloV:MP]{ffffff} Добро пожаловать на сервер!", false, "Чат",
             "приветствие при входе; {rrggbb} — цвет. Пусто — без приветствия"),
 

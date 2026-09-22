@@ -1768,7 +1768,11 @@ public partial class StarterResource : Resource
             return;
         }
 
-        BroadcastChatMessage(message, "player", ChatTag(player));
+        // Радиус обычного чата задаёт владелец (chat.radius): 0 — слышно всем,
+        // иначе сообщение получают только те, кто рядом (как на RP-серверах).
+        var chatRadius = _settings.Float("chat.radius");
+        if (chatRadius > 0.5f) SendNearby(player, chatRadius, message, "player", ChatTag(player));
+        else BroadcastChatMessage(message, "player", ChatTag(player));
     }
 
     private void HandleCommand(IPlayer player, string commandLine)
