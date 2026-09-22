@@ -746,12 +746,13 @@ namespace flov::game
             if (ui::LoadingVisible()) n::HIDE_HUD_AND_RADAR_THIS_FRAME();
         }
 
-        void ApplyModel(Hash model)
+        /// false — модели нет в игре (игрок уже получил сообщение).
+        bool ApplyModel(Hash model, const std::string& name = "")
         {
             if (!LoadModel(model))
             {
-                Chat("{ef4444}Модель персонажа недоступна в игре.");
-                return;
+                Chat("{ef4444}Модель персонажа" + (name.empty() ? "" : " «" + name + "»") + " не найдена в игре.");
+                return false;
             }
             const int health = n::GET_ENTITY_HEALTH(n::PLAYER_PED_ID());
             n::SET_PLAYER_MODEL(n::PLAYER_ID(), model);
@@ -761,6 +762,7 @@ namespace flov::game
             n::SET_PED_DEFAULT_COMPONENT_VARIATION(ped);
             n::SET_MODEL_AS_NO_LONGER_NEEDED(model);
             if (health > 100) n::SET_ENTITY_HEALTH(ped, health);
+            return true;
         }
 
         void Teleport(float x, float y, float z)
@@ -1217,7 +1219,11 @@ namespace flov::game
                 g_lastHealth = h;
             }
             else if (type == "ARMOR") { n::SET_PED_ARMOUR(n::PLAYER_PED_ID(), ToInt(at(1))); g_lastArmor = ToInt(at(1)); }
-            else if (type == "MODEL") ApplyModel(ToUInt(at(1), kFreemodeMale));
+            else if (type == "MODEL")
+            {
+                if (ApplyModel(ToUInt(at(1), kFreemodeMale), at(2)) && at(2).size())
+                    Chat("{34d399}Модель персонажа: " + at(2) + ".");
+            }
             else if (type == "WEATHER")
             {
                 const std::string w = at(1);
@@ -1244,7 +1250,17 @@ namespace flov::game
             }
             else if (type == "SPEED") n::SET_RUN_SPRINT_MULTIPLIER_FOR_PLAYER(n::PLAYER_ID(), std::clamp(ToFloat(at(1), 1.f), 1.f, 1.49f));
             else if (type == "WEAPON")
-                n::GIVE_WEAPON_TO_PED(n::PLAYER_PED_ID(), ToUInt(at(1)), std::clamp(ToInt(at(2), 250), 1, 9999), FALSE, at(3) != "0");
+            {
+                // Имя оружия приходит от игрока — проверяем, что такое в игре есть,
+                // иначе команда молча ничего не делала, а сервер писал «выдано».
+                const Hash weapon = ToUInt(at(1));
+                if (!n::IS_WEAPON_VALID(weapon)) Chat("{ef4444}Оружие «" + at(4) + "» не найдено в игре.");
+                else
+                {
+                    n::GIVE_WEAPON_TO_PED(n::PLAYER_PED_ID(), weapon, std::clamp(ToInt(at(2), 250), 1, 9999), FALSE, at(3) != "0");
+                    Chat("{34d399}Выдано оружие: " + at(4) + " (патронов: " + std::to_string(std::clamp(ToInt(at(2), 250), 1, 9999)) + ").");
+                }
+            }
             else if (type == "DISARM") n::REMOVE_ALL_PED_WEAPONS(n::PLAYER_PED_ID(), TRUE);
             else if (type == "REVIVE")
             {

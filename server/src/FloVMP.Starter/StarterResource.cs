@@ -2179,9 +2179,14 @@ public partial class StarterResource : Resource
                 var ammo = parts.Length > 2 && int.TryParse(parts[2], out var a) ? Math.Clamp(a, 1, 9999) : 250;
                 try
                 {
-                    var wepHash = Alt.Hash(wepName);
-                    player.GiveWeapon(wepHash, ammo, true);
-                    SendChatMessage(player, $"{{34d399}}Выдано оружие: {wepName} (патронов: {ammo})");
+                    var wepHash = Alt.Hash(wepName.ToLowerInvariant());
+                    // Клиенту 3889 отдаём вместе с именем: он проверит, что такое
+                    // оружие есть в игре, и напишет игроку результат сам.
+                    if (!GiveWeaponWithName(player, wepHash, wepName, ammo))
+                    {
+                        player.GiveWeapon(wepHash, ammo, true);
+                        SendChatMessage(player, $"{{34d399}}Выдано оружие: {wepName} (патронов: {ammo})");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2395,8 +2400,13 @@ public partial class StarterResource : Resource
                     }
                     try
                     {
-                        player.Model = Alt.Hash(skinModel);
-                        SendChatMessage(player, $"{{34d399}}Скин изменен на: {skinModel}");
+                        var skinHash = Alt.Hash(skinModel.ToLowerInvariant());
+                        // Есть ли такая модель, знает только игра клиента — он и ответит.
+                        if (!SetModelWithName(player, skinHash, skinModel))
+                        {
+                            player.Model = skinHash;
+                            SendChatMessage(player, $"{{34d399}}Скин изменён на: {skinModel}");
+                        }
                     }
                     catch (Exception ex)
                     {

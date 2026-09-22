@@ -267,9 +267,22 @@ namespace flov::ui
             if (name.empty() || !HasCyrillic(name)) return;
             const auto latin = ToUtf8(FromRussianLayout(name));
             auto known = [&](const Command& c) { return c.name == latin; };
-            if (std::any_of(g_commands.begin(), g_commands.end(), known) ||
-                (!slash && std::any_of(std::begin(kLocalCommands), std::end(kLocalCommands), known)))
-                line.replace(start, name.size(), FromUtf8(latin));
+            if (!std::any_of(g_commands.begin(), g_commands.end(), known) &&
+                !(!slash && std::any_of(std::begin(kLocalCommands), std::end(kLocalCommands), known)))
+                return;
+            line.replace(start, name.size(), FromUtf8(latin));
+
+            // У этих команд аргумент — латинское имя из игры (модель, оружие,
+            // погода). На русской раскладке «/car adder» превращалось в
+            // «/car фввук», и команда молча не срабатывала.
+            static const char* kLatinArgs[] = { "car", "veh", "weapon", "gun", "givegun", "skin", "ped", "weather" };
+            if (std::none_of(std::begin(kLatinArgs), std::end(kLatinArgs),
+                             [&](const char* c) { return latin == c; }))
+                return;
+            const size_t argStart = start + FromUtf8(latin).size() + 1;
+            if (argStart >= line.size()) return;
+            const std::wstring args = line.substr(argStart);
+            if (HasCyrillic(args)) line.replace(argStart, args.size(), FromRussianLayout(args));
         }
 
         void CycleAutocomplete(std::wstring& field, bool slash)

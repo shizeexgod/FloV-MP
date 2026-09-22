@@ -556,6 +556,26 @@ public partial class StarterResource
         return false;
     }
 
+    /// <summary>
+    /// Выдать оружие клиенту 3889 вместе с именем: клиент проверяет, что такое
+    /// оружие в игре есть, и сам пишет игроку результат. Без этого сервер
+    /// отвечал «выдано» на несуществующее имя, а в руках ничего не появлялось.
+    /// </summary>
+    private bool GiveWeaponWithName(IPlayer player, uint hash, string name, int ammo)
+    {
+        if (player is not NativePlayerProxy np) return false;
+        np.Session.Send("WEAPON", hash, ammo, true, name);
+        return true;
+    }
+
+    /// <summary>Сменить модель игроку 3889 (клиент сам сообщит, есть ли такая модель).</summary>
+    private bool SetModelWithName(IPlayer player, uint hash, string name)
+    {
+        if (player is not NativePlayerProxy np) return false;
+        np.Session.Send("MODEL", hash, name);
+        return true;
+    }
+
     /// <summary>Отключить всех нативных клиентов (лицензия, остановка).</summary>
     private void KickAllNative(string reason)
     {
