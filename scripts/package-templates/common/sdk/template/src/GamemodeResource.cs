@@ -8,25 +8,37 @@ namespace Gamemode;
 /// Точка входа вашего сервера. Работает рядом с платформой (ресурс
 /// flovmp-starter): вход, администрирование, баны, голос и чат уже есть,
 /// здесь — ваша игровая логика.
+///
+/// Игроки на GTA V Legacy 1.0.3889.0 (клиент FloV:MP) приходят к вам не
+/// объектом IPlayer, а номером: у них нет сущности движка alt:V. Поэтому
+/// рядом с каждым «обычным» событием есть парное flovmp:native:* с ID игрока,
+/// а чат и интерфейс им отправляются событиями по этому же номеру.
 /// </summary>
 public sealed class GamemodeResource : Resource
 {
     public override void OnStart()
     {
-        // Игрок загрузил клиент и появился в мире.
-        Alt.OnServer<IPlayer>("flovmp:player:ready", OnPlayerReady);
+        // Игрок появился в мире: клиент alt:V и клиент 3889.
+        Alt.OnServer<IPlayer>("flovmp:player:ready", p => OnPlayerReady((int)p.Id, p.Name));
+        Alt.OnServer<int, string>("flovmp:native:ready", OnPlayerReady);
 
         // Вызовы ваших чат-команд.
-        Alt.OnServer<IPlayer, string, string>("flovmp:command", OnCommand);
+        Alt.OnServer<IPlayer, string, string>("flovmp:command", (p, cmd, args) => OnCommand((int)p.Id, p.Name, cmd, args));
+        Alt.OnServer<int, string, string, string>("flovmp:native:command", OnCommand);
+
+        // Ответы игрока 3889 на меню и клавиши (см. команду /menu ниже).
+        Alt.OnServer<int, string, int>("flovmp:native:menuSelect", OnMenuSelect);
+        Alt.OnServer<int, string>("flovmp:native:key", (id, key) =>
+            SendChat(id, $"Вы нажали {key}. Клавиши регистрируются событием flovmp:keys:bind."));
 
         // Команды регистрируются в платформе. Если платформа стартует позже —
         // она сообщит об этом событием flovmp:platform:ready.
         Alt.OnServer("flovmp:platform:ready", ConfigurePlatform);
         ConfigurePlatform();
 
-        // Пример события от вашего клиентского скрипта (client/index.js).
+        // Пример события от вашего клиентского скрипта (client/index.js, только клиенты alt:V).
         Alt.OnClient<IPlayer, string>("gamemode:hello", (player, text) =>
-            SendChat(player, $"Сервер получил: {text}"));
+            SendChat((int)player.Id, $"Сервер получил: {text}"));
 
         Alt.Log("[Gamemode] ресурс запущен");
     }
@@ -44,6 +56,9 @@ public sealed class GamemodeResource : Resource
         // Возрождение после смерти своим кодом (событие flovmp:player:died):
         // Alt.Emit("flovmp:settings:respawn", false);
 
+        // Клавиша, о нажатии которой клиент 3889 сообщит серверу (A..Z, 0..9, F1..F12).
+        Alt.Emit("flovmp:keys:bind", "E");
+
         RegisterCommands();
     }
 
@@ -54,41 +69,69 @@ public sealed class GamemodeResource : Resource
         // лежат в server/config/admin-commands.cfg (по умолчанию все — 8,
         // то есть только у создателя сервера).
         Alt.Emit("flovmp:commands:register", "hello", "приветствие от сервера", 0);
+        Alt.Emit("flovmp:commands:register", "menu", "пример меню (игроки 3889)", 0);
         Alt.Emit("flovmp:commands:register", "sethp", "здоровье игроку: /sethp <id> <100-200>", 1);
     }
 
-    private static void OnPlayerReady(IPlayer player)
+    private static void OnPlayerReady(int id, string name)
     {
-        SendChat(player, $"{{c4b5fd}}[Сервер]{{ffffff}} Привет, {player.Name}! Это ваш ресурс gamemode.");
+        SendChat(id, $"{{c4b5fd}}[Сервер]{{ffffff}} Привет, {name}! Это ваш ресурс gamemode. Команды: /hello, /menu");
     }
 
-    private static void OnCommand(IPlayer player, string command, string args)
+    private static void OnCommand(int id, string name, string command, string args)
     {
         switch (command)
         {
             case "hello":
-                SendChat(player, $"Привет, {player.Name}! Уровень администратора: {AdminLevel(player)}.");
-                player.Emit("gamemode:notify", "Команда /hello выполнена");
+                SendChat(id, $"Привет, {name}! Вы вошли как игрок с ID {id}.");
+                // Уведомление на экране игрока 3889 (мс — сколько держать).
+                Alt.Emit("flovmp:ui:notify", id, "Команда /hello выполнена", 4000);
+                break;
+
+            case "menu":
+                // Пункты меню — JSON: строки или {"label","desc"}.
+                Alt.Emit("flovmp:ui:menu", id, "demo", "Пример меню",
+                    "[{\"label\":\"Выдать брони\",\"desc\":\"Пример действия сервера\"}," +
+                    " {\"label\":\"Сказать в чат\"}, {\"label\":\"Закрыть\"}]");
                 break;
 
             case "sethp":
                 // Права уже проверены платформой (уровень 1+), но проверять
                 // аргументы — ваша задача: их присылает игрок.
                 var parts = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2 || !uint.TryParse(parts[0], out var id) ||
+                if (parts.Length < 2 || !uint.TryParse(parts[0], out var target) ||
                     !ushort.TryParse(parts[1], out var hp) || hp is < 100 or > 200)
                 {
-                    SendChat(player, "Использование: /sethp <id> <100-200>");
+                    SendChat(id, "Использование: /sethp <id> <100-200>");
                     return;
                 }
-                var target = Alt.GetPlayerById(id);
-                if (target is null || !target.Exists)
+                var victim = Alt.GetPlayerById(target);
+                if (victim is null || !victim.Exists)
                 {
-                    SendChat(player, "Игрок не найден.");
+                    // Игрок 3889 виден платформе, но не alt:V: меняйте его состояние
+                    // своими командами платформы или событиями flovmp:*.
+                    SendChat(id, "Игрок не найден среди клиентов alt:V.");
                     return;
                 }
-                target.Health = hp;
-                SendChat(player, $"{target.Name}: здоровье {hp}.");
+                victim.Health = hp;
+                SendChat(id, $"{victim.Name}: здоровье {hp}.");
+                break;
+        }
+    }
+
+    private static void OnMenuSelect(int id, string menu, int index)
+    {
+        if (menu != "demo") return;
+        switch (index)
+        {
+            case 0:
+                Alt.Emit("flovmp:ui:notify", id, "Броня выдана (пример)", 3000);
+                break;
+            case 1:
+                SendChat(id, "Вы выбрали второй пункт меню.");
+                break;
+            default:
+                Alt.Emit("flovmp:ui:closeMenu", id);
                 break;
         }
     }
@@ -97,7 +140,9 @@ public sealed class GamemodeResource : Resource
     public static int AdminLevel(IPlayer player) =>
         player.GetLocalMetaData("adminLevel", out int level) ? level : 0;
 
-    /// <summary>Сообщение в чат игроку. {RRGGBB} в тексте — цвет.</summary>
-    public static void SendChat(IPlayer player, string text) =>
-        player.Emit("flovmp:chat:msg", "system", "", text);
+    /// <summary>Сообщение в чат игроку по его ID. {RRGGBB} в тексте — цвет.</summary>
+    public static void SendChat(int playerId, string text) => Alt.Emit("flovmp:chat:to", playerId, text);
+
+    /// <summary>Сообщение в чат всем игрокам.</summary>
+    public static void SendChatAll(string text) => Alt.Emit("flovmp:chat:all", text);
 }

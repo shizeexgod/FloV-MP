@@ -87,14 +87,32 @@ public partial class StarterResource
     }
 
     /// <summary>Записать проверенный license.flv (атомарно, прежний — в .bak).</summary>
+    private static readonly object LicenseFileLock = new();
+
+    /// <summary>
+    /// Записать проверенный license.flv. Активация по ключу и обновление файла
+    /// после online-проверки могут совпасть по времени, поэтому запись под
+    /// замком и во временный файл со своим именем: иначе Windows отдаёт
+    /// «файл занят другим процессом» и обновление теряется.
+    /// </summary>
     private static string WriteLicenseFile(string content)
     {
         var target = FloVMP.Core.Licensing.LicenseFile.Locate() ??
                      Path.Combine(InstallRoot(), FloVMP.Core.Licensing.LicenseFile.FileName);
-        var tmp = target + ".tmp";
-        File.WriteAllText(tmp, content, new UTF8Encoding(false));
-        if (File.Exists(target)) File.Copy(target, target + ".bak", overwrite: true);
-        File.Move(tmp, target, overwrite: true);
+        lock (LicenseFileLock)
+        {
+            var tmp = target + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+            try
+            {
+                File.WriteAllText(tmp, content, new UTF8Encoding(false));
+                if (File.Exists(target)) File.Copy(target, target + ".bak", overwrite: true);
+                File.Move(tmp, target, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(tmp)) try { File.Delete(tmp); } catch (IOException) { }
+            }
+        }
         return target;
     }
 
@@ -102,9 +120,11 @@ public partial class StarterResource
     /// Сервер лицензий прислал license.flv новее нашего (продление, смена тарифа):
     /// заменить, если он подписан сервером лицензий и выдан на наш ключ.
     /// </summary>
-    private static void RefreshLicenseFile(string? flv, string key)
+    private void RefreshLicenseFile(string? flv, string key)
     {
         if (string.IsNullOrWhiteSpace(flv) || flv.Length > 64 * 1024) return;
+        // Активация прямо сейчас сохраняет свежий файл сама — не мешаем ей.
+        if (Volatile.Read(ref _licenseActivating) != 0) return;
         var current = FloVMP.Core.Licensing.LicenseFile.Locate();
         if (current is not null && File.Exists(current) && File.ReadAllText(current).Trim() == flv.Trim()) return;
         var status = FloVMP.Core.Licensing.LicenseFile.EvaluateContent(flv, DateTime.UtcNow, key);

@@ -4,7 +4,8 @@ param(
     [switch]$Force,
     [switch]$NoStart,
     [string]$LicenseKey = '',
-    [string]$PortalUrl = ''   # устарел: адрес сервера лицензий — FLOVMP_LICENSE_URL в configlovmp.env
+    [string]$LicenseUrl = '', # адрес сервера лицензий FloV:MP (по умолчанию — вшитый в сервер)
+    [string]$PortalUrl = ''   # устарел, оставлен для совместимости со старыми командами
 )
 
 $ErrorActionPreference = 'Stop'
@@ -156,6 +157,11 @@ try {
 
         # Ключ активирует сам сервер при запуске (он знает ID своей установки).
         Write-Host 'Сервер активирует ключ при первом запуске FloVMP-Server.exe.' -ForegroundColor Green
+        $url = if ($LicenseUrl) { $LicenseUrl } else { $PortalUrl }
+        if ($url) {
+            Set-FlovmpEnvValue (Join-Path $target 'config\flovmp.env') 'FLOVMP_LICENSE_URL' $url.TrimEnd('/')
+            Write-Host "Сервер лицензий: $url" -ForegroundColor Green
+        }
     }
     elseif (-not (Test-Path -LiteralPath (Join-Path $target 'license.flv'))) {
         Write-Host 'Ключ лицензии не указан. После запуска сервера введите в его окне: license activate FLV-...' -ForegroundColor Yellow

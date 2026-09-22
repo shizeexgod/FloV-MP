@@ -126,7 +126,7 @@ FloV:MP — установщик игрового сервера
 
 Лицензия и пакет:
   --key <ключ>              Ключ лицензии (сохраняется в config/flovmp.env)
-  --portal <URL>            Адрес сервера лицензий FloV:MP (по умолчанию http://188.127.229.224)
+  --license-url <URL>       Адрес сервера лицензий FloV:MP (по умолчанию http://188.127.229.224)
   --package <файл.tar.gz>   Установить из указанного архива
   --package-url <URL>       Скачать архив по ссылке
   --sha256 <хэш>            Проверить хэш скачанного архива
@@ -196,7 +196,7 @@ while [ $# -gt 0 ]; do
     --no-start)            DO_START=0; shift ;;
     --no-firewall)         DO_FIREWALL=0; shift ;;
     --key|-k)              need_value "$@"; LICENSE_KEY="$2"; shift 2 ;;
-    --portal|-p)           need_value "$@"; PORTAL_URL="${2%/}"; shift 2 ;;
+    --license-url|--portal|-p) need_value "$@"; PORTAL_URL="${2%/}"; shift 2 ;;
     --package)             need_value "$@"; PACKAGE_FILE="$2"; shift 2 ;;
     --package-url)         need_value "$@"; PACKAGE_URL="$2"; shift 2 ;;
     --sha256)              need_value "$@"; PACKAGE_SHA256="$2"; shift 2 ;;

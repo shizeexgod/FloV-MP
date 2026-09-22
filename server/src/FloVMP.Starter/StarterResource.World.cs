@@ -76,6 +76,20 @@ public partial class StarterResource
         });
         Alt.OnServer("flovmp:maps:reload", () => LoadMaps(broadcast: true));
 
+        // Чат игроку по ID и всем: у игрока 3889 нет сущности движка, поэтому
+        // ресурсы владельца работают с его номером (как в flovmp:native:*).
+        Alt.OnServer<int, string>("flovmp:chat:to", (id, text) =>
+        {
+            var player = PlayerById((uint)Math.Max(0, id));
+            if (player is null || !player.Exists) { Alt.LogWarning($"[FloV:MP] чат: игрока с ID {id} нет на сервере"); return; }
+            SendChatMessage(player, Clean(text, 900));
+        });
+        Alt.OnServer<string>("flovmp:chat:all", text =>
+        {
+            var line = Clean(text, 900);
+            foreach (var p in AllPlayers()) if (p.Exists) SendChatMessage(p, line);
+        });
+
         // Интерфейс конкретного игрока 3889 — по его ID (у такого игрока нет
         // сущности движка, поэтому ресурсы получают и передают номер).
         Alt.OnServer<int, string, int>("flovmp:ui:notify", (id, text, ms) =>
