@@ -16,7 +16,7 @@ namespace FloVMP.Starter;
 /// объекты карты, метки, маркеры, 3D-надписи, NPC, меню, уведомления, клавиши.
 ///
 /// Владелец управляет ими из своего ресурса (C#, события flovmp:world:*,
-/// flovmp:ui:*, flovmp:keys:*) или файлами карт в server/config/maps
+/// flovmp:ui:*, flovmp:keys:*; ответы — flovmp:native:*) или файлами карт в server/config/maps
 /// (*.json, *.xml расстановок Menyoo) — без программирования. Сервер хранит
 /// всё в реестре и отдаёт каждому вошедшему; объекты клиент сам подгружает
 /// вокруг игрока и выгружает вдали, поэтому большая карта не бьёт по FPS.
@@ -75,6 +75,14 @@ public partial class StarterResource
             if (KindByName.TryGetValue(kind ?? "", out var k)) RemoveWorld(k, id);
         });
         Alt.OnServer("flovmp:maps:reload", () => LoadMaps(broadcast: true));
+
+        // Интерфейс конкретного игрока 3889 — по его ID (у такого игрока нет
+        // сущности движка, поэтому ресурсы получают и передают номер).
+        Alt.OnServer<int, string, int>("flovmp:ui:notify", (id, text, ms) =>
+            NativeById(id)?.Emit("flovmp:ui:notify", Clean(text, 300), Math.Clamp(ms, 1000, 20000).ToString(CultureInfo.InvariantCulture)));
+        Alt.OnServer<int, string, string, string>("flovmp:ui:menu", (id, menu, title, itemsJson) =>
+            NativeById(id)?.Emit("flovmp:ui:menu", Clean(menu, 64), Clean(title, 60), itemsJson ?? "[]"));
+        Alt.OnServer<int>("flovmp:ui:closeMenu", id => NativeById(id)?.Emit("flovmp:ui:closeMenu"));
         // Клавиша, о нажатии которой клиент сообщает серверу: A..Z, 0..9, F1..F12.
         Alt.OnServer<string>("flovmp:keys:bind", key =>
         {
@@ -82,6 +90,13 @@ public partial class StarterResource
             if (FloVMP.Core.Settings.ServerSettings.KeyCode(k) == 0) { Alt.LogWarning($"[FloV:MP] flovmp:keys:bind: неизвестная клавиша «{key}»"); return; }
             if (_boundKeys.Add(k)) foreach (var p in _nativePlayers.Values) SendKeys(((NativePlayerProxy)(object)p).Session);
         });
+    }
+
+    private IPlayer? NativeById(int id)
+    {
+        if (id > 0 && _nativePlayers.TryGetValue((uint)id, out var p)) return p;
+        Alt.LogWarning($"[FloV:MP] интерфейс: игрока 3889 с ID {id} нет на сервере");
+        return null;
     }
 
     private static string Clean(string? text, int max)
@@ -190,13 +205,13 @@ public partial class StarterResource
                     if (p[0] == "MENUCLOSED")
                     {
                         _openMenus.Remove(session.Id);
-                        Alt.Emit("flovmp:ui:menuClose", player, menuId);
+                        Alt.Emit("flovmp:native:menuClose", (int)session.Id, menuId);
                     }
                     else
                     {
                         var index = NativeProtocol.IntOr(p, 2, -1);
                         if (index < 0 || index > 500) return true;
-                        Alt.Emit("flovmp:ui:menuSelect", player, menuId, index);
+                        Alt.Emit("flovmp:native:menuSelect", (int)session.Id, menuId, index);
                     }
                     return true;
                 }
@@ -204,7 +219,7 @@ public partial class StarterResource
                 {
                     if (!UiRateOk(session.Id)) return true;
                     var key = p.Length > 1 ? p[1].ToUpperInvariant() : "";
-                    if (_boundKeys.Contains(key)) Alt.Emit("flovmp:key", player, key);
+                    if (_boundKeys.Contains(key)) Alt.Emit("flovmp:native:key", (int)session.Id, key);
                     return true;
                 }
         }

@@ -86,6 +86,63 @@ var conn = new FloVMP.Core.Database.DatabaseConfig().BuildConnectionString();
 Свои таблицы — файлами в `sql/migrations` с номером от `100`
 (например `100_jobs.sql`): сервер применит их при старте.
 
+## Мир и интерфейс для игроков GTA Legacy 1.0.3889.0
+
+У игроков на GTA Legacy 1.0.3889.0 (клиент FloV:MP, а не alt:V) нет
+`client/index.js`: мир и интерфейс для них задаёт сервер. Эти же события
+работают из вашего C#-ресурса.
+
+Карты можно положить файлами в `server/config/maps` (расстановки Menyoo `*.xml`
+или `*.json`, пример — в `README.txt` той же папки) и перечитать командой
+`reloadmaps` в консоли сервера.
+
+```csharp
+// объект: ID, модель, x y z, поворот rx ry rz, измерение, заморожен, коллизия
+Alt.Emit("flovmp:world:object", "bench1", "prop_bench_01a", 200f, -930f, 29.7f, 0f, 0f, 90f, 0, true, true);
+// метка на карте: ID, x y z, значок, цвет, масштаб, подпись, измерение
+Alt.Emit("flovmp:world:blip", "cityhall", 200f, -930f, 30f, 60, 2, 1f, "Мэрия", 0);
+// маркер: ID, тип 0..43, x y z, размер, цвет #rrggbbaa, измерение
+Alt.Emit("flovmp:world:marker", "job", 1, 200f, -930f, 29f, 1.5f, "#ff3d8ab4", 0);
+// 3D-надпись: ID, x y z, текст, дальность, измерение
+Alt.Emit("flovmp:world:label", "jobText", 200f, -930f, 31f, "{ff3d8a}Работа{ffffff} — нажмите E", 20f, 0);
+// NPC: ID, модель, x y z, поворот, сценарий, измерение
+Alt.Emit("flovmp:world:npc", "clerk", "a_m_y_business_01", 201f, -931f, 29.7f, 180f, "WORLD_HUMAN_STAND_MOBILE", 0);
+Alt.Emit("flovmp:world:remove", "object", "bench1");
+```
+
+Измерение `int.MinValue` — «во всех измерениях».
+
+Игрок 3889 для ресурсов — это его ID (у него нет сущности движка alt:V).
+События о нём приходят с номером:
+
+| Событие | Когда |
+|---|---|
+| `flovmp:native:ready` (id, ник) | игрок 3889 появился в мире |
+| `flovmp:native:command` (id, ник, команда, аргументы) | ввёл вашу команду |
+| `flovmp:native:died` (id, оружие) | погиб |
+| `flovmp:native:menuSelect` (id, меню, номер пункта) | выбрал пункт меню |
+| `flovmp:native:menuClose` (id, меню) | закрыл меню |
+| `flovmp:native:key` (id, клавиша) | нажал клавишу из `flovmp:keys:bind` |
+
+Интерфейс игроку — по его ID:
+
+```csharp
+Alt.Emit("flovmp:ui:notify", id, "Вы устроились на работу", 4000);
+// меню: ID игрока, ID меню, заголовок, пункты — JSON-массив строк или {"label","desc"}
+Alt.Emit("flovmp:ui:menu", id, "shop", "Магазин", "[\"Вода — $5\", {\"label\":\"Хлеб — $3\",\"desc\":\"Утоляет голод\"}]");
+Alt.Emit("flovmp:ui:closeMenu", id);
+Alt.OnServer<int, string, int>("flovmp:native:menuSelect", (id, menu, index) => { /* выбор пункта */ });
+
+// клавиша, о нажатии которой клиент сообщит серверу (A..Z, 0..9, F1..F12)
+Alt.Emit("flovmp:keys:bind", "E");
+Alt.OnServer<int, string>("flovmp:native:key", (id, key) => { /* игрок нажал E */ });
+```
+
+Сервер принимает выбор только из меню, которое сам открыл этому игроку.
+
+Свои модели (не из GTA) у игроков должны быть установлены как дополнение к
+игре — сервер их не передаёт.
+
 ## Клиентская часть
 
 `client/index.js` — модуль JavaScript с API `alt-client` и `natives`.
