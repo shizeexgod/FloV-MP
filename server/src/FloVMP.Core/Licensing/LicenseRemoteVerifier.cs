@@ -13,10 +13,11 @@ public sealed record LicenseRemoteResult(
     DateTime CheckedAtUtc,
     DateTime? LeaseUntilUtc,
     string? LeasePayloadB64 = null,
-    string? LeaseSignatureB64 = null);
+    string? LeaseSignatureB64 = null,
+    string? LicenseFlv = null);
 
 /// <summary>
-/// Проверяет короткий RSA-подписанный lease портала. Отзыв приходит отдельным
+/// Проверяет короткий RSA-подписанный lease сервера лицензий. Отзыв приходит отдельным
 /// 403 и блокирует сервер сразу; сетевой сбой не превращается в ложный отзыв,
 /// пока локальный lease не истёк.
 /// </summary>
@@ -48,6 +49,7 @@ public sealed class LicenseRemoteVerifier
             {
                 licenseKey = config.LicenseKey.Trim(),
                 serverIp = config.ServerIp,
+                serverId = config.ServerId,
                 version,
                 slots,
             }, cancellationToken);
@@ -85,7 +87,10 @@ public sealed class LicenseRemoteVerifier
             if (until <= checkedAt)
                 return new(true, false, false, "online lease уже истёк", checkedAt, until);
 
-            return new(true, true, false, "online lease действителен", checkedAt, until, payloadB64, signatureB64);
+            // Свежий license.flv (продлили срок, сменили тариф) — сервер заменит свой,
+            // если подпись и ключ сойдутся (проверяет StarterResource).
+            var flv = root.TryGetProperty("licenseFlv", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null;
+            return new(true, true, false, "online lease действителен", checkedAt, until, payloadB64, signatureB64, flv);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

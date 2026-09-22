@@ -342,6 +342,7 @@ public partial class StarterResource : Resource
         try
         {
             var result = await _licenseRemoteVerifier.VerifyAsync(config, slots: _license.PlayerLimit, cancellationToken: _licenseRemoteCts.Token);
+            if (result.Valid) RefreshLicenseFile(result.LicenseFlv, config.LicenseKey);
             _licenseRemoteResult = result;
             Interlocked.Exchange(ref _licenseRemoteNeedsApply, 1);
             if (result.Valid && result.LeasePayloadB64 is not null && result.LeaseSignatureB64 is not null)
@@ -1452,6 +1453,11 @@ public partial class StarterResource : Resource
                 break;
 
             case "license":
+                if (args.Length >= 2 && args[0].Equals("activate", StringComparison.OrdinalIgnoreCase))
+                {
+                    ActivateLicense(args[1]);
+                    break;
+                }
                 CheckLicense(logAlways: true);
                 Alt.Log($"[Console] Лимит игроков: {_license.PlayerLimit}. Файл: {FloVMP.Core.Licensing.LicenseFile.Locate() ?? "не найден (license.flv в корне установки)"}");
                 break;
@@ -1662,6 +1668,8 @@ public partial class StarterResource : Resource
         }
         if (Interlocked.Exchange(ref _licenseRemoteNeedsApply, 0) == 1)
             CheckLicense(logAlways: false);
+        ApplyActivatedLicense();
+        TryAutoActivate(nowMs);
         if (System.Threading.Interlocked.Exchange(ref _pendingAdminRecheck, 0) == 1)
         {
             using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAdminRights);

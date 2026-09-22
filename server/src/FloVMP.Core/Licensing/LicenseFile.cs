@@ -40,7 +40,7 @@ public sealed record LicenseStatus(LicenseState State, LicenseInfo? Info, string
 }
 
 /// <summary>
-/// Проверка license.flv — файла, который выдаёт портал
+/// Проверка license.flv — файла, который выдаёт сервер лицензий
 /// (GET /api/v1/licenses/download-by-key): <c>{ "payload_b64", "signature" }</c>,
 /// подпись RSA-2048 PKCS#1 v1.5 / SHA-256 над байтами payload.
 ///
@@ -64,18 +64,21 @@ public static class LicenseFile
     public static readonly TimeSpan GracePeriod = TimeSpan.FromDays(7);
 
     /// <summary>
-    /// Открытый ключ портала лицензий. Пара к FLOVMP_AUTHORITY_PRIVATE_KEY
-    /// портала: при смене ключа на портале заменить здесь и пересобрать.
+    /// Открытый ключ сервера лицензий FloV:MP (служба flovmp-license на VDS).
+    /// Закрытая часть — только там (/etc/flovmp-license/authority.pem). Сменили
+    /// ключ на VDS — заменить здесь и выпустить новую сборку.
     /// </summary>
     public const string AuthorityPublicKeyPem = """
         -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAj78Lp8wdYha6Ra87S9xT
-        NYir0eJKRz6ymm6UQnyFRkrPwwMHrNpQ9bYT5Bg9CCXVBvEUlhjh/A4zvudfAlyn
-        PkWeUM5U+9+ddulC8VaR5JKEmBK90i+w98n4lwmYsWNWIoyQH6mMa9zpY1eSYXDh
-        AGWH8siHMmJF8v86DWIGLgtL4YH0H4dv+9E65eegixpEEY+83vuWu3YEFXQzmqky
-        d6hAh78AULXdeaT0gW1Wp9de7hwTFTSpotmdMmoTI/56SZ3pj5sGPfeOMJahw6de
-        8alPzuTTY/xGpzsNC4I2tILtdIqHCWy2i4MCGpWeXNs5kUfHf1qL7abhX0zQMpos
-        LQIDAQAB
+        MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAst3jsCGnBI2txUgsxrru
+        6JZoJJny2UQOyacxpNEiXP2Xe05OL6n8n1/LPDtcVwGXNJfT7PiYGrrYP5Gga4Wp
+        jCcg6AXjNJXzz6hXcT9M/qyuB0RYVSaajYd8l8yUA7+IOPP7rimWJINKiJsXW/HU
+        d7w0bScysKLI8kT7ojnkH2p6ubX5kBlkEz3P6wsz8rAnoQnEF4J6ac1roS9Xrevh
+        mwymZZ3gR/+o55DMNIeZZHfjyLMeuaKbynHE4EJp8qT/6Apjm8JEU9RtyUtUEQZV
+        vU+/Ip//eh5ysPTiWylicRz7ENVe/RBuWVJ1W71KzOyyTFiVHNWeSAG83i+s6nAE
+        JKP4DwtcNMmkdzld5sXz89nnC7/3UWjK/Ee+coo6vedE+gRFcNpBpRtfbpcKxtD/
+        5s7uA+Mea6HmIIdLwHZuzVGqlXEanTxWqXk68KGoAP/DfBI9NmTsEN6cPkgLTKlN
+        4QvJu2opKshaG4gyMwiduX4W90ZRXbb+aVWo9pR69MTDAgMBAAE=
         -----END PUBLIC KEY-----
         """;
 
@@ -200,36 +203,12 @@ public static class LicenseFile
         new(LicenseState.Invalid, null, message + " — вход на сервер запрещён до установки действующей лицензии",
             UnlicensedPlayerLimit);
 
-    /// <summary>
-    /// Прежний ключ портала. Действующий портал flovmp.ru на 21.09.2026 всё ещё
-    /// подписывает лицензии и lease им, а новый ключ (AuthorityPublicKeyPem)
-    /// заведён в коде раньше, чем на портале. Без переходного периода ни один
-    /// сервер не принял бы выданную порталом лицензию. Поддельная лицензия со
-    /// старым ключом не проходит онлайн-проверку портала (ключа нет в базе —
-    /// вход закрывается). После перевода портала на новый ключ переходный
-    /// период выключается: FLOVMP_LICENSE_LEGACY_KEY=off, затем ключ удаляется.
-    /// </summary>
-    public const string LegacyAuthorityPublicKeyPem = """
-        -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuKirQxSjX3hcS80XVFA8
-        oOZPEfa2ZzSOMj1B3QgpcmjU/lI++TOKpmvhx/JGleQth1uQygJ8prFYuD3wTNvR
-        4ZTO8lrSNS4T/J+gIQQZiXZofJCXrOnf3Bzx5e/1+XCthJkyBZyQUFI0Xs/eIEtn
-        gbqsdHpzsTwUIZhhjZv3Y72G9dV6vRcXXu2nZRbA1AjOMRR6BnNh5ByUjt5aUSt2
-        avAWjPd5YZMFNvaVvcponjbhK4cxhV1W3a0JuXE/3gNYGBE+3/6I+lN+fylJQkKj
-        5kz7MTFu7zhlIU7NfHA10hdKibdLRiDjAUXV9bhKL1mrYnWJUSkUctgunOUuxxOQ
-        HQIDAQAB
-        -----END PUBLIC KEY-----
-        """;
-
-    public static bool LegacyKeyAccepted =>
-        !string.Equals(Environment.GetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY")?.Trim(), "off",
-            StringComparison.OrdinalIgnoreCase);
-
     public static bool VerifyAuthoritySignature(byte[] payload, byte[] signature, string? publicKeyPem = null)
     {
         if (publicKeyPem is not null) return Verify(publicKeyPem, payload, signature);
-        return Verify(AuthorityPublicKeyPem, payload, signature) ||
-               (LegacyKeyAccepted && Verify(LegacyAuthorityPublicKeyPem, payload, signature));
+        // Ключам портала flovmp.ru больше не доверяем: закрытая часть одного из
+        // них попала в репозиторий, подписать ею лицензию мог кто угодно.
+        return Verify(AuthorityPublicKeyPem, payload, signature);
     }
 
     private static bool Verify(string pem, byte[] payload, byte[] signature)

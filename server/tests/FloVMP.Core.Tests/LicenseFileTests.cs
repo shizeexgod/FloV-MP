@@ -145,45 +145,14 @@ public sealed class LicenseFileTests : IDisposable
         Assert.Equal(Path.Combine(_dir, LicenseFile.FileName), LicenseFile.Locate(serverDir));
     }
 
-    [Fact]
-    public void Real_portal_file_verifies_with_embedded_authority_key()
+    [Theory]
+    [InlineData("portal-license.flv")]
+    [InlineData("portal-license-legacy-key.flv")]
+    public void Licenses_signed_by_the_old_portal_keys_are_rejected(string fixture)
     {
-        // Файл сгенерирован кодом портала (createSignedLicenseFlv) его ключом:
-        // проверка совместимости формата и встроенного открытого ключа.
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license.flv");
-        var s = LicenseFile.Evaluate(path, Now);
-        Assert.Equal(LicenseState.Valid, s.State);
-        Assert.Equal("FLV-TEST-0001-0001", s.Info!.LicenseKey);
-        Assert.Equal(500, s.PlayerLimit);
-    }
-
-    [Fact]
-    public void License_from_live_portal_with_previous_key_is_accepted_during_transition()
-    {
-        // Лицензия, выданная действующим порталом (ещё старым ключом): без
-        // переходного периода ни один проданный сервер не пустил бы игроков.
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license-legacy-key.flv");
-        var s = LicenseFile.Evaluate(path, Now);
-        Assert.Equal(LicenseState.Valid, s.State);
-        Assert.Equal("FLV-34C6-24FA-1E9F", s.Info!.LicenseKey);
-    }
-
-    [Fact]
-    public void Previous_key_can_be_switched_off_after_portal_rotation()
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license-legacy-key.flv");
-        var before = Environment.GetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY");
-        try
-        {
-            Environment.SetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY", "off");
-            Assert.Equal(LicenseState.Invalid, LicenseFile.Evaluate(path, Now).State);
-            // Новым ключом подписанная — по-прежнему действует.
-            var fresh = Path.Combine(AppContext.BaseDirectory, "Fixtures", "portal-license.flv");
-            Assert.Equal(LicenseState.Valid, LicenseFile.Evaluate(fresh, Now).State);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("FLOVMP_LICENSE_LEGACY_KEY", before);
-        }
+        // Закрытая часть ключа портала попала в репозиторий: такой подписи
+        // сервер больше не верит, лицензии выдаёт только сервер лицензий на VDS.
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture);
+        Assert.Equal(LicenseState.Invalid, LicenseFile.Evaluate(path, Now).State);
     }
 }

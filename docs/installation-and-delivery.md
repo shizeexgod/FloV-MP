@@ -35,7 +35,7 @@ powershell -ExecutionPolicy Bypass -File .\flovmp-get.ps1 -Key FLV-XXXX-XXXX-XXX
 `--owner-sc`, `--no-db`...) передаются как есть.
 
 Сервер раздачи выдаёт пакет только по действующему ключу из своего списка
-(`flovmp-dist keys ...`, см. раздел «Раздача пакетов» ниже). Неверный ключ —
+(`flovmp-license new ...`, см. `docs/license-server.md`). Неверный ключ —
 отказ с понятной причиной; 20 неверных попыток за 10 минут с одного IP — пауза.
 
 ### Способ 2: из архива
@@ -52,30 +52,19 @@ systemd; повторный запуск из пакета новой верси
 копией и откатом при неудачном старте. Файлы владельца (`config/flovmp.env`,
 `server/server.toml`, `server/config/*`, ресурсы, данные) не трогаются никогда.
 
-С ключом установщик записывает его в `config/flovmp.env` и получает подписанный
-`license.flv` с портала. Сервер проверяет подпись локально и периодически
-получает online lease; при сбое сети действует ограниченный offline grace
-(по умолчанию 24 часа). При отзыве ключа новые подключения блокируются сразу.
+Установщик записывает ключ в `config/flovmp.env`; сервер при первом запуске
+активирует его у сервера лицензий на VDS и получает подписанный `license.flv`.
+Дальше каждые 5 минут — подтверждение на 24 часа. Приостановка или отзыв
+ключа закрывают вход при следующей проверке.
 
 **Порты:** игра — TCP+UDP `7788`; голос alt:V — UDP `7895`; клиенты GTA Legacy
 1.0.3889.0 и их голос — TCP+UDP `7798` (порт игры + 10). Установщик Linux
 открывает их в ufw сам.
 
-### Раздача пакетов (для владельца платформы)
+### Ключи и раздача (для владельца платформы)
 
-Один раз на VDS: `sudo bash scripts/distribution/setup-vds.sh <папка с flovmp_dist.py, get.sh, get.ps1>`.
-
-Выпуск версии:
-
-1. `python scripts/pack_server.py` — пакеты в `dist/server`.
-2. `python scripts/distribution/sign_release.py` — подписанный релиз в `dist/release`
-   (первый раз: `--init-key`; закрытый ключ `%USERPROFILE%\.flovmp\release-signing.pem`
-   хранить в резервной копии — без него новые релизы загрузчики не примут).
-3. Залить папку на VDS и `sudo flovmp-dist publish <папка>`.
-
-Ключи покупателей: `sudo flovmp-dist keys add FLV-XXXX-XXXX-XXXX --note "Проект" [--expires 2027-09-21] [--os linux]`,
-`keys list`, `keys disable|enable|remove`. Журнал скачиваний —
-`/var/lib/flovmp-dist/downloads.log` (вместо ключа — его отпечаток).
+Ключи, активации серверов и раздачу пакетов ведёт служба `flovmp-license` на VDS
+(MariaDB `flovmp_licensing`). Установка, команды и выпуск версий — `docs/license-server.md`.
 
 ## 2. Source-kit
 

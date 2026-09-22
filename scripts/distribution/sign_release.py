@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Подготовить и подписать релиз для раздачи (flovmp_dist.py publish).
+Подготовить и подписать релиз для раздачи (flovmp-license publish).
 
   python scripts/distribution/sign_release.py                 # из dist/server (после pack_server.py)
   python scripts/distribution/sign_release.py --out dist/release
@@ -120,7 +120,7 @@ def main():
         print("{}: {} подписан".format(os_name, name))
     for loader in ("get.sh", "get.ps1"):
         shutil.copy2(os.path.join(REPO, "scripts", "distribution", loader), os.path.join(args.out, loader))
-    print("\nГотово: {}\nЗалить на VDS и опубликовать: flovmp-dist publish <папка>".format(args.out))
+    print("\nГотово: {}\nЗалить на VDS и опубликовать: sudo flovmp-license publish <папка>".format(args.out))
 
 
 if __name__ == "__main__":

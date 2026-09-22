@@ -126,7 +126,7 @@ FloV:MP — установщик игрового сервера
 
 Лицензия и пакет:
   --key <ключ>              Ключ лицензии (сохраняется в config/flovmp.env)
-  --portal <URL>            Адрес портала (для скачивания пакета/лицензии)
+  --portal <URL>            Адрес сервера лицензий FloV:MP (по умолчанию http://188.127.229.224)
   --package <файл.tar.gz>   Установить из указанного архива
   --package-url <URL>       Скачать архив по ссылке
   --sha256 <хэш>            Проверить хэш скачанного архива
@@ -166,7 +166,8 @@ RUN_AS="flovmp"
 DO_START=1
 DO_FIREWALL=1
 LICENSE_KEY=""
-PORTAL_URL="${FLOVMP_PORTAL_URL:-https://flovmp.ru}"
+DEFAULT_LICENSE_URL="http://188.127.229.224"
+PORTAL_URL="${FLOVMP_LICENSE_URL:-$DEFAULT_LICENSE_URL}"
 PACKAGE_FILE=""
 PACKAGE_URL=""
 PACKAGE_SHA256=""
@@ -370,7 +371,8 @@ if [ -z "$SRC_DIR" ] || [ -n "$PACKAGE_FILE" ] || [ -n "$PACKAGE_URL" ]; then
     cp "$PACKAGE_FILE" "$WORK/package.tar.gz"
   else
     command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null; } || die "нужен curl"
-    URL="${PACKAGE_URL:-$PORTAL_URL/api/v1/distribution/download-latest?os=linux}"
+    [ -n "$PACKAGE_URL" ] || [ -n "$LICENSE_KEY" ] || die "для скачивания пакета нужен ключ: --key FLV-..."
+    URL="${PACKAGE_URL:-$PORTAL_URL/api/v1/distribution/download-latest?os=linux&key=$LICENSE_KEY}"
     info "Скачивание: $URL"
     curl -fL --retry 3 --connect-timeout 15 -o "$WORK/package.tar.gz" "$URL" || \
       die "не удалось скачать пакет. Скачайте архив сервера из личного кабинета, распакуйте и запустите ./install.sh из распакованной папки"
@@ -620,16 +622,13 @@ fi
 { read -r DB_NAME; read -r DB_USER; read -r DB_PASSWORD; read -r SETUP_TOKEN; } < "$INSTALL_DIR/.install-env.tmp"
 rm -f "$INSTALL_DIR/.install-env.tmp"
 
-if [ -n "$LICENSE_KEY" ] && [ ! -s "$INSTALL_DIR/license.flv" ]; then
-  if curl -fsS --max-time 20 -o "$INSTALL_DIR/license.flv.tmp" \
-       "$PORTAL_URL/api/v1/licenses/download-by-key?key=$LICENSE_KEY" 2>/dev/null && [ -s "$INSTALL_DIR/license.flv.tmp" ]; then
-    mv "$INSTALL_DIR/license.flv.tmp" "$INSTALL_DIR/license.flv"
-    chmod 600 "$INSTALL_DIR/license.flv" 2>/dev/null || true
-    ok "файл лицензии получен с портала"
-  else
-    rm -f "$INSTALL_DIR/license.flv.tmp"
-    warn "файл лицензии с портала получить не удалось — сервер установится, но вход игроков будет запрещён до появления действующего license.flv"
-  fi
+# Ключ активирует сам сервер при запуске: он знает ID своей установки, по
+# которому сервер лицензий считает серверы на ключ. Здесь — только адрес.
+[ "$PORTAL_URL" = "$DEFAULT_LICENSE_URL" ] || set_env_var FLOVMP_LICENSE_URL "$PORTAL_URL"
+if [ -n "$LICENSE_KEY" ]; then
+  ok "ключ лицензии сохранён — сервер активирует его при запуске"
+elif [ ! -s "$INSTALL_DIR/license.flv" ]; then
+  warn "ключ лицензии не указан: вход игроков закрыт, пока не выполните в консоли сервера: license activate FLV-..."
 fi
 
 if [ -z "$PUBLIC_HOST" ]; then

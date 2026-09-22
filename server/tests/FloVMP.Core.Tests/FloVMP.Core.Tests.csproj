@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FloVMP.Core\FloVMP.Core.csproj" />
     <ProjectReference Include="..\..\src\FloVMP.ServerHost\FloVMP.ServerHost.csproj" />
+    <ProjectReference Include="..\..\src\FloVMP.LicenseAuthority\FloVMP.LicenseAuthority.csproj" />
   </ItemGroup>
 
 </Project>
