@@ -25,7 +25,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 MACHINE = os.environ.get("REDL_MACHINE", "avds-rg1s7j")
-TOKEN = os.environ.get("REDL_TOKEN", "")
+TOKEN = os.environ.get("REDL_TOKEN", "").strip()
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUNDLE = os.path.join(REPO, "dist", "vds")
 REMOTE = "/root/flovmp-vds"
@@ -101,8 +101,8 @@ def check(cond, ok, fail):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    if not TOKEN:
-        sys.exit("задайте REDL_TOKEN (токен из панели redl.io)")
+    if not re.fullmatch(r"redl_pat_[0-9a-f]{20,}", TOKEN.strip()):
+        sys.exit("REDL_TOKEN — токен из панели redl.io вида redl_pat_... (сейчас задано что-то другое)")
     if not os.path.isfile(os.path.join(BUNDLE, "flovmp-license", "flovmp-license.dll")):
         sys.exit("нет комплекта: python scripts/distribution/make_vds_bundle.py --with-key")
 
