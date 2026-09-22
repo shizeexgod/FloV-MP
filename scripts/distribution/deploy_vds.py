@@ -29,8 +29,10 @@ TOKEN = os.environ.get("REDL_TOKEN", "").strip()
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUNDLE = os.path.join(REPO, "dist", "vds")
 REMOTE = "/root/flovmp-vds"
-# REDL надёжно принимает тело до ~100 КБ (замер старого загрузчика): 45 КБ с запасом.
-CHUNK = 45_000
+# У текущего REDL фактический предел JSON-тела ниже заявленного файлового
+# лимита: 280 КБ проходит, 320 КБ возвращает command_too_long. 250 КБ оставляет
+# запас на JSON и ускоряет публикацию больших релизов в 5+ раз против старых 45 КБ.
+CHUNK = 250_000
 
 
 def call(path, payload, timeout=180):
@@ -65,14 +67,26 @@ def upload(local, remote):
     data = open(local, "rb").read()
     digest = hashlib.sha256(data).hexdigest()
     # Уже залит (повторный запуск после обрыва) — не гоняем заново.
-    have = (run("sha256sum '{}' 2>/dev/null | cut -d' ' -f1".format(remote), quiet=True).get("output") or "").strip()
+    have = ""
+    try:
+        probe = call("/run", {"machine": MACHINE,
+                              "command": "sha256sum '{}' 2>/dev/null | cut -d' ' -f1".format(remote),
+                              "timeoutSec": 20}, timeout=35)
+        if isinstance(probe.get("exitCode"), int):
+            have = (probe.get("output") or "").strip()
+    except Exception:
+        # Файловый канал REDL может работать, пока SSH машины перегружен.
+        # В таком случае безопасно перезаписываем временные куски и сверяем
+        # итоговый файл, когда командный канал восстановится.
+        pass
     if have == digest:
         print("  {} — уже на VDS".format(os.path.relpath(local, BUNDLE)), flush=True)
         return
     b64 = base64.b64encode(data).decode()
     parts = [b64[i:i + CHUNK] for i in range(0, len(b64), CHUNK)] or [""]
-    stage = "/tmp/fu-" + hashlib.sha1(remote.encode()).hexdigest()[:12]
-    run("rm -rf {s}.d {s}.bin && mkdir -p {s}.d".format(s=stage), quiet=True)
+    # Digest в имени делает staging неизменяемым: старые куски другого файла
+    # не попадут в сборку, а /write сам создаёт промежуточную папку.
+    stage = "/tmp/fu-{}-{}".format(hashlib.sha1(remote.encode()).hexdigest()[:12], digest[:12])
 
     last_error = [""]
 
@@ -91,9 +105,8 @@ def upload(local, remote):
     todo = list(range(len(parts)))
     for _ in range(6):
         with ThreadPoolExecutor(3) as ex:
-            list(ex.map(put, todo))
-        have = {int(x) for x in (run("ls {}.d".format(stage), quiet=True).get("output") or "").split() if x.isdigit()}
-        todo = [i for i in range(len(parts)) if i not in have]
+            results = list(ex.map(put, todo))
+        todo = [i for i, uploaded in zip(todo, results) if not uploaded]
         if not todo:
             break
     if todo:

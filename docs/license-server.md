@@ -71,7 +71,10 @@ flovmp-license events [FLV-...] --limit 100
 1. `python scripts/pack_server.py` — пакеты в `dist/server`.
 2. `python scripts/distribution/sign_release.py` — подписанный релиз в `dist/release`
    (ключ релизов `%USERPROFILE%\.flovmp\release-signing.pem`, тоже с резервной копией).
-3. Залить папку релиза на VDS и выполнить `sudo flovmp-license publish <папка>`.
+3. Залить и опубликовать через REDL:
+   `python scripts/distribution/publish_release_vds.py dist/release-<версия>`.
+   Скрипт возобновляет загрузку, сверяет удалённый SHA-256 и вызывает
+   `flovmp-license publish`; вручную копировать большие архивы не требуется.
 
 Покупатель скачивает пакет только по действующему ключу: `get.sh` / `get.ps1`
 или `install.sh` одной командой (см. `INSTALL.md` в пакете).
