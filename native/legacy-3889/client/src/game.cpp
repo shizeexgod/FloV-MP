@@ -117,6 +117,7 @@ namespace flov::game
             uint32_t tagColor = 0xFFFFFF;
             bool chat = true, voice = true, loading = true;
             int voiceKey = 'N', espKey = VK_F3, noclipKey = VK_F4, waypointKey = VK_F5;
+            float vehPower = 1.f, vehTorque = 1.f;   // множители двигателя из настроек сервера
         } g_cfg;
 
         void NotifyEsp();
@@ -644,6 +645,22 @@ namespace flov::game
                 n::SET_RANDOM_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
             }
             if (!g_cfg.parked) n::SET_PARKED_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(0.f);
+            // Мощность машин владелец задаёт настройкой: множители держатся
+            // только кадр, поэтому выставляем их каждый кадр своему транспорту.
+            if (g_cfg.vehPower != 1.f || g_cfg.vehTorque != 1.f)
+            {
+                const Ped me = n::PLAYER_PED_ID();
+                if (n::IS_PED_IN_ANY_VEHICLE(me, FALSE))
+                {
+                    const Vehicle veh = n::GET_VEHICLE_PED_IS_IN(me, FALSE);
+                    if (veh && n::DOES_ENTITY_EXIST(veh))
+                    {
+                        n::SET_VEHICLE_ENGINE_POWER_MULTIPLIER(veh, (g_cfg.vehPower - 1.f) * 100.f);
+                        n::SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(veh, g_cfg.vehTorque);
+                    }
+                }
+            }
+
             const Player pl = n::PLAYER_ID();
             if (!g_cfg.police)
             {
@@ -1050,6 +1067,8 @@ namespace flov::game
             c.tagVoice = Bool("nametags.voice_icon"); c.tagAdmin = Bool("nametags.admin_badge");
             c.tagColor = Rgb("nametags.color"); c.tagSpace = Bool("nametags.underscore_to_space");
             c.chat = Bool("chat.enabled"); c.voice = Bool("voice.enabled"); c.loading = Bool("loading.enabled");
+            c.vehPower = std::clamp(Float("vehicles.power", 1.f), 0.1f, 10.f);
+            c.vehTorque = std::clamp(Float("vehicles.torque", 1.f), 0.1f, 10.f);
             c.voiceKey = Key("voice.key", 'N'); c.espKey = Key("keys.esp", VK_F3);
             c.noclipKey = Key("keys.noclip", VK_F4); c.waypointKey = Key("keys.waypoint", VK_F5);
 

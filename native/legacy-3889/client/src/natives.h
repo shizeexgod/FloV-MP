@@ -259,6 +259,8 @@ inline Object CREATE_OBJECT_NO_OFFSET(Hash objectHash, float posX, float posY, f
 inline Blip ADD_BLIP_FOR_COORD(float x, float y, float z) { return nv::invoke<Blip>(0x5A039BB0BCA604B6, x, y, z); }
 inline void BEGIN_TEXT_COMMAND_SET_BLIP_NAME(char* gxtentry) { nv::invoke<void>(0xF9113A30DE5C6670, gxtentry); }
 inline void END_TEXT_COMMAND_SET_BLIP_NAME(Blip blip) { nv::invoke<void>(0xBC38B49BCB83BC9B, blip); }
+inline void SET_VEHICLE_ENGINE_POWER_MULTIPLIER(Vehicle vehicle, float value) { nv::invoke<void>(0x93A3996368C94158, vehicle, value); }
+inline void SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(Vehicle vehicle, float value) { nv::invoke<void>(0xB59E4BD37AE292DB, vehicle, value); }
 inline void ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(char* text) { nv::invoke<void>(0x6C188BE134E074AA, text); }
 inline void DRAW_MARKER(int type, float x, float y, float z, float dirX, float dirY, float dirZ, float rotX, float rotY, float rotZ, float scaleX, float scaleY, float scaleZ, int colorR, int colorG, int colorB, int alpha, BOOL bobUpAndDown, BOOL faceCamera, int p19, BOOL rotate, char* textureDict, char* textureName, BOOL drawOnEnts) { nv::invoke<void>(0x28477EC23D892089, type, x, y, z, dirX, dirY, dirZ, rotX, rotY, rotZ, scaleX, scaleY, scaleZ, colorR, colorG, colorB, alpha, bobUpAndDown, faceCamera, p19, rotate, textureDict, textureName, drawOnEnts); }
 inline void TASK_START_SCENARIO_IN_PLACE(Ped ped, char* scenarioName, int unkDelay, BOOL playEnterAnim) { nv::invoke<void>(0x142A02425FF02BD9, ped, scenarioName, unkDelay, playEnterAnim); }
