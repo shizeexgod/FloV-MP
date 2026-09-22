@@ -34,7 +34,7 @@ def main():
     subprocess.run(["dotnet", "publish", os.path.join(REPO, "server", "src", "FloVMP.LicenseAuthority"),
                     "-c", "Release", "-o", app, "--nologo", "-v", "q"], check=True)
     for f in os.listdir(app):
-        if f.endswith(".pdb"):
+        if f.endswith((".pdb", ".exe")):  # .exe — запускалка Windows, на VDS не нужна
             os.remove(os.path.join(app, f))
     for f in ("setup-vds.sh", "check-vds.sh", "get.sh", "get.ps1"):
         data = open(os.path.join(HERE, f), "rb").read()
