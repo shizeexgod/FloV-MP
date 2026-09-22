@@ -28,6 +28,7 @@ public sealed class LicenseService
     private readonly ILicenseStore _store;
     private readonly RSA _signer;
     private readonly Func<DateTime> _now;
+    private readonly object _activationGate = new();
 
     public LicenseService(ILicenseStore store, RSA signer, Func<DateTime>? now = null)
     {
@@ -62,7 +63,16 @@ public sealed class LicenseService
         var now = _now();
         var expiry = license.ExpiresAt ?? LifetimeExpiry;
         var until = now + LeaseLifetime < expiry ? now + LeaseLifetime : expiry;
-        var lease = Sign(new { licenseKey = license.Key, valid = true, issuedAt = now, validUntil = until, reason = "" });
+        var normalizedServerId = NormalizeServerId(serverId, ip);
+        var lease = Sign(new
+        {
+            licenseKey = license.Key,
+            serverId = normalizedServerId,
+            valid = true,
+            issuedAt = now,
+            validUntil = until,
+            reason = "",
+        });
         return Json(200, new
         {
             valid = true,
@@ -98,8 +108,7 @@ public sealed class LicenseService
         var key = NormalizeKey(rawKey);
         if (key is null) return (null, Deny(400, "неверный формат ключа (FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX)"));
         // Старые сборки не присылают ID установки — считаем сервер по IP.
-        var serverId = (rawServerId ?? "").Trim().ToLowerInvariant();
-        if (serverId.Length == 0) serverId = "ip:" + ip;
+        var serverId = NormalizeServerId(rawServerId, ip);
         if (!ServerIdShape.IsMatch(serverId)) return (null, Deny(400, "неверный ID сервера"));
 
         var license = _store.FindByKey(key);
@@ -115,34 +124,60 @@ public sealed class LicenseService
             return (null, Deny(403, refusal));
         }
 
-        var activation = _store.FindActivation(license!.Id, serverId);
-        if (activation is null)
+        if (slots < 0) return (null, Deny(400, "число слотов не может быть отрицательным"));
+        if (slots > license!.MaxPlayers)
         {
-            var used = _store.Activations(license.Id).Count;
-            if (used >= license.MaxServers)
-            {
-                var msg = $"по ключу уже работает серверов: {used} из {license.MaxServers} — отвяжите старый сервер или увеличьте лимит";
-                Log(license, key, what + ":лимит", ip, serverId, msg);
-                return (null, Deny(403, msg));
-            }
-            _store.InsertActivation(new ActivationRecord
-            {
-                LicenseId = license.Id, ServerId = serverId, Ip = ip, Version = Short(version, 32),
-                Slots = Math.Max(0, slots), FirstSeen = now, LastSeen = now,
-            });
-            if (license.Status == LicenseStatus.Issued)
-            {
-                license.Status = LicenseStatus.Active;
-                license.ActivatedAt = now;
-                _store.Update(license);
-            }
-            Log(license, key, "активация", ip, serverId, $"сервер {used + 1} из {license.MaxServers}");
+            var msg = $"заявлено слотов: {slots}, лицензия разрешает не более {license.MaxPlayers}";
+            Log(license, key, what + ":слоты", ip, serverId, msg);
+            return (null, Deny(403, msg));
         }
-        else
+
+        // HttpApi обслуживает запросы параллельно. Без общей секции два первых
+        // запроса могли одновременно увидеть свободный лимит и создать две
+        // активации для ключа с maxServers=1.
+        lock (_activationGate)
         {
-            _store.TouchActivation(activation.Id, ip, Short(version, 32), Math.Max(0, slots), now);
+            var activation = _store.FindActivation(license.Id, serverId);
+            if (activation is null)
+            {
+                var used = _store.Activations(license.Id).Count;
+                if (used >= license.MaxServers)
+                {
+                    var msg = $"по ключу уже работает серверов: {used} из {license.MaxServers} — отвяжите старый сервер или увеличьте лимит";
+                    Log(license, key, what + ":лимит", ip, serverId, msg);
+                    return (null, Deny(403, msg));
+                }
+                _store.InsertActivation(new ActivationRecord
+                {
+                    LicenseId = license.Id, ServerId = serverId, Ip = ip, Version = Short(version, 32),
+                    Slots = slots, FirstSeen = now, LastSeen = now,
+                });
+                if (license.Status == LicenseStatus.Issued)
+                {
+                    license.Status = LicenseStatus.Active;
+                    license.ActivatedAt = now;
+                    _store.Update(license);
+                }
+                Log(license, key, "активация", ip, serverId, $"сервер {used + 1} из {license.MaxServers}");
+            }
+            else
+            {
+                if (!string.Equals(activation.Ip, ip, StringComparison.OrdinalIgnoreCase))
+                {
+                    var msg = $"ID сервера уже привязан к другому IP ({activation.Ip}); отвяжите сервер перед переносом";
+                    Log(license, key, what + ":ip", ip, serverId, msg);
+                    return (null, Deny(403, msg));
+                }
+                _store.TouchActivation(activation.Id, ip, Short(version, 32), slots, now);
+            }
         }
         return (license, null);
+    }
+
+    private static string NormalizeServerId(string? rawServerId, string ip)
+    {
+        var serverId = (rawServerId ?? "").Trim().ToLowerInvariant();
+        return serverId.Length == 0 ? "ip:" + ip : serverId;
     }
 
     private static string Because(LicenseRecord l) => l.StatusReason.Length > 0 ? ": " + l.StatusReason : "";

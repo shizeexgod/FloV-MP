@@ -24,6 +24,7 @@ public sealed class LicenseRemoteVerifierTests
     {
         LicenseKey = Key,
         LicenseVerifyUrl = "https://portal.invalid/api/v1/license/verify",
+        ServerId = "srv-a",
         OfflineGraceHours = 24,
     };
 
@@ -58,6 +59,7 @@ public sealed class LicenseRemoteVerifierTests
         var lease = new
         {
             licenseKey = Key,
+            serverId = "srv-a",
             valid = true,
             issuedAt = DateTime.UtcNow.AddMinutes(-1),
             validUntil = DateTime.UtcNow.AddHours(12),
@@ -109,6 +111,7 @@ public sealed class LicenseRemoteVerifierTests
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
             licenseKey = Key,
+            serverId = "srv-a",
             valid = true,
             issuedAt = DateTime.UtcNow.AddMinutes(-1),
             validUntil = DateTime.UtcNow.AddHours(12),
@@ -119,9 +122,10 @@ public sealed class LicenseRemoteVerifierTests
         try
         {
             LicenseLeaseCache.Save(path, Convert.ToBase64String(payload), Convert.ToBase64String(signature));
-            Assert.True(LicenseLeaseCache.TryRead(path, Key, out var until, key.ExportSubjectPublicKeyInfoPem()));
+            Assert.True(LicenseLeaseCache.TryRead(path, Key, "srv-a", out var until, key.ExportSubjectPublicKeyInfoPem()));
             Assert.True(until > DateTime.UtcNow);
-            Assert.False(LicenseLeaseCache.TryRead(path, "FLV-OTHER-KEY", out _, key.ExportSubjectPublicKeyInfoPem()));
+            Assert.False(LicenseLeaseCache.TryRead(path, "FLV-OTHER-KEY", "srv-a", out _, key.ExportSubjectPublicKeyInfoPem()));
+            Assert.False(LicenseLeaseCache.TryRead(path, Key, "srv-b", out _, key.ExportSubjectPublicKeyInfoPem()));
         }
         finally
         {

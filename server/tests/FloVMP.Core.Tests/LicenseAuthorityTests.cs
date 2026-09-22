@@ -30,7 +30,14 @@ public sealed class LicenseAuthorityTests
         public List<ActivationRecord> Activations(long id) => Acts.Where(a => a.LicenseId == id).ToList();
         public ActivationRecord? FindActivation(long id, string s) => Acts.FirstOrDefault(a => a.LicenseId == id && a.ServerId == s);
         public void InsertActivation(ActivationRecord a) { a.Id = ++_id; Acts.Add(a); }
-        public void TouchActivation(long id, string ip, string v, int slots, DateTime at) => Acts.First(a => a.Id == id).LastSeen = at;
+        public void TouchActivation(long id, string ip, string v, int slots, DateTime at)
+        {
+            var a = Acts.First(a => a.Id == id);
+            a.Ip = ip;
+            if (v.Length > 0) a.Version = v;
+            if (slots > 0) a.Slots = slots;
+            a.LastSeen = at;
+        }
         public int RemoveActivations(long id, string? s) => Acts.RemoveAll(a => a.LicenseId == id && (s is null || a.ServerId == s));
         public void AddEvent(EventRecord e) => Log.Add(e);
         public List<EventRecord> Events(long? id, int limit) => Log.Where(e => id is null || e.LicenseId == id).Take(limit).ToList();
@@ -101,6 +108,49 @@ public sealed class LicenseAuthorityTests
         Assert.Equal(200, Service().Download(l.Key, "srv-b", "ip").Status);
     }
 
+    [Fact]
+    public void Reusing_a_server_id_from_another_ip_is_refused_until_unbound()
+    {
+        var l = Issue();
+        Assert.Equal(200, Service().Verify(l.Key, "srv-a", "1.2.3.4", "1.0", 100).Status);
+
+        var moved = Service().Verify(l.Key, "srv-a", "5.6.7.8", "1.0", 100);
+        Assert.Equal(403, moved.Status);
+        Assert.Contains("другому IP", moved.Body);
+
+        _store.RemoveActivations(l.Id, "srv-a");
+        Assert.Equal(200, Service().Verify(l.Key, "srv-a", "5.6.7.8", "1.0", 100).Status);
+    }
+
+    [Fact]
+    public void Configured_slots_cannot_exceed_the_license_limit()
+    {
+        var l = Issue();
+        var reply = Service().Verify(l.Key, "srv", "ip", "1.0", 501);
+        Assert.Equal(403, reply.Status);
+        Assert.Contains("не более 500", reply.Body);
+        Assert.Empty(_store.Acts);
+    }
+
+    [Fact]
+    public async Task Parallel_first_activations_cannot_overrun_the_server_limit()
+    {
+        var l = Issue(servers: 1);
+        var service = Service();
+        var gate = new ManualResetEventSlim(false);
+        var calls = Enumerable.Range(0, 16).Select(i => Task.Run(() =>
+        {
+            gate.Wait();
+            return service.Verify(l.Key, $"srv-{i}", $"10.0.0.{i + 1}", "1.0", 100).Status;
+        })).ToArray();
+
+        gate.Set();
+        var statuses = await Task.WhenAll(calls);
+        Assert.Equal(1, statuses.Count(s => s == 200));
+        Assert.Equal(15, statuses.Count(s => s == 403));
+        Assert.Single(_store.Acts);
+    }
+
     [Theory]
     [InlineData(AuthorityStatus.Suspended, "приостановлен")]
     [InlineData(AuthorityStatus.Revoked, "отозван")]
@@ -149,6 +199,36 @@ public sealed class LicenseAuthorityTests
         l.ExpiresAt = _now.AddDays(1000);
         var renewed = await new LicenseRemoteVerifier(http, Pub).VerifyAsync(config, slots: 500);
         Assert.Contains(_now.AddDays(1000).ToString("dd.MM.yyyy"), LicenseFile.EvaluateContent(renewed.LicenseFlv!, _now, l.Key, Pub).Message);
+    }
+
+    [Fact]
+    public async Task Lease_cannot_be_replayed_by_another_server()
+    {
+        var l = Issue(servers: 2);
+        var service = Service();
+        string? responseBody = null;
+        using var firstHttp = new HttpClient(new Handler(_ =>
+        {
+            var r = service.Verify(l.Key, "srv-a", "1.2.3.4", "1.0", 100);
+            responseBody = r.Body;
+            return new HttpResponseMessage((HttpStatusCode)r.Status) { Content = new StringContent(r.Body) };
+        }));
+        var first = await new LicenseRemoteVerifier(firstHttp, Pub).VerifyAsync(new LicenseConfig
+        {
+            LicenseKey = l.Key, LicenseVerifyUrl = "http://authority.invalid/v", ServerId = "srv-a",
+        });
+        Assert.True(first.Valid);
+
+        using var replayHttp = new HttpClient(new Handler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseBody!),
+        }));
+        var replay = await new LicenseRemoteVerifier(replayHttp, Pub).VerifyAsync(new LicenseConfig
+        {
+            LicenseKey = l.Key, LicenseVerifyUrl = "http://authority.invalid/v", ServerId = "srv-b",
+        });
+        Assert.False(replay.Valid);
+        Assert.Contains("другому серверу", replay.Message);
     }
 
     [Fact]

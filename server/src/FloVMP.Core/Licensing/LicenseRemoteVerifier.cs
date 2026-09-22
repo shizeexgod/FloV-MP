@@ -83,6 +83,9 @@ public sealed class LicenseRemoteVerifier
             if (!lease.GetProperty("valid").GetBoolean() ||
                 !string.Equals(lease.GetProperty("licenseKey").GetString()?.Trim(), config.LicenseKey.Trim(), StringComparison.OrdinalIgnoreCase))
                 return new(true, false, true, "online lease отозван", checkedAt, null);
+            if (!lease.TryGetProperty("serverId", out var leaseServerId) ||
+                !string.Equals(leaseServerId.GetString()?.Trim(), config.ServerId.Trim(), StringComparison.OrdinalIgnoreCase))
+                return new(true, false, false, "online lease выдан другому серверу", checkedAt, null);
             var until = lease.GetProperty("validUntil").GetDateTime().ToUniversalTime();
             if (until <= checkedAt)
                 return new(true, false, false, "online lease уже истёк", checkedAt, until);

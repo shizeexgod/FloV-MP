@@ -305,8 +305,9 @@ public partial class StarterResource : Resource
 
         var key = local.Info?.LicenseKey ?? Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY") ?? "";
         var cachePath = FloVMP.Core.Licensing.LicenseLeaseCache.PathFor(licensePath);
+        var config = FloVMP.Core.Licensing.LicenseConfig.FromEnvironment();
         if (!string.IsNullOrWhiteSpace(key) &&
-            FloVMP.Core.Licensing.LicenseLeaseCache.TryRead(cachePath, key, out var cachedUntil) &&
+            FloVMP.Core.Licensing.LicenseLeaseCache.TryRead(cachePath, key, config.ServerId, out var cachedUntil) &&
             cachedUntil > DateTime.UtcNow)
             return local;
 

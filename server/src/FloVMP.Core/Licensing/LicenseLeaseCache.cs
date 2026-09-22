@@ -25,7 +25,7 @@ public static class LicenseLeaseCache
         TrySetPrivatePermissions(path);
     }
 
-    public static bool TryRead(string path, string expectedKey, out DateTime validUntilUtc, string? publicKeyPem = null)
+    public static bool TryRead(string path, string expectedKey, string expectedServerId, out DateTime validUntilUtc, string? publicKeyPem = null)
     {
         validUntilUtc = default;
         try
@@ -38,6 +38,8 @@ public static class LicenseLeaseCache
             var root = lease.RootElement;
             if (!root.GetProperty("valid").GetBoolean()) return false;
             if (!string.Equals(root.GetProperty("licenseKey").GetString()?.Trim(), expectedKey.Trim(), StringComparison.OrdinalIgnoreCase)) return false;
+            if (!root.TryGetProperty("serverId", out var serverId) ||
+                !string.Equals(serverId.GetString()?.Trim(), expectedServerId.Trim(), StringComparison.OrdinalIgnoreCase)) return false;
             validUntilUtc = root.GetProperty("validUntil").GetDateTime().ToUniversalTime();
             return true;
         }
