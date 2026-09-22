@@ -123,7 +123,8 @@ def main():
             upload(local, REMOTE + "/" + os.path.relpath(local, BUNDLE).replace(os.sep, "/"))
 
     step("Установка службы")
-    r = run("bash {0}/setup-vds.sh {0} 2>&1 | tail -30".format(REMOTE), t=900)
+    # Код возврата — самой установки, а не tail: провал nginx не должен сойти за успех.
+    r = run("bash {0}/setup-vds.sh {0} > /tmp/flovmp-setup.log 2>&1; rc=$?; tail -40 /tmp/flovmp-setup.log; exit $rc".format(REMOTE), t=900)
     if r.get("exitCode") != 0:
         sys.exit("setup-vds.sh завершился с ошибкой")
     if os.path.exists(os.path.join(BUNDLE, "authority.pem")):
@@ -139,7 +140,7 @@ def main():
     base = "http://127.0.0.1"
 
     def http(cmd):
-        o = run(cmd + " -s -o /tmp/la-body -w '%{http_code}'; echo; head -c 400 /tmp/la-body", quiet=True).get("output") or ""
+        o = run(cmd + " -s -o /tmp/la-body -w '%{http_code}'; echo; cat /tmp/la-body", quiet=True).get("output") or ""
         code, _, body = o.partition("\n")
         return code.strip(), body
 
@@ -170,7 +171,12 @@ def main():
     code, body = http("curl '{}/api/v1/licenses/download-by-key?key=FLV-00000000-00000000-00000000-00000000&server=x'".format(base))
     ok &= check(code == "403" and "не найден" in body, "неизвестный ключ отклонён", "unknown: {} {}".format(code, body))
 
-    code, _ = http("curl http://188.127.229.224/api/v1/license/health")
+    # Снаружи — с этого ПК: сам VDS до своего внешнего IP часто не достаёт.
+    try:
+        with urllib.request.urlopen("http://188.127.229.224/api/v1/license/health", timeout=15) as r:
+            code = str(r.status)
+    except Exception as e:
+        code = str(e)
     ok &= check(code == "200", "служба доступна снаружи: http://188.127.229.224", "снаружи: " + code)
 
     step("Журнал тестового ключа")

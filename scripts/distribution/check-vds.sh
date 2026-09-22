@@ -11,7 +11,7 @@ ok()  { echo "  ✓ $*"; }
 bad() { echo "  ✗ $*"; FAIL=1; }
 
 # code body <- curl
-req() { CODE="$(curl -s -o /tmp/la-body -w '%{http_code}' "$@")"; BODY="$(head -c 400 /tmp/la-body)"; }
+req() { CODE="$(curl -s -o /tmp/la-body -w '%{http_code}' "$@")"; BODY="$(cat /tmp/la-body)"; }
 
 echo "==> Служба"
 systemctl is-active --quiet flovmp-license && ok "flovmp-license работает" || bad "flovmp-license не запущена: journalctl -u flovmp-license -n 50"
@@ -47,8 +47,10 @@ req "${VERIFY[@]}"
 req "$BASE/api/v1/licenses/download-by-key?key=FLV-00000000-00000000-00000000-00000000&server=x"
 [ "$CODE" = 403 ] && [[ "$BODY" == *"не найден"* ]] && ok "неизвестный ключ отклонён" || bad "unknown: $CODE $BODY"
 
-req "http://188.127.229.224/api/v1/license/health"
-[ "$CODE" = 200 ] && ok "служба доступна снаружи" || bad "снаружи: $CODE"
+# Снаружи проверяйте со своего ПК: curl http://188.127.229.224/api/v1/license/health
+# (сам VDS до своего внешнего IP часто не достаёт).
+req "http://127.0.0.1/api/v1/license/health"
+[ "$CODE" = 200 ] && ok "nginx проксирует на службу" || bad "nginx → служба: $CODE"
 
 echo "==> Журнал тестового ключа"
 flovmp-license events "$KEY" --limit 20

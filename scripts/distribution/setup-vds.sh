@@ -113,8 +113,11 @@ systemctl restart flovmp-license
 echo "==> nginx"
 # /api/ уже проксируется на 127.0.0.1:7799; нужна только внутренняя папка
 # для отдачи пакетов после проверки ключа (X-Accel-Redirect).
+# Копии конфига — вне sites-enabled: nginx читает оттуда все файлы подряд.
+install -d -m 0700 /root/nginx-backups
+for old in /etc/nginx/sites-enabled/*.bak-*; do [ -e "$old" ] && mv "$old" /root/nginx-backups/; done
 if [ -f "$SITE" ] && ! grep -q "_flovmp_dist_files" "$SITE"; then
-  cp "$SITE" "$SITE.bak-license-$(date +%s)"
+  cp "$SITE" "/root/nginx-backups/default.bak-license-$(date +%s)"
   python3 - "$SITE" <<'PY'
 import sys
 p = sys.argv[1]
