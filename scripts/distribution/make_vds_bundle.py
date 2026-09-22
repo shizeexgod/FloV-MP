@@ -34,7 +34,7 @@ def main():
     for f in os.listdir(app):
         if f.endswith(".pdb"):
             os.remove(os.path.join(app, f))
-    for f in ("setup-vds.sh", "get.sh", "get.ps1"):
+    for f in ("setup-vds.sh", "check-vds.sh", "get.sh", "get.ps1"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(args.out, f))
     if args.with_key:
         key = os.path.join(os.path.expanduser("~"), ".flovmp", "license-authority.pem")
