@@ -72,6 +72,11 @@ public partial class StarterResource
     private readonly Dictionary<uint, (uint Prev, uint Cur, long ChangedAt)> _weaponHistory = new();
     private const int WeaponSwitchGraceMs = 2000;
 
+    /// <summary>Когда подтверждённое сервером попадание дошло до жертвы: убийцу
+    /// из сообщения DIED засчитываем только тому, кто и правда стрелял.</summary>
+    private readonly Dictionary<(uint Attacker, uint Victim), long> _lastHitAt = new();
+    private const int KillCreditWindowMs = 15_000;
+
     private static readonly int PerfNative = FloVMP.Core.Diagnostics.TickProfiler.Register("native-b3889");
 
     internal static bool IsNative(IPlayer? player) => player is NativePlayerProxy;
@@ -299,6 +304,8 @@ public partial class StarterResource
         _weaponHistory.Remove(session.Id);
         foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
             _hitPairRate.Remove(key);
+        foreach (var key in _lastHitAt.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
+            _lastHitAt.Remove(key);
         ForgetNativeUi(session.Id);
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
@@ -327,6 +334,11 @@ public partial class StarterResource
                 if (np.DeadReported) break;
                 np.DeadReported = true;
                 var killerId = NativeProtocol.UIntOr(p, 1, 0);
+                // Убийцу называет клиент жертвы — верим только если этот игрок
+                // действительно попал по ней недавно (иначе можно «дарить» убийства).
+                if (killerId != 0 && (!_lastHitAt.TryGetValue((killerId, session.Id), out var hitAt) ||
+                                      _clock.ElapsedMilliseconds - hitAt > KillCreditWindowMs))
+                    killerId = 0;
                 var killer = killerId != 0 && killerId != session.Id ? PlayerById(killerId) : null;
                 if (killer is not null)
                     Alt.Log($"[FloV:MP] {session.Name} убит игроком [{killer.Id}] {killer.Name}.");
@@ -413,6 +425,7 @@ public partial class StarterResource
             }
             return;
         }
+        _lastHitAt[(session.Id, victimId)] = now;
         victim.Session.Send("DAMAGE", damage, session.Id, NativeProtocol.UIntOr(p, 2, 0));
     }
 
