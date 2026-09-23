@@ -479,10 +479,13 @@ public partial class StarterResource
         // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
         // и тряски экрана), и итоговые значения: изменённый клиент не может
         // «не заметить» попадание и остаться с полным здоровьем.
+        var armorBefore = victim.ServerArmor;
         var (health, armorLeft) = victim.ApplyServerDamage(damage);
         victim.Session.Send("DAMAGE", damage, session.Id, NativeProtocol.UIntOr(p, 2, 0));
         victim.Session.Send("HEALTH", (int)health);
-        victim.Session.Send("ARMOR", (int)armorLeft);
+        // Броню шлём, только когда она изменилась: в перестрелке из автомата
+        // это десятки лишних строк в секунду на каждого, кого задели.
+        if (armorLeft != armorBefore) victim.Session.Send("ARMOR", (int)armorLeft);
         if (health == 0 && !victim.DeadReported)
         {
             // Смерть объявляет сервер, не дожидаясь сообщения клиента: иначе
