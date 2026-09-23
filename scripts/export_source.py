@@ -278,8 +278,7 @@ def main():
     marker = "public const bool SourceKitBuild = false;"
     if marker not in text:
         fail("Edition.cs: не найден флаг SourceKitBuild")
-    with open(edition, "w", encoding="utf-8", newline="
-") as fh:
+    with open(edition, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text.replace(marker, "public const bool SourceKitBuild = true;"))
     leaked = sorted(name for name in FORBIDDEN_TOP_LEVEL if os.path.exists(os.path.join(dest, name)))
     if leaked:

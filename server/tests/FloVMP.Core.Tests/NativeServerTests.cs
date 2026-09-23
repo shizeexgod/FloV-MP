@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -223,8 +223,9 @@ public sealed class NativeServerTests
     {
         using var server = new NativeServer(IPAddress.Loopback, 0, _ => { });
         server.Start();
-        // С одного IP пускается не больше MaxConnectionsPerIp — столько и проверяем.
-        var clients = Enumerable.Range(0, NativeServer.MaxConnectionsPerIp).Select(_ => new FakeClient()).ToList();
+        // Подключения с самой машины сервера лимитом на один IP не режутся:
+        // берём заведомо больше лимита — все должны войти и получить свой ID.
+        var clients = Enumerable.Range(0, NativeServer.MaxConnectionsPerIp + 6).Select(_ => new FakeClient()).ToList();
         try
         {
             await Task.WhenAll(clients.Select(c => c.JoinAsync(server.Port)));

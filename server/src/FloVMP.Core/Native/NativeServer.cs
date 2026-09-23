@@ -27,8 +27,14 @@ public sealed record NativeLeft(NativeSession Session, string Reason) : NativeEv
 /// </summary>
 public sealed class NativeServer : IDisposable
 {
-    // За одним IP бывает много игроков: CGNAT мобильных операторов, семьи, клубы.
-    public const int MaxConnectionsPerIp = 12;
+    // За одним IP бывает много игроков: CGNAT мобильных операторов, семьи,
+    // компьютерные клубы. Лимит поднимается переменной FLOVMP_MAX_PER_IP,
+    // а подключения с самой машины сервера (127.0.0.1) не ограничиваются.
+    public const int DefaultMaxConnectionsPerIp = 12;
+
+    public static int MaxConnectionsPerIp =>
+        int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_MAX_PER_IP"), out var v) && v is > 0 and <= 1000
+            ? v : DefaultMaxConnectionsPerIp;
     public const int MaxMessagesPerSecond = 120;
     public static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
@@ -116,10 +122,21 @@ public sealed class NativeServer : IDisposable
 
     private async Task HandleAsync(TcpClient client)
     {
-        var ip = (client.Client.RemoteEndPoint as IPEndPoint)?.Address.MapToIPv4().ToString() ?? "0.0.0.0";
-        if (_perIp.AddOrUpdate(ip, 1, (_, n) => n + 1) > MaxConnectionsPerIp)
+        var remote = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
+        var ip = remote?.MapToIPv4().ToString() ?? "0.0.0.0";
+        var local = remote is not null && IPAddress.IsLoopback(remote);
+        if (!local && _perIp.AddOrUpdate(ip, 1, (_, n) => n + 1) > MaxConnectionsPerIp)
         {
             _perIp.AddOrUpdate(ip, 0, (_, n) => n - 1);
+            // Раньше соединение просто рвалось, и игрок видел «сервер не отвечает».
+            try
+            {
+                using var reject = client.GetStream();
+                WriteRawAsync(reject, NativeProtocol.Format("REJECT",
+                    $"с вашего адреса уже подключено {MaxConnectionsPerIp} игроков — попробуйте позже")).Wait(1000);
+            }
+            catch (Exception) { }
+            _log($"отклонён {ip}: превышен лимит подключений с одного адреса ({MaxConnectionsPerIp})");
             client.Dispose();
             return;
         }
@@ -213,7 +230,7 @@ public sealed class NativeServer : IDisposable
         catch (Exception ex) { _log("соединение: " + ex.Message); }
         finally
         {
-            _perIp.AddOrUpdate(ip, 0, (_, n) => Math.Max(0, n - 1));
+            if (!local) _perIp.AddOrUpdate(ip, 0, (_, n) => Math.Max(0, n - 1));
             if (session is not null && _sessions.TryRemove(session.Id, out _))
             {
                 session.MarkClosed();

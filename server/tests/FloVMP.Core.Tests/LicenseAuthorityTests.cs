@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -45,7 +45,9 @@ public sealed class LicenseAuthorityTests
 
     private readonly RSA _key = RSA.Create(2048);
     private readonly MemoryStore _store = new();
-    private DateTime _now = new(2026, 9, 22, 12, 0, 0, DateTimeKind.Utc);
+    // Часы службы — рядом с настоящими: LicenseRemoteVerifier сверяет срок lease
+    // с DateTime.UtcNow, и фиксированная дата ломала бы проверку на следующий день.
+    private DateTime _now = DateTime.UtcNow;
     private string Pub => _key.ExportSubjectPublicKeyInfoPem();
 
     private LicenseService Service() => new(_store, _key, () => _now);
