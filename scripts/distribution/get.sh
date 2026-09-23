@@ -34,14 +34,25 @@ mtDfUsL1Uo+uwzLny0LnQuhILpMotkDPe7arcMbsSVQpAgMBAAE=
 die() { echo "ОШИБКА: $*" >&2; exit 1; }
 
 KEY=""
+DIR="/opt/flovmp"
+REINSTALL=0
+EXTRA=0   # прочие параметры установщика: с ними пропуск обновления не делаем
 PASS=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --key|-k) [ $# -ge 2 ] || die "после $1 нужен ключ"; KEY="$2"; PASS+=("$1" "$2"); shift 2 ;;
-    --dist)   [ $# -ge 2 ] || die "после --dist нужен адрес"; DIST="${2%/}"; shift 2 ;;
-    *)        PASS+=("$1"); shift ;;
+    --key|-k)    [ $# -ge 2 ] || die "после $1 нужен ключ"; KEY="$2"; PASS+=("$1" "$2"); shift 2 ;;
+    --dir)       [ $# -ge 2 ] || die "после --dir нужен путь"; DIR="${2%/}"; PASS+=("$1" "$2"); shift 2 ;;
+    --dist)      [ $# -ge 2 ] || die "после --dist нужен адрес"; DIST="${2%/}"; shift 2 ;;
+    --reinstall) REINSTALL=1; shift ;;
+    *)           PASS+=("$1"); EXTRA=$((EXTRA + 1)); shift ;;
   esac
 done
+# Обновление уже установленного сервера: ключ лежит в его настройках, второй
+# раз его вводить не нужно — команда обновления получается короткой.
+if [ -z "$KEY" ] && [ -f "$DIR/config/flovmp.env" ]; then
+  KEY="$(sed -n 's/^[[:space:]]*FLOVMP_LICENSE_KEY[[:space:]]*=[[:space:]]*//p' "$DIR/config/flovmp.env" | head -1)"
+  [ -n "$KEY" ] && { echo "  ключ лицензии взят из $DIR/config/flovmp.env"; PASS+=(--key "$KEY"); }
+fi
 [ -n "$KEY" ] || die "нужен ключ лицензии: --key FLV-XXXX-XXXX-XXXX (личный кабинет FloV:MP)"
 [ "$(id -u)" -eq 0 ] || die "запустите через sudo"
 [ -n "$RELEASE_PUBKEY_PEM" ] || die "в загрузчике нет ключа релизов — скачайте get.sh заново"
@@ -76,6 +87,15 @@ VERSION="$(field version)"; FILE="$(field file)"; SHA="$(field sha256)"; OS="$(f
 [[ "$FILE" =~ ^[A-Za-z0-9._-]+\.tar\.gz$ ]] || die "неверное имя пакета в релизе: $FILE"
 [[ "$SHA" =~ ^[0-9a-f]{64}$ ]] || die "неверный SHA-256 в релизе"
 echo "  версия $VERSION, пакет $FILE"
+
+INSTALLED="$(cat "$DIR/VERSION" 2>/dev/null || true)"
+if [ -n "$INSTALLED" ]; then
+  echo "  установлено сейчас: $INSTALLED"
+  if [ "$INSTALLED" = "$VERSION" ] && [ "$REINSTALL" -eq 0 ] && [ "$EXTRA" -eq 0 ]; then
+    echo "Обновление не требуется: установлена та же версия. Поставить заново — --reinstall"
+    exit 0
+  fi
+fi
 
 echo "==> Скачивание пакета"
 fetch "$DIST/api/v1/distribution/download?$Q" "$WORK/$FILE"

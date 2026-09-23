@@ -74,10 +74,11 @@ def upload(local, remote, attempts=3):
     sys.exit("не удалось залить {}".format(local))
 
 
-def missing_parts(stage, parts, already):
-    """Куски, которых на машине нет или они короче отправленных.
+def staged(stage):
+    """Что уже лежит на машине: имя куска → размер.
 
-    Ответ /write про число байт ничего не гарантирует, поэтому смотрим сами."""
+    Ответ /write про число байт ничего не гарантирует (выше ~50 КБ он говорит
+    «записал», а файла нет), поэтому смотрим на самой машине."""
     out = run("for f in {}.d/*; do echo \"$(basename $f) $(wc -c < $f)\"; done 2>/dev/null".format(stage),
               t=60, quiet=True).get("output") or ""
     have = {}
@@ -85,8 +86,17 @@ def missing_parts(stage, parts, already):
         name, _, size = line.strip().partition(" ")
         if size.isdigit():
             have[name] = int(size)
-    return [i for i in range(len(parts))
-            if i not in already and have.get("{:05d}".format(i)) != len(parts[i])]
+    return have
+
+
+def missing_parts(stage, parts):
+    """Куски, которых нет или которые короче отправленных. Заодно убирает
+    лишние: если размер куска менялся, от прошлой заливки остаётся хвост."""
+    have = staged(stage)
+    extra = [n for n in have if not n.isdigit() or int(n) >= len(parts)]
+    if extra:
+        run("cd {}.d && rm -f {}".format(stage, " ".join("'" + n.replace("'", "") + "'" for n in extra)), quiet=True)
+    return [i for i in range(len(parts)) if have.get("{:05d}".format(i)) != len(parts[i])]
 
 
 def upload_once(local, remote):
@@ -114,10 +124,6 @@ def upload_once(local, remote):
     # не попадут в сборку, а /write сам создаёт промежуточную папку.
     stage = "/tmp/fu-{}-{}".format(hashlib.sha1(remote.encode()).hexdigest()[:12], digest[:12])
 
-    # Остатки прерванной заливки того же файла: лишние куски попадут в склейку
-    # и SHA-256 не сойдётся сколько ни повторяй.
-    run("rm -rf {s}.d {s}.bin".format(s=stage), quiet=True)
-
     last_error = [""]
 
     def put(i):
@@ -132,14 +138,16 @@ def upload_once(local, remote):
             time.sleep(1 + attempt * 2)
         return False
 
-    todo = list(range(len(parts)))
+    # Продолжаем с того места, где оборвались: уже залитые куски не гоняем заново.
+    todo = missing_parts(stage, parts)
+    if todo and len(todo) < len(parts):
+        print("  продолжаем: осталось {} кусков из {}".format(len(todo), len(parts)), flush=True)
     for _ in range(6):
-        with ThreadPoolExecutor(6) as ex:
-            results = list(ex.map(put, todo))
-        todo = [i for i, uploaded in zip(todo, results) if not uploaded]
-        todo += missing_parts(stage, parts, todo)
         if not todo:
             break
+        with ThreadPoolExecutor(6) as ex:
+            list(ex.map(put, todo))
+        todo = missing_parts(stage, parts)
     if todo:
         print("  не залито кусков: {} из {} ({})".format(len(todo), len(parts), last_error[0]), flush=True)
         return False

@@ -106,6 +106,10 @@ curl -fsSLo flovmp-get.sh http://188.127.229.224/cdn/get.sh
 sudo bash flovmp-get.sh --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX --owner-sc <ваш SocialClubId>
 ```
 
+Обновление потом — та же команда **без ключа**: он берётся из
+`/opt/flovmp/config/flovmp.env`. Если установлена последняя версия, ничего не
+скачивается («Обновление не требуется»); поставить заново — `--reinstall`.
+
 **Или из архива:**
 
 ```bash

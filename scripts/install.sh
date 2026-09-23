@@ -429,10 +429,35 @@ SAME_DIR=0
 if [ -f "$INSTALL_DIR/manifest.txt" ] && [ "$SAME_DIR" -eq 0 ]; then
   UPGRADE=1
   OLD_VERSION="$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo unknown)"
-elif [ -d "$INSTALL_DIR" ] && [ "$SAME_DIR" -eq 0 ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ] && [ "$FORCE" -eq 0 ]; then
-  die "папка $INSTALL_DIR не пуста и не похожа на установку этого пакета (нет manifest.txt).
-       Это может быть сервер, установленный вручную. Чтобы ничего не сломать, установка остановлена.
-       Выберите другую папку (--dir) или подтвердите установку поверх (--force)"
+elif [ -d "$INSTALL_DIR" ] && [ "$SAME_DIR" -eq 0 ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+  # В папке что-то есть, но это не наша установка: чужой сервер или мод.
+  # Платформа трогает только свои файлы из manifest.txt, поэтому запрещаем не
+  # «непустую папку», а настоящие столкновения — чужие файлы с теми же именами.
+  CONFLICTS=""
+  CONFLICT_COUNT=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    rel="${line#* }"; rel="${rel#"${rel%%[![:space:]]*}"}"
+    if [ -e "$INSTALL_DIR/$rel" ]; then
+      CONFLICT_COUNT=$((CONFLICT_COUNT + 1))
+      [ "$CONFLICT_COUNT" -le 10 ] && CONFLICTS="$CONFLICTS
+       $rel"
+    fi
+  done < "$SRC_DIR/manifest.txt"
+  if [ "$CONFLICT_COUNT" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
+    die "в папке $INSTALL_DIR уже есть чужие файлы с такими же именами ($CONFLICT_COUNT):$CONFLICTS
+       Ничего не изменено. Поставьте в пустую папку (--dir) или подтвердите замену (--force):
+       при --force чужие файлы сначала уйдут в резервную копию рядом с папкой."
+  fi
+  if [ "$CONFLICT_COUNT" -gt 0 ]; then
+    FOREIGN_BACKUP="$(dirname "$INSTALL_DIR")/flovmp-foreign-$(date +%Y%m%d-%H%M%S).tar.gz"
+    ( cd "$INSTALL_DIR" && tar -czf "$FOREIGN_BACKUP" $(while IFS= read -r line || [ -n "$line" ]; do
+        [ -z "$line" ] && continue; rel="${line#* }"; rel="${rel#"${rel%%[![:space:]]*}"}"
+        [ -e "$rel" ] && printf '%s
+' "$rel"; done < "$SRC_DIR/manifest.txt") ) 2>/dev/null       && ok "чужие файлы ($CONFLICT_COUNT) сохранены в $FOREIGN_BACKUP"       || warn "не удалось сохранить чужие файлы в резервную копию"
+  else
+    warn "папка $INSTALL_DIR не пуста: ставим рядом, посторонние файлы не трогаем"
+  fi
 fi
 
 if [ "$UPGRADE" -eq 1 ]; then
