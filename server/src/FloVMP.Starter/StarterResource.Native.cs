@@ -296,6 +296,11 @@ public partial class StarterResource
     {
         if (!_nativePlayers.TryGetValue(session.Id, out var proxy) ||
             !ReferenceEquals(((NativePlayerProxy)(object)proxy).Session, session)) return;
+        // Ресурсу нужно узнать об уходе игрока 3889: сохранить его данные,
+        // снять таймеры, закрыть сделки. Без этого события геймод про выход
+        // просто не знал.
+        if (_nativeReady.Contains(session.Id))
+            Alt.Emit("flovmp:native:left", (int)session.Id, session.Name, reason ?? "");
         _nativePlayers.Remove(session.Id);
         _nativeVoice?.Unregister(session);
         _nativeReady.Remove(session.Id);

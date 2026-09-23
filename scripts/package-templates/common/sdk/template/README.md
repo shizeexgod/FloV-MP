@@ -135,6 +135,33 @@ Alt.Emit("flovmp:world:remove", "object", "bench1");
 | `flovmp:native:menuClose` (id, меню) | закрыл меню |
 | `flovmp:native:key` (id, клавиша) | нажал клавишу из `flovmp:keys:bind` |
 
+Управление игроком 3889 из вашего ресурса — по его ID:
+
+```csharp
+Alt.Emit("flovmp:native:teleport", id, 200f, -930f, 30f);   // переместить
+Alt.Emit("flovmp:native:spawn", id, 200f, -930f, 30f, 90f); // возродить и повернуть
+Alt.Emit("flovmp:native:health", id, 150);                  // здоровье 0..200
+Alt.Emit("flovmp:native:armor", id, 100);                   // броня 0..100
+Alt.Emit("flovmp:native:model", id, "a_m_y_business_01");   // модель персонажа
+Alt.Emit("flovmp:native:weapon", id, "weapon_pistol", 120); // выдать оружие
+Alt.Emit("flovmp:native:disarm", id);                       // забрать всё оружие
+Alt.Emit("flovmp:native:dimension", id, 7);                 // измерение
+Alt.Emit("flovmp:native:kick", id, "нарушение правил");     // отключить
+
+// Прочитать состояние: запрос и ответ отдельным событием.
+Alt.Emit("flovmp:native:query", id);        // один игрок
+Alt.Emit("flovmp:native:queryAll");         // все игроки 3889
+Alt.OnServer<int, string, float, float, float, float, int, int, string, int, bool, string, int>(
+    "flovmp:native:state",
+    (id, nick, x, y, z, heading, health, armor, weapon, dimension, inVehicle, vehicleModel, seat) =>
+    {
+        // позиция, здоровье, броня, оружие, измерение и транспорт игрока
+    });
+
+// Игрок вышел: сохранить данные, снять таймеры, закрыть сделки.
+Alt.OnServer<int, string, string>("flovmp:native:left", (id, nick, reason) => { });
+```
+
 Интерфейс игроку — по его ID:
 
 ```csharp
