@@ -237,6 +237,54 @@ public sealed class NativeServerTests
     }
 
     [Fact]
+    public async Task BurstOfMessagesArrivesWholeAndInOrder()
+    {
+        // Снимок мира — это тысячи строк подряд. Ни одна не должна пропасть и
+        // ни одна не должна слипнуться с соседней.
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var session = (await WaitEventAsync<NativeJoined>(server)).Session;
+
+        const int count = 3000;
+        for (var i = 0; i < count; i++)
+            Assert.True(session.Send(NativeProtocol.Format("WOBJ", "item" + i, new string('y', 60))));
+
+        var seen = 0;
+        while (seen < count)
+        {
+            var line = await client.ReadAsync(15000);
+            Assert.NotNull(line);
+            if (!line!.StartsWith("WOBJ", StringComparison.Ordinal)) continue;
+            var parts = NativeProtocol.Parse(line);
+            Assert.Equal("item" + seen, parts[1]);   // порядок и целостность строки
+            seen++;
+        }
+        Assert.Equal(count, seen);
+    }
+
+    [Fact]
+    public async Task SlowClientIsDisconnectedInsteadOfLosingMessages()
+    {
+        // Очередь на переполнении раньше «принимала» строку и молча её теряла:
+        // у игрока пропадали объекты мира, чат и урон. Теперь такой клиент
+        // отключается с причиной — потерь без предупреждения быть не должно.
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        var session = (await WaitEventAsync<NativeJoined>(server)).Session;
+
+        var line = "CHAT	" + new string('x', 3500);   // клиент ничего не читает
+        var refused = false;
+        for (var i = 0; i < NativeSession.OutboxCapacity * 4 && !refused; i++)
+            refused = !session.Send(line);
+
+        Assert.True(refused, "переполненная очередь должна отказать, а не терять строки");
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Contains("не успевает", left.Reason);
+    }
+
+    [Fact]
     public async Task FreedIdIsNotReusedImmediately()
     {
         using var server = StartServer();

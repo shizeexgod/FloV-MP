@@ -207,7 +207,7 @@ public partial class StarterResource
 
     /// <summary>Сколько строк снимка держим в очереди сессии: остальное место
     /// нужно синхронизации игроков и чату.</summary>
-    private const int WorldQueueHeadroom = 1024;
+    private const int WorldQueueHeadroom = 2048;
 
     /// <summary>Досылает снимки мира тем, кому они ещё не дошли. Зовётся каждый тик.</summary>
     private void PumpWorldSnapshots()

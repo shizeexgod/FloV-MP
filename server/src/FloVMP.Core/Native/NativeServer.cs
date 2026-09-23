@@ -321,8 +321,17 @@ public sealed class NativeSession
     private readonly NativeServer _owner;
     private readonly TcpClient _client;
     private readonly Stream _stream;
-    private readonly Channel<string> _outbox = Channel.CreateBounded<string>(
-        new BoundedChannelOptions(4096) { SingleReader = true, FullMode = BoundedChannelFullMode.DropWrite });
+    /// <summary>Размер очереди отправки. Переполнение — это отставший клиент:
+    /// его отключаем с причиной, а не молча теряем строки (см. Send).</summary>
+    public const int OutboxCapacity = 4096;
+
+    // Очередь неограниченная намеренно: ограниченная с DropWrite на переполнении
+    // отвечала «записал» и молча теряла строку — так пропадали объекты мира,
+    // сообщения чата, появление игроков и урон. Предел держим сами счётчиком:
+    // отставшего клиента отключаем с причиной, потерь без предупреждения нет.
+    private readonly Channel<string> _outbox = Channel.CreateUnbounded<string>(
+        new UnboundedChannelOptions { SingleReader = true });
+    private int _queued;
     private readonly CancellationTokenSource _close = new();
     private readonly object _stateLock = new();
     private NativePlayerState _state;
@@ -393,14 +402,20 @@ public sealed class NativeSession
 
     /// <summary>Сколько строк ещё ждёт отправки: снимок мира шлётся порциями,
     /// чтобы не переполнить очередь и не выкинуть игрока на входе.</summary>
-    public int Queued => _outbox.Reader.Count;
+    public int Queued => Volatile.Read(ref _queued);
 
     /// <summary>Поставить сообщение в очередь отправки. Не блокирует главный поток.</summary>
     public bool Send(string line)
     {
         if (_closed != 0) return false;
+        if (Interlocked.Increment(ref _queued) > OutboxCapacity)
+        {
+            Interlocked.Decrement(ref _queued);
+            Close("клиент не успевает принимать данные");
+            return false;
+        }
         if (_outbox.Writer.TryWrite(line)) return true;
-        Close("клиент не успевает принимать данные");
+        Interlocked.Decrement(ref _queued);
         return false;
     }
 
@@ -436,6 +451,7 @@ public sealed class NativeSession
                     buffer.SetLength(0);
                     while (buffer.Length < 64 * 1024 && reader.TryRead(out var line))
                     {
+                        Interlocked.Decrement(ref _queued);
                         var bytes = Encoding.UTF8.GetBytes(line);
                         buffer.Write(bytes);
                         buffer.WriteByte((byte)'\n');
