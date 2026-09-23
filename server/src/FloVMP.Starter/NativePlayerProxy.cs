@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Linq;
@@ -39,6 +39,16 @@ public class NativePlayerProxy : DispatchProxy
     private ushort? _armorOverride;
     private long _overrideStateVersion;
     internal bool DeadReported;
+
+    /// <summary>
+    /// Здоровье и броня, которые считает сервер. Клиент сам применяет урон у
+    /// себя, поэтому его число — только заявка: если оно больше серверного,
+    /// значит урон «не заметили», и верим серверу. Меньше — верим клиенту
+    /// (упал с высоты, сбила машина) и опускаем серверное следом. Расти эти
+    /// значения могут только по команде сервера: лечение, спавн, возрождение.
+    /// </summary>
+    internal ushort ServerHealth = 200;
+    internal ushort ServerArmor;
     internal readonly ConcurrentDictionary<string, object?> LocalMeta = new();
 
     internal void Init(NativeSession session, StarterResource owner)
@@ -55,14 +65,31 @@ public class NativePlayerProxy : DispatchProxy
         if (DeadReported) return 0;
         if (_healthOverride is { } h && Session.StateVersion <= _overrideStateVersion + 2) return h;
         _healthOverride = null;
-        return Session.HasState ? (ushort)Math.Clamp(State.Health, 0, 1000) : (ushort)200;
+        if (!Session.HasState) return ServerHealth;
+        var reported = (ushort)Math.Clamp(State.Health, 0, 1000);
+        if (reported < ServerHealth) ServerHealth = reported;   // клиент потерял больше — верим ему
+        return ServerHealth;                                     // больше серверного — не верим
     }
 
     private ushort CurrentArmor()
     {
         if (_armorOverride is { } a && Session.StateVersion <= _overrideStateVersion + 2) return a;
         _armorOverride = null;
-        return (ushort)Math.Clamp(State.Armor, 0, 200);
+        if (!Session.HasState) return ServerArmor;
+        var reported = (ushort)Math.Clamp(State.Armor, 0, 200);
+        if (reported < ServerArmor) ServerArmor = reported;
+        return ServerArmor;
+    }
+
+    /// <summary>Урон, посчитанный сервером: сначала броня, потом здоровье.</summary>
+    internal (ushort Health, ushort Armor) ApplyServerDamage(int damage)
+    {
+        var left = Math.Max(0, damage);
+        var absorbed = Math.Min((int)ServerArmor, left);
+        ServerArmor = (ushort)(ServerArmor - absorbed);
+        left -= absorbed;
+        ServerHealth = (ushort)Math.Max(0, ServerHealth - left);
+        return (ServerHealth, ServerArmor);
     }
 
     protected override object? Invoke(MethodInfo? method, object?[]? args)
@@ -118,6 +145,7 @@ public class NativePlayerProxy : DispatchProxy
                     var h = (ushort)args[0]!;
                     _healthOverride = h;
                     _overrideStateVersion = s.StateVersion;
+                    ServerHealth = h;   // лечение и возрождение — единственный путь вверх
                     if (h > 0) DeadReported = false;
                     s.Send("HEALTH", (int)h);
                     return null;
@@ -130,6 +158,7 @@ public class NativePlayerProxy : DispatchProxy
                     var a = (ushort)args[0]!;
                     _armorOverride = a;
                     _overrideStateVersion = s.StateVersion;
+                    ServerArmor = a;
                     s.Send("ARMOR", (int)a);
                     return null;
                 }
@@ -151,6 +180,8 @@ public class NativePlayerProxy : DispatchProxy
                     var p = (Position)args[posIndex]!;
                     DeadReported = false;
                     _healthOverride = 200;
+                    ServerHealth = 200;
+                    ServerArmor = 0;
                     _overrideStateVersion = s.StateVersion;
                     s.OverridePosition(p.X, p.Y, p.Z);
                     s.Send("SPAWN", p.X, p.Y, p.Z, State.Heading, _model);

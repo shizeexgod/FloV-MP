@@ -459,7 +459,21 @@ public partial class StarterResource
             return;
         }
         _lastHitAt[(session.Id, victimId)] = now;
+        // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
+        // и тряски экрана), и итоговые значения: изменённый клиент не может
+        // «не заметить» попадание и остаться с полным здоровьем.
+        var (health, armorLeft) = victim.ApplyServerDamage(damage);
         victim.Session.Send("DAMAGE", damage, session.Id, NativeProtocol.UIntOr(p, 2, 0));
+        victim.Session.Send("HEALTH", (int)health);
+        victim.Session.Send("ARMOR", (int)armorLeft);
+        if (health == 0 && !victim.DeadReported)
+        {
+            // Смерть объявляет сервер, не дожидаясь сообщения клиента: иначе
+            // тот же изменённый клиент просто не сообщал бы о ней.
+            victim.DeadReported = true;
+            Alt.Log($"[FloV:MP] {victim.Session.Name} убит игроком [{session.Id}] {session.Name}.");
+            OnPlayerDead(victimPlayer, null!, weapon);
+        }
     }
 
     /// <summary>
