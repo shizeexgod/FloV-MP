@@ -3,6 +3,7 @@
     [string]$InstallDir = '',
     [string]$Dist = '',
     [string]$GitHub = '',
+    [string]$Tag = '',
     [switch]$Force,
     [switch]$NoStart,
     [switch]$Reinstall
@@ -27,7 +28,14 @@ if (-not $Dist) { $Dist = if ($env:FLOVMP_DIST_URL) { $env:FLOVMP_DIST_URL } els
 $Dist = $Dist.TrimEnd('/')
 # -GitHub owner/repo — брать релиз из GitHub, а не с сервера раздачи. Подпись
 # проверяется та же самая, поэтому подменить пакет на GitHub тоже нельзя.
-$GitHubBase = if ($GitHub) { "https://github.com/$($GitHub.Trim('/'))/releases/latest/download" } else { '' }
+# Без -Tag берётся последний стабильный релиз; с -Tag — именно он (например
+# бета: -Tag v1.0.5-beta). Так у клиентов остаётся стабильная версия, а
+# владелец может поставить бету одной и той же командой.
+$GitHubBase = if ($GitHub) {
+    $repo = $GitHub.Trim('/')
+    if ($Tag) { "https://github.com/$repo/releases/download/$($Tag.Trim())" }
+    else { "https://github.com/$repo/releases/latest/download" }
+} else { '' }
 
 # BEGIN RELEASE_PUBKEY_XML
 $ReleasePubKeyXml = '<RSAKeyValue><Modulus>pmynUrPAKz17KYFCg3URy5BgBanGtIDxbLIExHQ59tdxAcUN2uPMN7Wu51TSkvit5kKxZvDWF9MSll2sLCXUJMpX9Lxa1GFLpmx6axrrw44z4id0ESrb1C7kqyOYu54lBVdBVyCup09Kgyfrc1vE9J7LRTUD+9DaahJ1CVkcg4uopbBItVqywb4UuOlbGuAf1x/ocgO3hrKv9e6R+LN33EH3udfMlEcq7GWVN5/GW0709KWF21zemEm4wS3NRUWnAGvwBcwgOIQdKoybjZtMgY6rpKCganSdpcGthunHnAOddbPSoerR6imGgqL2zTzKMFsPpxxOz1Mop3MdqkDbM5g2laOt8CyfcTwYgQi2OUf7K3MmXqkR1sv8duIlRRW1GOEaMg7M2zvm4MwVe4qMIms7ME+fREEIAE4UmdP8v5Pc8fhEQNl5WD2eTXY57DC08IrRE0GbwAg1R99C9Du3mtDfUsL1Uo+uwzLny0LnQuhILpMotkDPe7arcMbsSVQp</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
