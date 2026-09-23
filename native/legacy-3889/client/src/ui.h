@@ -87,6 +87,10 @@ namespace flov::ui
     /// Владелец сервера может вернуть штатное меню GTA (hud.pause_menu = on);
     /// тогда Esc уходит игре как раньше, вместе с её паузой.
     void SetEscMenu(bool ours);
+    /// Открыто ли сейчас штатное меню GTA (его можно открыть из нашего меню
+    /// пунктом «Настройки игры»). Пока оно открыто, Esc отдаём игре, иначе
+    /// закрыть её меню нечем.
+    void SetGtaMenuOpen(bool open);
     void CloseMenu();
     /// Выбор (index >= 0) или закрытие меню игроком (index = -1).
     struct MenuEvent { std::string id; int index; };

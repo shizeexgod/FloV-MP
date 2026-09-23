@@ -73,6 +73,7 @@ namespace flov::ui
         bool g_menuOpen = false;
         bool g_escRequested = false;
         bool g_escMenuOff = false;
+        bool g_gtaMenuOpen = false;
         std::string g_menuId, g_menuTitle;
         std::vector<MenuItem> g_menuItems;
         int g_menuSel = 0;
@@ -475,7 +476,7 @@ namespace flov::ui
 
             // Esc при закрытых окнах — наше меню (его собирает игровой поток).
             // Штатное меню GTA сюда не попадает: оно останавливает мир и скрипты.
-            if (vk == VK_ESCAPE && !g_escMenuOff)
+            if (vk == VK_ESCAPE && !g_escMenuOff && !g_gtaMenuOpen)
             {
                 g_escRequested = true;
                 return true;
@@ -544,7 +545,7 @@ namespace flov::ui
                 if (wp == VK_F12) return 0;   // см. HandleKey: оверлей Rockstar
                 // Не отдаём отпускание Esc GTA: иначе её frontend может открыть
                 // штатную паузу даже после того, как наш обработчик съел keydown.
-                if (wp == VK_ESCAPE && !g_escMenuOff) return 0;
+                if (wp == VK_ESCAPE && !g_escMenuOff && !g_gtaMenuOpen) return 0;
                 if (IsLayoutModifier(wp)) break;
                 if (InputActive()) return 0;
                 break;
@@ -1845,6 +1846,12 @@ namespace flov::ui
         g_menuTitle = title.empty() ? "Меню" : title;
         g_menuItems = std::move(items);
         g_menuSel = 0;
+    }
+
+    void SetGtaMenuOpen(bool open)
+    {
+        std::lock_guard lock(g_mutex);
+        g_gtaMenuOpen = open;
     }
 
     void SetEscMenu(bool ours)

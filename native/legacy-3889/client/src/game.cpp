@@ -1844,6 +1844,9 @@ namespace flov::game
                 g_net.Connect(g_host, g_port, g_pendingName);
             }
 
+            // Пока открыто штатное меню GTA (его открывает пункт нашего меню),
+            // Esc принадлежит ему — иначе игрок не смог бы его закрыть.
+            ui::SetGtaMenuOpen(n::IS_PAUSE_MENU_ACTIVE() != 0);
             if (ui::TakeEscRequest()) OpenEscMenu();
 
             for (const auto& ev : ui::TakeMenuEvents())
