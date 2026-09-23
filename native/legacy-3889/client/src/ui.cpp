@@ -551,7 +551,14 @@ namespace flov::ui
                         swallow = g_gtaMenuOpen;
                     }
                 }
-                if (swallow) return 1;
+                if (swallow)
+                {
+                    // Один раз пишем в журнал, что перехват реально работает:
+                    // низкоуровневый хук мог не установиться, и это надо видеть.
+                    static bool reported = false;
+                    if (!reported) { reported = true; Log("ui: клавиша Rockstar перехвачена, оверлей не откроется"); }
+                    return 1;
+                }
             }
             return CallNextHookEx(g_keyboardHook, code, wp, lp);
         }
