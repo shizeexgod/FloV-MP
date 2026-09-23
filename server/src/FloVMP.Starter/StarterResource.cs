@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
@@ -306,18 +306,20 @@ public partial class StarterResource : Resource
         var key = local.Info?.LicenseKey ?? Environment.GetEnvironmentVariable("FLOVMP_LICENSE_KEY") ?? "";
         var cachePath = FloVMP.Core.Licensing.LicenseLeaseCache.PathFor(licensePath);
         var config = FloVMP.Core.Licensing.LicenseConfig.FromEnvironment();
-        if (!string.IsNullOrWhiteSpace(key) &&
-            FloVMP.Core.Licensing.LicenseLeaseCache.TryRead(cachePath, key, config.ServerId, out var cachedUntil) &&
-            cachedUntil > DateTime.UtcNow)
+        var cachedUntil = DateTime.MinValue;
+        var hasLease = !string.IsNullOrWhiteSpace(key) &&
+            FloVMP.Core.Licensing.LicenseLeaseCache.TryRead(cachePath, key, config.ServerId, out cachedUntil);
+        if (hasLease && cachedUntil > DateTime.UtcNow)
             return local;
 
         // Краткий сбой связи не должен ошибочно блокировать действующую
-        // лицензию. После offline grace без валидного lease вход закрывается.
+        // лицензию. Отсрочка считается от подписанного срока последнего
+        // подтверждения, а если подтверждений ещё не было — от старта сервера.
+        // Раньше она считалась от времени файла license.flv, и её можно было
+        // продлевать бесконечно, просто меняя дату файла.
         var graceHours = Math.Clamp(
             FloVMP.Core.Licensing.LicenseConfig.FromEnvironment().OfflineGraceHours, 1, 168);
-        var baseline = licensePath is not null && File.Exists(licensePath)
-            ? File.GetLastWriteTimeUtc(licensePath)
-            : DateTime.UtcNow;
+        var baseline = hasLease ? cachedUntil : _startedUtc;
         if (remote is null || DateTime.UtcNow - baseline <= TimeSpan.FromHours(graceHours))
             return local;
 
@@ -387,6 +389,9 @@ public partial class StarterResource : Resource
 
     /// <summary>Как часто сверять позиции игроков, мс.</summary>
     private const long AntiCheatIntervalMs = 500;
+    /// <summary>Старт сервера: от него считается отсрочка, пока не было ни одного
+    /// подписанного подтверждения лицензии.</summary>
+    private readonly DateTime _startedUtc = DateTime.UtcNow;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
     private readonly List<(IPlayer Player, long RespawnAtMs)> _pendingRespawns = new();
 

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -29,17 +29,21 @@ public sealed class LicenseRemoteVerifierTests
     };
 
     [Fact]
-    public async Task Forbidden_response_is_immediate_revoke()
+    public async Task Forbidden_without_signature_is_not_a_revoke()
     {
+        // По открытому HTTP посредник мог подделать 403 и мгновенно выключить
+        // чужой рабочий сервер. Отказу без нашей подписи не верим: лицензия не
+        // считается отозванной, сервер доживает на запасе времени.
         using var http = new HttpClient(new Handler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
         {
             Content = new StringContent("{\"reason\":\"refunded\"}")
         }));
         var result = await new LicenseRemoteVerifier(http).VerifyAsync(Config);
         Assert.True(result.Reachable);
-        Assert.True(result.Revoked);
+        Assert.False(result.Revoked);
         Assert.False(result.Valid);
         Assert.Contains("refunded", result.Message);
+        Assert.Contains("без подписи", result.Message);
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -121,7 +121,10 @@ public sealed class LicenseService
         if (refusal is not null)
         {
             Log(license, key, what + ":отказ", ip, serverId, refusal);
-            return (null, Deny(403, refusal));
+            // Отказ подписывается: по открытому HTTP любой посредник мог бы
+            // подделать 403 и мгновенно «отозвать» чужую рабочую лицензию.
+            // Сервер клиента верит отказу только с нашей подписью.
+            return (null, DenySigned(403, refusal, key, serverId));
         }
 
         if (slots < 0) return (null, Deny(400, "число слотов не может быть отрицательным"));
@@ -224,6 +227,26 @@ public sealed class LicenseService
     }
 
     private static ServiceReply Deny(int status, string reason) => Json(status, new { valid = false, reason });
+
+    /// <summary>Отказ с подписью: сервер клиента отличает настоящий отзыв от подделки.</summary>
+    private ServiceReply DenySigned(int status, string reason, string key, string serverId)
+    {
+        var refusal = Sign(new
+        {
+            licenseKey = key,
+            serverId,
+            valid = false,
+            issuedAt = _now(),
+            reason,
+        });
+        return Json(status, new
+        {
+            valid = false,
+            reason,
+            refusalPayloadB64 = refusal.PayloadB64,
+            refusalSignature = refusal.SignatureB64,
+        });
+    }
     /// <summary>Кириллица в ответах — как есть: причину отказа читает человек.</summary>
     public static readonly JsonSerializerOptions JsonOut = new()
     {

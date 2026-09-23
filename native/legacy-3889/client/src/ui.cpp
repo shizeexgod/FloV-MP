@@ -118,6 +118,7 @@ namespace flov::ui
 
         // --- рендер ---------------------------------------------------------------
         HWND g_hwnd = nullptr;
+        HHOOK g_keyboardHook = nullptr;
         WNDPROC g_originalWndProc = nullptr;
         ID3D11Device* g_device = nullptr;
         ID3D11DeviceContext* g_context = nullptr;
@@ -526,6 +527,33 @@ namespace flov::ui
             return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
                    vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU ||
                    vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL;
+        }
+
+        /// Оверлей Rockstar/Social Club игра открывает сама, читая клавиатуру
+        /// напрямую (RawInput/DirectInput), поэтому перехвата оконных сообщений
+        /// мало — его клавиши просто не приходят в WndProc. Низкоуровневый хук
+        /// забирает их раньше игры. Работает только когда окно игры активно,
+        /// чтобы не мешать остальной системе.
+        LRESULT CALLBACK LowLevelKeyboard(int code, WPARAM wp, LPARAM lp)
+        {
+            if (code == HC_ACTION && lp)
+            {
+                const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
+                const bool ourWindow = g_hwnd && GetForegroundWindow() == g_hwnd;
+                bool swallow = false;
+                if (ourWindow)
+                {
+                    if (key->vkCode == VK_F12) swallow = true;
+                    // В меню GTA оверлей висит на CapsLock — там он тоже не нужен.
+                    else if (key->vkCode == VK_CAPITAL)
+                    {
+                        std::lock_guard lock(g_mutex);
+                        swallow = g_gtaMenuOpen;
+                    }
+                }
+                if (swallow) return 1;
+            }
+            return CallNextHookEx(g_keyboardHook, code, wp, lp);
         }
 
         LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1620,6 +1648,17 @@ namespace flov::ui
 
             LoadIcons();
             g_originalWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc)));
+            if (!g_keyboardHook)
+            {
+                // Модуль хука — наш ASI, а не GTA5.exe: с чужим handle Windows
+                // хук ставить отказывается, и оверлей Rockstar снова вылезал бы.
+                HMODULE self = nullptr;
+                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   reinterpret_cast<LPCWSTR>(&LowLevelKeyboard), &self);
+                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboard, self, 0);
+                if (g_keyboardHook) Log("ui: перехват клавиш Rockstar включён");
+                else Log("ui: не удалось поставить перехват клавиш, ошибка " + std::to_string(GetLastError()));
+            }
             PostMessageW(g_hwnd, kMsgApplyTitle, 0, 0);
             g_imguiReady = true;
             Log("ui: оверлей готов (" + std::to_string(desc.BufferDesc.Width) + "x" + std::to_string(desc.BufferDesc.Height) + ")");
@@ -1695,6 +1734,7 @@ namespace flov::ui
     void Shutdown()
     {
         if (shv::presentCallbackUnregister) shv::presentCallbackUnregister(OnPresent);
+        if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
         if (g_hwnd && g_originalWndProc)
             SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_originalWndProc));
     }

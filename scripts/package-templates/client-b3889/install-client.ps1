@@ -209,7 +209,16 @@ if ($Uninstall) {
     if (Get-Process GTA5 -ErrorAction SilentlyContinue) { Fail 'Закройте GTA V и повторите.' 6 }
     Remove-Item (Join-Path $dir 'FloVMP.asi') -Force -ErrorAction SilentlyContinue
     if ($state -and $state.InstalledScriptHook) {
-        foreach ($f in 'ScriptHookV.dll', 'dinput8.dll') { Remove-Item (Join-Path $dir $f) -Force -ErrorAction SilentlyContinue }
+        foreach ($f in 'ScriptHookV.dll', 'dinput8.dll') {
+            $target = Join-Path $dir $f
+            $backup = "$target.flovmp-backup"
+            Remove-Item $target -Force -ErrorAction SilentlyContinue
+            # Был чужой файл — возвращаем его, а не оставляем игру без него.
+            if (Test-Path $backup) {
+                Move-Item $backup $target -Force -ErrorAction SilentlyContinue
+                Say "Возвращён прежний $f"
+            }
+        }
         Say 'ScriptHookV удалён (его ставил установщик FloV:MP).'
     }
     if ($state -and $state.AddedNoBattlEye) { Set-NoBattlEye $dir $false | Out-Null; Say 'BattlEye снова включён (убран -nobattleye из args.txt).' }
@@ -230,7 +239,16 @@ if (-not (Test-Writable $dir)) { Restart-Elevated }
 if (Get-Process GTA5 -ErrorAction SilentlyContinue) { Fail 'GTA V запущена — закройте игру и повторите установку.' 6 }
 
 $state = Get-State
-if (-not $state -or $state.GtaDir -ne $dir) { $state = [pscustomobject]@{ GtaDir = $dir; InstalledScriptHook = $false; AddedNoBattlEye = $false; Shortcut = '' } }
+if (-not $state -or $state.GtaDir -ne $dir) { $state = [pscustomobject]@{ GtaDir = $dir } }
+# Все поля состояния создаём заранее: присвоение несуществующего свойства
+# PSCustomObject — ошибка, и на чистой установке скрипт обрывался ровно здесь,
+# уже после правки commandline.txt, но до копирования клиента.
+foreach ($field in 'InstalledScriptHook', 'AddedNoBattlEye', 'AddedStraightToGame', 'Shortcut') {
+    if ($null -eq $state.PSObject.Properties[$field]) {
+        $value = if ($field -eq 'Shortcut') { '' } else { $false }
+        $state | Add-Member -NotePropertyName $field -NotePropertyValue $value -Force
+    }
+}
 
 # ScriptHookV
 $shv = Join-Path $dir 'ScriptHookV.dll'
@@ -265,9 +283,17 @@ if (-not ($shvOk -and $loaderOk)) {
     $zip = [IO.Compression.ZipFile]::OpenRead($tmp)
     try {
         foreach ($name in 'ScriptHookV.dll', 'dinput8.dll') {
+            $target = Join-Path $dir $name
+            # Чужой файл (другой мод мог положить свой dinput8.dll) сначала
+            # сохраняем: перезаписать его молча — значит сломать чужую сборку,
+            # а при удалении клиента ещё и унести с собой.
+            if ((Test-Path $target) -and -not (Test-Path "$target.flovmp-backup")) {
+                Copy-Item $target "$target.flovmp-backup" -Force -ErrorAction SilentlyContinue
+                Say "Прежний $name сохранён как $name.flovmp-backup" Yellow
+            }
             $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -like "*bin/$name" } | Select-Object -First 1
             if (-not $entry) { throw "в архиве нет $name" }
-            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $dir $name), $true)
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
         }
     } finally { $zip.Dispose(); Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
     $state.InstalledScriptHook = $true

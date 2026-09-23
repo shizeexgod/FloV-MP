@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -59,7 +59,14 @@ public sealed class LicenseRemoteVerifier
                 : $"портал вернул HTTP {(int)response.StatusCode}");
 
             if (response.StatusCode == HttpStatusCode.Forbidden)
-                return new(true, false, true, reason, checkedAt, null);
+            {
+                // Мгновенный отзыв — только с подписью сервера лицензий.
+                // Иначе по открытому HTTP любой посредник выключал бы чужой
+                // сервер поддельным 403; без подписи это просто «не
+                // подтвердили», и сервер доживает на запасе времени.
+                var signed = RefusalIsSigned(body, config);
+                return new(true, false, signed, signed ? reason : reason + " (ответ без подписи — считаем связь недоверенной)", checkedAt, null);
+            }
             if (!response.IsSuccessStatusCode)
                 return new(true, false, false, reason, checkedAt, null);
 
@@ -102,6 +109,32 @@ public sealed class LicenseRemoteVerifier
         catch (Exception ex)
         {
             return new(false, false, false, "портал недоступен: " + ex.Message, checkedAt, null);
+        }
+    }
+
+    /// <summary>Отказ подписан нашим ключом и относится к этому ключу и серверу.</summary>
+    private bool RefusalIsSigned(string body, LicenseConfig config)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("refusalPayloadB64", out var p) || !root.TryGetProperty("refusalSignature", out var s))
+                return false;
+            var payload = Convert.FromBase64String(p.GetString() ?? "");
+            var signature = Convert.FromBase64String(s.GetString() ?? "");
+            if (!LicenseFile.VerifyAuthoritySignature(payload, signature, _publicKeyPem)) return false;
+            using var refusal = JsonDocument.Parse(payload);
+            var r = refusal.RootElement;
+            if (r.TryGetProperty("valid", out var valid) && valid.ValueKind == JsonValueKind.True) return false;
+            if (!string.Equals(r.GetProperty("licenseKey").GetString()?.Trim(), config.LicenseKey.Trim(), StringComparison.OrdinalIgnoreCase))
+                return false;
+            return !r.TryGetProperty("serverId", out var serverId) ||
+                   string.Equals(serverId.GetString()?.Trim(), config.ServerId.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
