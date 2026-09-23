@@ -2,6 +2,7 @@
     [string]$Key = '',
     [string]$InstallDir = '',
     [string]$Dist = '',
+    [string]$GitHub = '',
     [switch]$Force,
     [switch]$NoStart,
     [switch]$Reinstall
@@ -24,6 +25,9 @@ $ProgressPreference = 'SilentlyContinue' # иначе Invoke-WebRequest кача
 
 if (-not $Dist) { $Dist = if ($env:FLOVMP_DIST_URL) { $env:FLOVMP_DIST_URL } else { 'http://188.127.229.224' } }
 $Dist = $Dist.TrimEnd('/')
+# -GitHub owner/repo — брать релиз из GitHub, а не с сервера раздачи. Подпись
+# проверяется та же самая, поэтому подменить пакет на GitHub тоже нельзя.
+$GitHubBase = if ($GitHub) { "https://github.com/$($GitHub.Trim('/'))/releases/latest/download" } else { '' }
 
 # BEGIN RELEASE_PUBKEY_XML
 $ReleasePubKeyXml = '<RSAKeyValue><Modulus>pmynUrPAKz17KYFCg3URy5BgBanGtIDxbLIExHQ59tdxAcUN2uPMN7Wu51TSkvit5kKxZvDWF9MSll2sLCXUJMpX9Lxa1GFLpmx6axrrw44z4id0ESrb1C7kqyOYu54lBVdBVyCup09Kgyfrc1vE9J7LRTUD+9DaahJ1CVkcg4uopbBItVqywb4UuOlbGuAf1x/ocgO3hrKv9e6R+LN33EH3udfMlEcq7GWVN5/GW0709KWF21zemEm4wS3NRUWnAGvwBcwgOIQdKoybjZtMgY6rpKCganSdpcGthunHnAOddbPSoerR6imGgqL2zTzKMFsPpxxOz1Mop3MdqkDbM5g2laOt8CyfcTwYgQi2OUf7K3MmXqkR1sv8duIlRRW1GOEaMg7M2zvm4MwVe4qMIms7ME+fREEIAE4UmdP8v5Pc8fhEQNl5WD2eTXY57DC08IrRE0GbwAg1R99C9Du3mtDfUsL1Uo+uwzLny0LnQuhILpMotkDPe7arcMbsSVQp</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
@@ -74,8 +78,13 @@ try {
 
     Write-Host '==> Релиз FloV:MP' -ForegroundColor Cyan
     $releaseFile = Join-Path $work 'release.txt'
-    Fetch "$Dist/api/v1/distribution/release?$q" $releaseFile
-    Fetch "$Dist/api/v1/distribution/release.sig?$q" (Join-Path $work 'release.sig')
+    if ($GitHubBase) {
+        Fetch "$GitHubBase/release-windows.txt" $releaseFile
+        Fetch "$GitHubBase/release-windows.txt.sig" (Join-Path $work 'release.sig')
+    } else {
+        Fetch "$Dist/api/v1/distribution/release?$q" $releaseFile
+        Fetch "$Dist/api/v1/distribution/release.sig?$q" (Join-Path $work 'release.sig')
+    }
     $releaseBytes = [IO.File]::ReadAllBytes($releaseFile)
     $sig = [Convert]::FromBase64String(([IO.File]::ReadAllText((Join-Path $work 'release.sig'))).Trim())
     $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider
@@ -104,7 +113,8 @@ try {
 
     Write-Host '==> Скачивание пакета' -ForegroundColor Cyan
     $zip = Join-Path $work $info.file
-    Fetch "$Dist/api/v1/distribution/download?$q" $zip
+    if ($GitHubBase) { Fetch "$GitHubBase/$($info.file)" $zip }
+    else { Fetch "$Dist/api/v1/distribution/download?$q" $zip }
     $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($got -ne $info.sha256) { Fail "SHA-256 пакета не совпал (ожидали $($info.sha256), получили $got)" }
     Write-Host '  SHA-256 совпал' -ForegroundColor Green

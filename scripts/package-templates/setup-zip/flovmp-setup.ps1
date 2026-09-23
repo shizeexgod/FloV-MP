@@ -2,6 +2,7 @@
     [string]$Key = '',
     [string]$InstallDir = '',
     [string]$Dist = '',
+    [string]$GitHub = '',   # owner/repo: брать релиз с GitHub вместо сервера раздачи
     [switch]$Reinstall,
     [switch]$Quiet   # без вопросов: для планировщика и автообновления
 )
@@ -32,6 +33,7 @@ if (Test-Path -LiteralPath $settingsPath) {
 }
 if (-not $Key) { $Key = $saved['ключ'] }
 if (-not $Dist) { $Dist = $saved['адрес'] }
+if (-not $GitHub) { $GitHub = $saved['github'] }
 if (-not $InstallDir) { $InstallDir = $saved['папка'] }
 
 # 2. Папка сервера. По умолчанию — та, куда распаковали архив.
@@ -78,11 +80,13 @@ $lines = @(
     "папка = $InstallDir"
 )
 if ($Dist) { $lines += "адрес = $Dist" }
+if ($GitHub) { $lines += "github = $GitHub" }
 [IO.File]::WriteAllLines($settingsPath, $lines, [Text.UTF8Encoding]::new($true))
 
 # 5. Работу делает загрузчик: подпись релиза, SHA-256 пакета, установка.
 $arguments = @{ Key = $Key; InstallDir = $InstallDir }
 if ($Dist) { $arguments.Dist = $Dist }
+if ($GitHub) { $arguments.GitHub = $GitHub }
 if ($Reinstall) { $arguments.Reinstall = $true }
 Write-Host ''
 & $loader @arguments

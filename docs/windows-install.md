@@ -49,7 +49,7 @@ get.ps1             загрузчик с вшитым открытым ключ
 Папка установки: C:\FloVMP
 ==> Релиз FloV:MP
   подпись релиза верна
-  версия 1.0.0, пакет flovmp-server-1.0.0-windows.zip
+  версия 1.0.4, пакет flovmp-server-1.0.4-windows.zip
 ==> Скачивание пакета
   SHA-256 совпал
 ==> Установка
@@ -91,6 +91,19 @@ get.ps1             загрузчик с вшитым открытым ключ
 планировщика заданий Windows (раз в сутки ночью).
 
 ## Способ 2. Одна команда
+
+### Откуда берётся пакет
+
+Загрузчик умеет две раздачи:
+
+| Источник | Команда | Когда |
+|---|---|---|
+| VDS владельца | `.\get.ps1 -Key FLV-...` | по умолчанию, пакет отдаёт сервер лицензий по ключу |
+| GitHub-релиз | `.\get.ps1 -GitHub shizeexgod/FloV-MP-releases -Key FLV-...` | когда канал VDS медленный или пакет раздаётся публично |
+
+Подпись релиза проверяется одинаково в обоих случаях — подменить пакет нельзя
+ни на VDS, ни на GitHub. Разница только в том, кто отдаёт файл.
+
 
 Клиенту даётся строка, которую он выполняет в папке будущего сервера:
 
@@ -169,9 +182,9 @@ powershell -ExecutionPolicy Bypass -Command "iwr http://188.127.229.224/cdn/get.
 
 ```powershell
 python scripts/pack_server.py                          # собрать пакеты
-python scripts/distribution/sign_release.py --out dist/release-1.0.1
+python scripts/distribution/sign_release.py --out dist/release-1.0.4
 $env:REDL_TOKEN = "redl_pat_..."
-python scripts/distribution/publish_release_vds.py dist/release-1.0.1
+python scripts/distribution/publish_release_vds.py dist/release-1.0.4
 ```
 
 Архив установки пересобирать не нужно — он ссылается на «последний релиз».
