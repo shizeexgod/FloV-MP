@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -184,13 +184,51 @@ public partial class StarterResource
         return NativeProtocol.Format("W" + item.Kind, all);
     }
 
-    /// <summary>Весь мир — вошедшему игроку или после смены измерения.</summary>
+    /// <summary>
+    /// Весь мир — вошедшему игроку или после смены измерения.
+    ///
+    /// Карта бывает в десятки тысяч объектов, а очередь отправки сессии
+    /// ограничена: сваленный в неё целиком снимок переполнял её, и игрока
+    /// выкидывало с «клиент не успевает принимать данные» прямо на входе.
+    /// Поэтому снимок уходит порциями по мере того, как очередь пустеет.
+    /// </summary>
     private void SendWorldSnapshot(NativeSession session, int dimension)
     {
-        session.Send("WCLEAR");
+        var queue = new Queue<string>();
+        queue.Enqueue("WCLEAR");
         foreach (var item in _world.Values)
-            if (Visible(item, dimension)) session.Send(FormatWorld(item));
-        SendKeys(session);
+            if (Visible(item, dimension)) queue.Enqueue(FormatWorld(item));
+        queue.Enqueue(NativeProtocol.Format("KEYS", string.Join(",", _boundKeys)));
+        _worldPending[session.Id] = queue;
+        PumpWorldSnapshots();
+    }
+
+    private readonly Dictionary<uint, Queue<string>> _worldPending = new();
+
+    /// <summary>Сколько строк снимка держим в очереди сессии: остальное место
+    /// нужно синхронизации игроков и чату.</summary>
+    private const int WorldQueueHeadroom = 1024;
+
+    /// <summary>Досылает снимки мира тем, кому они ещё не дошли. Зовётся каждый тик.</summary>
+    private void PumpWorldSnapshots()
+    {
+        if (_worldPending.Count == 0) return;
+        foreach (var id in _worldPending.Keys.ToList())
+        {
+            var queue = _worldPending[id];
+            if (!_nativePlayers.TryGetValue(id, out var player))
+            {
+                _worldPending.Remove(id);
+                continue;
+            }
+            var session = ((NativePlayerProxy)(object)player).Session;
+            while (queue.Count > 0 && session.Queued < WorldQueueHeadroom)
+            {
+                if (!session.Send(queue.Peek())) { queue.Clear(); break; }
+                queue.Dequeue();
+            }
+            if (queue.Count == 0) _worldPending.Remove(id);
+        }
     }
 
     private void SendKeys(NativeSession session) => session.Send("KEYS", string.Join(",", _boundKeys));

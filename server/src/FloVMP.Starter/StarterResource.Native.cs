@@ -241,6 +241,9 @@ public partial class StarterResource
             }
         }
 
+        // Снимок мира уходит порциями: у карты бывают десятки тысяч объектов.
+        PumpWorldSnapshots();
+
         if (nowMs >= _nextNativeSyncMs)
         {
             _nextNativeSyncMs = nowMs + NativeSyncIntervalMs;

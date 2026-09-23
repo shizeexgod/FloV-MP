@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -390,6 +390,10 @@ public sealed class NativeSession
     {
         lock (_stateLock) _state = _state with { Heading = heading };
     }
+
+    /// <summary>Сколько строк ещё ждёт отправки: снимок мира шлётся порциями,
+    /// чтобы не переполнить очередь и не выкинуть игрока на входе.</summary>
+    public int Queued => _outbox.Reader.Count;
 
     /// <summary>Поставить сообщение в очередь отправки. Не блокирует главный поток.</summary>
     public bool Send(string line)
