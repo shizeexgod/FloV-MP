@@ -402,10 +402,24 @@ namespace flov::game
                 else
                 {
                     veh = VehicleOfOwner(s.vehOwner);
-                    if (!veh || !n::DOES_ENTITY_EXIST(veh)) return;
+                    if (!veh || !n::DOES_ENTITY_EXIST(veh))
+                    {
+                        // Машины водителя у нас ещё нет (модель не догрузилась):
+                        // пассажир едет вместе с ней, а не стоит столбом на дороге —
+                        // его координаты в STATE и так координаты машины.
+                        n::SET_ENTITY_COORDS_NO_OFFSET(ped, s.x, s.y, s.z, FALSE, FALSE, FALSE);
+                        n::SET_ENTITY_HEADING(ped, s.heading);
+                        r.inVehicleSeat = false;
+                        return;
+                    }
                 }
                 if (n::GET_VEHICLE_PED_IS_IN(ped, FALSE) != veh || !r.inVehicleSeat)
                 {
+                    Ped busy = n::GET_PED_IN_VEHICLE_SEAT(veh, s.seat);
+                    // Место занял случайный прохожий (сел в машину сам) — убираем его,
+                    // иначе игрок навсегда остаётся снаружи и «телепортируется» рядом.
+                    if (busy && busy != ped && !FindByEntity(busy) && busy != n::PLAYER_PED_ID())
+                        DeleteEntity(busy);
                     if (n::IS_VEHICLE_SEAT_FREE(veh, s.seat) || n::GET_PED_IN_VEHICLE_SEAT(veh, s.seat) == ped)
                     {
                         n::SET_PED_INTO_VEHICLE(ped, veh, s.seat);
