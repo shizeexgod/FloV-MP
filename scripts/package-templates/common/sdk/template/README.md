@@ -112,6 +112,17 @@ Alt.Emit("flovmp:world:remove", "object", "bench1");
 
 Измерение `int.MinValue` — «во всех измерениях».
 
+Если такой игрок всё же попал к вам объектом `IPlayer` (например из
+`flovmp:player:ready`), с ним работает не всё — у него нет сущности движка:
+
+| Работает | Не работает |
+|---|---|
+| `Id`, `Name`, `Position`, `Rotation`, `Dimension`, `Health`, `Armor`, `Model`, `CurrentWeapon` | `Vehicle` — всегда `null`, `Seat` — всегда 0 |
+| `IsDead`, `IsInVehicle`, `Spawn`, `Kick`, `GiveWeapon`, `RemoveAllWeapons`, `Emit`, `SetLocalMetaData` | всё остальное из alt:V API — вызов пропускается с предупреждением в журнале |
+
+«Игрок в машине?» — `player.IsInVehicle`. Какая именно машина — платформа
+пока не сообщает: транспорт 3889 живёт в игре игрока, а не в движке.
+
 Игрок 3889 для ресурсов — это его ID (у него нет сущности движка alt:V).
 События о нём приходят с номером:
 
