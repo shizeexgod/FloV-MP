@@ -87,6 +87,11 @@ namespace flov::game
         bool g_carLocked = false;
         Hash g_remoteGroup = 0;
         std::string g_host;
+        // Автопереподключение: перезапуск сервера не должен выгонять игрока
+        // в меню — клиент сам возвращается, пока не кончатся попытки.
+        int g_reconnectLeft = 0;
+        ULONGLONG g_reconnectAt = 0;
+        constexpr int kReconnectTries = 5;
         int g_port = 0;
         float g_voiceRadius = 25.f;
         bool g_micWarned = false;
@@ -541,6 +546,7 @@ namespace flov::game
                 ui::OpenConnectDialog(g_host.empty() ? std::string("127.0.0.1") : g_host, g_pendingName);
                 break;
             case 3:
+                g_reconnectLeft = 0;
                 g_net.Disconnect("выход через меню");
                 ui::Notify("Вы отключились от сервера. F9 — подключиться снова.", 5000);
                 break;
@@ -1074,6 +1080,7 @@ namespace flov::game
                           const std::string& typed = "")
         {
             ResetSession();
+            g_reconnectLeft = 0;   // ручное подключение отменяет автопопытки
             g_host = host;
             g_port = port;
             g_altPort = altPort;
@@ -1248,6 +1255,7 @@ namespace flov::game
                 // Голос: токен и порт из WELCOME (старый сервер их не шлёт — голоса нет).
                 g_voiceRadius = std::max(3.f, ToFloat(at(7), 25.f));
                 g_micWarned = false;
+                g_reconnectLeft = 0;   // вернулись — попытки больше не нужны
                 g_voiceToken = at(5);
                 g_voicePort = ToInt(at(6), g_port);
                 if (!g_voiceToken.empty() && g_cfg.voice) voice::Start(g_host, g_voicePort, g_voiceToken, g_voiceRadius);
@@ -1467,9 +1475,19 @@ namespace flov::game
                     g_net.Connect(g_host, g_port, g_pendingName);
                     return;
                 }
+                const bool wasInGame = g_welcomed;
                 ResetSession();
                 Chat(std::string(kicked ? "{ef4444}" : "{fde047}") + "[FloV:MP] " + at(1));
-                ui::Notify(at(1) + "  (F9 — подключиться снова)", 9000);
+                // Кик, бан и собственный выход — это решение, а не сбой: не возвращаемся.
+                const bool byChoice = kicked || at(1).find("выход через меню") != std::string::npos;
+                if (wasInGame && !byChoice && !g_host.empty())
+                {
+                    g_reconnectLeft = kReconnectTries;
+                    g_reconnectAt = GetTickCount64() + 3000;
+                    ui::Notify("Связь с сервером потеряна. Переподключение… (1 из " +
+                               std::to_string(kReconnectTries) + ")", 4000);
+                }
+                else ui::Notify(at(1) + "  (F9 — подключиться снова)", 9000);
             }
             else if (type == "CFG")
             {
@@ -1810,6 +1828,20 @@ namespace flov::game
                 else if (key == g_cfg.waypointKey && Allowed("tpm")) TeleportToWaypoint();
                 for (const auto& [vk, name] : g_serverKeys)
                     if (vk == key) g_net.Send({ "KEY", name });
+            }
+
+            if (g_reconnectLeft > 0 && GetTickCount64() >= g_reconnectAt)
+            {
+                const int attempt = kReconnectTries - g_reconnectLeft + 1;
+                --g_reconnectLeft;
+                // Пауза растёт: сервер после перезапуска поднимается не мгновенно.
+                g_reconnectAt = GetTickCount64() + (ULONGLONG)(4000 + attempt * 3000);
+                Log("переподключение, попытка " + std::to_string(attempt));
+                if (g_reconnectLeft == 0)
+                    ui::Notify("Последняя попытка. Если не выйдет — F9, чтобы подключиться вручную.", 6000);
+                ui::Notify("Переподключение… (" + std::to_string(attempt) + " из " +
+                           std::to_string(kReconnectTries) + ")", 3500);
+                g_net.Connect(g_host, g_port, g_pendingName);
             }
 
             if (ui::TakeEscRequest()) OpenEscMenu();
