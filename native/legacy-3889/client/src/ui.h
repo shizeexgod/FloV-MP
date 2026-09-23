@@ -76,6 +76,12 @@ namespace flov::ui
     struct MenuItem { std::string label, desc; };
     /// Меню слева: стрелки — выбор, Enter — выбрать, Esc/Backspace — закрыть.
     void OpenMenu(const std::string& id, const std::string& title, std::vector<MenuItem> items);
+    /// Игрок нажал Esc, когда ничего не открыто: игровой поток соберёт и
+    /// покажет наше меню (штатное меню GTA останавливает мир и скрипты).
+    bool TakeEscRequest();
+    /// Владелец сервера может вернуть штатное меню GTA (hud.pause_menu = on);
+    /// тогда Esc уходит игре как раньше, вместе с её паузой.
+    void SetEscMenu(bool ours);
     void CloseMenu();
     /// Выбор (index >= 0) или закрытие меню игроком (index = -1).
     struct MenuEvent { std::string id; int index; };

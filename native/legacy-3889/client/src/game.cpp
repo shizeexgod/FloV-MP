@@ -509,6 +509,52 @@ namespace flov::game
             return -1;
         }
 
+        constexpr const char* kEscMenuId = "__flovmp_esc";
+
+        /// Меню на Esc вместо штатного: мир при нём не останавливается, а
+        /// значит время на сервере идёт у всех одинаково — это RP-платформа.
+        void OpenEscMenu()
+        {
+            int online = 1;
+            for (const auto& [id, r] : g_remotes) if (r.hasState) ++online;
+            std::vector<ui::MenuItem> items = {
+                { "Продолжить", "Закрыть меню и вернуться в игру" },
+                { "Игроки на сервере: " + std::to_string(online), "Список — клавиша Tab в консоли F8" },
+                { "Сменить сервер", "Открыть окно подключения (F9)" },
+                { "Настройки игры GTA", "Штатное меню игры. Внимание: на это время игра встаёт на паузу" },
+                { "Отключиться от сервера", "Остаться в игре, но выйти с сервера" },
+                { "Выйти из игры", "Закрыть GTA V" },
+            };
+            ui::OpenMenu(kEscMenuId, g_serverName.empty() ? "FloV:MP" : g_serverName, std::move(items));
+        }
+
+        void HandleEscMenu(int index)
+        {
+            switch (index)
+            {
+            case 1:  // список игроков — подсказка уже в пункте меню
+            case 0:
+            case -1:
+                break;
+            case 2:
+                ui::OpenConnectDialog(g_host.empty() ? std::string("127.0.0.1") : g_host, g_pendingName);
+                break;
+            case 3:
+                // По желанию игрока: штатное меню GTA со своей паузой.
+                n::ACTIVATE_FRONTEND_MENU(n::GET_HASH_KEY(const_cast<char*>("FE_MENU_VERSION_SP_PAUSE")), FALSE, -1);
+                break;
+            case 4:
+                g_net.Disconnect("выход через меню");
+                ui::Notify("Вы отключились от сервера. F9 — подключиться снова.", 5000);
+                break;
+            case 5:
+                ui::Notify("Выход из игры...", 2000);
+                std::exit(0);
+                break;
+            }
+            ui::CloseMenu();
+        }
+
         void SendLocalState()
         {
             const Ped ped = n::PLAYER_PED_ID();
@@ -728,6 +774,8 @@ namespace flov::game
             }
             if (!g_cfg.pauseMenu)
             {
+                // Esc перехватывает клиент (своё меню), а эти две команды —
+                // тот же вызов паузы с геймпада и запасной клавиши.
                 n::DISABLE_CONTROL_ACTION(0, 199, TRUE);
                 n::DISABLE_CONTROL_ACTION(0, 200, TRUE);
             }
@@ -1111,6 +1159,8 @@ namespace flov::game
             c.minimap = Bool("hud.minimap"); c.abilityBar = Bool("hud.ability_bar"); c.areaNames = Bool("hud.area_names");
             c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel"); c.pauseMenu = Bool("hud.pause_menu");
             c.playerBlips = Bool("hud.player_blips"); c.watermark = Bool("hud.watermark");
+            // Esc: наше меню (мир не останавливается) или штатное меню GTA.
+            ui::SetEscMenu(!c.pauseMenu);
             c.tags = Bool("nametags.enabled"); c.tagDistance = std::clamp(Float("nametags.distance", 30.f), 3.f, 500.f);
             c.tagId = Bool("nametags.show_id"); c.tagHealth = Bool("nametags.health"); c.tagArmor = Bool("nametags.armor");
             c.tagVoice = Bool("nametags.voice_icon"); c.tagAdmin = Bool("nametags.admin_badge");
@@ -1755,8 +1805,11 @@ namespace flov::game
                     if (vk == key) g_net.Send({ "KEY", name });
             }
 
+            if (ui::TakeEscRequest()) OpenEscMenu();
+
             for (const auto& ev : ui::TakeMenuEvents())
             {
+                if (ev.id == kEscMenuId) { HandleEscMenu(ev.index); continue; }
                 if (!g_welcomed) continue;
                 if (ev.index < 0) g_net.Send({ "MENUCLOSED", ev.id });
                 else g_net.Send({ "MENUSEL", ev.id, std::to_string(ev.index) });

@@ -71,6 +71,8 @@ namespace flov::ui
 
         // Меню сервера.
         bool g_menuOpen = false;
+        bool g_escRequested = false;
+        bool g_escMenuOff = false;
         std::string g_menuId, g_menuTitle;
         std::vector<MenuItem> g_menuItems;
         int g_menuSel = 0;
@@ -469,6 +471,14 @@ namespace flov::ui
                     g_menuOpen = false;
                     return true;
                 }
+            }
+
+            // Esc при закрытых окнах — наше меню (его собирает игровой поток).
+            // Штатное меню GTA сюда не попадает: оно останавливает мир и скрипты.
+            if (vk == VK_ESCAPE && !g_escMenuOff)
+            {
+                g_escRequested = true;
+                return true;
             }
 
             // Ничего не открыто: горячие клавиши.
@@ -1830,6 +1840,18 @@ namespace flov::ui
         g_menuTitle = title.empty() ? "Меню" : title;
         g_menuItems = std::move(items);
         g_menuSel = 0;
+    }
+
+    void SetEscMenu(bool ours)
+    {
+        std::lock_guard lock(g_mutex);
+        g_escMenuOff = !ours;
+    }
+
+    bool TakeEscRequest()
+    {
+        std::lock_guard lock(g_mutex);
+        return std::exchange(g_escRequested, false);
     }
 
     void CloseMenu()

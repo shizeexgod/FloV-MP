@@ -16,7 +16,7 @@ namespace flov::settings
         { "world.peds", "off" }, { "world.traffic", "off" }, { "world.parked_vehicles", "off" },
         { "world.police", "off" }, { "world.ambient_events", "off" }, { "world.freeze_time", "off" },
         { "hud.minimap", "on" }, { "hud.ability_bar", "off" }, { "hud.area_names", "off" },
-        { "hud.vehicle_names", "off" }, { "hud.weapon_wheel", "off" }, { "hud.pause_menu", "on" },
+        { "hud.vehicle_names", "off" }, { "hud.weapon_wheel", "off" }, { "hud.pause_menu", "off" },
         { "hud.player_blips", "off" }, { "hud.watermark", "off" }, { "hud.accent", "#ffffff" },
         { "nametags.enabled", "on" }, { "nametags.distance", "30" }, { "nametags.show_id", "on" },
         { "nametags.health", "on" }, { "nametags.armor", "on" }, { "nametags.voice_icon", "on" },
