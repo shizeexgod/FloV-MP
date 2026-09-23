@@ -480,7 +480,11 @@ public partial class StarterResource
         // Сначала собираем только серверно подтверждённых водителей. Это
         // позволяет проверить пассажиров независимо от порядка словаря
         // подключённых клиентов в текущем тике.
-        _nativeVehicleOwners.Clear();
+        //
+        // Записи НЕ очищаются каждый тик: один пропущенный STATE водителя
+        // (сеть моргнула, игрок садится за руль) иначе выкидывал бы всех
+        // пассажиров из машины на экранах остальных. Запись живёт ещё
+        // несколько тиков — столько же, сколько допускает проверка ниже.
         foreach (var (driverId, driver) in _nativePlayers)
         {
             var driverProxy = (NativePlayerProxy)(object)driver;
@@ -491,6 +495,10 @@ public partial class StarterResource
                     driverState.VehicleModel, driverState.X, driverState.Y, driverState.Z,
                     driverProxy.DimensionValue, nowMs);
         }
+        foreach (var stale in _nativeVehicleOwners
+                     .Where(o => nowMs - o.Value.SeenAt > NativeVehicleOwnerTtlMs)
+                     .Select(o => o.Key).ToList())
+            _nativeVehicleOwners.Remove(stale);
 
         foreach (var (id, player) in _nativePlayers)
         {
@@ -582,6 +590,10 @@ public partial class StarterResource
     private long _syncTick;
     private readonly record struct NativeVehicleOwner(uint Model, float X, float Y, float Z, int Dimension, long SeenAt);
     private readonly Dictionary<uint, NativeVehicleOwner> _nativeVehicleOwners = new();
+
+    /// <summary>Сколько живёт запись о водителе после его последнего состояния:
+    /// короткий пропуск не должен высаживать пассажиров.</summary>
+    private const long NativeVehicleOwnerTtlMs = NativeSyncIntervalMs * 4;
     private readonly Dictionary<uint, (NativePlayerState State, long Version, string Name, int Dimension)> _syncStates = new();
     private readonly Dictionary<uint, string> _syncLines = new();
     private readonly List<(uint Id, float D2)> _syncNear = new();
