@@ -19,13 +19,16 @@ if (-not $Address) {
     exit 1
 }
 
-# Клиент установлен?
-$gta = $null
+# Клиент установлен? Лаунчер может передать точную папку игры через env,
+# чтобы пакетный вход не выбрал другую Legacy-установку из реестра.
+$gta = [Environment]::GetEnvironmentVariable('FLOVMP_GTA_PATH', 'Process')
 $state = Join-Path $dir 'install.json'
-if (Test-Path $state) { try { $gta = (Get-Content $state -Raw -Encoding UTF8 | ConvertFrom-Json).GtaDir } catch { } }
+if (-not $gta -and (Test-Path $state)) { try { $gta = (Get-Content $state -Raw -Encoding UTF8 | ConvertFrom-Json).GtaDir } catch { } }
 if (-not $gta -or -not (Test-Path (Join-Path $gta 'FloVMP.asi'))) {
     Say 'Клиент FloV:MP ещё не установлен — запускаю установку...' Yellow
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'install-client.ps1') -Yes
+    $installArgs = @('-Yes')
+    if ($gta) { $installArgs += @('-GtaDir', $gta) }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'install-client.ps1') @installArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     try { $gta = (Get-Content $state -Raw -Encoding UTF8 | ConvertFrom-Json).GtaDir } catch { }
 }

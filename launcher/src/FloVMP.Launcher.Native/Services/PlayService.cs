@@ -40,14 +40,22 @@ public static class PlayService
         }
         catch { }
 
-        var connectExe = FindConnectExe();
-        if (connectExe == null)
-            return new LaunchResult(false, "Не найден FloVMP.Connect.exe. Убедитесь что движок FloV:MP установлен.");
-
         var safeGtaPath = gtaPath.Trim().Trim('"', '\'').TrimEnd('\\');
         var safeNick = (nickname ?? "Player").Replace("\"", "").Trim();
         var safeHost = (serverHost ?? "127.0.0.1").Trim();
         var safePort = serverPort <= 0 ? 7788 : serverPort;
+
+        // В поставке Legacy b3889 connect.cmd — полноценный вход в игру:
+        // он запускает встроенный ASI-клиент и сам пишет native endpoint.
+        // Используем его, если рядом есть client-b3889; FloVMP.Connect остаётся
+        // совместимым путём для старых/alt:V-профилей.
+        var connectScript = FindConnectScript();
+        if (connectScript != null)
+            return LaunchConnectScript(connectScript, safeGtaPath, safeHost, safePort, safeNick);
+
+        var connectExe = FindConnectExe();
+        if (connectExe == null)
+            return new LaunchResult(false, "Не найден вход FloV:MP: ни connect.cmd с client-b3889, ни FloVMP.Connect.exe.");
 
         var clientDir = FindClientDir();
         var clientArg = !string.IsNullOrWhiteSpace(clientDir) ? " --client " + QuoteArg(clientDir) : "";
@@ -295,5 +303,47 @@ public static class PlayService
         }
 
         return null;
+    }
+
+    private static string? FindConnectScript()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (var i = 0; i < 8; i++)
+        {
+            var script = Path.Combine(dir, "connect.cmd");
+            var client = Path.Combine(dir, "client-b3889", "play.cmd");
+            if (File.Exists(script) && File.Exists(client)) return script;
+            var parent = Directory.GetParent(dir);
+            if (parent == null) break;
+            dir = parent.FullName;
+        }
+
+        var hardcoded = @"C:\FloV-MP\connect.cmd";
+        return File.Exists(hardcoded) && File.Exists(Path.Combine(Path.GetDirectoryName(hardcoded)!, "client-b3889", "play.cmd"))
+            ? hardcoded : null;
+    }
+
+    private static LaunchResult LaunchConnectScript(string script, string gtaPath, string host, int port, string nickname)
+    {
+        try
+        {
+            var root = Path.GetDirectoryName(script)!;
+            var psi = new ProcessStartInfo
+            {
+                FileName = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe",
+                Arguments = "/d /c call " + QuoteArg(script) + " " + QuoteArg($"{host}:{port}") + " " + QuoteArg(nickname),
+                UseShellExecute = false,
+                WorkingDirectory = root,
+            };
+            psi.Environment["FLOVMP_GTA_PATH"] = gtaPath;
+            var proc = Process.Start(psi);
+            return proc == null
+                ? new LaunchResult(false, "Не удалось запустить connect.cmd.")
+                : new LaunchResult(true);
+        }
+        catch (Exception ex)
+        {
+            return new LaunchResult(false, $"Ошибка запуска connect.cmd: {ex.Message}");
+        }
     }
 }

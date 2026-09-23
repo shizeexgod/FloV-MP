@@ -303,6 +303,7 @@ public partial class StarterResource
         _hitRate.Remove(session.Id);
         _hitWarnedAt.Remove(session.Id);
         _weaponHistory.Remove(session.Id);
+        _nativeVehicleOwners.Remove(session.Id);
         foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
             _hitPairRate.Remove(key);
         foreach (var key in _lastHitAt.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
@@ -475,6 +476,22 @@ public partial class StarterResource
         _nativeGrid.Clear();
         _syncStates.Clear();
         _syncLines.Clear();
+
+        // Сначала собираем только серверно подтверждённых водителей. Это
+        // позволяет проверить пассажиров независимо от порядка словаря
+        // подключённых клиентов в текущем тике.
+        _nativeVehicleOwners.Clear();
+        foreach (var (driverId, driver) in _nativePlayers)
+        {
+            var driverProxy = (NativePlayerProxy)(object)driver;
+            if (!_nativeReady.Contains(driverId) || !driverProxy.Session.HasState) continue;
+            var driverState = driverProxy.State;
+            if (driverState.InVehicle && driverState.Seat == -1 && driverState.VehicleModel != 0)
+                _nativeVehicleOwners[driverId] = new NativeVehicleOwner(
+                    driverState.VehicleModel, driverState.X, driverState.Y, driverState.Z,
+                    driverProxy.DimensionValue, nowMs);
+        }
+
         foreach (var (id, player) in _nativePlayers)
         {
             var np = (NativePlayerProxy)(object)player;
@@ -484,6 +501,7 @@ public partial class StarterResource
             // кому NoClip разрешён: иначе это невидимость для любого читера.
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
+            st = AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
             if (_weaponHistory.TryGetValue(id, out var wh))
             {
                 if (wh.Cur != st.Weapon) _weaponHistory[id] = (wh.Cur, st.Weapon, nowMs);
@@ -562,11 +580,52 @@ public partial class StarterResource
     }
 
     private long _syncTick;
+    private readonly record struct NativeVehicleOwner(uint Model, float X, float Y, float Z, int Dimension, long SeenAt);
+    private readonly Dictionary<uint, NativeVehicleOwner> _nativeVehicleOwners = new();
     private readonly Dictionary<uint, (NativePlayerState State, long Version, string Name, int Dimension)> _syncStates = new();
     private readonly Dictionary<uint, string> _syncLines = new();
     private readonly List<(uint Id, float D2)> _syncNear = new();
     private readonly HashSet<uint> _syncInRange = new();
     private readonly List<uint> _syncGone = new();
+
+    /// <summary>
+    /// Транспорт — серверная сущность даже у native-клиента: водитель владеет
+    /// им, а пассажир может ссылаться только на актуального водителя в том же
+    /// измерении. Поддельная ссылка превращается в пешее состояние, чтобы не
+    /// создать на других клиентах чужую/дублированную машину.
+    /// </summary>
+    private NativePlayerState AuthorizeVehicleState(uint playerId, int dimension, NativePlayerState state, long nowMs)
+    {
+        if (!state.InVehicle || state.VehicleModel == 0) return state;
+        if (state.Seat == -1)
+            return state with { VehicleOwner = (int)playerId };
+
+        var ownerId = state.VehicleOwner > 0 ? (uint)state.VehicleOwner : 0;
+        if (ownerId != 0 && _nativeVehicleOwners.TryGetValue(ownerId, out var owner) &&
+            owner.Model == state.VehicleModel && owner.Dimension == dimension &&
+            nowMs - owner.SeenAt <= NativeSyncIntervalMs * 4 &&
+            DistanceSquared(state.X, state.Y, state.Z, owner.X, owner.Y, owner.Z) <= 25f * 25f)
+            return state;
+
+        return state with
+        {
+            Flags = state.Flags & ~NativePlayerState.FlagInVehicle,
+            VehicleModel = 0,
+            VehicleOwner = 0,
+            Seat = -1,
+            Rx = 0,
+            Ry = 0,
+            Rz = 0,
+        };
+    }
+
+    private static float DistanceSquared(float ax, float ay, float az, float bx, float by, float bz)
+    {
+        var dx = ax - bx;
+        var dy = ay - by;
+        var dz = az - bz;
+        return dx * dx + dy * dy + dz * dz;
+    }
 
     /// <summary>
     /// Транспорт у клиента b3889 создаётся в его игре и синхронизируется

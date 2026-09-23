@@ -206,7 +206,15 @@ public sealed class NativeServer : IDisposable
                 switch (parts[0])
                 {
                     case "STATE":
-                        if (NativePlayerState.TryParse(parts, out var state)) session.SetState(state);
+                        if (NativePlayerState.TryParse(parts, out var state))
+                        {
+                            // Водитель не может объявить владельцем транспорта
+                            // другого игрока: это поле является частью серверной
+                            // авторитетности транспорта, а не доверием к клиенту.
+                            if (state.InVehicle && state.Seat == -1)
+                                state = state with { VehicleOwner = (int)session.Id };
+                            session.SetState(state);
+                        }
                         break;
                     case "PING":
                         session.Send(NativeProtocol.Format("PONG", parts.Length > 1 ? parts[1] : ""));

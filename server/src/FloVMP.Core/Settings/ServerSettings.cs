@@ -58,7 +58,7 @@ public sealed class ServerSettings
         new("hud.area_names", Kind.Bool, "off", true, "Интерфейс", "названия районов и улиц"),
         new("hud.vehicle_names", Kind.Bool, "off", true, "Интерфейс", "название машины при посадке"),
         new("hud.weapon_wheel", Kind.Bool, "off", true, "Интерфейс", "колесо оружия на Tab"),
-        new("hud.pause_menu", Kind.Bool, "off", true, "Интерфейс", "штатное меню GTA на Esc. Выключено — на Esc открывается меню FloV:MP, и мир при нём не останавливается"),
+        new("hud.pause_menu", Kind.Bool, "off", true, "Интерфейс", "устарело: штатная пауза GTA всегда отключена, на Esc открывается меню FloV:MP"),
         new("hud.player_blips", Kind.Bool, "off", true, "Интерфейс", "маркеры игроков на карте и мини-карте"),
         new("hud.watermark", Kind.Bool, "off", true, "Интерфейс", "строка «сервер · ID · пинг» в углу экрана"),
         new("hud.accent", Kind.Color, "#ffffff", true, "Интерфейс", "акцентный цвет интерфейса (чат, консоль)"),
@@ -73,6 +73,12 @@ public sealed class ServerSettings
         new("nametags.admin_badge", Kind.Bool, "off", true, "Ники", "метка ADMIN у администраторов"),
         new("nametags.color", Kind.Color, "#ffffff", true, "Ники", "цвет ника"),
         new("nametags.underscore_to_space", Kind.Bool, "on", true, "Ники", "Nick_Name показывать как Nick Name"),
+        new("nametags.scale", Kind.Float, "1", true, "Ники", "масштаб ника и полосок", 0.5, 1.5),
+        new("nametags.bar_width", Kind.Float, "74", true, "Ники", "ширина полосок здоровья и брони", 24, 240),
+        new("nametags.bar_height", Kind.Float, "5", true, "Ники", "высота полосок здоровья и брони", 2, 16),
+        new("nametags.health_color", Kind.Color, "#4ade80", true, "Ники", "цвет обычного здоровья"),
+        new("nametags.health_low_color", Kind.Color, "#f87171", true, "Ники", "цвет здоровья ниже 30 процентов"),
+        new("nametags.armor_color", Kind.Color, "#60a5fa", true, "Ники", "цвет брони"),
 
         // --- Чат -------------------------------------------------------------------------
         new("chat.enabled", Kind.Bool, "on", true, "Чат", "чат (T)"),

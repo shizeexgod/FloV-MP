@@ -388,4 +388,12 @@ public sealed class NativeServerTests
         Assert.Equal(0, s.Armor);
         Assert.Equal(3f, s.Speed);
     }
+
+    [Fact]
+    public void StateParsingRejectsTruncatedPacket()
+    {
+        var parts = new string[18];
+        parts[0] = "STATE";
+        Assert.False(NativePlayerState.TryParse(parts, out _));
+    }
 }

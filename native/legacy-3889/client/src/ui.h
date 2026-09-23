@@ -19,6 +19,11 @@ namespace flov::ui
         int adminLevel = 0;        // >0 и включено в настройках — метка ADMIN
         std::string extra;         // ESP: дистанция и т.п.
         uint32_t rgb = 0xFFFFFF;
+        uint32_t healthColor = 0x4ADE80;
+        uint32_t healthLowColor = 0xF87171;
+        uint32_t armorColor = 0x60A5FA;
+        float barWidth = 74.f;      // пиксели до масштабирования интерфейса
+        float barHeight = 5.f;
         float scale = 1.f;         // уменьшение вдали
         float alpha = 1.f;         // затухание вдали
     };

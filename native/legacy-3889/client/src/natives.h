@@ -216,6 +216,7 @@ inline void SET_AUDIO_FLAG(char* flagName, BOOL toggle) { nv::invoke<void>(0xB9E
 inline void SET_CAN_ATTACK_FRIENDLY(Ped ped, BOOL toggle, BOOL p2) { nv::invoke<void>(0xB3B1CB349FF9C75D, ped, toggle, p2); }
 inline BOOL IS_PAUSE_MENU_ACTIVE() { return nv::invoke<BOOL>(0xB0034A223497FFCB); }
 inline void SET_GAME_PAUSED(BOOL toggle) { nv::invoke<void>(0x577D1284D6873711, toggle); }
+inline void DISABLE_FRONTEND_THIS_FRAME() { nv::invoke<void>(0x6D3465A73092F0E6); }
 inline void ACTIVATE_FRONTEND_MENU(Hash menuhash, BOOL p1, int p2) { nv::invoke<void>(0xEF01D36B9C9D0C7B, menuhash, p1, p2); }
 inline void SET_BLIP_FLASHES(Blip blip, BOOL toggle) { nv::invoke<void>(0xB14552383D39CE3E, blip, toggle); }
 inline void SET_BLIP_AS_FRIENDLY(Blip blip, BOOL toggle) { nv::invoke<void>(0x6F6F290102C02AB4, blip, toggle); }

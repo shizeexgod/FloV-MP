@@ -542,6 +542,9 @@ namespace flov::ui
             case WM_KEYUP:
             case WM_SYSKEYUP:
                 if (wp == VK_F12) return 0;   // см. HandleKey: оверлей Rockstar
+                // Не отдаём отпускание Esc GTA: иначе её frontend может открыть
+                // штатную паузу даже после того, как наш обработчик съел keydown.
+                if (wp == VK_ESCAPE && !g_escMenuOff) return 0;
                 if (IsLayoutModifier(wp)) break;
                 if (InputActive()) return 0;
                 break;
@@ -750,7 +753,7 @@ namespace flov::ui
             const float s = g_s;
             for (const auto& l : g_labels)
             {
-                const float k = std::clamp(l.scale, 0.5f, 1.2f);
+                const float k = std::clamp(l.scale, 0.5f, 1.5f);
                 const float a = std::clamp(l.alpha, 0.f, 1.f);
                 const float px = Px(g_name) * k;
                 const float cx = l.x * w;
@@ -766,7 +769,9 @@ namespace flov::ui
                 const float total = (badge ? badgeW + gap : 0) + nameW + idW + (l.speaking ? gap + micW : 0);
 
                 // Полоски под ником: броня (если есть) над здоровьем.
-                const float barW = 74 * s * k, barH = std::max(2.f, 5 * s * k), barGap = 2 * s * k;
+                const float barW = std::clamp(l.barWidth, 24.f, 240.f) * s * k;
+                const float barH = std::max(2.f, std::clamp(l.barHeight, 2.f, 16.f) * s * k);
+                const float barGap = 2 * s * k;
                 const bool hp = l.health >= 0, ar = l.armor > 0;
                 const float barsH = (hp ? barH : 0) + (ar ? barH + (hp ? barGap : 0) : 0);
                 const float nameTop = y - barsH - (barsH > 0 ? 4 * s * k : 0) - px;
@@ -799,8 +804,8 @@ namespace flov::ui
                     dl->AddRectFilled(b0, ImVec2(b0.x + barW * std::clamp(v, 0.f, 1.f), b1.y), fill, 1.5f * s);
                     by += barH + barGap;
                 };
-                if (ar) bar(l.armor, Rgba(96, 165, 250, a));
-                if (hp) bar(l.health, l.health < 0.3f ? Rgba(248, 113, 113, a) : Rgba(74, 222, 128, a));
+                if (ar) bar(l.armor, Rgb(l.armorColor, a));
+                if (hp) bar(l.health, Rgb(l.health < 0.3f ? l.healthLowColor : l.healthColor, a));
             }
         }
 

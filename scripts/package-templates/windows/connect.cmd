@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal enabledelayedexpansion
 title FloV:MP
 
-rem Optional helper for an externally installed client connector:
+rem Primary entry point for the bundled Legacy b3889 client:
 rem connect.cmd [host:port]
 rem Without an argument the port is read from server\server.toml: the owner may
 rem change it, and a hardcoded 7788 would point at a server that is not there.
@@ -24,6 +24,13 @@ set "TARGET=127.0.0.1:!PORT!"
 :run
 echo [FloV:MP] Подключение к %TARGET%
 
+rem The b3889 client is the normal product path.
+if exist "%~dp0client-b3889\play.cmd" (
+    call "%~dp0client-b3889\play.cmd" "%TARGET%" "%~2"
+    exit /b %errorlevel%
+)
+
+rem Compatibility fallback for old packages without client-b3889.
 if exist "%~dp0tools\connector\FloVMP.Connect.exe" (
     "%~dp0tools\connector\FloVMP.Connect.exe" -connect "%TARGET%"
     exit /b %errorlevel%

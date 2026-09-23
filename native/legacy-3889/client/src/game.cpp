@@ -116,6 +116,8 @@ namespace flov::game
             bool tags = true, tagId = true, tagHealth = true, tagArmor = true, tagVoice = true, tagAdmin = false, tagSpace = true;
             float tagDistance = 30.f;
             uint32_t tagColor = 0xFFFFFF;
+            uint32_t tagHealthColor = 0x4ADE80, tagHealthLowColor = 0xF87171, tagArmorColor = 0x60A5FA;
+            float tagScale = 1.f, tagBarWidth = 74.f, tagBarHeight = 5.f;
             bool chat = true, voice = true, loading = true;
             int voiceKey = 'N', espKey = VK_F3, noclipKey = VK_F4, waypointKey = VK_F5;
             float vehPower = 1.f, vehTorque = 1.f;   // множители двигателя из настроек сервера
@@ -521,7 +523,6 @@ namespace flov::game
                 { "Продолжить", "Закрыть меню и вернуться в игру" },
                 { "Игроки на сервере: " + std::to_string(online), "Список — клавиша Tab в консоли F8" },
                 { "Сменить сервер", "Открыть окно подключения (F9)" },
-                { "Настройки игры GTA", "Штатное меню игры. Внимание: на это время игра встаёт на паузу" },
                 { "Отключиться от сервера", "Остаться в игре, но выйти с сервера" },
                 { "Выйти из игры", "Закрыть GTA V" },
             };
@@ -540,14 +541,10 @@ namespace flov::game
                 ui::OpenConnectDialog(g_host.empty() ? std::string("127.0.0.1") : g_host, g_pendingName);
                 break;
             case 3:
-                // По желанию игрока: штатное меню GTA со своей паузой.
-                n::ACTIVATE_FRONTEND_MENU(n::GET_HASH_KEY(const_cast<char*>("FE_MENU_VERSION_SP_PAUSE")), FALSE, -1);
-                break;
-            case 4:
                 g_net.Disconnect("выход через меню");
                 ui::Notify("Вы отключились от сервера. F9 — подключиться снова.", 5000);
                 break;
-            case 5:
+            case 4:
                 ui::Notify("Выход из игры...", 2000);
                 std::exit(0);
                 break;
@@ -772,6 +769,8 @@ namespace flov::game
                 n::HIDE_HUD_COMPONENT_THIS_FRAME(19);
                 n::HIDE_HUD_COMPONENT_THIS_FRAME(20);
             }
+            // Штатный frontend GTA всегда отключён в сетевой сессии. Esc
+            // открывает только меню FloV:MP, поэтому мир и серверный тик идут.
             if (!g_cfg.pauseMenu)
             {
                 // Esc перехватывает клиент (своё меню), а эти две команды —
@@ -779,11 +778,7 @@ namespace flov::game
                 n::DISABLE_CONTROL_ACTION(0, 199, TRUE);
                 n::DISABLE_CONTROL_ACTION(0, 200, TRUE);
             }
-            // Замечание про меню Esc: в одиночной GTA оно останавливает игру
-            // вместе со скриптами, поэтому снять паузу изнутри нельзя — наш
-            // код на этих кадрах не выполняется (проверено: состояние игрока
-            // перестаёт уходить на сервер). Чтобы время шло у всех одинаково,
-            // нужен свой экран на Esc вместо штатного — отдельная задача.
+            n::DISABLE_FRONTEND_THIS_FRAME();
             n::DISABLE_CONTROL_ACTION(0, 19, TRUE);  // колесо смены персонажа
             n::DISABLE_CONTROL_ACTION(0, 166, TRUE); // F5..F8 — выбор персонажа в сюжете
             n::DISABLE_CONTROL_ACTION(0, 167, TRUE);
@@ -1157,14 +1152,21 @@ namespace flov::game
             c.peds = Bool("world.peds"); c.traffic = Bool("world.traffic"); c.parked = Bool("world.parked_vehicles");
             c.police = Bool("world.police"); c.ambient = Bool("world.ambient_events"); c.freezeTime = Bool("world.freeze_time");
             c.minimap = Bool("hud.minimap"); c.abilityBar = Bool("hud.ability_bar"); c.areaNames = Bool("hud.area_names");
-            c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel"); c.pauseMenu = Bool("hud.pause_menu");
+            c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel");
+            c.pauseMenu = false; // legacy config key; native GTA pause is never allowed
             c.playerBlips = Bool("hud.player_blips"); c.watermark = Bool("hud.watermark");
-            // Esc: наше меню (мир не останавливается) или штатное меню GTA.
-            ui::SetEscMenu(!c.pauseMenu);
+            // Esc всегда принадлежит FloV:MP: штатное меню GTA останавливает мир.
+            ui::SetEscMenu(true);
             c.tags = Bool("nametags.enabled"); c.tagDistance = std::clamp(Float("nametags.distance", 30.f), 3.f, 500.f);
             c.tagId = Bool("nametags.show_id"); c.tagHealth = Bool("nametags.health"); c.tagArmor = Bool("nametags.armor");
             c.tagVoice = Bool("nametags.voice_icon"); c.tagAdmin = Bool("nametags.admin_badge");
             c.tagColor = Rgb("nametags.color"); c.tagSpace = Bool("nametags.underscore_to_space");
+            c.tagScale = std::clamp(Float("nametags.scale", 1.f), 0.5f, 1.5f);
+            c.tagBarWidth = std::clamp(Float("nametags.bar_width", 74.f), 24.f, 240.f);
+            c.tagBarHeight = std::clamp(Float("nametags.bar_height", 5.f), 2.f, 16.f);
+            c.tagHealthColor = Rgb("nametags.health_color", 0x4ADE80);
+            c.tagHealthLowColor = Rgb("nametags.health_low_color", 0xF87171);
+            c.tagArmorColor = Rgb("nametags.armor_color", 0x60A5FA);
             c.chat = Bool("chat.enabled"); c.voice = Bool("voice.enabled"); c.loading = Bool("loading.enabled");
             c.vehPower = std::clamp(Float("vehicles.power", 1.f), 0.1f, 10.f);
             c.vehTorque = std::clamp(Float("vehicles.torque", 1.f), 0.1f, 10.f);
@@ -1629,6 +1631,11 @@ namespace flov::game
                 l.name = DisplayName(r.name);
                 l.id = g_cfg.tagId || espShow ? id : -1;
                 l.rgb = g_cfg.tagColor;
+                l.healthColor = g_cfg.tagHealthColor;
+                l.healthLowColor = g_cfg.tagHealthLowColor;
+                l.armorColor = g_cfg.tagArmorColor;
+                l.barWidth = g_cfg.tagBarWidth;
+                l.barHeight = g_cfg.tagBarHeight;
                 const bool dead = (r.cur.flags & FDead) != 0;
                 if (g_cfg.tagHealth || espShow) l.health = dead ? 0.f : std::clamp((r.cur.health - 100) / 100.f, 0.f, 1.f);
                 if (g_cfg.tagArmor || espShow) l.armor = std::clamp(r.cur.armor / 100.f, 0.f, 1.f);
@@ -1636,7 +1643,7 @@ namespace flov::game
                 l.adminLevel = g_cfg.tagAdmin ? level : 0;
                 // Ближе 40% дистанции — полный размер, дальше плавно меньше и прозрачнее.
                 const float k = std::clamp((d - tagDist * 0.4f) / std::max(1.f, tagDist * 0.6f), 0.f, 1.f);
-                l.scale = 1.f - 0.2f * k;
+                l.scale = (1.f - 0.2f * k) * g_cfg.tagScale;
                 l.alpha = 1.f - 0.45f * k;
                 if (espShow)
                 {

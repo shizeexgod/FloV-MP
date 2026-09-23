@@ -151,6 +151,8 @@ public readonly record struct NativePlayerState(
     public static bool TryParse(string[] p, out NativePlayerState state)
     {
         state = default;
+        // Последнее поле pedModel появилось позже и остаётся необязательным:
+        // старый клиент присылает 18 значений после имени сообщения.
         if (p.Length < 19) return false;
         if (!NativeProtocol.TryFloat(p, 1, out var x) || !NativeProtocol.TryFloat(p, 2, out var y) ||
             !NativeProtocol.TryFloat(p, 3, out var z) || !NativeProtocol.TryFloat(p, 4, out var h)) return false;
