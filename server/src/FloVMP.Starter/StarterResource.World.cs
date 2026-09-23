@@ -162,7 +162,7 @@ public partial class StarterResource
         foreach (var p in _nativePlayers.Values)
         {
             var np = (NativePlayerProxy)(object)p;
-            if (_nativeReady.Contains(np.Session.Id) && Visible(item, np.DimensionValue)) np.Session.Send(line);
+            if (_nativeReady.Contains(np.Session.Id) && Visible(item, np.DimensionValue)) SendWorldLine(np.Session, line);
         }
         return true;
     }
@@ -171,7 +171,7 @@ public partial class StarterResource
     {
         if (id is null || !_world.Remove(Key(kind, id))) return;
         foreach (var p in _nativePlayers.Values)
-            ((NativePlayerProxy)(object)p).Session.Send("WDEL", kind, id);
+            SendWorldLine(((NativePlayerProxy)(object)p).Session, NativeProtocol.Format("WDEL", kind, id));
     }
 
     private static bool Visible(WorldItem item, int dimension) => item.Dimension == DimensionAll || item.Dimension == dimension;
@@ -229,6 +229,25 @@ public partial class StarterResource
             }
             if (queue.Count == 0) _worldPending.Remove(id);
         }
+    }
+
+    /// <summary>
+    /// Строка мира игроку. Если очередь отправки подходит к концу (геймод
+    /// строит карту кодом — тысячи объектов за тик), строка уходит в ту же
+    /// порционную очередь, что и снимок: порядок сохраняется, игрока не
+    /// выбрасывает за «не успевает принимать данные».
+    /// </summary>
+    private void SendWorldLine(NativeSession session, string line)
+    {
+        if (_worldPending.TryGetValue(session.Id, out var pending)) { pending.Enqueue(line); return; }
+        if (session.Queued >= WorldQueueHeadroom)
+        {
+            var queue = new Queue<string>();
+            queue.Enqueue(line);
+            _worldPending[session.Id] = queue;
+            return;
+        }
+        session.Send(line);
     }
 
     private void SendKeys(NativeSession session) => session.Send("KEYS", string.Join(",", _boundKeys));
