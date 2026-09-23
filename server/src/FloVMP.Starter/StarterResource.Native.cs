@@ -268,6 +268,7 @@ public partial class StarterResource
         if (RejectIfBanned(proxy)) refusal = "бан";
         else if (!_license.IsLicensed) refusal = "[Лицензия] " + _license.Message;
         else if (AllPlayers().Count > _license.PlayerLimit) refusal = $"Сервер заполнен ({_license.PlayerLimit} игроков).";
+        else refusal = NameConflict(session);
         if (refusal is not null)
         {
             if (refusal != "бан") proxy.Kick(refusal);
@@ -311,6 +312,32 @@ public partial class StarterResource
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
         OnPlayerDisconnect(proxy, reason);
+    }
+
+    /// <summary>
+    /// Два игрока с одним ником — это и путаница в админских командах по нику,
+    /// и подмена: можно зайти под ником администратора. Свой же обрыв связи
+    /// таким отказом не наказываем: если ник занят тем же клиентом (тот же
+    /// ключ), старую сессию закрываем и пускаем новую.
+    /// </summary>
+    private string? NameConflict(NativeSession session)
+    {
+        foreach (var (id, other) in _nativePlayers)
+        {
+            if (id == session.Id) continue;
+            var np = (NativePlayerProxy)(object)other;
+            if (!string.Equals(np.Session.Name, session.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            if (np.Session.Identity == session.Identity)
+            {
+                np.Session.Close("вы зашли на сервер заново");
+                continue;
+            }
+            return "Ник уже занят игроком на сервере — выберите другой.";
+        }
+        foreach (var alt in Alt.GetAllPlayers())
+            if (alt.Exists && string.Equals(alt.Name, session.Name, StringComparison.OrdinalIgnoreCase))
+                return "Ник уже занят игроком на сервере — выберите другой.";
+        return null;
     }
 
     private void OnNativeMessage(NativeSession session, string[] p)
