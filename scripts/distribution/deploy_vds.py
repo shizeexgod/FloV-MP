@@ -29,10 +29,11 @@ TOKEN = os.environ.get("REDL_TOKEN", "").strip()
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BUNDLE = os.path.join(REPO, "dist", "vds")
 REMOTE = "/root/flovmp-vds"
-# У текущего REDL фактический предел JSON-тела ниже заявленного файлового
-# лимита: 280 КБ проходит, 320 КБ возвращает command_too_long. 250 КБ оставляет
-# запас на JSON и ускоряет публикацию больших релизов в 5+ раз против старых 45 КБ.
-CHUNK = 250_000
+# ВАЖНО: /write выше ~50 КБ отвечает «bytes: N», но файла на машине не создаёт
+# (замерено 23.09.2026: 40 000 — есть, 60 000 — ответ есть, файла нет). Поэтому
+# кусок держим заведомо ниже порога, а каждый кусок после заливки сверяем по
+# размеру — молчаливая потеря куска иначе выглядит как «SHA-256 не совпал».
+CHUNK = 40_000
 
 
 def call(path, payload, timeout=180):
@@ -73,6 +74,21 @@ def upload(local, remote, attempts=3):
     sys.exit("не удалось залить {}".format(local))
 
 
+def missing_parts(stage, parts, already):
+    """Куски, которых на машине нет или они короче отправленных.
+
+    Ответ /write про число байт ничего не гарантирует, поэтому смотрим сами."""
+    out = run("for f in {}.d/*; do echo \"$(basename $f) $(wc -c < $f)\"; done 2>/dev/null".format(stage),
+              t=60, quiet=True).get("output") or ""
+    have = {}
+    for line in out.splitlines():
+        name, _, size = line.strip().partition(" ")
+        if size.isdigit():
+            have[name] = int(size)
+    return [i for i in range(len(parts))
+            if i not in already and have.get("{:05d}".format(i)) != len(parts[i])]
+
+
 def upload_once(local, remote):
     data = open(local, "rb").read()
     digest = hashlib.sha256(data).hexdigest()
@@ -98,6 +114,10 @@ def upload_once(local, remote):
     # не попадут в сборку, а /write сам создаёт промежуточную папку.
     stage = "/tmp/fu-{}-{}".format(hashlib.sha1(remote.encode()).hexdigest()[:12], digest[:12])
 
+    # Остатки прерванной заливки того же файла: лишние куски попадут в склейку
+    # и SHA-256 не сойдётся сколько ни повторяй.
+    run("rm -rf {s}.d {s}.bin".format(s=stage), quiet=True)
+
     last_error = [""]
 
     def put(i):
@@ -117,6 +137,7 @@ def upload_once(local, remote):
         with ThreadPoolExecutor(3) as ex:
             results = list(ex.map(put, todo))
         todo = [i for i, uploaded in zip(todo, results) if not uploaded]
+        todo += missing_parts(stage, parts, todo)
         if not todo:
             break
     if todo:

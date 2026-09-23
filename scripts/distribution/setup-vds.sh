@@ -179,7 +179,7 @@ nginx -t && systemctl reload nginx
 install -d -m 0755 /var/www/cdn
 for f in get.sh get.ps1 flovmp-setup.zip; do [ -f "$SRC/$f" ] && install -m 0644 "$SRC/$f" "/var/www/cdn/$f"; done
 # Раздача загрузчиков и архива установки: их клиент качает до всякой лицензии.
-if [ -f "$SITE" ] && ! grep -q "_flovmp_cdn" "$SITE"; then
+if [ -f "$SITE" ] && ! grep -q "location /cdn/" "$SITE"; then
   cp "$SITE" "/root/nginx-backups/default.bak-cdn-$(date +%s)"
   python3 - "$SITE" <<'CDN'
 import sys
