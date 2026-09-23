@@ -622,6 +622,25 @@ namespace flov::game
         /// звонки, смену персонажа, «больницу»). Сервер FloV:MP, как FiveM и
         /// alt:V, работает в мире без сюжетных скриптов — иначе игрок на входе
         /// оказывается посреди миссии своего сохранения. Возвращает число остановленных.
+        /// Экраны и служебные скрипты интерфейса игры, которые нам нужны живыми:
+        /// меню Esc (карта, настройки, статистика) целиком на них держится.
+        bool IsGameScreenScript(const std::string& name)
+        {
+            static const char* kKeep[] = {
+                "pausemenu", "pausemenu_map", "pausemenu_sp_repeat", "pausemenu_multiplayer",
+                "pausemenu_online", "pausemenu_example", "maintransition", "startup_positioning",
+                "loadingscreen", "loadingscreen_hint_controller", "mp_menuped", "appsettings",
+                "appcamera", "appmedia", "appsettings_controller",
+            };
+            std::string lower;
+            lower.reserve(name.size());
+            for (char c : name) lower += (char)std::tolower((unsigned char)c);
+            if (lower.rfind("pausemenu", 0) == 0) return true;   // все экраны меню паузы
+            for (const char* keep : kKeep)
+                if (lower == keep) return true;
+            return false;
+        }
+
         int StopStoryScripts()
         {
             const int self = n::GET_ID_OF_THIS_THREAD();
@@ -639,6 +658,10 @@ namespace flov::game
                 const std::string name = raw ? raw : "";
                 // Потоки ScriptHookV (свои и чужих ASI) имени сюжетного скрипта не имеют — не трогаем.
                 if (name.empty()) continue;
+                // Экраны самой игры — не сюжет: меню Esc с картой и настройками
+                // работает именно на них. Убив PauseMenu_Map, мы своими руками
+                // ломали карту в меню (игрок видел пустой экран).
+                if (IsGameScreenScript(name)) continue;
                 // Служебный скрипт, который движок сразу запускает снова (награды, DLC):
                 // после трёх попыток оставляем его в покое — сюжета в нём нет, а
                 // остановка по кругу только тратит время кадра.
@@ -777,14 +800,15 @@ namespace flov::game
             }
             // Штатный frontend GTA всегда отключён в сетевой сессии. Esc
             // открывает только меню FloV:MP, поэтому мир и серверный тик идут.
-            if (!g_cfg.pauseMenu)
+            // Меню GTA открывает только наш обработчик Esc — и открывает его
+            // без паузы. Поэтому штатные кнопки вызова паузы (геймпад, запасная
+            // клавиша) закрыты, пока меню не открыто. Когда открыто — не
+            // трогаем ничего, иначе игрок не сможет по нему ходить и закрыть.
+            if (!n::IS_PAUSE_MENU_ACTIVE())
             {
-                // Esc перехватывает клиент (своё меню), а эти две команды —
-                // тот же вызов паузы с геймпада и запасной клавиши.
                 n::DISABLE_CONTROL_ACTION(0, 199, TRUE);
                 n::DISABLE_CONTROL_ACTION(0, 200, TRUE);
             }
-            n::DISABLE_FRONTEND_THIS_FRAME();
             n::DISABLE_CONTROL_ACTION(0, 19, TRUE);  // колесо смены персонажа
             n::DISABLE_CONTROL_ACTION(0, 166, TRUE); // F5..F8 — выбор персонажа в сюжете
             n::DISABLE_CONTROL_ACTION(0, 167, TRUE);
@@ -1844,10 +1868,23 @@ namespace flov::game
                 g_net.Connect(g_host, g_port, g_pendingName);
             }
 
-            // Пока открыто штатное меню GTA (его открывает пункт нашего меню),
-            // Esc принадлежит ему — иначе игрок не смог бы его закрыть.
-            ui::SetGtaMenuOpen(n::IS_PAUSE_MENU_ACTIVE() != 0);
-            if (ui::TakeEscRequest()) OpenEscMenu();
+            // Esc открывает штатное меню GTA (карта, настройки графики и звука),
+            // но без паузы: у ACTIVATE_FRONTEND_MENU второй аргумент — «ставить
+            // ли игру на паузу», и мы передаём FALSE. Пока меню открыто, Esc
+            // принадлежит ему, иначе игрок не смог бы его закрыть.
+            const bool gtaMenu = n::IS_PAUSE_MENU_ACTIVE() != 0;
+            static bool s_gtaMenuWas = false;
+            if (gtaMenu != s_gtaMenuWas)
+            {
+                s_gtaMenuWas = gtaMenu;
+                Log(std::string("меню GTA: ") + (gtaMenu ? "открыто" : "закрыто"));
+            }
+            ui::SetGtaMenuOpen(gtaMenu);
+            if (gtaMenu) n::SET_GAME_PAUSED(FALSE);
+            if (ui::TakeEscRequest() && !gtaMenu)
+            {
+                n::ACTIVATE_FRONTEND_MENU(n::GET_HASH_KEY(const_cast<char*>("FE_MENU_VERSION_SP_PAUSE")), FALSE, -1);
+            }
 
             for (const auto& ev : ui::TakeMenuEvents())
             {
