@@ -215,6 +215,10 @@ inline void DESTROY_MOBILE_PHONE() { nv::invoke<void>(0x3BC861DF703E5097); }
 inline void SET_AUDIO_FLAG(char* flagName, BOOL toggle) { nv::invoke<void>(0xB9EFD5C25018725A, flagName, toggle); }
 inline void SET_CAN_ATTACK_FRIENDLY(Ped ped, BOOL toggle, BOOL p2) { nv::invoke<void>(0xB3B1CB349FF9C75D, ped, toggle, p2); }
 inline BOOL IS_PAUSE_MENU_ACTIVE() { return nv::invoke<BOOL>(0xB0034A223497FFCB); }
+inline void SET_GAME_PAUSED(BOOL toggle) { nv::invoke<void>(0x577D1284D6873711, toggle); }
+inline void SET_BLIP_FLASHES(Blip blip, BOOL toggle) { nv::invoke<void>(0xB14552383D39CE3E, blip, toggle); }
+inline void SET_BLIP_AS_FRIENDLY(Blip blip, BOOL toggle) { nv::invoke<void>(0x6F6F290102C02AB4, blip, toggle); }
+inline void SET_BLIP_PRIORITY(Blip blip, Any p1) { nv::invoke<void>(0xAE9FC9EF6A9FAC79, blip, p1); }
 inline void SET_MOUSE_CURSOR_ACTIVE_THIS_FRAME() { nv::invoke<void>(0xAAE7CE1D63167423); }
 inline void DISPLAY_AREA_NAME(BOOL toggle) { nv::invoke<void>(0x276B6CE369C33678, toggle); }
 inline void SPECIAL_ABILITY_DEACTIVATE_FAST(Player player) { nv::invoke<void>(0x9CB5CE07A3968D5A, player); }

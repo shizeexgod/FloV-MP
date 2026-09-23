@@ -509,19 +509,35 @@ namespace flov::ui
             return true;
         }
 
+        /// Клавиши-модификаторы, которыми переключают раскладку.
+        bool IsLayoutModifier(WPARAM vk)
+        {
+            return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
+                   vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU ||
+                   vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL;
+        }
+
         LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
             switch (msg)
             {
             case WM_KEYDOWN:
             case WM_SYSKEYDOWN:
+                // Shift, Alt и Ctrl отдаём системе всегда: ими переключают
+                // раскладку (Shift+Alt, Ctrl+Shift), а если их перехватывать,
+                // в чате и консоли невозможно сменить язык.
+                if (IsLayoutModifier(wp)) break;
                 if (HandleKey(wp)) return 0;
                 break;
             case WM_KEYUP:
             case WM_SYSKEYUP:
                 if (wp == VK_F12) return 0;   // см. HandleKey: оверлей Rockstar
+                if (IsLayoutModifier(wp)) break;
                 if (InputActive()) return 0;
                 break;
+            case WM_INPUTLANGCHANGE:
+            case WM_INPUTLANGCHANGEREQUEST:
+                break;   // смена раскладки — дело системы, не мешаем
             case WM_CHAR:
                 if (HandleChar(wp)) return 0;
                 break;
