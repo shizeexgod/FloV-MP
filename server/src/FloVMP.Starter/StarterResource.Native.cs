@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -66,6 +66,11 @@ public partial class StarterResource
     private const float MaxRamDistance = 20f;
     private const uint WeaponUnarmed = 0xA2719263;
     private readonly Dictionary<uint, long> _hitWarnedAt = new();
+
+    /// <summary>Прошлое и текущее оружие игрока: HIT выстрела, сделанного
+    /// сразу после смены оружия, приходит раньше нового STATE.</summary>
+    private readonly Dictionary<uint, (uint Prev, uint Cur, long ChangedAt)> _weaponHistory = new();
+    private const int WeaponSwitchGraceMs = 2000;
 
     private static readonly int PerfNative = FloVMP.Core.Diagnostics.TickProfiler.Register("native-b3889");
 
@@ -288,6 +293,7 @@ public partial class StarterResource
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
         _hitWarnedAt.Remove(session.Id);
+        _weaponHistory.Remove(session.Id);
         foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
             _hitPairRate.Remove(key);
         ForgetNativeUi(session.Id);
@@ -370,6 +376,7 @@ public partial class StarterResource
 
         // Правдоподобие: удар рукой — вплотную и слабый; наезд — рядом; оружие
         // в сообщении должно совпадать с тем, что у стрелка в руках по STATE.
+        var now = _clock.ElapsedMilliseconds;
         string? why = null;
         if (dist > MaxHitDistance) why = $"попадание с {dist:F0} м";
         else if (a.InVehicle) { if (dist > MaxRamDistance && weapon == WeaponUnarmed) why = $"наезд с {dist:F0} м"; }
@@ -378,9 +385,11 @@ public partial class StarterResource
             if (dist > MaxMeleeDistance) why = $"удар рукой с {dist:F0} м";
             else damage = Math.Min(damage, 60);
         }
-        else if (a.Weapon != 0 && a.Weapon != WeaponUnarmed && a.Weapon != weapon) why = "оружие не совпадает с тем, что в руках";
+        else if (a.Weapon != 0 && a.Weapon != WeaponUnarmed && a.Weapon != weapon &&
+                 !(_weaponHistory.TryGetValue(session.Id, out var wh) && weapon == wh.Prev &&
+                   now - wh.ChangedAt < WeaponSwitchGraceMs))
+            why = "оружие не совпадает с тем, что в руках";
 
-        var now = _clock.ElapsedMilliseconds;
         var rate = _hitRate.TryGetValue(session.Id, out var r) && now - r.WindowStart < 1000
             ? (Count: r.Count + 1, Damage: r.Damage + damage, r.WindowStart)
             : (Count: 1, Damage: damage, WindowStart: now);
@@ -432,6 +441,11 @@ public partial class StarterResource
             // кому NoClip разрешён: иначе это невидимость для любого читера.
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
+            if (_weaponHistory.TryGetValue(id, out var wh))
+            {
+                if (wh.Cur != st.Weapon) _weaponHistory[id] = (wh.Cur, st.Weapon, nowMs);
+            }
+            else _weaponHistory[id] = (st.Weapon, st.Weapon, nowMs);
             _syncStates[id] = (st, np.Session.StateVersion, np.Session.Name, np.DimensionValue);
             _nativeGrid.InsertOrUpdate(id, new FloVMP.Core.AntiCheat.Vector3D(st.X, st.Y, st.Z), np.DimensionValue);
         }

@@ -134,7 +134,7 @@ def upload_once(local, remote):
 
     todo = list(range(len(parts)))
     for _ in range(6):
-        with ThreadPoolExecutor(3) as ex:
+        with ThreadPoolExecutor(6) as ex:
             results = list(ex.map(put, todo))
         todo = [i for i, uploaded in zip(todo, results) if not uploaded]
         todo += missing_parts(stage, parts, todo)
