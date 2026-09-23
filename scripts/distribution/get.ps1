@@ -1,13 +1,19 @@
 ﻿param(
-    [Parameter(Mandatory = $true)] [string]$Key,
-    [string]$InstallDir = 'C:\FloVMP',
+    [string]$Key = '',
+    [string]$InstallDir = '',
     [string]$Dist = '',
     [switch]$Force,
-    [switch]$NoStart
+    [switch]$NoStart,
+    [switch]$Reinstall
 )
-# FloV:MP — установка сервера одной командой (Windows).
+# FloV:MP — установка и обновление сервера одной командой (Windows).
 #
-#   powershell -ExecutionPolicy Bypass -Command "iwr http://<адрес раздачи>/cdn/get.ps1 -OutFile flovmp-get.ps1; .\flovmp-get.ps1 -Key FLV-XXXX-XXXX-XXXX"
+#   cd C:\Мой сервер
+#   powershell -ExecutionPolicy Bypass -Command "iwr http://<адрес>/cdn/get.ps1 -OutFile get.ps1; .\get.ps1 -Key FLV-XXXX-XXXX-XXXX-XXXX"
+#
+# Без -InstallDir ставит в текущую папку (ту, куда клиент зашёл через cd).
+# Повторный запуск в той же папке — обновление: ключ и настройки берутся из
+# уже установленного config\flovmp.env, свои файлы клиента не трогаются.
 #
 # По ключу лицензии получает описание последнего релиза, проверяет его подпись
 # ключом релизов FloV:MP (вшит ниже), скачивает ZIP-пакет, сверяет SHA-256 и
@@ -25,7 +31,33 @@ $ReleasePubKeyXml = '<RSAKeyValue><Modulus>pmynUrPAKz17KYFCg3URy5BgBanGtIDxbLIEx
 
 function Fail($t) { Write-Host "ОШИБКА: $t" -ForegroundColor Red; exit 1 }
 if (-not $ReleasePubKeyXml) { Fail 'в загрузчике нет ключа релизов — скачайте get.ps1 заново' }
+
+# Куда ставим: по умолчанию — текущая папка (клиент зашёл в неё через cd).
+if (-not $InstallDir) { $InstallDir = (Get-Location).ProviderPath }
+$target = [IO.Path]::GetFullPath($InstallDir).TrimEnd([IO.Path]::DirectorySeparatorChar)
+foreach ($forbidden in @($env:SystemRoot, (Join-Path $env:SystemRoot 'System32'), $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:USERPROFILE)) {
+    if ($forbidden -and $target.TrimEnd('\').Equals($forbidden.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+        Fail "в системную папку ставить нельзя: $target. Зайдите в папку сервера (cd) или укажите -InstallDir"
+    }
+}
+Write-Host "Папка установки: $target" -ForegroundColor Cyan
+
+# Обновление: ключ уже лежит рядом, второй раз его вводить не нужно.
+$envPath = Join-Path $target 'config\flovmp.env'
+$installedVersion = ''
+if (Test-Path -LiteralPath (Join-Path $target 'manifest.json')) {
+    try { $installedVersion = (Get-Content -LiteralPath (Join-Path $target 'manifest.json') -Raw | ConvertFrom-Json).version } catch { }
+}
+if (-not $Key -and (Test-Path -LiteralPath $envPath)) {
+    foreach ($line in Get-Content -LiteralPath $envPath -Encoding UTF8) {
+        if ($line -match '^\s*FLOVMP_LICENSE_KEY\s*=\s*(\S+)') { $Key = $Matches[1] }
+    }
+    if ($Key) { Write-Host '  ключ лицензии взят из установленного config\flovmp.env' }
+}
+if (-not $Key) { Fail 'нужен ключ лицензии: -Key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX' }
+
 $cleanKey = ($Key.Trim().ToUpperInvariant() -replace '[^A-Z0-9-]', '')
+if ($cleanKey -notmatch '^FLV(-[0-9A-F]{8}){4}$') { Fail "ключ не похож на лицензионный: $cleanKey" }
 $q = "os=windows&key=$cleanKey"
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ('flovmp-get-' + [Guid]::NewGuid().ToString('N'))
@@ -62,6 +94,14 @@ try {
     if ($info.sha256 -notmatch '^[0-9a-f]{64}$') { Fail 'неверный SHA-256 в релизе' }
     Write-Host "  версия $($info.version), пакет $($info.file)"
 
+    if ($installedVersion) {
+        Write-Host "  установлено сейчас: $installedVersion"
+        if ($installedVersion -eq $info.version -and -not $Reinstall) {
+            Write-Host 'Обновление не требуется: установлена та же версия. Повторить установку — ключ -Reinstall.' -ForegroundColor Green
+            exit 0
+        }
+    }
+
     Write-Host '==> Скачивание пакета' -ForegroundColor Cyan
     $zip = Join-Path $work $info.file
     Fetch "$Dist/api/v1/distribution/download?$q" $zip
@@ -77,10 +117,15 @@ try {
     if (-not (Test-Path -LiteralPath $installer)) { Fail 'в пакете нет install.ps1' }
 
     Write-Host '==> Установка' -ForegroundColor Cyan
-    $arguments = @{ InstallDir = $InstallDir; LicenseKey = $cleanKey }
+    $arguments = @{ InstallDir = $target; LicenseKey = $cleanKey }
     if ($Force) { $arguments.Force = $true }
     if ($NoStart) { $arguments.NoStart = $true }
-    & $installer @arguments
+    try { & $installer @arguments }
+    catch {
+        # Установщик бросает понятное сообщение (столкновение файлов, нет места,
+        # файл занят). Клиенту нужна причина, а не трассировка PowerShell.
+        Fail $_.Exception.Message
+    }
 } finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }

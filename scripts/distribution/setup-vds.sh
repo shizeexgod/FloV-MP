@@ -177,7 +177,28 @@ fi
 nginx -t && systemctl reload nginx
 
 install -d -m 0755 /var/www/cdn
-for f in get.sh get.ps1; do [ -f "$SRC/$f" ] && install -m 0644 "$SRC/$f" "/var/www/cdn/$f"; done
+for f in get.sh get.ps1 flovmp-setup.zip; do [ -f "$SRC/$f" ] && install -m 0644 "$SRC/$f" "/var/www/cdn/$f"; done
+# Раздача загрузчиков и архива установки: их клиент качает до всякой лицензии.
+if [ -f "$SITE" ] && ! grep -q "_flovmp_cdn" "$SITE"; then
+  cp "$SITE" "/root/nginx-backups/default.bak-cdn-$(date +%s)"
+  python3 - "$SITE" <<'CDN'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+anchor = "    location /api/ {"
+block = """    # _flovmp_cdn: get.sh, get.ps1 и flovmp-setup.zip
+    location /cdn/ {
+        alias /var/www/cdn/;
+        autoindex off;
+        add_header Cache-Control "no-store" always;
+    }
+
+"""
+i = s.index(anchor)
+open(p, "w", encoding="utf-8").write(s[:i] + block + s[i:])
+CDN
+  nginx -t && systemctl reload nginx
+fi
 
 sleep 2
 curl -fsS http://127.0.0.1/api/v1/license/health && echo

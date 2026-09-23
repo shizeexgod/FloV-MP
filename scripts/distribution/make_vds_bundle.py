@@ -36,6 +36,11 @@ def main():
     for f in os.listdir(app):
         if f.endswith((".pdb", ".exe")):  # .exe — запускалка Windows, на VDS не нужна
             os.remove(os.path.join(app, f))
+    # Архив установки для Windows-клиента: собирается из текущего get.ps1,
+    # поэтому в нём всегда тот же ключ релизов, что и у загрузчика.
+    subprocess.run([sys.executable, os.path.join(HERE, "make_setup_zip.py")], check=True)
+    shutil.copy2(os.path.join(REPO, "dist", "cdn", "flovmp-setup.zip"),
+                 os.path.join(args.out, "flovmp-setup.zip"))
     for f in ("setup-vds.sh", "check-vds.sh", "get.sh", "get.ps1"):
         data = open(os.path.join(HERE, f), "rb").read()
         if f.endswith(".sh"):

@@ -82,9 +82,26 @@ foreach ($entry in $entries) {
 Write-Host '  OK: пакет целый.' -ForegroundColor Green
 
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
-if ((Test-Path -LiteralPath $target) -and (Get-ChildItem -LiteralPath $target -Force | Select-Object -First 1) -and
-    (-not (Test-Path -LiteralPath (Join-Path $target 'manifest.txt'))) -and (-not $Force)) {
-    throw "Целевая папка не похожа на FloV:MP: $target. Используйте -Force или другую -InstallDir."
+$targetIsOurs = Test-Path -LiteralPath (Join-Path $target 'manifest.txt') -PathType Leaf
+$targetNotEmpty = (Test-Path -LiteralPath $target) -and (Get-ChildItem -LiteralPath $target -Force | Select-Object -First 1)
+
+# В папке клиента может уже лежать чужой сервер или мод. Платформа трогает
+# только свои файлы из manifest.txt, поэтому вместо запрета «папка не пустая»
+# ищем настоящие столкновения: чужие файлы с теми же именами.
+$conflicts = @()
+if ($targetNotEmpty -and -not $targetIsOurs) {
+    foreach ($entry in $entries) {
+        $existing = Get-ContainedPath $target $entry.Path
+        if (Test-Path -LiteralPath $existing -PathType Leaf) { $conflicts += $entry.Path }
+    }
+    if ($conflicts.Count -gt 0 -and -not $Force) {
+        $shown = ($conflicts | Select-Object -First 10) -join "`n  "
+        $more = if ($conflicts.Count -gt 10) { "`n  ... и ещё $($conflicts.Count - 10)" } else { '' }
+        throw ("В папке $target уже есть чужие файлы с такими же именами:`n  $shown$more`n" +
+               'Ничего не изменено. Поставьте в пустую папку (-InstallDir) или повторите с -Force: ' +
+               'тогда эти файлы сначала уйдут в резервную копию, а потом будут заменены.')
+    }
+    Write-Host "  Папка не пуста: ставим рядом, посторонние файлы не трогаем." -ForegroundColor Yellow
 }
 
 $parent = Split-Path -Parent $target
@@ -134,6 +151,16 @@ try {
                 }
             }
         }
+    }
+    elseif ($conflicts.Count -gt 0) {
+        # -Force поверх чужой папки: каждый чужой файл уходит в копию до замены.
+        New-Item -ItemType Directory -Path $backup -Force | Out-Null
+        foreach ($rel in $conflicts) {
+            $backupPath = Get-ContainedPath $backup $rel
+            New-Item -ItemType Directory -Path (Split-Path -Parent $backupPath) -Force | Out-Null
+            Copy-Item -LiteralPath (Get-ContainedPath $target $rel) -Destination $backupPath -Force
+        }
+        Write-Host "  Чужие файлы ($($conflicts.Count)) сохранены в $backup" -ForegroundColor Yellow
     }
     New-Item -ItemType Directory -Path $target -Force | Out-Null
     foreach ($entry in $entries) {
