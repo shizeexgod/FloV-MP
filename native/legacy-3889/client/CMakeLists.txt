@@ -26,7 +26,18 @@ add_library(flovmp-client SHARED
 
 target_compile_features(flovmp-client PRIVATE cxx_std_20)
 target_include_directories(flovmp-client PRIVATE src ${IMGUI_DIR})
-target_compile_definitions(flovmp-client PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
+# Версия клиента берётся из общего файла VERSION, чтобы сервер видел,
+# какая сборка у игрока, и мог просить обновиться.
+set(FLOVMP_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../../VERSION")
+if(EXISTS "${FLOVMP_VERSION_FILE}")
+    file(READ "${FLOVMP_VERSION_FILE}" FLOVMP_VERSION_RAW)
+    string(STRIP "${FLOVMP_VERSION_RAW}" FLOVMP_VERSION)
+else()
+    set(FLOVMP_VERSION "dev")
+endif()
+message(STATUS "FloV:MP client version: ${FLOVMP_VERSION}")
+
+target_compile_definitions(flovmp-client PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}" WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
     IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
 if (MSVC)
     target_compile_options(flovmp-client PRIVATE /utf-8 /W3 /EHsc /GS /guard:cf)

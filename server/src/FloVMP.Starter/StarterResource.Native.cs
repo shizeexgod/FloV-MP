@@ -287,6 +287,17 @@ public partial class StarterResource
         SendClientSettings(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
+        // Версия клиента приходит из его сборки. Не совпала с версией
+        // платформы — игрок играет старым клиентом: предупреждаем и его, и
+        // владельца сервера, но не выкидываем (обновление — решение владельца).
+        var platformVersion = FloVMP.Core.Licensing.Edition.Version;
+        if (!string.IsNullOrWhiteSpace(session.ClientVersion) &&
+            !string.Equals(session.ClientVersion, platformVersion, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(session.ClientVersion, "dev", StringComparison.OrdinalIgnoreCase))
+        {
+            Alt.LogWarning($"[FloV:MP b3889] у {session.Name} клиент {session.ClientVersion}, а сервер {platformVersion} — попросите обновить клиент.");
+            SendChatMessage(proxy, $"{{fde047}}[FloV:MP] Ваш клиент {session.ClientVersion} старее сервера ({platformVersion}). Обновите клиент, чтобы всё работало правильно.");
+        }
 
         // Тот же вход, что у клиента alt:V: ник, бан, лицензия, лимит, спавн, права.
         OnPlayerConnect(proxy, "native-b3889");

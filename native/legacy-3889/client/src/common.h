@@ -8,7 +8,13 @@
 
 namespace flov
 {
-    constexpr const char* kClientVersion = "1.0.0";
+#ifndef FLOVMP_CLIENT_VERSION
+// Версия подставляется сборкой из файла VERSION в корне проекта.
+// Раньше здесь была зашита строка «1.0.0», и клиент навсегда сообщал
+// её серверу — понять, у кого старый клиент, было невозможно.
+#define FLOVMP_CLIENT_VERSION "dev"
+#endif
+    constexpr const char* kClientVersion = FLOVMP_CLIENT_VERSION;
     constexpr const char* kProtocolVersion = "2";
     constexpr const char* kGameVersion = "1.0.3889.0";
     constexpr int kDefaultNativePort = 7798;
