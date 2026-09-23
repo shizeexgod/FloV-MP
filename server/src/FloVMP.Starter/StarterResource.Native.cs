@@ -58,10 +58,15 @@ public partial class StarterResource
     private readonly Dictionary<(uint Attacker, uint Victim), (int Damage, long WindowStart)> _hitPairRate = new();
     // Миниган делает ~50 выстрелов в секунду, пистолет-пулемёт ~12: прежний
     // лимит 12 отбрасывал честные попадания («нерег» автоматическим оружием).
-    private const int MaxHitsPerSecond = 40;
+    // Миниган и автоматы дают десятки попаданий в секунду по одной цели;
+    // предел держим выше их темпа, а злоупотребление ограничивает урон в секунду.
+    private const int MaxHitsPerSecond = 60;
     private const int MaxDamagePerSecond = 1000;      // суммарно по всем жертвам
     private const int MaxDamagePerVictimPerSecond = 300;
-    private const float MaxHitDistance = 300f;
+    /// <summary>Запас к дальности видимости: попадание дальше, чем игрок
+    /// вообще мог видеть цель, невозможно. Жёсткие 300 м резали снайпера
+    /// на сервере с дальностью видимости 400 м по умолчанию.</summary>
+    private const float HitDistanceMargin = 25f;
     private const float MaxMeleeDistance = 6f;
     private const float MaxRamDistance = 20f;
     private const uint WeaponUnarmed = 0xA2719263;
@@ -437,7 +442,8 @@ public partial class StarterResource
         // в сообщении должно совпадать с тем, что у стрелка в руках по STATE.
         var now = _clock.ElapsedMilliseconds;
         string? why = null;
-        if (dist > MaxHitDistance) why = $"попадание с {dist:F0} м";
+        var maxHitDistance = MathF.Max(300f, _settings.Float("sync.stream_radius") + HitDistanceMargin);
+        if (dist > maxHitDistance) why = $"попадание с {dist:F0} м";
         else if (a.InVehicle) { if (dist > MaxRamDistance && weapon == WeaponUnarmed) why = $"наезд с {dist:F0} м"; }
         else if (weapon == WeaponUnarmed || weapon == 0)
         {
