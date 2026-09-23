@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace FloVMP.Core.Settings;
@@ -58,7 +58,7 @@ public sealed class ServerSettings
         new("hud.area_names", Kind.Bool, "off", true, "Интерфейс", "названия районов и улиц"),
         new("hud.vehicle_names", Kind.Bool, "off", true, "Интерфейс", "название машины при посадке"),
         new("hud.weapon_wheel", Kind.Bool, "off", true, "Интерфейс", "колесо оружия на Tab"),
-        new("hud.pause_menu", Kind.Bool, "off", true, "Интерфейс", "меню паузы на Esc (в сюжетной GTA оно останавливает игру)"),
+        new("hud.pause_menu", Kind.Bool, "on", true, "Интерфейс", "меню паузы на Esc (настройки игры, карта; мир на сервере при этом не останавливается)"),
         new("hud.player_blips", Kind.Bool, "off", true, "Интерфейс", "маркеры игроков на карте и мини-карте"),
         new("hud.watermark", Kind.Bool, "off", true, "Интерфейс", "строка «сервер · ID · пинг» в углу экрана"),
         new("hud.accent", Kind.Color, "#ffffff", true, "Интерфейс", "акцентный цвет интерфейса (чат, консоль)"),

@@ -368,6 +368,10 @@ namespace flov::ui
         /// true — клавиша наша, игре её не отдавать.
         bool HandleKey(WPARAM vk)
         {
+            // F12 — оверлей Rockstar/Social Club поверх игры. На сервере он не
+            // нужен и мешает, поэтому клавиша не доходит до игры совсем.
+            // Делается перехватом сообщения окна: файлы игры не трогаем.
+            if (vk == VK_F12) return true;
             const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
             std::lock_guard lock(g_mutex);
@@ -515,6 +519,7 @@ namespace flov::ui
                 break;
             case WM_KEYUP:
             case WM_SYSKEYUP:
+                if (wp == VK_F12) return 0;   // см. HandleKey: оверлей Rockstar
                 if (InputActive()) return 0;
                 break;
             case WM_CHAR:

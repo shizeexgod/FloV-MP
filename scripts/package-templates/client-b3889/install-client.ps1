@@ -146,6 +146,32 @@ function Set-NoBattlEye($dir, [bool]$on) {
     return $false
 }
 
+function Set-StraightToGame($dir, [bool]$on) {
+    # Стартовая страница GTA («Войти / GTA Online / Сюжетный режим») появляется
+    # до запуска любых скриптов, поэтому закрыть её из клиента невозможно —
+    # игрок просто застревал на ней. С -scOfflineOnly Social Club не выходит в
+    # сеть, и игра сразу идёт в одиночный режим, где клиент забирает игрока на
+    # сервер под своим загрузочным экраном. Файлы игры не меняются: только
+    # commandline.txt, и только нашей строкой (удаление её убирает).
+    $file = Join-Path $dir 'commandline.txt'
+    $lines = @()
+    if (Test-Path $file) { $lines = @(Get-Content $file -Encoding UTF8) }
+    $has = [bool]($lines | Where-Object { $_ -match '(^|\s)-scOfflineOnly(\s|$)' })
+    if ($on -and -not $has) {
+        if (Test-Path $file) { Copy-Item $file (Join-Path $dir 'commandline.flovmp-backup.txt') -Force -ErrorAction SilentlyContinue }
+        $lines += '-scOfflineOnly'
+        [IO.File]::WriteAllLines($file, [string[]]$lines, (New-Object Text.UTF8Encoding $false))
+        return $true
+    }
+    if (-not $on -and $has) {
+        $clean = @($lines | ForEach-Object { ($_ -replace '(^|\s)-scOfflineOnly(?=\s|$)', '').Trim() } | Where-Object { $_ })
+        if ($clean.Count -eq 0) { Remove-Item $file -Force } else { [IO.File]::WriteAllLines($file, [string[]]$clean, (New-Object Text.UTF8Encoding $false)) }
+        Remove-Item (Join-Path $dir 'commandline.flovmp-backup.txt') -Force -ErrorAction SilentlyContinue
+        return $true
+    }
+    return $false
+}
+
 function Get-ServerInfo {
     $f = Join-Path $here 'server.txt'
     $info = @{ address = ''; name = 'FloV:MP' }
@@ -187,6 +213,7 @@ if ($Uninstall) {
         Say 'ScriptHookV удалён (его ставил установщик FloV:MP).'
     }
     if ($state -and $state.AddedNoBattlEye) { Set-NoBattlEye $dir $false | Out-Null; Say 'BattlEye снова включён (убран -nobattleye из args.txt).' }
+    if ($state -and $state.AddedStraightToGame) { Set-StraightToGame $dir $false | Out-Null; Say 'Стартовая страница GTA возвращена (убран -scOfflineOnly).' }
     if ($state -and $state.Shortcut) { Remove-Item $state.Shortcut -Force -ErrorAction SilentlyContinue }
     Remove-Item $StateFile -Force -ErrorAction SilentlyContinue
     Say 'Клиент FloV:MP удалён. Игра в исходном состоянии.' Green
@@ -257,6 +284,14 @@ if ($KeepBattlEye) {
     Say 'Режим «без BattlEye» включён (args.txt папки игры). GTA Online в нём недоступна; вернуть — install-client.cmd -Uninstall.' Green
 } else {
     Say 'Режим «без BattlEye» уже включён.'
+}
+
+# Вход в игру без стартовой страницы GTA
+if (Set-StraightToGame $dir $true) {
+    $state.AddedStraightToGame = $true
+    Say 'Игра будет запускаться сразу в мир, без стартовой страницы GTA.' Green
+} else {
+    Say 'Запуск сразу в мир уже настроен.'
 }
 
 # Клиент

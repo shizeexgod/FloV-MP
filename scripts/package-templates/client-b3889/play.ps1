@@ -43,7 +43,7 @@ if (Get-Process GTA5 -ErrorAction SilentlyContinue) {
     exit 0
 }
 Say "Сервер $Address. Запускаю GTA V..."
-Say 'На заставке выберите «Сюжетный режим» — клиент сам зайдёт на сервер.' Green
+Say 'Игра откроется сразу в мире сервера — ничего выбирать не нужно.' Green
 
 function Norm($p) { if ($p -and (Test-Path (Join-Path $p 'GTA5.exe'))) { return ([IO.Path]::GetFullPath($p)).TrimEnd([char]92).ToLowerInvariant() } return $null }
 $g = Norm $gta
