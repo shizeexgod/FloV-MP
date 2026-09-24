@@ -346,7 +346,7 @@ public partial class StarterResource
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
-        OnPlayerDisconnect(proxy, reason);
+        OnPlayerDisconnect(proxy, reason ?? "connection closed");
     }
 
     /// <summary>
