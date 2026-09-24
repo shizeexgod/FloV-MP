@@ -16,6 +16,7 @@ add_library(flovmp-client SHARED
     src/ui.cpp
     src/image.cpp
     src/http.cpp
+    src/crash.cpp
     src/voice.cpp
     src/world.cpp
     res/client.rc

@@ -1321,6 +1321,10 @@ public partial class StarterResource : Resource
                 Alt.Log("[Console] " + (_metrics.Last?.ToLogLine() ?? "метрики ещё не собраны (первое окно — через минуту после запуска)"));
                 break;
 
+            case "crashes":
+                PrintClientCrashes();
+                break;
+
             case "say":
                 if (args.Length == 0)
                 {

@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include "common.h"
+#include "crash.h"
 #include "game.h"
 #include "invoke.h"
 #include "ui.h"
@@ -22,6 +23,7 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
     {
         DisableThreadLibraryCalls(module);
         flov::Log(std::string("FloV:MP client ") + flov::kClientVersion + " загружен в GTA5.exe " + flov::GameVersion());
+        flov::crash::Install();
 
         // ScriptHookV.dll не импортируется статически — берём уже загруженный
         // или грузим из папки игры. Так ASI не роняет игру, если ScriptHookV нет.

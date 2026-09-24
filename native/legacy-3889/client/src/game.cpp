@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "ui.h"
 #include "http.h"
+#include "crash.h"
 
 #include <mutex>
 #include <thread>
@@ -1750,6 +1751,18 @@ namespace flov::game
                 g_serverName = at(4);
                 g_welcomed = true;
                 g_welcomeAt = GetTickCount64();
+                // Прошлое падение игры — одной строкой серверу (пункт 12): дамп
+                // остаётся у игрока. Обработчик ставим заново: игра или мод
+                // могли подменить его своим за время загрузки.
+                crash::Install();
+                if (std::vector<std::string> report; crash::TakePending(report))
+                {
+                    std::vector<std::string> line{ "CRASH" };
+                    line.insert(line.end(), report.begin(), report.end());
+                    g_net.Send(line);
+                    crash::MarkSent();
+                    Log("отчёт о прошлом падении игры отправлен серверу");
+                }
                 PrepareWorldOnce();
                 ui::SetChatEnabled(g_cfg.chat);
                 ui::SetWindowTitle(WindowTitle());
@@ -2701,6 +2714,7 @@ namespace flov::game
     void ScriptMain()
     {
         Log("скрипт запущен, GTA5.exe " + GameVersion());
+        crash::Install();   // поверх обработчика, который игра ставит при старте
         ApplySettings(); // значения по умолчанию до первого CFG от сервера
         ui::SetWindowTitle("FloV Multiplayer");
         while (n::GET_IS_LOADING_SCREEN_ACTIVE() || !n::DOES_ENTITY_EXIST(n::PLAYER_PED_ID())) WAIT(250);

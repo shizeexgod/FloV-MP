@@ -539,6 +539,8 @@ def main():
     ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
     ap.add_argument("--hit", type=int, default=0, help="ID игрока: нанести урон (проверка PvP)")
+    ap.add_argument("--crash-test", action="store_true",
+                    help="прислать отчёт о падении, как клиент 1.0.6 после вылета (в журнале сервера — [Падения])")
     ap.add_argument("--voice", metavar="OPUS_DLL", help="говорить тоном 440 Гц (opus.dll из папки GTA) и считать чужой голос")
     a = ap.parse_args()
     if a.check:
@@ -555,6 +557,15 @@ def main():
     if a.voice:
         got = bot.voice(a.seconds, a.voice)
         print("голос принят от игроков:", got)
+        bot.close()
+        return
+    if a.crash_test:
+        # Как клиент после вылета: строка CRASH сразу после WELCOME. Вторая за
+        # тот же вход сервер должен пропустить (один отчёт на вход).
+        bot.send("CRASH", "0xC0000005", "GTA5.exe", "0x1A2B3C", a.client_version, "75", "1.0.3889.0")
+        bot.send("CRASH", "0xC0000005", "GTA5.exe", "0xDEAD", a.client_version, "75", "1.0.3889.0")
+        time.sleep(1)
+        print("отчёт отправлен — в журнале сервера должна быть ОДНА строка [Падения] с GTA5.exe+0x1A2B3C")
         bot.close()
         return
     if a.hit:

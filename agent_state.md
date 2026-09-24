@@ -1,6 +1,19 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-24 (релиз 1.0.6-beta: Linux-установка с GitHub, один скрипт выпуска)
+Updated: 2026-09-24 (после 1.0.6-beta: 10 находок ревью, пункт 12 — отчёты о падениях; линия 1.0.7-beta)
+
+### 2026-09-24 — после 1.0.6-beta: ревью и пункт 12 (линия 1.0.7-beta)
+
+- 1.0.6-beta выпущен владельцем (`scripts/release.py`), GitHub latest;
+  проверено из облака: Linux-установка с GitHub в пустую папку с настоящей
+  подписью. VDS лёг (SSH timeout), владелец перезагрузил, заливка идёт.
+- Ревью всего после 1.0.5 (скилл code-review): 10 находок, все исправлены
+  (`fa74353`) — см. `docs/releases/1.0.7-beta.md`. Тестов 586.
+- Пункт 12: `FloVMP.Core/Diagnostics/ClientCrash.cs` (разбор CRASH, счёт
+  мест), `StarterResource.ClientCrash.cs`, клиент `crash.cpp` (SEH-фильтр,
+  MiniDumpWriteDump через dbghelp, pending.txt), `bot.py --crash-test`.
+- VERSION = 1.0.7-beta (готовится, не выпущен).
+- Строк кода (без документации и сторонних библиотек): ~75 тыс.
 
 ### 2026-09-24 — выпуск 1.0.6-beta
 

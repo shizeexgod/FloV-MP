@@ -331,6 +331,7 @@ public partial class StarterResource
         _weaponHistory.Remove(session.Id);
         _nativeVehicleOwners.Remove(session.Id);
         OnVehicleClientLeft(session.Id);
+        ForgetCrashReport(session.Id);
         foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
             _hitPairRate.Remove(key);
         foreach (var key in _lastHitAt.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
@@ -419,6 +420,9 @@ public partial class StarterResource
             case "MENUCLOSED":
             case "KEY":
                 HandleNativeUi(player, session, p);
+                break;
+            case "CRASH":
+                OnClientCrashReport(session, p);
                 break;
             case "LOG":
                 // Диагностика клиента в журнал сервера — ограничена по длине.
