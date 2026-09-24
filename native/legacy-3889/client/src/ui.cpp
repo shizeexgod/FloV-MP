@@ -1395,88 +1395,93 @@ namespace flov::ui
             if (g_background) DrawCover(dl, g_background, w, h, fade);
             else
             {
-                // Подложка без картинки: наклонная подсветка акцентом. Кругов
-                // много и каждый почти прозрачный — иначе на месте свечения
-                // видны кольца, как у нескольких вложенных окружностей.
+                // Подложка без картинки: графит с диагональным оттенком акцента.
+                // Раньше свечение собиралось из вложенных окружностей и давало
+                // видимые кольца; два линейных градиента чистее и дешевле.
                 dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(w, h),
-                                            Rgba(16, 16, 20, fade), Rgba(12, 12, 16, fade),
-                                            Rgba(8, 8, 10, fade), Rgba(10, 10, 13, fade));
-                const ImVec2 centre(w * 0.34f, h * 0.36f);
-                const float radius = std::max(w, h) * 0.78f;
-                for (int i = 0; i < 56; ++i)
-                    dl->AddCircleFilled(centre, radius * (1.f - i / 56.f), Rgb(acc, 0.0022f * fade), 72);
+                                            Rgba(19, 19, 24, fade), Rgba(13, 13, 17, fade),
+                                            Rgba(8, 8, 10, fade), Rgba(11, 11, 15, fade));
+                dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(w, h * 0.8f),
+                                            Rgb(acc, 0.085f * fade), Rgb(acc, 0.012f * fade),
+                                            Rgb(acc, 0.f), Rgb(acc, 0.02f * fade));
             }
 
             // Нижний край фотографии плавно уходит в темноту: сначала
             // длинный мягкий переход, потом короткий резкий, и внизу — ровная
             // тёмная полоса, на которой живут логотип и полоса прогресса.
-            // Нижний край фотографии уходит в темноту. Переход собран из
-            // многих полос с нарастающей плотностью: два-три больших градиента
-            // дают видимый стык на границе, а здесь его нет.
+            // Нижний край фотографии уходит в темноту, как в лоадерах RAGE:MP.
+            //
+            // Переход рисуется многими узкими полосами со сглаженной
+            // кривой (smootherstep): у неё нулевой наклон на обоих концах, поэтому
+            // ни в начале, ни в конце затемнения не видно границы. Полос
+            // много и каждая тонкая — изломы между ними не читаются глазом.
             {
-                const float top = h * 0.48f;
-                const int bands = 18;
+                const float top = h * 0.42f;
+                const float solid = h * 0.88f;          // ниже — ровный тёмный цвет
+                const int bands = 96;
+                // Без фотографии гасить нечего: полное затемнение съело бы
+                // подсветку акцентом и экран стал бы ровно чёрным.
+                const float depth = g_background ? 0.985f : 0.55f;
+                auto curve = [](float t)
+                {
+                    const float v = std::clamp(t, 0.f, 1.f);
+                    return v * v * v * (v * (v * 6.f - 15.f) + 10.f);
+                };
                 for (int i = 0; i < bands; ++i)
                 {
-                    const float y0 = top + (h - top) * (i / (float)bands);
-                    const float y1 = top + (h - top) * ((i + 1) / (float)bands);
-                    // Доля закрытого растёт по кубу: сверху почти прозрачно,
-                    // внизу — ровный тёмный цвет под логотипом и полосой.
-                    const float t0 = i / (float)bands, t1 = (i + 1) / (float)bands;
-                    // К низу экрана фотография должна уйти почти полностью ещё до
-                    // полосы прогресса, иначе статус и логотип теряются в кадре.
-                    auto curve = [](float t) { const float v = std::clamp(t / 0.84f, 0.f, 1.f); return 0.975f * v * std::sqrt(v); };
-                    const float a0 = curve(t0), a1 = curve(t1);
+                    const float y0 = top + (solid - top) * (i / (float)bands);
+                    const float y1 = top + (solid - top) * ((i + 1) / (float)bands);
+                    const float a0 = curve(i / (float)bands) * depth;
+                    const float a1 = curve((i + 1) / (float)bands) * depth;
                     // Полосы идут встык и не накладываются, поэтому каждая красит
                     // свою полную плотность, а не приращение к предыдущей.
-                    dl->AddRectFilledMultiColor(ImVec2(0, y0), ImVec2(w, y1 + 1),
+                    // Без нахлёста по высоте: лишний пиксель снизу закрашивался дважды,
+                    // и на каждой границе появлялась тёмная полоска.
+                    dl->AddRectFilledMultiColor(ImVec2(0, y0), ImVec2(w, y1),
                                                 Rgba(7, 7, 9, a0 * fade), Rgba(7, 7, 9, a0 * fade),
                                                 Rgba(7, 7, 9, a1 * fade), Rgba(7, 7, 9, a1 * fade));
                 }
-                dl->AddRectFilled(ImVec2(0, h * 0.965f), ImVec2(w, h), Rgba(7, 7, 9, 0.99f * fade));
+                dl->AddRectFilled(ImVec2(0, solid), ImVec2(w, h), Rgba(7, 7, 9, depth * fade));
             }
 
             const float margin = std::min(72 * s, w * 0.07f);
-            const float barH = 8 * s;
+            const float barH = 5 * s;
             const float barBottom = h - margin;
             const float barTop = barBottom - barH;
 
-            // --- справа снизу: этап, процент, полоса -----------------------------
+            // --- справа снизу: этап над полосой, по правому краю -------------
             const float rightW = std::min(560 * s, w * 0.44f);
             const float rx0 = w - margin - rightW;
+            const float rx1 = w - margin;
             {
-                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW * 0.7f, 16 * s);
-                const float stepY = barTop - Px(g_text) - 18 * s;
-                Text(dl, g_text, ImVec2(rx0, stepY), Rgba(236, 236, 240, fade), step, 16 * s);
+                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW, 15 * s);
+                const float tw = Measure(g_text, step, 15 * s).x;
+                Text(dl, g_text, ImVec2(rx1 - tw, barTop - Px(g_text) - 15 * s),
+                     Rgba(255, 255, 255, 0.78f * fade), step, 15 * s);
 
-                if (g_loadingPercent >= 0)
-                {
-                    const std::string pct = std::to_string((int)std::lround(g_loadingPercent)) + "%";
-                    const float pw = Measure(g_mono, pct, 16 * s).x;
-                    Text(dl, g_mono, ImVec2(w - margin - pw, stepY), Rgb(acc, fade), pct, 16 * s);
-                }
-
-                // Дорожка с тонкой обводкой: на светлом кадре одной заливки мало.
                 const float r = barH / 2;
-                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.07f * fade), r);
-                dl->AddRect(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.11f * fade), r, 0, 1.f);
+                // Дорожка едва заметна: весь цвет достаётся заполненной части.
+                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx1, barBottom), Rgba(255, 255, 255, 0.09f * fade), r);
 
                 auto fillSegment = [&](float x0, float x1)
                 {
-                    if (x1 - x0 < 1.f) return;
-                    dl->PushClipRect(ImVec2(rx0, barTop - barH * 2), ImVec2(w - margin, barBottom + barH * 2), true);
-                    // Свечение под полосой и градиент по длине: заливка не выглядит
-                    // плоской плашкой, а конец читается как живой край.
-                    for (int i = 1; i <= 3; ++i)
-                        dl->AddRectFilled(ImVec2(x0, barTop - i * s), ImVec2(x1, barBottom + i * s),
-                                          Rgb(acc, 0.05f * fade), r + i * s);
-                    dl->AddRectFilledMultiColor(ImVec2(x0, barTop), ImVec2(x1, barBottom),
-                                                Rgb(acc, 0.62f * fade), Rgb(acc, fade),
-                                                Rgb(acc, fade), Rgb(acc, 0.62f * fade));
-                    dl->AddRectFilled(ImVec2(x1 - r * 2, barTop), ImVec2(x1, barBottom), Rgb(acc, fade), r);
-                    // Блик верхней кромки — полоса смотрится объёмной.
-                    dl->AddRectFilled(ImVec2(x0 + r, barTop + s), ImVec2(x1 - r, barTop + 2.4f * s),
-                                      Rgba(255, 255, 255, 0.3f * fade), s);
+                    if (x1 - x0 < barH) return;
+                    dl->PushClipRect(ImVec2(rx0 - barH * 3, barTop - barH * 3),
+                                     ImVec2(rx1 + barH * 3, barBottom + barH * 3), true);
+                    // Мягкое свечение под заливкой: полоса светится, а не лежит
+                    // наклейкой. Слоёв несколько, каждый шире и прозрачнее.
+                    for (int i = 1; i <= 5; ++i)
+                        dl->AddRectFilled(ImVec2(x0 - i * s * 0.6f, barTop - i * 1.6f * s),
+                                          ImVec2(x1 + i * s * 0.6f, barBottom + i * 1.6f * s),
+                                          Rgb(acc, 0.045f * fade), r + i * 1.6f * s);
+                    dl->AddRectFilled(ImVec2(x0, barTop), ImVec2(x1, barBottom), Rgb(acc, fade), r);
+                    // Яркая голова и блик на ней: глаз сразу находит, где край.
+                    const float headW = std::min(x1 - x0, 48 * s);
+                    dl->AddRectFilledMultiColor(ImVec2(x1 - headW, barTop), ImVec2(x1, barBottom),
+                                                Rgb(acc, fade), Rgba(255, 255, 255, 0.85f * fade),
+                                                Rgba(255, 255, 255, 0.85f * fade), Rgb(acc, fade));
+                    dl->AddCircleFilled(ImVec2(x1 - r, (barTop + barBottom) / 2), r * 2.2f,
+                                        Rgba(255, 255, 255, 0.22f * fade), 20);
                     dl->PopClipRect();
                 };
 
@@ -1489,9 +1494,11 @@ namespace flov::ui
                 {
                     // Неизвестный прогресс: бегущий отрезок, честнее выдуманных процентов.
                     const float t = (float)((now - g_loadingShownAt) % 1400) / 1400.f;
-                    const float seg = rightW * 0.32f;
+                    const float seg = rightW * 0.3f;
                     const float sx = rx0 - seg + (rightW + seg) * t;
-                    fillSegment(std::max(rx0, sx), std::min(w - margin, sx + seg));
+                    dl->PushClipRect(ImVec2(rx0, barTop - barH * 3), ImVec2(rx1, barBottom + barH * 3), true);
+                    fillSegment(std::max(rx0, sx), std::min(rx1, sx + seg));
+                    dl->PopClipRect();
                 }
             }
 
