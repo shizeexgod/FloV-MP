@@ -564,6 +564,7 @@ public partial class StarterResource : Resource
             }
             _antiCheat = new FloVMP.Core.AntiCheat.AntiCheatService(acConfig);
             _antiCheat.OnDetection += OnAntiCheatDetection;
+            StartSuspicionLedger(antiCheatMode);
             Alt.Log($"[FloV:MP Starter] Проверка движения включена (режим {antiCheatMode}; off/log/strict — FLOVMP_ANTICHEAT).");
         }
 
@@ -659,6 +660,7 @@ public partial class StarterResource : Resource
         RegisterWorldApi();
         RegisterNativeApi();
         RegisterVehicleApi();
+        RegisterAntiCheatApi();
         LoadMaps(broadcast: false);
 
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
@@ -747,6 +749,7 @@ public partial class StarterResource : Resource
         var player = PlayerById((uint)ev.AccountId);
         Alt.LogWarning($"[FloV:MP Античит] {ev.DetectionType}: {(player?.Name ?? ev.Username)} " +
                        $"(ID {ev.AccountId}) — {ev.Details}");
+        ReportSuspicion((uint)ev.AccountId, FloVMP.Core.AntiCheat.SuspicionKind.Movement, $"{ev.DetectionType}: {ev.Details}");
 
         if (player is null || !player.Exists) return;
         if (ev.SuggestedAction != FloVMP.Core.AntiCheat.AntiCheatAction.TeleportBack) return;
@@ -783,6 +786,7 @@ public partial class StarterResource : Resource
 
             _antiCheat.CheckMovement(id, vec, InAnyVehicle(player));
         }
+        TickSuspicionChecks(nowMs);
     }
 
     /// <summary>
@@ -1512,6 +1516,7 @@ public partial class StarterResource : Resource
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _antiCheat?.RemovePlayer((int)player.Id);
+        ForgetSuspicions(player.Id);
         _sessionAdminRanks.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
@@ -1809,6 +1814,7 @@ public partial class StarterResource : Resource
                 return;
             }
         if (IsNative(player) && HandleNativeVehicleCommand(player, cmd, parts)) return;
+        if (HandleAntiCheatCommand(player, cmd, parts)) return;
         if (!_settings.Bool("chat.rp_commands") && cmd is "me" or "do" or "b" or "ooc" or "s" or "shout" or "w" or "whisper"
             && !_modCommands.ContainsKey(cmd))
         {

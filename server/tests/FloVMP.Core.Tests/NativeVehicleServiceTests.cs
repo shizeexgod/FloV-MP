@@ -480,4 +480,32 @@ public class NativeVehicleServiceTests
         Assert.True(svc.SetPlate(v.Id, "police 1"));
         Assert.Equal("POLICE 1", Assert.Single(host.To(1, "VADD"))[11]);
     }
+
+    [Fact]
+    public void AntiCheat_BlacklistedTrafficModelIsRefusedAndSuspected()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        var rhino = FloVMP.Core.AntiCheat.GameHash.Joaat("rhino");
+        var suspects = new List<string>();
+        svc.Suspicious += (p, d) => suspects.Add($"{p}: {d}");
+        svc.TrafficModelAllowed = m => m != rhino;
+        svc.HandleRequest(1, new[] { "VREQ", "4", rhino.ToString() }, 0);
+        Assert.Equal("4", Assert.Single(host.To(1, "VREJ"))[1]);
+        Assert.Single(suspects);
+        Assert.Equal(0, svc.Registry.Count);
+    }
+
+    [Fact]
+    public void AntiCheat_ForeignVSyncIsSuspected()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(2, 1, 0);
+        var suspects = new List<uint>();
+        svc.Suspicious += (p, _) => suspects.Add(p);
+        var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
+        svc.HandleSync(2, Sync(v.Id, x: 50), DateTime.UtcNow);
+        Assert.Equal(new[] { 2u }, suspects);
+    }
 }

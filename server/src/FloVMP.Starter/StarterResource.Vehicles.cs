@@ -33,6 +33,7 @@ public partial class StarterResource
             PhysicsChecks = mode != "off",
         };
         WireVehicleEvents(service);
+        WireVehicleAntiCheat(service);
         return service;
     }
 

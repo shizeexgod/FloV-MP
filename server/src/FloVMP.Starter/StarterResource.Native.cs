@@ -483,8 +483,10 @@ public partial class StarterResource
                 _hitWarnedAt[session.Id] = now;
                 Alt.LogWarning($"[FloV:MP Античит] {why}: [{session.Id}] {session.Name} → [{victimId}] {victim.Session.Name} — отклонено.");
             }
+            ReportSuspicion(session.Id, FloVMP.Core.AntiCheat.SuspicionKind.Hit, why);
             return;
         }
+        if (weapon != WeaponUnarmed) _ledgerAc?.OnHit(session.Id, weapon, now);
         _lastHitAt[(session.Id, victimId)] = now;
         // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
         // и тряски экрана), и итоговые значения: изменённый клиент не может
@@ -765,6 +767,7 @@ public partial class StarterResource
     private bool GiveWeaponWithName(IPlayer player, uint hash, string name, int ammo)
     {
         if (player is not NativePlayerProxy np) return false;
+        NoteWeaponIssued(np.Session.Id, hash, ammo);
         np.Session.Send("WEAPON", hash, ammo, true, name);
         return true;
     }
@@ -774,6 +777,7 @@ public partial class StarterResource
     {
         if (player is not NativePlayerProxy np) return false;
         np.NoteModel(hash);   // иначе player.Model на сервере остался бы прежним
+        NoteModelIssued(np.Session.Id, hash);
         np.Session.Send("MODEL", hash, name);
         return true;
     }

@@ -249,6 +249,35 @@ Alt.Emit("flovmp:settings:set", "vehicles.plate_format", "RP 9999");  // сво�
 `server/config/admin-commands.cfg`: 0 — доступна всем, 1…8 — с этого уровня
 администратора (8 — только владелец).
 
+## Античит: журнал подозрений
+
+Все проверки платформы (движение, урон, машины, оружие, модели, патроны, ход
+часов клиента) не наказывают сами — они добавляют вес к счёту игрока, а счёт
+со временем тает. Решает порог: по умолчанию администраторам в чат уходит
+предупреждение, отключение выключено (`anticheat.kick_score = 0`). Веса,
+пороги и списки — раздел «Античит» в `client.cfg` (или `flovmp:settings:set`).
+Администраторы: `/ac <ID>` — счёт и последние подозрения, `/acforgive <ID>` — сбросить.
+
+```csharp
+// каждое подозрение и пересечение порога ("notify" / "kick")
+Alt.OnServer<int, string, float, float, string>("flovmp:anticheat:suspicion", (id, type, weight, score, details) => { });
+Alt.OnServer<int, string, float>("flovmp:anticheat:threshold", (id, level, score) =>
+{
+    // ваше решение: бан, заморозка, запись в свой журнал, сообщение в Discord
+});
+
+// своё подозрение (дюп денег, вход в закрытую зону) — со своим весом
+Alt.Emit("flovmp:anticheat:report", id, "перевод 1 000 000 за секунду", 40f);
+Alt.Emit("flovmp:anticheat:forgive", id);
+Alt.Emit("flovmp:anticheat:query", id);   // ответ: flovmp:anticheat:state (id, счёт, JSON истории)
+```
+
+Оружие и модели, выданные сервером (`/weapon`, `/skin`, `flovmp:native:weapon`,
+`flovmp:native:model`, `player.GiveWeapon`), платформа запоминает: с
+`anticheat.issued_weapons_only = on` любое другое оружие в руках — подозрение, а
+попаданий больше, чем выдано патронов, быть не может. Выдавайте патроны своим
+ресурсом тем же `flovmp:native:weapon` — тогда учёт сходится.
+
 Интерфейс игроку — по его ID:
 
 ```csharp

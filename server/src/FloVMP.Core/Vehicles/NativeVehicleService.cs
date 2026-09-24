@@ -46,7 +46,10 @@ public sealed class NativeVehicleService
         _host = host;
         Registry = registry ?? new VehicleRegistry();
         _physics.OnVehicleViolation += (vehicleId, driverId, type, reason) =>
+        {
             WarnLimited((uint)driverId, $"[FloV:MP Античит] машина {vehicleId}, водитель [{driverId}]: {type} — {reason}");
+            Suspicious?.Invoke((uint)driverId, $"машина {vehicleId}: {type} — {reason}");
+        };
     }
 
     public VehicleRegistry Registry { get; }
@@ -63,6 +66,12 @@ public sealed class NativeVehicleService
     public event Action<uint>? Destroyed;
     /// <summary>Машина убрана из реестра: (машина, причина: api, command, abandoned).</summary>
     public event Action<uint, string>? Removed;
+    /// <summary>Подозрение для журнала античита: (игрок, подробности).</summary>
+    public event Action<uint, string>? Suspicious;
+
+    /// <summary>Можно ли взять модель в реестр как «трафик» (anticheat.vehicle_blacklist).
+    /// null — любую.</summary>
+    public Func<uint, bool>? TrafficModelAllowed { get; set; }
     /// <summary>Режим античита (FLOVMP_ANTICHEAT): в off нарушения физики не пишутся.</summary>
     public bool PhysicsChecks { get; set; } = true;
 
@@ -149,6 +158,13 @@ public sealed class NativeVehicleService
             _host.Send(playerId, NativeProtocol.Format("VREJ", reqId, "нет позиции игрока"));
             return;
         }
+        if (TrafficModelAllowed is { } allowed && !allowed(model))
+        {
+            // Такие машины по улицам не ездят: «сел в трафик» на ней — значит, создал её сам.
+            _host.Send(playerId, NativeProtocol.Format("VREJ", reqId, "эта модель не берётся в реестр"));
+            Suspicious?.Invoke(playerId, $"сел за руль запрещённой модели 0x{model:X8} (не из трафика)");
+            return;
+        }
         var (v, refusal) = Registry.RegisterTraffic(playerId, model, pl.X, pl.Y, pl.Z, 0, 0, 0, pl.Dimension, nowMs);
         if (v is null)
         {
@@ -206,6 +222,7 @@ public sealed class NativeVehicleService
         if (v.Driver != playerId)
         {
             WarnLimited(playerId, $"[FloV:MP Античит] VSYNC машины {s.VehicleId} от [{playerId}], а водитель — [{v.Driver}] — отброшено.");
+            Suspicious?.Invoke(playerId, $"VSYNC чужой машины {s.VehicleId}");
             return;
         }
         if (PhysicsChecks)

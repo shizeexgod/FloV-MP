@@ -170,6 +170,7 @@ public class NativePlayerProxy : DispatchProxy
             case "get_Model": return s.HasState && State.PedModel != 0 ? State.PedModel : _model;
             case "set_Model":
                 _model = (uint)args[0]!;
+                Owner.NoteModelIssued(s.Id, _model);   // выданную сервером модель носить можно всегда
                 s.Send("MODEL", _model);
                 return null;
             case "get_CurrentWeapon": return State.Weapon;
@@ -192,9 +193,14 @@ public class NativePlayerProxy : DispatchProxy
                 s.Close(args.Length > 0 ? args[0] as string ?? "Вы отключены от сервера." : "Вы отключены от сервера.");
                 return null;
             case "GiveWeapon":
-                s.Send("WEAPON", Convert.ToUInt32(args[0], CultureInfo.InvariantCulture), (int)args[1]!, (bool)args[2]!);
-                return null;
+                {
+                    var weapon = Convert.ToUInt32(args[0], CultureInfo.InvariantCulture);
+                    Owner.NoteWeaponIssued(s.Id, weapon, (int)args[1]!);   // учёт патронов античита
+                    s.Send("WEAPON", weapon, (int)args[1]!, (bool)args[2]!);
+                    return null;
+                }
             case "RemoveAllWeapons":
+                Owner.NoteWeaponsCleared(s.Id);
                 s.Send("DISARM");
                 return null;
             case "SetLocalMetaData":

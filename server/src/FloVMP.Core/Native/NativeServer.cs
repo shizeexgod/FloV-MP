@@ -224,6 +224,8 @@ public sealed class NativeServer : IDisposable
                         break;
                     case "PING":
                         session.Send(NativeProtocol.Format("PONG", parts.Length > 1 ? parts[1] : ""));
+                        // Часы клиента в PING — для проверки ускорения времени.
+                        if (parts.Length > 1 && long.TryParse(parts[1], out var clientMs)) session.SetPing(clientMs);
                         break;
                     case "KEEPALIVE":
                         // Сетевой поток клиента шлёт его и тогда, когда игра стоит на
@@ -403,6 +405,28 @@ public sealed class NativeSession
     {
         lock (_stateLock) _state = state;
         Interlocked.Increment(ref _stateVersion);
+    }
+
+    private long _pingClientMs, _pingServerMs;
+    private bool _hasPing;
+
+    /// <summary>Отметка PING: часы клиента и момент приёма по часам сервера.</summary>
+    internal void SetPing(long clientMs)
+    {
+        lock (_stateLock) { _pingClientMs = clientMs; _pingServerMs = Environment.TickCount64; _hasPing = true; }
+    }
+
+    /// <summary>Забрать последнюю отметку PING (античит: ход часов клиента).</summary>
+    public bool TryTakePing(out long clientMs, out long serverMs)
+    {
+        lock (_stateLock)
+        {
+            clientMs = _pingClientMs;
+            serverMs = _pingServerMs;
+            if (!_hasPing) return false;
+            _hasPing = false;
+            return true;
+        }
     }
 
     /// <summary>Последний VSYNC водителя (реестр транспорта, клиент 1.0.6+).</summary>
