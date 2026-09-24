@@ -215,6 +215,40 @@ Alt.OnServer<int, string>("flovmp:vehicle:removed", (vehicleId, reason) => { });
 Свои данные машины (владелец-персонаж, страховка, тюнинг) храните в своих
 таблицах по ID машины.
 
+### Сохранение машин
+
+Машина с флагом «сохранять» (`persistent`) переживает перезапуск сервера: платформа
+пишет её в таблицу `vehicles` (или в `flovmp-data/vehicles.json`, если базы нет) —
+по таймеру, сразу при парковке и перед остановкой. После запуска машины встают
+на свои места с теми же ID, заглушёнными, и приходит событие:
+
+```csharp
+Alt.OnServer<int>("flovmp:vehicles:loaded", restored => Alt.Emit("flovmp:vehicle:queryAll"));
+```
+
+Внешний ключ ваших таблиц — на `vehicles (world, id)` с `ON DELETE CASCADE`:
+убранная машина уйдёт из базы вместе с вашими строками. Хотите хранить машины
+полностью сами — `vehicles.persistence = off`.
+
+### Настройки из кода
+
+Любую настройку `server/config/client.cfg` ваш ресурс может поменять на лету, с той
+же проверкой значения, что и в файле. Значение из кода важнее файла и переживает
+`reloadsettings`:
+
+```csharp
+Alt.Emit("flovmp:settings:set", "vehicles.register_traffic", "off"); // только свои машины
+Alt.Emit("flovmp:settings:set", "vehicles.plate_format", "RP 9999");  // свой формат номеров
+```
+
+Что настраивается в транспорте: `vehicles.max_registered`, `vehicles.abandoned_ttl_sec`,
+`vehicles.register_traffic`, `vehicles.register_cooldown_sec`, `vehicles.enter_distance`,
+`vehicles.plate_format`, `vehicles.persistence`, `vehicles.save_interval_sec`,
+`vehicles.restore_damage`, `vehicles.world` — описание каждой в `client.cfg`.
+Уровни доступа к встроенным командам (`/car`, `/dv`, `/fix` …) — в
+`server/config/admin-commands.cfg`: 0 — доступна всем, 1…8 — с этого уровня
+администратора (8 — только владелец).
+
 Интерфейс игроку — по его ID:
 
 ```csharp

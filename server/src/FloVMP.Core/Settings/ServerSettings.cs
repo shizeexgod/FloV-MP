@@ -46,6 +46,22 @@ public sealed class ServerSettings
             "потолок машин в реестре сервера (свои, /car и трафик, в который сели игроки)", 1, 100000),
         new("vehicles.abandoned_ttl_sec", Kind.Int, "300", false, "Транспорт",
             "через сколько секунд убирать машину трафика, в которую садились: пустую и без игроков рядом; 0 — никогда. Машины /car и геймода сами не исчезают", 0, 86400),
+        new("vehicles.register_traffic", Kind.Bool, "on", false, "Транспорт",
+            "брать в реестр машину трафика, в которую сел игрок (off — ездить можно только на машинах сервера и геймода)"),
+        new("vehicles.register_cooldown_sec", Kind.Float, "2", false, "Транспорт",
+            "не чаще одной регистрации машины трафика на игрока за столько секунд", 0, 60),
+        new("vehicles.enter_distance", Kind.Float, "10", false, "Транспорт",
+            "дальше скольких метров от машины сервер не сажает в неё (защита от «телепорта в машину»)", 2, 50),
+        new("vehicles.plate_format", Kind.Text, "99AAA999", false, "Транспорт",
+            "шаблон случайного номера: 9 — цифра, A — буква, остальное как есть (латиница, цифры, пробел), до 8 символов"),
+        new("vehicles.persistence", Kind.Bool, "on", false, "Транспорт",
+            "сохранять машины, помеченные «сохраняемая», и возвращать их после перезапуска (off — сохраняет ваш геймод сам)"),
+        new("vehicles.save_interval_sec", Kind.Int, "30", false, "Транспорт",
+            "как часто записывать изменившиеся сохраняемые машины, секунд (при парковке — сразу)", 5, 3600),
+        new("vehicles.restore_damage", Kind.Bool, "on", false, "Транспорт",
+            "после перезапуска машина с теми же повреждениями (off — все встают целыми)"),
+        new("vehicles.world", Kind.Text, "main", false, "Транспорт",
+            "имя мира в базе: несколько серверов на одной базе с разными именами не видят машин друг друга"),
 
         // --- Появление -------------------------------------------------------------
         new("spawn.points", Kind.Text, "198.8, -935.6, 30.7, 140", false, "Появление",
@@ -148,6 +164,23 @@ public sealed class ServerSettings
     public bool Bool(string key) => Get(key) is "on" or "true" or "1" or "yes";
     public int Int(string key) => int.Parse(Get(key), CultureInfo.InvariantCulture);
     public float Float(string key) => float.Parse(Get(key), CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Поменять значение из кода (событие flovmp:settings:set от геймода) с той
+    /// же проверкой, что строка файла: опечатка не должна поставить серверу
+    /// бессмысленное значение. false — ключа нет или значение не подходит.
+    /// </summary>
+    public bool TrySet(string key, string value, out string error)
+    {
+        error = "";
+        if (!ByKey.TryGetValue(key ?? "", out var def)) { error = $"неизвестный ключ «{key}»"; return false; }
+        var normalized = Normalize(def, (value ?? "").Trim(), out var why);
+        if (normalized is null) { error = why; return false; }
+        _values[def.Key] = normalized;
+        return true;
+    }
+
+    public static bool IsClientKey(string key) => ByKey.TryGetValue(key, out var d) && d.Client;
 
     /// <summary>Ключи оформления платформы: менять их можно только с Source Kit.</summary>
     public static readonly IReadOnlySet<string> BrandingKeys =

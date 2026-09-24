@@ -66,6 +66,71 @@ public sealed class NativeVehicleService
     /// <summary>Режим античита (FLOVMP_ANTICHEAT): в off нарушения физики не пишутся.</summary>
     public bool PhysicsChecks { get; set; } = true;
 
+    /// <summary>Брать ли в реестр машины трафика, в которые сел игрок
+    /// (vehicles.register_traffic). RP-проект может разрешить только свои машины.</summary>
+    public bool AllowTrafficRegistration { get; set; } = true;
+
+    /// <summary>Как часто сохранять изменившиеся сохраняемые машины (vehicles.save_interval_sec).</summary>
+    public long SaveIntervalMs { get; set; } = 30_000;
+
+    private VehiclePersistence? _persistence;
+    // Какая версия машины уже в хранилище: не пишем то, что не менялось.
+    private readonly Dictionary<uint, long> _savedVersion = new();
+    private long _nextSaveMs;
+
+    /// <summary>Подключить хранилище (8d). Без него реестр живёт только в памяти.</summary>
+    public void AttachPersistence(VehiclePersistence persistence) => _persistence = persistence;
+
+    /// <summary>
+    /// Поднять сохранённые машины при старте. Возвращает (восстановлено,
+    /// пропущено). restoreDamage false — все встают целыми (vehicles.restore_damage).
+    /// </summary>
+    public (int Restored, int Skipped) RestoreSaved(bool restoreDamage, long nowMs)
+    {
+        if (_persistence is null) return (0, 0);
+        int restored = 0, skipped = 0;
+        foreach (var p in _persistence.LoadAll())
+        {
+            var v = Registry.Restore(p, restoreDamage, nowMs);
+            if (v is null) { skipped++; continue; }
+            _savedVersion[v.Id] = v.Version;
+            restored++;
+        }
+        return (restored, skipped);
+    }
+
+    /// <summary>Сохранять ли машину между перезапусками. Снятие флага удаляет её из хранилища.</summary>
+    public bool SetPersistent(uint vehicleId, bool persistent)
+    {
+        var v = Registry.Get(vehicleId);
+        if (v is null) return false;
+        v.Persistent = persistent;
+        if (persistent) SaveNow(v);
+        else if (_savedVersion.Remove(vehicleId)) _persistence?.Delete(vehicleId);
+        return true;
+    }
+
+    /// <summary>Сохранить все изменившиеся сохраняемые машины (по таймеру и при остановке).</summary>
+    public int SaveAll()
+    {
+        if (_persistence is null) return 0;
+        var saved = 0;
+        foreach (var v in Registry.All)
+            if (v.Persistent && (!_savedVersion.TryGetValue(v.Id, out var ver) || ver != v.Version))
+            {
+                SaveNow(v);
+                saved++;
+            }
+        return saved;
+    }
+
+    private void SaveNow(RegisteredVehicle v)
+    {
+        if (_persistence is null || !v.Persistent) return;
+        _persistence.Save(VehicleRegistry.Snapshot(v));
+        _savedVersion[v.Id] = v.Version;
+    }
+
     // ------------------------------------------------------------------ входящие
 
     /// <summary>VREQ reqId model — игрок сел за руль машины трафика.</summary>
@@ -74,6 +139,11 @@ public sealed class NativeVehicleService
         var reqId = NativeProtocol.UIntOr(p, 1, 0);
         var model = NativeProtocol.UIntOr(p, 2, 0);
         if (!_host.TryGetPlayer(playerId, out var pl) || !pl.UsesRegistry) return;
+        if (!AllowTrafficRegistration)
+        {
+            _host.Send(playerId, NativeProtocol.Format("VREJ", reqId, "на сервере машины трафика не регистрируются"));
+            return;
+        }
         if (!pl.HasState)
         {
             _host.Send(playerId, NativeProtocol.Format("VREJ", reqId, "нет позиции игрока"));
@@ -201,6 +271,8 @@ public sealed class NativeVehicleService
         var v = Registry.Remove(vehicleId);
         if (v is null) return false;
         Forget(vehicleId);
+        // Убранная машина не должна вернуться после перезапуска.
+        if (_savedVersion.Remove(vehicleId)) _persistence?.Delete(vehicleId);
         FlushSeatChanges();   // сидевшим — событие «вышел»
         Removed?.Invoke(vehicleId, reason);
         return true;
@@ -208,8 +280,12 @@ public sealed class NativeVehicleService
 
     /// <summary>Машина от геймода (API): стоит пустой, пока в неё не сядут.</summary>
     public RegisteredVehicle? Create(uint model, float x, float y, float z, float heading, int dimension,
-        string? plate, bool persistent, long nowMs) =>
-        Registry.Create(model, x, y, z, 0, 0, heading, dimension, nowMs, plate, persistent);
+        string? plate, bool persistent, long nowMs)
+    {
+        var v = Registry.Create(model, x, y, z, 0, 0, heading, dimension, nowMs, plate, persistent);
+        if (v is not null) SaveNow(v);   // сохраняемая — в хранилище сразу, а не через таймер
+        return v;
+    }
 
     /// <summary>
     /// Посадить игрока (API). null — посажен, иначе причина отказа. Игроку,
@@ -289,6 +365,11 @@ public sealed class NativeVehicleService
     public void Replicate(long nowMs, IReadOnlyList<VehiclePlayer> players, float radius, int maxStreamed, long abandonedTtlMs)
     {
         _tick++;
+        if (_persistence is not null && nowMs >= _nextSaveMs)
+        {
+            _nextSaveMs = nowMs + Math.Max(1000, SaveIntervalMs);
+            SaveAll();
+        }
         _grid.Clear();
         _stateLines.Clear();
         foreach (var v in Registry.All) _grid.InsertOrUpdate(v.Id, new Vector3D(v.X, v.Y, v.Z), v.Dimension);
@@ -394,7 +475,12 @@ public sealed class NativeVehicleService
                 if (who != 0 && (!_visible.TryGetValue(who, out var seen) || !seen.ContainsKey(c.VehicleId)))
                     _host.Send(who, line);
             if (c.PreviousPlayerId != 0 && c.PreviousPlayerId != c.PlayerId)
+            {
+                // Водитель припарковал машину — сохраняем место сразу, не ждём таймера:
+                // сервер может упасть раньше, и машина «уедет» на полчаса назад.
+                if (c.Seat == VehicleRegistry.DriverSeat && Registry.Get(c.VehicleId) is { } parked) SaveNow(parked);
                 PlayerLeftVehicle?.Invoke(c.PreviousPlayerId, c.VehicleId, c.Seat);
+            }
             if (c.PlayerId != 0) PlayerEnteredVehicle?.Invoke(c.PlayerId, c.VehicleId, c.Seat);
         }
     }

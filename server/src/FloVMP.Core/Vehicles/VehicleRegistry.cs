@@ -89,10 +89,12 @@ public sealed class VehicleRegistry
 {
     public const int DriverSeat = -1;
     public const int MaxSeat = 15;
-    /// <summary>Сесть можно только рядом с машиной: дальше — это телепорт в чужую машину.</summary>
-    public const float MaxEnterDistance = 10f;
-    /// <summary>Одна регистрация трафика на игрока за столько мс (решение владельца).</summary>
-    public const long TrafficRegisterIntervalMs = 2000;
+    /// <summary>Сесть можно только рядом с машиной: дальше — это телепорт в
+    /// чужую машину (vehicles.enter_distance, по умолчанию 10 м).</summary>
+    public float MaxEnterDistance { get; set; } = 10f;
+    /// <summary>Одна регистрация трафика на игрока за столько мс
+    /// (vehicles.register_cooldown_sec, по умолчанию 2 с).</summary>
+    public long TrafficRegisterIntervalMs { get; set; } = 2000;
     public const int MaxPlateLength = 8;
 
     private readonly Dictionary<uint, RegisteredVehicle> _vehicles = new();
@@ -110,6 +112,23 @@ public sealed class VehicleRegistry
 
     /// <summary>Потолок машин на сервер (vehicles.max_registered).</summary>
     public int MaxRegistered { get; set; }
+
+    /// <summary>
+    /// Шаблон случайного номера (vehicles.plate_format): 9 — цифра, A — буква,
+    /// остальное как есть, до 8 символов. Номер — часть стиля проекта, поэтому
+    /// он настраивается владельцем, а не зашит «как в GTA».
+    /// </summary>
+    public string PlateFormat
+    {
+        get => _plateFormat;
+        set => _plateFormat = ValidPlateFormat(value) ? value.ToUpperInvariant() : DefaultPlateFormat;
+    }
+    public const string DefaultPlateFormat = "99AAA999";
+    private string _plateFormat = DefaultPlateFormat;
+
+    public static bool ValidPlateFormat(string? format) =>
+        !string.IsNullOrWhiteSpace(format) && format.Length <= MaxPlateLength &&
+        format.All(ch => ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or ' ');
     public int Count => _vehicles.Count;
     public IEnumerable<RegisteredVehicle> All => _vehicles.Values;
 
@@ -371,12 +390,47 @@ public sealed class VehicleRegistry
         return clean.Length > MaxPlateLength ? clean[..MaxPlateLength] : clean;
     }
 
-    /// <summary>Номер как у машин в игре: 2 цифры, 3 буквы, 3 цифры.</summary>
+    /// <summary>Случайный номер по шаблону <see cref="PlateFormat"/>.</summary>
     private string RandomPlate()
     {
-        Span<char> c = stackalloc char[8];
-        for (var i = 0; i < 8; i++)
-            c[i] = i is >= 2 and <= 4 ? (char)('A' + _random.Next(26)) : (char)('0' + _random.Next(10));
+        Span<char> c = stackalloc char[_plateFormat.Length];
+        for (var i = 0; i < c.Length; i++)
+            c[i] = _plateFormat[i] switch
+            {
+                '9' => (char)('0' + _random.Next(10)),
+                'A' => (char)('A' + _random.Next(26)),
+                var literal => literal,
+            };
         return new string(c);
     }
+
+    /// <summary>
+    /// Вернуть сохранённую машину с её прежним ID: по нему геймод связал свои
+    /// данные (владелец, тюнинг). null — ID уже занят или потолок. Новые
+    /// машины после этого получают ID выше восстановленных.
+    /// </summary>
+    public RegisteredVehicle? Restore(PersistedVehicle p, bool restoreDamage, long nowMs)
+    {
+        if (p.Id == 0 || p.Model == 0 || _vehicles.ContainsKey(p.Id) || _vehicles.Count >= MaxRegistered) return null;
+        var v = new RegisteredVehicle(p.Id, p.Model, NormalizePlate(p.Plate) ?? RandomPlate(), p.Dimension,
+            VehicleOrigin.Server, 0, nowMs)
+        {
+            X = p.X, Y = p.Y, Z = p.Z, Rx = p.Rx, Ry = p.Ry, Rz = p.Rz,
+            Locked = p.Locked,
+            Persistent = true,
+        };
+        if (restoreDamage)
+        {
+            v.BodyHealth = Math.Clamp(p.BodyHealth, 0f, NativeVehicleProtocol.MaxHealth);
+            v.EngineHealth = Math.Clamp(p.EngineHealth, NativeVehicleProtocol.MinEngineHealth, NativeVehicleProtocol.MaxHealth);
+            v.Destroyed = v.EngineHealth <= NativeVehicleProtocol.MinEngineHealth;
+        }
+        _vehicles[v.Id] = v;
+        if (v.Id >= _nextId) _nextId = v.Id == uint.MaxValue ? 1 : v.Id + 1;
+        return v;
+    }
+
+    /// <summary>Снимок для хранилища.</summary>
+    public static PersistedVehicle Snapshot(RegisteredVehicle v) => new(v.Id, v.Model, v.Plate,
+        v.X, v.Y, v.Z, v.Rx, v.Ry, v.Rz, v.Dimension, v.Locked, v.BodyHealth, v.EngineHealth);
 }

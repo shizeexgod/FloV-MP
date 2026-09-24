@@ -79,7 +79,7 @@ public partial class StarterResource
             }));
         // Сохранять ли машину между перезапусками (само сохранение — 8d).
         Alt.OnServer<int, bool>("flovmp:vehicle:persistent", (id, on) =>
-            WithVehicle(id, "persistent", v => v.Persistent = on));
+            WithVehicle(id, "persistent", v => Vehicles.SetPersistent(v.Id, on)));
 
         // --- чтение -------------------------------------------------------------------
         // Ответ — flovmp:vehicle:state (см. EmitVehicleState).

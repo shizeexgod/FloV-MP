@@ -597,6 +597,9 @@ public partial class StarterResource : Resource
         if (dbReachable)
             _adminManager.AttachStore(new FloVMP.Core.Admin.MySqlAdminStore(starterDbConn));
 
+        // Сохранённые машины мира — до входа первых игроков (8d).
+        StartVehiclePersistence(dbReachable ? starterDbConn : null, starterDataDir);
+
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
 
@@ -650,6 +653,7 @@ public partial class StarterResource : Resource
         Alt.OnServer<string, string, int>("flovmp:commands:register", OnRegisterModCommand);
         Alt.OnServer<float, float, float, float>("flovmp:settings:spawn", OnSpawnSetting);
         Alt.OnServer<bool>("flovmp:settings:respawn", OnRespawnSetting);
+        Alt.OnServer<string, string>("flovmp:settings:set", OnSettingSet);
 
         // Мир и интерфейс для клиентов b3889: события ресурсов и файлы карт.
         RegisterWorldApi();
@@ -667,6 +671,9 @@ public partial class StarterResource : Resource
     public override void OnStop()
     {
         _licenseRemoteCts.Cancel();
+        // Машины — пока игроки ещё на сервере: позиция машины, в которой едут
+        // прямо сейчас, тоже должна пережить перезапуск.
+        StopVehiclePersistence();
         StopNativeGateway();
         // Баны на диск до отписки от событий: выданный в последнюю секунду бан
         // обязан пережить перезапуск.

@@ -38,6 +38,66 @@ public partial class StarterResource
 
     private bool UsesRegistry(uint playerId) => _registryClients.Contains(playerId);
 
+    private VehiclePersistence? _vehiclePersistence;
+
+    /// <summary>
+    /// Сохранение машин (8d): хранилище по настройке vehicles.persistence,
+    /// подъём сохранённых машин и событие flovmp:vehicles:loaded ресурсам.
+    /// </summary>
+    private void StartVehiclePersistence(string? dbConnection, string dataDir)
+    {
+        if (!_settings.Bool("vehicles.persistence"))
+        {
+            Alt.Log("[FloV:MP] [Транспорт] Сохранение машин платформой выключено (vehicles.persistence = off) — его делает ваш геймод.");
+            return;
+        }
+        try
+        {
+            var world = _settings.Get("vehicles.world").Trim();
+            if (world.Length == 0 || world.Length > 32) world = "main";
+            var store = VehicleStoreFactory.Create(dbConnection, world, Path.Combine(dataDir, "vehicles.json"));
+            _vehiclePersistence = new VehiclePersistence(store, Alt.LogWarning);
+            Vehicles.AttachPersistence(_vehiclePersistence);
+            ApplyVehicleSettings();
+            var (restored, skipped) = Vehicles.RestoreSaved(_settings.Bool("vehicles.restore_damage"), _clock.ElapsedMilliseconds);
+            Alt.Log($"[FloV:MP] [Транспорт] Машины сохраняются: {store.Describe}. Восстановлено: {restored}" +
+                    (skipped > 0 ? $", пропущено {skipped} (потолок vehicles.max_registered или повтор ID)." : "."));
+            Alt.Emit("flovmp:vehicles:loaded", restored);
+        }
+        catch (Exception ex)
+        {
+            // Без машин сервер работать может, без запуска — нет.
+            Alt.LogError($"[FloV:MP] [Транспорт] Сохранённые машины не подняты: {ex.Message}");
+        }
+    }
+
+    private void StopVehiclePersistence()
+    {
+        if (_vehiclePersistence is null) return;
+        try
+        {
+            var saved = Vehicles.SaveAll();
+            var ok = _vehiclePersistence.FlushBlocking(TimeSpan.FromSeconds(10));
+            Alt.Log($"[FloV:MP] [Транспорт] Машины сохранены перед остановкой ({saved} изменились)" +
+                    (ok ? "." : " — НЕ всё успело записаться, проверьте хранилище."));
+            _vehiclePersistence.Dispose();
+        }
+        catch (Exception ex) { Alt.LogWarning($"[FloV:MP] [Транспорт] Сохранение перед остановкой: {ex.Message}"); }
+        _vehiclePersistence = null;
+    }
+
+    /// <summary>Настройки транспорта из client.cfg (и flovmp:settings:set) — на лету.</summary>
+    private void ApplyVehicleSettings()
+    {
+        var v = Vehicles;
+        v.Registry.MaxRegistered = _settings.Int("vehicles.max_registered");
+        v.Registry.PlateFormat = _settings.Get("vehicles.plate_format");
+        v.Registry.MaxEnterDistance = _settings.Float("vehicles.enter_distance");
+        v.Registry.TrafficRegisterIntervalMs = (long)(_settings.Float("vehicles.register_cooldown_sec") * 1000);
+        v.AllowTrafficRegistration = _settings.Bool("vehicles.register_traffic");
+        v.SaveIntervalMs = _settings.Int("vehicles.save_interval_sec") * 1000L;
+    }
+
     private void OnVehicleClientJoined(NativeSession session)
     {
         if (NativeVehicleProtocol.SupportsRegistry(session.ClientVersion))
@@ -84,7 +144,7 @@ public partial class StarterResource
     private void ReplicateVehicles(long nowMs)
     {
         if (_vehicles is null && _registryClients.Count == 0) return;
-        Vehicles.Registry.MaxRegistered = _settings.Int("vehicles.max_registered");
+        ApplyVehicleSettings();
         // Все игроки 3889, не только 1.0.6+: рядом стоящий старый клиент тоже
         // не даёт убрать машину как брошенную. Рассылку сервис шлёт только 1.0.6+.
         _vehicleRecipients.Clear();
