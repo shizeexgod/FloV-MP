@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Стенд реестра транспорта для ботов: настоящий шлюз NativeServer и
+    NativeVehicleService без alt:V и без лицензии. Нужен там, где живой
+    сервер не поднять (облачная сессия без доступа к серверу лицензий):
+    бот гоняет по TCP тот же протокол, что и в игре. В поставку НЕ входит.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>FloVMP.VehicleHarness</AssemblyName>
+    <RootNamespace>FloVMP.VehicleHarness</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
+
+</Project>

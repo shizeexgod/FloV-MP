@@ -175,3 +175,16 @@ seat)` и **`playerLeaveVehicle`** (на сервере — `playerExitVehicle`)
 Слой совместимости должен различать сторону.
 
 Имена событий FloV:MP в 8c — предложение, утверждаются вместе с API.
+
+Уже есть в коде: `FloVMP.Core/Bridge/RageCompatibility.cs` — атрибуты
+`[Command]` и `[RemoteEvent]` в стиле серверного C# RAGE:MP (тесты
+`RageCompatibilityTests`). Слой совместимости пункта 17 стоит строить от него.
+
+## Проверка без игры
+
+    dotnet run -c Release --project server/tools/FloVMP.VehicleHarness -- 17798
+    python native/legacy-3889/client/tools/bot.py --port 17798 --vehicle-test
+
+Стенд — настоящий шлюз `NativeServer` и `NativeVehicleService` без alt:V и
+лицензии. Против живого сервера тот же сценарий (`--port 7798`) проверяет
+ещё и вид машины у старого клиента через `PSTATE`.

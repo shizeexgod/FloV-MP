@@ -35,6 +35,8 @@ public partial class StarterResource
     internal void OnNativeDimensionChanged(NativeSession session, int dimension)
     {
         if (_nativeReady.Contains(session.Id)) SendWorldSnapshot(session, dimension);
+        // Машина остаётся в своём измерении — игрок из неё высаживается.
+        _vehicles?.PlayerDimensionChanged(session.Id, _clock.ElapsedMilliseconds);
     }
 
     // Кого из игроков уже видит нативный клиент и какую версию состояния ему отправили.
@@ -304,6 +306,8 @@ public partial class StarterResource
             SendChatMessage(proxy, $"{{fde047}}[FloV:MP] Ваш клиент {session.ClientVersion} старее сервера ({platformVersion}). Обновите клиент, чтобы всё работало правильно.");
         }
 
+        OnVehicleClientJoined(session);
+
         // Тот же вход, что у клиента alt:V: ник, бан, лицензия, лимит, спавн, права.
         OnPlayerConnect(proxy, "native-b3889");
     }
@@ -325,6 +329,7 @@ public partial class StarterResource
         _hitWarnedAt.Remove(session.Id);
         _weaponHistory.Remove(session.Id);
         _nativeVehicleOwners.Remove(session.Id);
+        OnVehicleClientLeft(session.Id);
         foreach (var key in _hitPairRate.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
             _hitPairRate.Remove(key);
         foreach (var key in _lastHitAt.Keys.Where(k => k.Attacker == session.Id || k.Victim == session.Id).ToList())
@@ -395,6 +400,11 @@ public partial class StarterResource
                 break;
             case "HIT":
                 OnNativeHit(session, np, p);
+                break;
+            case "VREQ":
+            case "VENTER":
+            case "VLEAVE":
+                OnVehicleMessage(session, p);
                 break;
             case "TPM":
                 if (NativeProtocol.TryFloat(p, 1, out var x) && NativeProtocol.TryFloat(p, 2, out var y) &&
@@ -515,6 +525,8 @@ public partial class StarterResource
         _nativeGrid.Clear();
         _syncStates.Clear();
         _syncLines.Clear();
+        _syncLinesLegacy.Clear();
+        TakeVehicleSyncs();
 
         // Сначала собираем только серверно подтверждённых водителей. Это
         // позволяет проверить пассажиров независимо от порядка словаря
@@ -528,6 +540,9 @@ public partial class StarterResource
         {
             var driverProxy = (NativePlayerProxy)(object)driver;
             if (!_nativeReady.Contains(driverId) || !driverProxy.Session.HasState) continue;
+            // У клиента 1.0.6+ поля машины в STATE ничего не значат: его
+            // машины ведёт реестр, а не этот список.
+            if (UsesRegistry(driverId)) continue;
             var driverState = driverProxy.State;
             if (driverState.InVehicle && driverState.Seat == -1 && driverState.VehicleModel != 0)
                 _nativeVehicleOwners[driverId] = new NativeVehicleOwner(
@@ -548,7 +563,7 @@ public partial class StarterResource
             // кому NoClip разрешён: иначе это невидимость для любого читера.
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
-            st = AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
+            st = UsesRegistry(id) ? WithoutVehicleFields(st) : AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
             if (_weaponHistory.TryGetValue(id, out var wh))
             {
                 if (wh.Cur != st.Weapon) _weaponHistory[id] = (wh.Cur, st.Weapon, nowMs);
@@ -578,6 +593,7 @@ public partial class StarterResource
             if (!_nativeVisible.TryGetValue(id, out var visible))
                 _nativeVisible[id] = visible = new Dictionary<uint, (long Version, long Tick)>();
 
+            var recipientUsesRegistry = UsesRegistry(id);
             _syncNear.Clear();
             if (_syncStates.TryGetValue(id, out var own))
             {
@@ -619,11 +635,21 @@ public partial class StarterResource
                 var every = d2 < 60 * 60 ? 1 : d2 < 150 * 150 ? 2 : 4;
                 if (sent.Version >= 0 && _syncTick - sent.Tick < every) continue;
                 visible[other] = (info.Version, _syncTick);
-                if (!_syncLines.TryGetValue(other, out var line))
+                // Переходный релиз: старый клиент видит машину игрока 1.0.6+
+                // только полями PSTATE — для него своя строка.
+                string? line;
+                if (!recipientUsesRegistry && UsesRegistry(other))
+                {
+                    if (!_syncLinesLegacy.TryGetValue(other, out line))
+                        _syncLinesLegacy[other] = line = LegacyViewOf(other, info.State).FormatFor(other);
+                }
+                else if (!_syncLines.TryGetValue(other, out line))
                     _syncLines[other] = line = info.State.FormatFor(other);
                 np.Session.Send(line);
             }
         }
+
+        ReplicateVehicles(nowMs);
     }
 
     private long _syncTick;
@@ -635,6 +661,7 @@ public partial class StarterResource
     private const long NativeVehicleOwnerTtlMs = NativeSyncIntervalMs * 4;
     private readonly Dictionary<uint, (NativePlayerState State, long Version, string Name, int Dimension)> _syncStates = new();
     private readonly Dictionary<uint, string> _syncLines = new();
+    private readonly Dictionary<uint, string> _syncLinesLegacy = new();
     private readonly List<(uint Id, float D2)> _syncNear = new();
     private readonly HashSet<uint> _syncInRange = new();
     private readonly List<uint> _syncGone = new();
@@ -687,6 +714,7 @@ public partial class StarterResource
     private bool HandleNativeVehicleCommand(IPlayer player, string cmd, string[] parts)
     {
         var np = (NativePlayerProxy)(object)player;
+        if (UsesRegistry(np.Session.Id)) return HandleRegistryVehicleCommand(player, np, cmd, parts);
         var inVehicle = np.Session.HasState && np.State.InVehicle;
         switch (cmd)
         {

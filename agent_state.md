@@ -1,6 +1,24 @@
 # Agent State — FloV:MP
 
-Updated: 2026-09-21 (separate runtime/source products, Linux/Windows delivery hardening, b3889 guard)
+Updated: 2026-09-24 (реестр транспорта 8a — серверное ядро, протокол, боты)
+
+### 2026-09-24 — серверный реестр транспорта, этап 8a (линия 1.0.6-beta)
+
+- Протокол утверждён владельцем: `docs/vehicle-registry-protocol.md`
+  (VADD/VSTATE/VDEL/VOWN/VREG/VREJ/VSET, VREQ/VSYNC/VENTER/VLEAVE) и таблица
+  имён FloV:MP ↔ RAGE:MP ↔ alt:V для слоя совместимости (пункт 17).
+- Ядро: `FloVMP.Core/Vehicles` (`VehicleRegistry`, `NativeVehicleService`),
+  `FloVMP.Core/Native/NativeVehicleProtocol.cs`; VSYNC мимо очереди событий,
+  «последнее побеждает». Обвязка — `StarterResource.Vehicles.cs`.
+- Клиенты < 1.0.6 живут по-старому (машина — поля STATE); видят машину
+  реестра, только пока в ней водитель. Старый путь убрать после 1.0.7.
+- Настройки: `vehicles.max_registered` (1000), `vehicles.abandoned_ttl_sec` (300).
+- Проверка: тесты 496/496; стенд `server/tools/FloVMP.VehicleHarness` +
+  `bot.py --vehicle-test` — 20/20 трижды подряд. Живой сервер не запускался
+  (облако без доступа к серверу лицензий) — прогон ботов у владельца.
+- Бот: `close()` теперь делает shutdown — раньше сервер видел уход бота
+  только через 30 с простоя.
+- Дальше: 8b — клиент (`game.cpp`), 8c — публичный API, 8d — сохранение.
 
 ### 2026-09-21 — GTA V Legacy 1.0.3889.0: собственный клиент, проверен вживую
 

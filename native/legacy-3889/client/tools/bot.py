@@ -7,6 +7,7 @@
 
   python tools/bot.py --host 127.0.0.1 --port 7798 --name Bot1 [--say "привет"] [--seconds 30]
   python tools/bot.py --check   # короткая самопроверка: вход, спавн, чат, /help — код выхода 0/1
+  python tools/bot.py --vehicle-test   # реестр транспорта (клиент 1.0.6+): VREQ/VENTER/VLEAVE/VSYNC
 """
 import argparse
 import base64
@@ -47,8 +48,11 @@ def fmt(*fields):
 
 
 class Bot:
-    def __init__(self, host, port, name, key_path=None, log=print):
+    def __init__(self, host, port, name, key_path=None, log=print, client_version="bot-1.0"):
         self.host, self.port, self.name, self.log = host, port, name, log
+        # Версия из HELLO решает, каким путём сервер ведёт машины: ниже 1.0.6 —
+        # через STATE, 1.0.6+ — через реестр.
+        self.client_version = client_version
         self.key = self._load_key(key_path)
         self.sock = None
         self.buf = b""
@@ -93,7 +97,7 @@ class Bot:
         self.sock = socket.create_connection((self.host, self.port), timeout=10)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         pub = self.public_raw()
-        self.send("HELLO", "2", GAME_VERSION, "bot-1.0", self.name, base64.b64encode(pub).decode(),
+        self.send("HELLO", "2", GAME_VERSION, self.client_version, self.name, base64.b64encode(pub).decode(),
                   "B0B0B0B0B0B0B0B0", "0000000000000B07")
         ch = self.read_line()
         if not ch or ch[0] != "CHALLENGE":
@@ -223,6 +227,13 @@ class Bot:
 
     def close(self):
         self.alive = False
+        # shutdown до close: поток чтения висит в recv на этом же сокете, и
+        # одно close() на Linux не шлёт FIN — сервер узнавал об уходе бота
+        # только через 30 с простоя.
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
         try:
             self.sock.close()
         except OSError:
@@ -341,6 +352,178 @@ def moderation(host, port, admin_key):
     return ok
 
 
+ADDER = 0xB779A091
+
+
+def vehicle_test(host, port):
+    """Реестр транспорта глазами трёх игроков: A и B — клиенты 1.0.6, C — 1.0.5.
+
+    Работает и против живого сервера, и против стенда
+    server/tools/FloVMP.VehicleHarness (там нет PSTATE — проверки старого
+    клиента пропускаются).
+    """
+    ok = True
+
+    def check(name, cond):
+        nonlocal ok
+        ok &= bool(cond)
+        print(("OK   " if cond else "FAIL ") + name)
+        return cond
+
+    def since(bot, mark, pred, timeout=3):
+        """Первое подходящее сообщение, пришедшее после отметки mark."""
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            for m in list(bot.messages[mark:]):
+                if pred(m):
+                    return m
+            time.sleep(0.05)
+        return None
+
+    def join(name, version):
+        b = Bot(host, port, name, None, log=lambda s: None, client_version=version)
+        b.connect()
+        t0 = time.time()
+        while not b.spawn and time.time() - t0 < 5:
+            time.sleep(0.05)
+        b.send("READY")
+        b.pos = list(b.spawn or b.pos)
+        b.state(0)
+        return b
+
+    def in_car_state(b, x, y, z):
+        b.pos = [x, y, z]
+        # Поля машины в STATE у клиента 1.0.6 сервер игнорирует — шлём мусор
+        # нарочно: реестр не должен ему поверить.
+        b.send("STATE", x, y, z, 0, 5, 0, 0, 1 | 256, 12345, 999, 3, 0, 0, 90, 200, 0, 0, 5, 1885233650)
+
+    def vsync(b, vid, x, y, z, body=1000, engine=1000, vx=5.0):
+        b.send("VSYNC", vid, x, y, z, 0, 0, 90, vx, 0, 0, 1, 0, body, engine)
+
+    a = join("VehA", "1.0.6-beta")
+    b = join("VehB", "1.0.6-beta")
+    c = join("VehC", "1.0.5-beta")
+    time.sleep(0.5)
+    x0, y0, z0 = a.pos
+
+    # 1. Регистрация машины трафика.
+    mark_a, mark_b = len(a.messages), len(b.messages)
+    a.send("VREQ", 1, ADDER)
+    reg = since(a, mark_a, lambda m: m[0] == "VREG" and m[1] == "1")
+    if not check("VREQ → VREG с ID машины", reg):
+        for bot in (a, b, c):
+            bot.close()
+        return False
+    vid = reg[2]
+    check("водитель получил VOWN себя на -1",
+          since(a, mark_a, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == str(a.id) and m[3] == "-1"))
+
+    # Частота регистрации: сразу же второй VREQ — отказ, машина прежняя.
+    mark_a2 = len(a.messages)
+    a.send("VREQ", 2, ADDER)
+    check("повторный VREQ быстрее 2 с → VREJ",
+          since(a, mark_a2, lambda m: m[0] == "VREJ" and m[1] == "2"))
+
+    # 2. Водитель едет: остальные видят машину и её движение.
+    for i in range(1, 11):
+        in_car_state(a, x0 + i, y0, z0)
+        vsync(a, vid, x0 + i, y0, z0)
+        time.sleep(0.06)
+    check("второй игрок получил VADD машины (модель adder)",
+          since(b, mark_b, lambda m: m[0] == "VADD" and m[1] == vid and m[2] == str(ADDER)))
+    check("второй игрок видит водителя (VOWN)",
+          since(b, mark_b, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == str(a.id) and m[3] == "-1"))
+    moved = since(b, mark_b, lambda m: m[0] == "VSTATE" and m[1] == vid and float(m[2]) >= x0 + 5)
+    check("второй игрок получает VSTATE с движением", moved)
+    check("водителю не приходит VADD своей машины",
+          not any(m[0] == "VADD" and m[1] == vid for m in a.messages[mark_a:]))
+    check("водителю не приходит VSTATE своей машины",
+          not any(m[0] == "VSTATE" and m[1] == vid for m in a.messages[mark_a:]))
+    legacy = since(c, 0, lambda m: m[0] == "PSTATE" and m[1] == str(a.id) and int(m[9]) & 1, timeout=1.5)
+    if any(m[0] == "PSTATE" for m in c.messages):
+        check("старый клиент видит машину через PSTATE водителя (модель и владелец)",
+              legacy and legacy[10] == str(ADDER) and legacy[11] == str(a.id))
+    else:
+        print("SKIP старый клиент: сервер не шлёт PSTATE (стенд)")
+
+    # 3. Чужой VSYNC отбрасывается.
+    mark_b = len(b.messages)
+    for _ in range(5):
+        vsync(b, vid, x0 + 300, y0, z0)
+        time.sleep(0.06)
+    time.sleep(0.4)
+    check("VSYNC не от водителя не двигает машину",
+          not any(m[0] == "VSTATE" and m[1] == vid and float(m[2]) > x0 + 200 for m in b.messages[mark_b:]))
+
+    # 4. Здоровье от клиента — только вниз.
+    vsync(a, vid, x0 + 11, y0, z0, body=500)
+    time.sleep(0.2)
+    mark_b = len(b.messages)
+    vsync(a, vid, x0 + 12, y0, z0, body=1000)
+    hp = since(b, mark_b, lambda m: m[0] == "VSTATE" and m[1] == vid and float(m[2]) >= x0 + 12)
+    check("кузов не «чинится» клиентом (bodyHp остался 500)", hp and float(hp[14]) == 500)
+
+    # 5. Место водителя занято: отказ приходит как VOWN с настоящим водителем.
+    b.pos = [x0 + 12, y0 + 2, z0]
+    b.state(0)
+    time.sleep(0.15)
+    mark_b = len(b.messages)
+    b.send("VENTER", vid, -1)
+    check("VENTER на занятое место → VOWN с настоящим водителем",
+          since(b, mark_b, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == str(a.id) and m[3] == "-1"))
+
+    # 6. Пассажиром можно, VOWN видят все.
+    mark_a, mark_b = len(a.messages), len(b.messages)
+    b.send("VENTER", vid, 0)
+    check("пассажир сел: VOWN у водителя",
+          since(a, mark_a, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == str(b.id) and m[3] == "0"))
+
+    # 7. Водитель вышел: машина остаётся и останавливается.
+    mark_b = len(b.messages)
+    a.send("VLEAVE", vid)
+    a.state(0)
+    check("водитель вышел: VOWN 0 на -1",
+          since(b, mark_b, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == "0" and m[3] == "-1"))
+    check("машина остановилась (VSTATE со скоростью 0)",
+          since(b, mark_b, lambda m: m[0] == "VSTATE" and m[1] == vid and float(m[8]) == 0))
+    time.sleep(0.3)
+    check("машина без водителя не исчезла (нет VDEL)",
+          not any(m[0] == "VDEL" and m[1] == vid for m in b.messages[mark_b:]))
+
+    # 8. Пассажир пересел за руль и повёл.
+    mark_a, mark_b = len(a.messages), len(b.messages)
+    b.send("VENTER", vid, -1)
+    check("новый водитель: VOWN у него",
+          since(b, mark_b, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == str(b.id) and m[3] == "-1"))
+    for i in range(1, 6):
+        in_car_state(b, x0 + 12 + i, y0, z0)
+        vsync(b, vid, x0 + 12 + i, y0, z0)
+        time.sleep(0.06)
+    check("прежний водитель видит, как машину ведёт новый",
+          since(a, mark_a, lambda m: m[0] == "VSTATE" and m[1] == vid and float(m[2]) >= x0 + 15))
+
+    # 9. Ушёл из зоны видимости — VDEL, вернулся — снова полный снимок.
+    mark_a = len(a.messages)
+    a.pos = [x0 + 3000, y0, z0]
+    a.state(0)
+    check("вне зоны видимости → VDEL", since(a, mark_a, lambda m: m[0] == "VDEL" and m[1] == vid))
+    mark_a = len(a.messages)
+    a.pos = [x0, y0, z0]
+    a.state(0)
+    check("вернулся → снова VADD (снимок, а не дельта)",
+          since(a, mark_a, lambda m: m[0] == "VADD" and m[1] == vid))
+
+    # 10. Водитель отключился — место свободно у остальных.
+    mark_a = len(a.messages)
+    b.close()
+    check("водитель отключился → VOWN 0 на -1",
+          since(a, mark_a, lambda m: m[0] == "VOWN" and m[1] == vid and m[2] == "0" and m[3] == "-1", timeout=5))
+
+    a.close()
+    c.close()
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -350,6 +533,8 @@ def main():
     ap.add_argument("--say", default=None)
     ap.add_argument("--seconds", type=float, default=30)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--vehicle-test", action="store_true", help="сценарий реестра транспорта (клиенты 1.0.6 и 1.0.5)")
+    ap.add_argument("--client-version", default="bot-1.0", help="версия клиента в HELLO (1.0.6+ — реестр транспорта)")
     ap.add_argument("--moderation-test", metavar="ADMIN_KEY", help="сценарий модерации; ключ бота-владельца")
     ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
@@ -361,9 +546,11 @@ def main():
     if a.identity:
         print(identity_of(a.identity))
         return
+    if a.vehicle_test:
+        sys.exit(0 if vehicle_test(a.host, a.port) else 1)
     if a.moderation_test:
         sys.exit(0 if moderation(a.host, a.port, a.moderation_test) else 1)
-    bot = Bot(a.host, a.port, a.name, a.key)
+    bot = Bot(a.host, a.port, a.name, a.key, client_version=a.client_version)
     bot.connect()
     if a.voice:
         got = bot.voice(a.seconds, a.voice)
