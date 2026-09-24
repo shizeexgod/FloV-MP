@@ -273,7 +273,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
 
     if (headless)
     {
-        if (scene == L"loading") { flov::ui::ShowLoading(""); flov::ui::LoadingStep("Загружаем окрестности…", 62.f); }
+        if (scene == L"loading") { flov::ui::ShowLoading(""); flov::ui::LoadingStep("Loading the surroundings", 62.f); }
         else if (scene == L"menu") ShowMenu();
         else if (scene == L"connect") flov::ui::OpenConnectDialog("188.127.229.224:7798", "Дмитрий_Соколов");
     }
@@ -307,7 +307,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         if (f2 && !prevF2)
         {
             flov::ui::ShowLoading("");
-            flov::ui::LoadingStep("Загружаем окрестности…", 62.f);
+            flov::ui::LoadingStep("Loading the surroundings", 62.f);
         }
         if (f3 && !prevF3) ShowMenu();
         if (f4 && !prevF4) flov::ui::Notify("Вы получили 5 000 ₽ за смену", 4000);
@@ -316,7 +316,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         if (flov::ui::LoadingVisible() && !headless)
         {
             const float percent = std::fmod(time * 12.f, 100.f);
-            flov::ui::LoadingStep(percent < 50.f ? "Загрузка ресурсов сервера…" : "Готовим мир…", percent);
+            flov::ui::LoadingStep(percent < 50.f ? "Receiving server settings" : "Preparing the world", percent);
         }
 
         // Меню и чат читаем, иначе очереди растут без конца.

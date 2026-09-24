@@ -1445,58 +1445,67 @@ namespace flov::ui
             }
 
             const float margin = std::min(72 * s, w * 0.07f);
-            const float barH = 5 * s;
+            const float barH = 4 * s;
             const float barBottom = h - margin;
             const float barTop = barBottom - barH;
+            const float radius = barH / 2;
 
             // --- справа снизу: этап над полосой, по правому краю -------------
-            const float rightW = std::min(560 * s, w * 0.44f);
-            const float rx0 = w - margin - rightW;
+            const float barW = std::min(560 * s, w * 0.44f);
+            const float rx0 = w - margin - barW;
             const float rx1 = w - margin;
             {
-                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW, 15 * s);
-                const float tw = Measure(g_text, step, 15 * s).x;
-                Text(dl, g_text, ImVec2(rx1 - tw, barTop - Px(g_text) - 15 * s),
-                     Rgba(255, 255, 255, 0.78f * fade), step, 15 * s);
+                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Connecting" : g_loadingStep, barW, 14 * s);
+                const float tw = Measure(g_text, step, 14 * s).x;
+                Text(dl, g_text, ImVec2(rx1 - tw, barTop - Px(g_text) - 16 * s),
+                     Rgba(255, 255, 255, 0.85f * fade), step, 14 * s);
 
-                const float r = barH / 2;
-                // Дорожка едва заметна: весь цвет достаётся заполненной части.
-                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx1, barBottom), Rgba(255, 255, 255, 0.09f * fade), r);
+                // Дорожка: тонкая и почти незаметная, весь цвет — у заполненной части.
+                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx1, barBottom), Rgba(255, 255, 255, 0.1f * fade), radius);
 
                 auto fillSegment = [&](float x0, float x1)
                 {
                     if (x1 - x0 < barH) return;
-                    dl->PushClipRect(ImVec2(rx0 - barH * 3, barTop - barH * 3),
-                                     ImVec2(rx1 + barH * 3, barBottom + barH * 3), true);
-                    // Мягкое свечение под заливкой: полоса светится, а не лежит
-                    // наклейкой. Слоёв несколько, каждый шире и прозрачнее.
-                    for (int i = 1; i <= 5; ++i)
-                        dl->AddRectFilled(ImVec2(x0 - i * s * 0.6f, barTop - i * 1.6f * s),
-                                          ImVec2(x1 + i * s * 0.6f, barBottom + i * 1.6f * s),
-                                          Rgb(acc, 0.045f * fade), r + i * 1.6f * s);
-                    dl->AddRectFilled(ImVec2(x0, barTop), ImVec2(x1, barBottom), Rgb(acc, fade), r);
-                    // Яркая голова и блик на ней: глаз сразу находит, где край.
-                    const float headW = std::min(x1 - x0, 48 * s);
-                    dl->AddRectFilledMultiColor(ImVec2(x1 - headW, barTop), ImVec2(x1, barBottom),
-                                                Rgb(acc, fade), Rgba(255, 255, 255, 0.85f * fade),
-                                                Rgba(255, 255, 255, 0.85f * fade), Rgb(acc, fade));
-                    dl->AddCircleFilled(ImVec2(x1 - r, (barTop + barBottom) / 2), r * 2.2f,
-                                        Rgba(255, 255, 255, 0.22f * fade), 20);
+                    dl->PushClipRect(ImVec2(rx0 - barH * 4, barTop - barH * 5),
+                                     ImVec2(rx1 + barH * 4, barBottom + barH * 5), true);
+                    // Свечение под заливкой: полоса светится, а не лежит наклейкой.
+                    for (int i = 1; i <= 4; ++i)
+                        dl->AddRectFilled(ImVec2(x0, barTop - i * 1.4f * s), ImVec2(x1, barBottom + i * 1.4f * s),
+                                          Rgb(acc, 0.04f * fade), radius + i * 1.4f * s);
+                    // Заливка с лёгким градиентом по длине и скруглёнными концами.
+                    dl->AddRectFilled(ImVec2(x0, barTop), ImVec2(x1, barBottom), Rgb(acc, fade), radius);
+                    dl->PushClipRect(ImVec2(x0, barTop), ImVec2(x1, barBottom), true);
+                    dl->AddRectFilledMultiColor(ImVec2(x0, barTop), ImVec2(x1, barBottom),
+                                                Rgb(acc, 0.55f * fade), Rgb(acc, fade),
+                                                Rgb(acc, fade), Rgb(acc, 0.55f * fade));
+                    // Блик проходит по заливке: видно, что загрузка живая, даже когда
+                    // длинный этап долго не меняет длину полосы.
+                    const float period = 2200.f;
+                    const float t = (float)((now - g_loadingShownAt) % (ULONGLONG)period) / period;
+                    const float sheenW = std::max(60.f * s, (x1 - x0) * 0.22f);
+                    const float sx = x0 - sheenW + (x1 - x0 + sheenW * 2.f) * t;
+                    dl->AddRectFilledMultiColor(ImVec2(sx, barTop), ImVec2(sx + sheenW / 2, barBottom),
+                                                Rgba(255, 255, 255, 0.f), Rgba(255, 255, 255, 0.3f * fade),
+                                                Rgba(255, 255, 255, 0.3f * fade), Rgba(255, 255, 255, 0.f));
+                    dl->AddRectFilledMultiColor(ImVec2(sx + sheenW / 2, barTop), ImVec2(sx + sheenW, barBottom),
+                                                Rgba(255, 255, 255, 0.3f * fade), Rgba(255, 255, 255, 0.f),
+                                                Rgba(255, 255, 255, 0.f), Rgba(255, 255, 255, 0.3f * fade));
+                    dl->PopClipRect();
                     dl->PopClipRect();
                 };
 
                 if (g_loadingPercent >= 0)
                 {
-                    g_loadingShownPercent += (g_loadingPercent - g_loadingShownPercent) * 0.12f;
-                    fillSegment(rx0, rx0 + rightW * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f));
+                    g_loadingShownPercent += (g_loadingPercent - g_loadingShownPercent) * 0.08f;
+                    fillSegment(rx0, rx0 + barW * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f));
                 }
                 else
                 {
                     // Неизвестный прогресс: бегущий отрезок, честнее выдуманных процентов.
                     const float t = (float)((now - g_loadingShownAt) % 1400) / 1400.f;
-                    const float seg = rightW * 0.3f;
-                    const float sx = rx0 - seg + (rightW + seg) * t;
-                    dl->PushClipRect(ImVec2(rx0, barTop - barH * 3), ImVec2(rx1, barBottom + barH * 3), true);
+                    const float seg = barW * 0.3f;
+                    const float sx = rx0 - seg + (barW + seg) * t;
+                    dl->PushClipRect(ImVec2(rx0, barTop - barH * 5), ImVec2(rx1, barBottom + barH * 5), true);
                     fillSegment(std::max(rx0, sx), std::min(rx1, sx + seg));
                     dl->PopClipRect();
                 }

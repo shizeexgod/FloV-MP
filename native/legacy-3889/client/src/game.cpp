@@ -103,6 +103,9 @@ namespace flov::game
 
         // Загрузочный экран: от подключения до появления в мире.
         bool g_loadingActive = false;
+        // Номер показанного этапа загрузки: каждый объявляется один раз
+        // и только по факту события, а не по таймеру.
+        int g_loadStage = 0;
         ULONGLONG g_loadStart = 0, g_spawnAt = 0;
 
         // Показатели для консоли и netgraph.
@@ -1096,6 +1099,7 @@ namespace flov::game
             ui::SetMicIndicator(0);
             ui::HideLoading();
             g_loadingActive = false;
+            g_loadStage = 0;
             g_spawnAt = 0;
             ui::SetWindowTitle(WindowTitle());
         }
@@ -1114,7 +1118,8 @@ namespace flov::game
             if (g_cfg.loading)
             {
                 ui::ShowLoading(g_typedAddress);
-                ui::LoadingStep("Устанавливаем соединение…", 10);
+                ui::LoadingStep("Connecting to the server", 8);
+                g_loadStage = 1;
                 g_loadingActive = true;
                 g_loadStart = GetTickCount64();
             }
@@ -1287,7 +1292,8 @@ namespace flov::game
                 {
                     const auto title = settings::Get("loading.title");
                     ui::ShowLoading(title.empty() ? (g_serverName.empty() ? std::string("Сервер FloV:MP") : g_serverName) : title);
-                    ui::LoadingStep("Готовим мир…", 55);
+                    ui::LoadingStep("Preparing the world", 62);
+                    g_loadStage = 4;
                 }
                 else ui::Notify("Добро пожаловать на " + (g_serverName.empty() ? std::string("сервер") : g_serverName) +
                                 "! T — чат, /help — команды.", 5000);
@@ -1303,7 +1309,8 @@ namespace flov::game
                 if (g_loadingActive && !g_spawnAt)
                 {
                     g_spawnAt = GetTickCount64();
-                    ui::LoadingStep("Загружаем окрестности…", 80);
+                    ui::LoadingStep("Loading the surroundings", 82);
+                    g_loadStage = 5;
                 }
             }
             else if (type == "TP") Teleport(ToFloat(at(1)), ToFloat(at(2)), ToFloat(at(3)));
@@ -1518,6 +1525,11 @@ namespace flov::game
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
                 ApplySettings();
                 Log("настройки сервера получены (" + std::to_string((m.size() - 1) / 2) + ")");
+                if (g_loadingActive && g_loadStage < 3)
+                {
+                    g_loadStage = 3;
+                    ui::LoadingStep("Receiving server settings", 42);
+                }
             }
             else if (type == "COPY")
             {
@@ -1967,7 +1979,7 @@ namespace flov::game
             else if (g_welcomed && g_readySent && now - g_welcomeAt > 5000) done = true; // сервер не прислал спавн
             if (!done && !timeout) return;
             if (timeout && !done) Log("загрузка не завершилась за 30 с — показываю игру как есть");
-            ui::LoadingStep("Готово", 100);
+            ui::LoadingStep("Launching the game", 100);
             ui::HideLoading();
             g_loadingActive = false;
             ui::SetChatEnabled(g_welcomed && g_cfg.chat);
@@ -2029,7 +2041,18 @@ namespace flov::game
             StatsTick(now);
             if (!g_welcomed)
             {
-                if (g_loadingActive && now - g_loadStart > 30000) LoadingTick(now);
+                if (g_loadingActive)
+                {
+                    // Шаги отражают то, что действительно произошло: сокет открыт,
+                    // настройки пришли, сервер принял игрока. Выдуманного движения
+                    // по таймеру здесь нет.
+                    if (g_loadStage < 2 && g_net.State() == NetState::Connected)
+                    {
+                        g_loadStage = 2;
+                        ui::LoadingStep("Waiting for the server", 25);
+                    }
+                    if (now - g_loadStart > 30000) LoadingTick(now);
+                }
                 return;
             }
             const Ped me = n::PLAYER_PED_ID();
