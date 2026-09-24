@@ -249,6 +249,7 @@ public partial class StarterResource
             }
             catch (Exception ex)
             {
+                _metrics.RecordError();
                 Alt.LogError($"[FloV:MP b3889] Ошибка обработки {ev.GetType().Name} от [{ev.Session.Id}] {ev.Session.Name}: {ex}");
             }
         }

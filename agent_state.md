@@ -44,6 +44,12 @@ Updated: 2026-09-24 (реестр транспорта 8a — серверное
   `Database/LatestWinsWriter` (на нём же теперь машины); учёт оружия вынесен
   из античита (ведётся всегда). `vehicles.world` → `world.name`. Проверено на
   MariaDB 10.11. Тесты 556. Ограничение: патроны — выдано минус попадания.
+- Пункт 11 — метрики и оповещения: `Diagnostics/ServerMetrics.cs`
+  (сборщик, JSON, Prometheus, `NetCounters`), `Diagnostics/Alerts.cs`
+  (`AlertPolicy`, `RunMarker`, `WebhookNotifier`), `MetricsHttpServer`
+  (TcpListener, токен), обвязка `StarterResource.Metrics.cs`; сторож
+  зависаний — существующий `ServerCrashWatchdog` (раньше не был подключён).
+  Тесты 566.
 - Принцип владельца (24.09): всё, что делает платформа, — макет по
   умолчанию; максимум настраивается в `client.cfg` или из кода ресурса
   (`flovmp:settings:set` — любой ключ, с проверкой, переживает reloadsettings).

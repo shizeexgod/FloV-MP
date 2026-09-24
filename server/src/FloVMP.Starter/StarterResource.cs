@@ -601,6 +601,7 @@ public partial class StarterResource : Resource
         // Сохранённые машины мира — до входа первых игроков (8d).
         StartVehiclePersistence(dbReachable ? starterDbConn : null, starterDataDir);
         StartPlayerPersistence(dbReachable ? starterDbConn : null, starterDataDir);
+        StartMetrics(starterDataDir);
 
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
@@ -663,6 +664,7 @@ public partial class StarterResource : Resource
         RegisterVehicleApi();
         RegisterAntiCheatApi();
         RegisterPlayerApi();
+        RegisterMetricsApi();
         LoadMaps(broadcast: false);
 
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
@@ -690,6 +692,7 @@ public partial class StarterResource : Resource
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         Alt.OnPlayerDead -= OnPlayerDead;
         Alt.OnConsoleCommand -= OnConsoleCommand;
+        StopMetrics();
         Alt.Log("[FloV:MP Starter] Остановка платформы.");
     }
 
@@ -1314,6 +1317,10 @@ public partial class StarterResource : Resource
                 }
                 break;
 
+            case "metrics":
+                Alt.Log("[Console] " + (_metrics.Last?.ToLogLine() ?? "метрики ещё не собраны (первое окно — через минуту после запуска)"));
+                break;
+
             case "say":
                 if (args.Length == 0)
                 {
@@ -1676,6 +1683,14 @@ public partial class StarterResource : Resource
     private long _nextPerfReportMs = PerfReportIntervalMs;
 
     public override void OnTick()
+    {
+        var tickStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        try { OnTickCore(); }
+        catch { _metrics.RecordError(); throw; }
+        finally { TickMetrics(tickStart); }
+    }
+
+    private void OnTickCore()
     {
         using var _perfTick = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfTick);
 

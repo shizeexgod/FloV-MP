@@ -249,6 +249,23 @@ Alt.Emit("flovmp:settings:set", "vehicles.plate_format", "RP 9999");  // сво�
 `server/config/admin-commands.cfg`: 0 — доступна всем, 1…8 — с этого уровня
 администратора (8 — только владелец).
 
+## Метрики и оповещения
+
+Раз в `metrics.log_interval_sec` (60 с) сервер пишет в журнал и в
+`server/flovmp-data/metrics.json` онлайн, тики, сеть, ошибки и память, а ресурсам
+уходит событие. Оповещения (долгий тик, ошибки, память, зависание главного потока,
+аварийный перезапуск) — в журнал, администраторам в игре и на webhook
+`alerts.webhook_url` (Discord, Slack, свой сервис). Страница для Grafana/Prometheus —
+`metrics.http_port` (`/metrics` — JSON, `/metrics.prom`), наружу — только с `metrics.token`.
+В консоли сервера — команда `metrics`.
+
+```csharp
+Alt.OnServer<int, float, float, float, int, int>("flovmp:metrics",
+    (online, tickRate, avgTickMs, maxTickMs, errors, memoryMb) => { });
+Alt.Emit("flovmp:metrics:set", "jobs_active", 12f);          // своя метрика: flovmp_custom_jobs_active
+Alt.Emit("flovmp:alert", "касса банка ушла в минус");         // своё оповещение тем же путём
+```
+
 ## Сохранение игрока
 
 Платформа сама сохраняет игрока (при выходе, раз в `players.save_interval_sec` и

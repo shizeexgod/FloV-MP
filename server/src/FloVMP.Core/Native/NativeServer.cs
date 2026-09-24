@@ -193,6 +193,7 @@ public sealed class NativeServer : IDisposable
                     break;
                 }
                 if (line is null) break;
+                FloVMP.Core.Diagnostics.NetCounters.AddIn(line.Length + 1);
 
                 var now = DateTime.UtcNow;
                 if (now - window > TimeSpan.FromSeconds(1)) { window = now; inWindow = 0; }
@@ -516,6 +517,7 @@ public sealed class NativeSession
                         buffer.WriteByte((byte)'\n');
                     }
                     await _stream.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), stop);
+                    FloVMP.Core.Diagnostics.NetCounters.AddOut(buffer.Length);
                 }
                 if (CloseReason is not null)
                 {
