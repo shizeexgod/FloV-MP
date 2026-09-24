@@ -21,6 +21,8 @@ public sealed class LatestWinsWriter<TKey> : IDisposable where TKey : notnull
     private volatile bool _stopping;
     private volatile bool _writing;
     private long _lastWarnMs;
+    /// <summary>Столько неудач подряд — считаем, что хранилище недоступно.</summary>
+    private const int StoreDownAfter = 3;
 
     public LatestWinsWriter(string threadName, string what, Action<string> warn)
     {
@@ -68,22 +70,34 @@ public sealed class LatestWinsWriter<TKey> : IDisposable where TKey : notnull
             }
             try
             {
+                var failedInRow = 0;
                 for (var i = 0; i < batch.Count; i++)
                 {
-                    try { batch[i].Value(); }
+                    try
+                    {
+                        batch[i].Value();
+                        failedInRow = 0;
+                    }
                     catch (Exception ex)
                     {
-                        // Вернуть эту и все оставшиеся, если по ним не пришло более свежее.
-                        lock (_lock)
-                            for (var j = i; j < batch.Count; j++) _pending.TryAdd(batch[j].Key, batch[j].Value);
+                        // Вернуть эту запись, если по её ключу не пришло более свежей, и
+                        // идти дальше: одна «ядовитая» запись (внешний ключ, слишком
+                        // длинное поле) не должна держать остальные. Паузу делаем, только
+                        // когда падают несколько подряд — значит, лежит само хранилище.
+                        lock (_lock) _pending.TryAdd(batch[i].Key, batch[i].Value);
                         var now = Environment.TickCount64;
                         if (now - _lastWarnMs > 30_000)
                         {
                             _lastWarnMs = now;
                             _warn($"[FloV:MP] {_what} не сохранены ({ex.Message}) — повторю, когда хранилище ответит.");
                         }
-                        Thread.Sleep(1000);
-                        break;
+                        if (++failedInRow >= StoreDownAfter)
+                        {
+                            lock (_lock)
+                                for (var j = i + 1; j < batch.Count; j++) _pending.TryAdd(batch[j].Key, batch[j].Value);
+                            Thread.Sleep(1000);
+                            break;
+                        }
                     }
                 }
             }

@@ -121,7 +121,19 @@ public sealed class WeaponLedger
 /// </summary>
 public sealed class ClockDriftDetector
 {
-    private readonly Dictionary<uint, (long Client, long Server)> _anchor = new();
+    // Опора окна и кандидат на следующую опору — отметки PING с наименьшей
+    // задержкой сети. Задержка только прибавляется ко времени приёма, поэтому
+    // наименее задержанная отметка — та, у которой «сервер − клиент» меньше
+    // всех. Опора на опоздавший PING (TCP-повтор, провал сети) завышала бы
+    // отношение следующего окна, и честный игрок получал бы «speedhack».
+    private sealed class Track
+    {
+        public long AnchorClient, AnchorServer;
+        public long CandClient, CandServer;
+        public bool HasCand;
+    }
+
+    private readonly Dictionary<uint, Track> _anchor = new();
 
     /// <summary>Сколько секунд сервера копить, прежде чем судить (anticheat.timescale_window_sec).</summary>
     public long WindowMs { get; set; } = 20_000;
@@ -135,16 +147,33 @@ public sealed class ClockDriftDetector
     /// </summary>
     public float? Sample(uint playerId, long clientMs, long serverMs)
     {
-        if (!_anchor.TryGetValue(playerId, out var a) || clientMs < a.Client || serverMs < a.Server)
+        if (!_anchor.TryGetValue(playerId, out var t) || clientMs < t.AnchorClient || serverMs < t.AnchorServer)
         {
-            _anchor[playerId] = (clientMs, serverMs);   // первая отметка или часы клиента сброшены
+            // первая отметка или часы клиента сброшены
+            _anchor[playerId] = new Track { AnchorClient = clientMs, AnchorServer = serverMs };
             return null;
         }
-        var serverSpan = serverMs - a.Server;
-        if (serverSpan < WindowMs) return null;
-        var ratio = (float)(clientMs - a.Client) / serverSpan;
-        _anchor[playerId] = (clientMs, serverMs);
-        return ratio > MaxRatio ? ratio : null;
+        if (!t.HasCand || serverMs - clientMs < t.CandServer - t.CandClient)
+        {
+            t.CandClient = clientMs;
+            t.CandServer = serverMs;
+            t.HasCand = true;
+        }
+        if (serverMs - t.AnchorServer < WindowMs) return null;
+
+        // Судим по двум наименее задержанным отметкам; если лучшая отметка
+        // окна оказалась у самого начала, отрезок слишком короткий — пропуск.
+        float? result = null;
+        var span = t.CandServer - t.AnchorServer;
+        if (span >= WindowMs / 2)
+        {
+            var ratio = (float)(t.CandClient - t.AnchorClient) / span;
+            if (ratio > MaxRatio) result = ratio;
+        }
+        t.AnchorClient = t.CandClient;
+        t.AnchorServer = t.CandServer;
+        t.HasCand = false;
+        return result;
     }
 
     public void Remove(uint playerId) => _anchor.Remove(playerId);

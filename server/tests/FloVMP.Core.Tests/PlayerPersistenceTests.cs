@@ -54,7 +54,9 @@ public class PlayerPersistenceTests
     private static List<(string, string?)> PumpUntil(PlayerPersistence p, int count)
     {
         var all = new List<(string, string?)>();
-        for (var i = 0; i < 200 && all.Count < count; i++) { all.AddRange(p.PumpLoaded()); Thread.Sleep(10); }
+        // До 10 с: под нагрузкой всего набора соседние тесты держат потоки пула
+        // (HoldLoad/DelayFirstRead), и фоновая загрузка встаёт в очередь — 2 с не хватало.
+        for (var i = 0; i < 1000 && all.Count < count; i++) { all.AddRange(p.PumpLoaded()); Thread.Sleep(10); }
         return all;
     }
 
@@ -269,5 +271,23 @@ public class PlayerPersistenceTests
         store.HoldLoad.Set();                           // теперь №2
         PumpUntil(p, 1);
         Assert.Equal("250", p.GetData("7", "money"));
+    }
+
+    [Fact]
+    public void Writer_OneAlwaysFailingWriteDoesNotBlockOthers()
+    {
+        // Аудит: неудачная запись возвращалась первой в каждую пачку и цикл
+        // обрывался — одна «ядовитая» строка (внешний ключ) останавливала все.
+        var written = new List<string>();
+        using var w = new LatestWinsWriter<string>("test-writer", "тест", _ => { });
+        w.Enqueue("poison", () => throw new InvalidOperationException("FK 1451"));
+        for (var i = 0; i < 5; i++)
+        {
+            var key = "car" + i;
+            w.Enqueue(key, () => { lock (written) written.Add(key); });
+        }
+        for (var i = 0; i < 300 && written.Count < 5; i++) Thread.Sleep(10);
+        lock (written) Assert.Equal(5, written.Count);
+        Assert.Equal(1, w.Pending);                   // ядовитая осталась и будет повторяться
     }
 }

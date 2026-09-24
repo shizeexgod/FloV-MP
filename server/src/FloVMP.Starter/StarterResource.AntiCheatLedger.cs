@@ -106,12 +106,20 @@ public partial class StarterResource
             var session = np.Session;
             var pinged = session.TryTakePing(out var clientMs, out var serverMs);
             if (!_nativeReady.Contains(id) || !session.HasState || IsAdmin(player, 1)) continue;
-            if (pinged) ac.OnPing(id, clientMs, serverMs);
+            if (pinged) ac.OnPing(id, clientMs, serverMs, nowMs);
             if (ac.CheckState(id, np.State, nowMs) && _acStrict)
             {
                 // Строгий режим: запрещённое оружие забираем сразу, счёт — отдельно.
-                player.RemoveAllWeapons(true);
-                SendChatMessage(player, "{f59e0b}[FloV:MP] Это оружие на сервере запрещено.");
+                // STATE с оружием в руках приходит ещё несколько тиков, пока до
+                // клиента идёт DISARM, — не забираем и не пишем в чат на каждом:
+                // раз на оружие и повтор, только если оно в руках и через 3 с.
+                var weapon = np.State.Weapon;
+                if (!_acDisarmed.TryGetValue(id, out var last) || last.Weapon != weapon || nowMs - last.AtMs >= StrictDisarmRepeatMs)
+                {
+                    _acDisarmed[id] = (weapon, nowMs);
+                    player.RemoveAllWeapons(true);
+                    SendChatMessage(player, "{f59e0b}[FloV:MP] Это оружие на сервере запрещено.");
+                }
             }
         }
     }
@@ -125,8 +133,13 @@ public partial class StarterResource
     internal void NoteWeaponsCleared(uint playerId) => _weaponLedger.Clear(playerId);
     internal void NoteModelIssued(uint playerId, uint model) => _ledgerAc?.NoteIssuedModel(playerId, model);
 
+    // Строгий режим: когда и что забрали последним — чтобы не повторять каждый тик.
+    private readonly Dictionary<uint, (uint Weapon, long AtMs)> _acDisarmed = new();
+    private const long StrictDisarmRepeatMs = 3000;
+
     private void ForgetSuspicions(uint playerId)
     {
+        _acDisarmed.Remove(playerId);
         _ledgerAc?.RemovePlayer(playerId);
         _weaponLedger.Remove(playerId);
     }

@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "http.h"
 
+#include <mutex>
 #include <thread>
 #include "voice.h"
 #include "world.h"
@@ -900,7 +901,12 @@ namespace flov::game
                 v.s.received = now;
                 const int flags = ToInt(m[10]);
                 v.engine = (flags & 1) != 0; v.siren = (flags & 2) != 0; v.locked = (flags & 4) != 0;
-                v.plate = at(11).substr(0, 8);
+                const std::string plate = at(11).substr(0, 8);
+                // Сервер меняет номер повторным VADD (SetPlate): копия, которая уже
+                // стоит в мире, должна получить его сразу, а не после stream-out.
+                if (v.handle && plate != v.plate && n::DOES_ENTITY_EXIST(v.handle))
+                    n::SET_VEHICLE_NUMBER_PLATE_TEXT(v.handle, const_cast<char*>(plate.c_str()));
+                v.plate = plate;
                 v.frozen = false;   // снимок: встать на новое место, даже если копия уже была
                 return true;
             }
@@ -2286,6 +2292,30 @@ namespace flov::game
             ui::OpenConnectDialog(host, name);
         }
 
+        /// «/car модель» проверяется здесь, до сервера: машину создаёт сервер
+        /// (реестр), а есть ли такая модель в игре, знает только клиент. Без
+        /// проверки опечатка давала машину-призрак, в которой игрок «сидит».
+        /// Модель по умолчанию (без аргумента) выбирает сервер — её не трогаем.
+        bool CarCommandModelOk(std::string text)
+        {
+            if (!text.empty() && text[0] == '/') text.erase(0, 1);
+            const auto sp = text.find(' ');
+            std::string cmd = text.substr(0, sp);
+            std::transform(cmd.begin(), cmd.end(), cmd.begin(), [](char c) { return (char)tolower((unsigned char)c); });
+            if ((cmd != "car" && cmd != "veh") || sp == std::string::npos) return true;
+            std::string model;
+            for (char c : text.substr(sp + 1))
+            {
+                if (c == ' ') { if (!model.empty()) break; continue; }
+                if (isalnum((unsigned char)c) || c == '_') model += (char)tolower((unsigned char)c);
+            }
+            if (model.empty() || model.size() > 32) return true;   // формат проверит сервер
+            const Hash hash = n::GET_HASH_KEY(const_cast<char*>(model.c_str()));
+            if (n::IS_MODEL_IN_CDIMAGE(hash) && n::IS_MODEL_A_VEHICLE(hash)) return true;
+            Chat("{ef4444}Транспорт «" + model + "» не найден в игре.");
+            return false;
+        }
+
         /// Команды консоли F8: свои — здесь, остальные уходят на сервер как «/команда».
         void HandleConsoleCommand(const std::string& line)
         {
@@ -2330,7 +2360,7 @@ namespace flov::game
                 else CycleEsp();
             }
             else if (!g_welcomed) ui::ConsoleLog("WARN", "Нет подключения к серверу — команда «" + name + "» не отправлена.");
-            else g_net.Send({ "CHAT", ("/" + line).substr(0, 256) });
+            else if (CarCommandModelOk(line)) g_net.Send({ "CHAT", ("/" + line).substr(0, 256) });
         }
 
         void HandleHotkeys()
@@ -2401,7 +2431,7 @@ namespace flov::game
             const size_t maxLen = (size_t)std::clamp(settings::Int("chat.max_length", 256), 16, 1024);
             for (const auto& line : ui::TakeSubmittedChat())
             {
-                if (!g_welcomed) continue;
+                if (!g_welcomed || !CarCommandModelOk(line)) continue;
                 g_net.Send({ "CHAT", line.substr(0, maxLen) });
             }
         }
@@ -2486,11 +2516,34 @@ namespace flov::game
                               needLogo ? std::wstring() : logoPath);
             if (!needBackground && !needLogo) return;
 
-            std::thread([background, logo, backgroundPath, logoPath, needBackground, needLogo]
+            // CFG приходит при входе и после каждой смены настроек: одну ссылку
+            // качает один поток (иначе два пишут в один .part и мешают друг
+            // другу), а ссылку, которая не скачалась, до перезапуска игры не
+            // дёргаем — 404 не должен повторяться на каждый CFG.
+            static std::mutex busyLock;
+            static std::set<std::string> busy, failed;
+            auto claim = [](const std::string& url)
             {
+                std::lock_guard lock(busyLock);
+                return !failed.count(url) && busy.insert(url).second;
+            };
+            const bool takeBackground = needBackground && claim(background);
+            const bool takeLogo = needLogo && logo != background && claim(logo);
+            if (!takeBackground && !takeLogo) return;
+
+            std::thread([background, logo, backgroundPath, logoPath, takeBackground, takeLogo]
+            {
+                auto fetch = [](const std::string& url, const std::wstring& path)
+                {
+                    const bool ok = http::Download(url, path);
+                    std::lock_guard lock(busyLock);
+                    busy.erase(url);
+                    if (!ok) failed.insert(url);
+                    return ok;
+                };
                 bool got = false;
-                if (needBackground) got |= http::Download(background, backgroundPath);
-                if (needLogo) got |= http::Download(logo, logoPath);
+                if (takeBackground) got |= fetch(background, backgroundPath);
+                if (takeLogo) got |= fetch(logo, logoPath);
                 if (!got) return;
                 // Показываем только то, что действительно лежит на диске.
                 auto ready = [](const std::wstring& path)

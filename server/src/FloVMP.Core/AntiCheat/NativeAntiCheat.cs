@@ -122,11 +122,16 @@ public sealed class NativeAntiCheat
         ReportLimited(playerId, SuspicionKind.Ammo, $"попаданий из 0x{weapon:X8} больше, чем выдано патронов", nowMs);
     }
 
-    /// <summary>PING клиента с его часами: разгон времени (speedhack).</summary>
-    public void OnPing(uint playerId, long clientMs, long serverMs)
+    /// <summary>
+    /// PING клиента с его часами: разгон времени (speedhack). serverMs —
+    /// момент приёма PING (для сравнения хода часов), nowMs — часы журнала,
+    /// те же, что у остальных проверок: смешивать их нельзя, иначе счёт
+    /// игрока перестаёт таять.
+    /// </summary>
+    public void OnPing(uint playerId, long clientMs, long serverMs, long nowMs)
     {
         if (Clock.Sample(playerId, clientMs, serverMs) is { } ratio)
-            Report(playerId, SuspicionKind.TimeScale, $"часы клиента идут в {ratio:0.00} раза быстрее сервера", serverMs);
+            Report(playerId, SuspicionKind.TimeScale, $"часы клиента идут в {ratio:0.00} раза быстрее сервера", nowMs);
     }
 
     public bool VehicleAllowed(uint model) => !VehicleBlacklist.Contains(model);

@@ -130,6 +130,7 @@ public partial class StarterResource
         _vehicles?.PlayerLeft(playerId, _clock.ElapsedMilliseconds);
         _registryClients.Remove(playerId);
         _legacyPassengerNoted.Remove(playerId);
+        _commandCar.Remove(playerId);
     }
 
     private void OnVehicleMessage(NativeSession session, string[] p)
@@ -226,9 +227,20 @@ public partial class StarterResource
                     SendChatMessage(player, "{fde047}[Транспорт] Сервер ещё не знает, где вы — попробуйте через секунду.");
                     return true;
                 }
+                // Как у старого клиента: новая машина по /car заменяет прошлую. Машины
+                // сервера сами не убираются никогда, и без этого каждая /car копилась
+                // бы до vehicles.max_registered — дальше отказ всем, включая трафик.
+                // Машину, которую геймод сделал сохраняемой, не трогаем: она уже его.
+                if (_commandCar.TryGetValue(id, out var previousId) &&
+                    Vehicles.Registry.Get(previousId) is { Persistent: false, RegisteredBy: var by } && by == id)
+                    Vehicles.Remove(previousId, "command");
                 var v = Vehicles.SpawnForPlayer(id, Alt.Hash(modelName.ToLowerInvariant()), np.State.Heading, now);
                 if (v is null) SendChatMessage(player, "{f87171}[Транспорт] На сервере слишком много машин.");
-                else Alt.Log($"[FloV:MP] {np.Session.Name} создал {modelName}: машина {v.Id} ({v.Plate}).");
+                else
+                {
+                    _commandCar[id] = v.Id;
+                    Alt.Log($"[FloV:MP] {np.Session.Name} создал {modelName}: машина {v.Id} ({v.Plate}).");
+                }
                 return true;
             case "fix":
             case "repair":
@@ -249,19 +261,37 @@ public partial class StarterResource
                     SendChatMessage(player, $"{{fde047}}[Транспорт] Рядом нет вашей машины: сядьте в неё или подойдите ближе {DeleteOwnRadius:0} м.");
                     return true;
                 }
+                // Как у старого клиента: чужую машину пассажиром не убрать —
+                // только свою или ту, где сидишь за рулём.
+                if (doomed.RegisteredBy != id && doomed.Driver != id)
+                {
+                    SendChatMessage(player, "{f87171}[Транспорт] Это транспорт другого игрока — пересядьте за руль, чтобы убрать его.");
+                    return true;
+                }
                 Vehicles.Remove(doomed.Id, "command");
                 SendChatMessage(player, "{34d399}[Транспорт] Машина убрана.");
                 return true;
             case "engine":
                 if (current is null) { SendChatMessage(player, "{fde047}[Транспорт] Вы должны находиться в транспортном средстве."); return true; }
+                // Двигатель — только водитель: иначе пассажир глушил бы чужую машину на ходу.
+                if (current.Driver != id) { SendChatMessage(player, "{fde047}[Транспорт] Двигатель заводит и глушит водитель."); return true; }
                 Vehicles.SetEngine(current.Id, !current.EngineOn);
                 return true;
             case "lock":
-                // Как у старого клиента: закрыть можно и снаружи — свою машину
-                // (в которой сидишь, иначе последнюю, что создал или угнал).
+                // Закрыть можно за рулём или снаружи — свою машину рядом (как
+                // брелок, LockOwnRadius). Пассажир чужой машины двери не открывает.
                 // Ключи и доступ по владельцу-персонажу — забота геймода (8c).
-                var target = current ?? LastOwnVehicle(id);
-                if (target is null) { SendChatMessage(player, "{fde047}[Транспорт] Поблизости нет вашего транспорта."); return true; }
+                var target = current is not null && current.Driver == id ? current
+                    : np.Session.HasState
+                        ? Vehicles.Registry.NearestOwned(id, np.State.X, np.State.Y, np.State.Z, np.DimensionValue, LockOwnRadius)
+                        : null;
+                if (target is null)
+                {
+                    SendChatMessage(player, current is not null
+                        ? "{fde047}[Транспорт] Двери закрывает водитель."
+                        : $"{{fde047}}[Транспорт] Рядом нет вашего транспорта (ближе {LockOwnRadius:0} м).");
+                    return true;
+                }
                 Vehicles.SetLocked(target.Id, !target.Locked);
                 SendChatMessage(player, target.Locked ? "{f87171}[Транспорт] Двери заблокированы." : "{34d399}[Транспорт] Двери разблокированы.");
                 return true;
@@ -292,14 +322,11 @@ public partial class StarterResource
 
     /// <summary>/dv снаружи: своя машина не дальше этого, м.</summary>
     private const float DeleteOwnRadius = 10f;
+    /// <summary>/lock снаружи: своя машина не дальше этого, м (дальность брелока).</summary>
+    private const float LockOwnRadius = 30f;
+    /// <summary>Машина игрока по /car: следующая /car её заменяет.</summary>
+    private readonly Dictionary<uint, uint> _commandCar = new();
 
-    private RegisteredVehicle? LastOwnVehicle(uint playerId)
-    {
-        RegisteredVehicle? last = null;
-        foreach (var v in Vehicles.Registry.All)
-            if (v.RegisteredBy == playerId && (last is null || v.Id > last.Id)) last = v;
-        return last;
-    }
 
     /// <summary>Мост к сервису: отправка и данные игроков.</summary>
     private sealed class VehicleHost : IVehicleHost

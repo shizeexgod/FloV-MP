@@ -3,12 +3,19 @@
 
 #include <d3d11.h>
 #include <wincodec.h>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 namespace flov::image
 {
     namespace
     {
+        // Больше 4096 по стороне экранам не нужно (и 4K-фон в это укладывается),
+        // а больше 100 Мп — заведомо не картинка для загрузочного экрана.
+        constexpr UINT kMaxSide = 4096;
+        constexpr uint64_t kMaxSourcePixels = 100ull * 1000 * 1000;
+
         IWICImagingFactory* Factory()
         {
             static IWICImagingFactory* factory = nullptr;
@@ -32,10 +39,40 @@ namespace flov::image
             if (FAILED(decoder->GetFrame(0, &frame)) || !frame) return texture;
 
             IWICFormatConverter* converter = nullptr;
+            IWICBitmapScaler* scaler = nullptr;
+            IWICBitmapSource* source = frame;
             UINT width = 0, height = 0;
-            if (SUCCEEDED(frame->GetSize(&width, &height)) && width && height &&
-                SUCCEEDED(Factory()->CreateFormatConverter(&converter)) && converter &&
-                SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppBGRA,
+            if (FAILED(frame->GetSize(&width, &height)) || !width || !height ||
+                (uint64_t)width * height > kMaxSourcePixels)
+            {
+                // Картинку присылает сервер (loading.background_url): маленький
+                // PNG может раскрыться в десятки гигабайт и уронить игру.
+                Log("ui: картинка " + std::to_string(width) + "x" + std::to_string(height) + " слишком большая — пропущена");
+                frame->Release();
+                return texture;
+            }
+            if (width > kMaxSide || height > kMaxSide)
+            {
+                // Больше стороны текстуры не нужно ни одному экрану — уменьшаем
+                // при чтении, не держа исходник в памяти целиком.
+                const double k = (double)kMaxSide / (width > height ? width : height);
+                const UINT w = (UINT)(width * k) ? (UINT)(width * k) : 1, h = (UINT)(height * k) ? (UINT)(height * k) : 1;
+                if (SUCCEEDED(Factory()->CreateBitmapScaler(&scaler)) && scaler &&
+                    SUCCEEDED(scaler->Initialize(frame, w, h, WICBitmapInterpolationModeFant)))
+                {
+                    source = scaler;
+                    width = w;
+                    height = h;
+                }
+                else
+                {
+                    if (scaler) scaler->Release();
+                    frame->Release();
+                    return texture;
+                }
+            }
+            if (SUCCEEDED(Factory()->CreateFormatConverter(&converter)) && converter &&
+                SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA,
                                                 WICBitmapDitherTypeNone, nullptr, 0.0,
                                                 WICBitmapPaletteTypeCustom)))
             {
@@ -74,6 +111,7 @@ namespace flov::image
                 }
             }
             if (converter) converter->Release();
+            if (scaler) scaler->Release();
             frame->Release();
             return texture;
         }

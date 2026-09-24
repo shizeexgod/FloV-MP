@@ -224,4 +224,34 @@ public class SuspicionLedgerTests
         ac.Weapons.Restore(1, GameHash.Joaat("weapon_knife"), -1);
         Assert.Equal(-1, ac.Weapons.AmmoLeft(1, GameHash.Joaat("weapon_knife")));
     }
+
+    [Fact]
+    public void Clock_LatePingDoesNotSkewNextWindow()
+    {
+        // Аудит: опорой окна становился последний PING. Если он опоздал на 6 с
+        // (TCP-повтор), следующее окно давало 1.3 — «speedhack» у честного игрока.
+        var c = new ClockDriftDetector { WindowMs = 20_000, MaxRatio = 1.25f };
+        for (long t = 0; t <= 80_000; t += 2_000)
+        {
+            // TCP держит порядок: PING за 20 с опоздал на 6 с, и следующие за
+            // ним пришли пачкой в тот же момент, дальше — снова вовремя.
+            var server = t is >= 20_000 and <= 26_000 ? 26_050 : t + 50;
+            Assert.Null(c.Sample(1, t, server));
+        }
+    }
+
+    [Fact]
+    public void Ping_ReportUsesLedgerClock_SoScoreStillDecays()
+    {
+        // Аудит: подозрение по часам писалось временем от старта машины, и счёт
+        // игрока переставал таять на часах журнала.
+        var ac = new NativeAntiCheat();
+        ac.Clock.WindowMs = 20_000;
+        ac.Ledger.DecayPerMinute = 60;
+        const long bootMs = 400_000_000;              // машина работает ~4.6 суток
+        ac.OnPing(1, 0, bootMs, 0);
+        for (long t = 2_000; t <= 40_000; t += 2_000) ac.OnPing(1, t * 2, bootMs + t, t);
+        Assert.True(ac.Ledger.Score(1, 40_000) > 0);
+        Assert.Equal(0f, ac.Ledger.Score(1, 40_000 + 10 * 60_000));
+    }
 }
