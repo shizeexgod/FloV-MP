@@ -82,6 +82,14 @@
     {
       "date": "2026-09-17",
       "decision": "Primary navigation keeps fixed text geometry and animates only color and a transform-only underline. Language changes use a short root crossfade rather than replaying every page reveal. The home hero is a product-led runtime scene with no fake metrics or stock GTA artwork. Dashboard tools remain absent until an active license exists; the pre-purchase state is an honest product shelf with only Lifetime checkout wired and fixed-term/source access routed to discussion."
+    },
+    {
+      "date": "2026-09-23",
+      "decision": "Public redesign uses a game-tech editorial rhythm: simple RAGE-inspired navigation, one owner-provided city visual in the hero until a dedicated 2.5D asset arrives, a real dashboard screenshot for product depth, minimal magenta, and language selection only in the footer. Generic engine-orbit art, card grids, fake metrics, and decorative dashboard copies are excluded."
+    },
+    {
+      "date": "2026-09-23",
+      "decision": "Footer language control is a focused modal sheet with a small backdrop blur, keyboard Escape support, and an immediate return to the hero after selection. The hero itself is a restrained rounded banner with a dark-magenta ambient gradient that resolves into the page background; no global glow is used."
     }
   ],
   "evidence": [

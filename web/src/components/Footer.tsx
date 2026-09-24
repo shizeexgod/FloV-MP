@@ -2,143 +2,58 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Send } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { useT } from '@/lib/i18n';
-import { LEGAL, lv } from '@/lib/legal';
+import { LEGAL } from '@/lib/legal';
+import LangMenu from './LangMenu';
 
 export default function Footer() {
   const t = useT();
-  const L = t.footer.links;
-
-  const productLinks = [
-    { label: L.features, href: '/features' },
-    { label: L.pricing, href: '/pricing' },
-    { label: L.docs, href: '/docs' },
-    { label: L.projects, href: '/projects' },
+  const links = t.footer.links;
+  const product = [
+    { label: links.features, href: '/features' },
+    { label: links.pricing, href: '/pricing' },
+    { label: links.projects, href: '/projects' },
+    { label: links.docs, href: '/docs' },
   ];
-
-  const docLinks = [
-    { label: L.offer, href: '/legal/offer' },
-    { label: L.requisites, href: '/legal/requisites' },
-    { label: L.terms, href: '/legal/terms' },
-    { label: L.privacy, href: '/legal/privacy' },
+  const legal = [
+    { label: links.offer, href: '/legal/offer' },
+    { label: links.requisites, href: '/legal/requisites' },
+    { label: links.terms, href: '/legal/terms' },
+    { label: links.privacy, href: '/legal/privacy' },
   ];
 
   return (
-    <footer className="mt-8 px-3 pb-4 sm:px-4">
-      <div className="mx-auto max-w-6xl rounded-2xl border border-white/[0.08] bg-[#131316]/60 px-6 py-12 sm:px-8">
-        <div className="grid grid-cols-1 gap-x-8 gap-y-10 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
-          {/* Brand + working hours */}
+    <footer className="site-footer mt-12">
+      <div className="mx-auto max-w-[1240px] px-5 py-14 sm:px-8 sm:py-16">
+        <div className="grid gap-11 lg:grid-cols-[1.75fr_.7fr_.85fr]">
           <div>
-            <div className="flex items-center gap-2.5">
-              <span className="block h-9 w-9 shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/branding/logo.png" alt="" width="36" height="36" loading="lazy" className="h-full w-full object-contain" />
-              </span>
-              <span translate="no" className="text-[16px] font-extrabold text-white">
-                FloV<span className="text-brand">:MP</span>
-              </span>
-            </div>
-            <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-white/50">{t.footer.tagline}</p>
-
-            <h4 className="mt-8 font-mono text-[11px] font-semibold uppercase tracking-widest text-white/45">
-              {t.footer.colHours}
-            </h4>
-            <div className="mt-3 space-y-1.5 text-[13px] text-white/50">
-              <p>{t.footer.hoursAuto}</p>
-              <p>
-                {t.footer.hoursSupportPrefix}
-                {t.footer.supportHours}
-              </p>
-            </div>
+            <Link href="/" className="inline-flex items-center gap-2.5" aria-label="FloV:MP">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/branding/logo.png" alt="" width="34" height="34" loading="lazy" className="h-[34px] w-[34px] object-contain" />
+              <span translate="no" className="text-[16px] font-extrabold tracking-[-0.04em] text-white">FloV<span className="text-brand">:MP</span></span>
+            </Link>
+            <p className="mt-5 max-w-sm text-[13px] leading-relaxed text-white/[0.46]">{t.footer.tagline}</p>
+            <p className="mt-5 max-w-md text-[11px] leading-relaxed text-white/[0.29]">{t.footer.legalDisclaimer}</p>
+            <a href={`mailto:${LEGAL.email}`} className="group mt-5 inline-flex w-max items-center gap-1.5 text-[12px] font-semibold text-white/[0.54] transition-colors hover:text-brand">{LEGAL.email}<ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" /></a>
           </div>
 
-          {/* Контакты */}
-          <div>
-            <h4 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-white/45">
-              {t.footer.colContacts}
-            </h4>
-            <ul className="mt-4 space-y-2.5 text-[13px]">
-              {LEGAL.telegramUrl && (
-                <li>
-                  <a
-                    href={LEGAL.telegramUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover-text inline-block text-white/50 transition-colors hover:text-brand"
-                  >
-                    {lv(LEGAL.telegramHandle)}
-                  </a>
-                </li>
-              )}
-              {LEGAL.phone && (
-                <li>
-                  <a href={`tel:${LEGAL.phone}`} className="hover-text inline-block text-white/50 transition-colors hover:text-brand">
-                    {lv(LEGAL.phoneDisplay)}
-                  </a>
-                </li>
-              )}
-              {LEGAL.email && (
-                <li>
-                  <a href={`mailto:${LEGAL.email}`} className="hover-text inline-block text-white/50 transition-colors hover:text-brand">
-                    {LEGAL.email}
-                  </a>
-                </li>
-              )}
-              {!LEGAL.telegramUrl && !LEGAL.phone && !LEGAL.email && (
-                <li className="text-white/30">—</li>
-              )}
-            </ul>
-          </div>
+          <nav aria-label={t.footer.colProduct}>
+            <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/[0.36]">{t.footer.colProduct}</h2>
+            <ul className="mt-4 space-y-2.5">{product.map((link) => <li key={link.href}><Link href={link.href} className="hover-text text-[13px] text-white/[0.55] hover:text-white">{link.label}</Link></li>)}</ul>
+          </nav>
 
-          {/* Документы */}
-          <div>
-            <h4 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-white/45">
-              {t.footer.colDocs}
-            </h4>
-            <ul className="mt-4 space-y-2.5">
-              {docLinks.map((l) => (
-                <li key={l.href}>
-                  <Link href={l.href} className="hover-text inline-block text-[13px] text-white/50 transition-colors hover:text-brand">
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <nav aria-label={t.footer.colDocs}>
+            <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/[0.36]">{t.footer.colDocs}</h2>
+            <ul className="mt-4 space-y-2.5">{legal.map((link) => <li key={link.href}><Link href={link.href} className="hover-text text-[13px] text-white/[0.55] hover:text-white">{link.label}</Link></li>)}</ul>
+          </nav>
 
-          {/* Продукт */}
-          <div>
-            <h4 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-white/45">
-              {t.footer.colProduct}
-            </h4>
-            <ul className="mt-4 space-y-2.5">
-              {productLinks.map((l) => (
-                <li key={l.href}>
-                  <Link href={l.href} className="hover-text inline-block text-[13px] text-white/50 transition-colors hover:text-brand">
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
 
-        <hr className="rule-soft mt-12" />
-        <div className="mt-8 flex flex-col gap-3 text-[12px] text-white/40 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <span>© 2026 FloV:MP. {t.common.allRightsReserved}</span>
-          <span className="hidden lg:inline">{t.footer.descriptor}</span>
-          {LEGAL.telegramUrl && (
-            <a
-              href={LEGAL.telegramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-1.5 font-medium text-white/50 transition-colors hover:text-brand"
-            >
-              <Send aria-hidden="true" className="icon-pop h-3.5 w-3.5" />
-              Telegram
-            </a>
-          )}
+        <hr className="rule-soft mt-14" />
+        <div className="mt-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-[11px] text-white/[0.34]">© 2026 FloV:MP. {t.common.allRightsReserved}</span>
+          <LangMenu />
         </div>
       </div>
     </footer>

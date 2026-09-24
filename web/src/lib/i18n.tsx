@@ -44,18 +44,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* ignore */
       }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     };
 
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const viewTransitionDocument = document as Document & {
-      startViewTransition?: (callback: () => void) => unknown;
-    };
-
-    if (!reducedMotion && viewTransitionDocument.startViewTransition) {
-      viewTransitionDocument.startViewTransition(commit);
-    } else {
-      commit();
-    }
+    // A language choice must return to the beginning of the page immediately.
+    // Avoid a document-wide view-transition here: it crossfades two scroll positions
+    // and makes the old footer briefly ghost over the hero.
+    commit();
   }, [lang]);
 
   const value = useMemo<Ctx>(() => ({ lang, setLang, t: DICT[lang] }), [lang, setLang]);

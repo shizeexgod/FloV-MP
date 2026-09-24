@@ -53,6 +53,8 @@ const ru = {
     hoursAuto: 'Движок и FastDL CDN: автоматический режим',
     hoursSupportPrefix: 'Поддержка: ',
     supportHours: 'Пн–Пт, 10:00–19:00 (МСК)',
+    legalDisclaimer: 'FloV:MP — независимая техническая платформа для управления игровыми проектами. Названия Grand Theft Auto и Grand Theft Auto V являются товарными знаками соответствующих правообладателей. FloV:MP не аффилирован с ними и не размещает пользовательские игровые проекты.',
+    telegramSupport: 'Поддержка в Telegram',
     taxIdLabel: 'ИНН',
     descriptor: 'Свой мультиплеер и управление GTA V проектом в одном месте',
     links: {
@@ -187,6 +189,26 @@ const ru = {
 
     ctaTitle: 'Разверните первый проект на FloV:MP',
     ctaSub: 'Подготовим перенос с RAGE:MP или FiveM, конфигурацию VDS и первый запуск игрового сервера.',
+    marketing: {
+      keyartAlt: 'Городская сцена проекта FloV:MP',
+      heroMeta: ['FloV:MP', 'инфраструктура проекта'],
+      sectionLabels: { start: '01 / ЗАПУСК', control: '02 / УПРАВЛЕНИЕ', platform: ['ОСНОВА', 'ПАНЕЛЬ', 'ЗАЩИТА'], included: '06 / В СОСТАВЕ', sdk: '07 / SDK', license: '08 / ЛИЦЕНЗИЯ' },
+      dashboardAlt: 'Личный кабинет FloV:MP: обзор проекта и серверов',
+      dashboardTitle: 'Управляйте проектом, а не серверными окнами',
+      dashboardChecks: ['Проект и среды Production / Development / Test', 'Консоль, логи и команды без SSH', 'Ключи, IP-привязка и статус лицензии'],
+      dashboardCta: 'Открыть личный кабинет',
+      platformMeta: ['Сетевой рантайм', 'Контроль окружений', 'Защита проекта'],
+      platformDetails: [['C# и CoreCLR на .NET 8', 'Собственный VDS и UDP 7788', 'Среды Production / Development / Test'], ['Веб-консоль и потоковые логи', 'Ресурсы без перезапуска сервера', 'FastDL для клиентских файлов'], ['Лицензия привязана к проекту', 'HMAC-проверка ответа сервера', 'Политики FloV:ID и VPN']],
+      allFeatures: 'Посмотреть все возможности',
+      devTitle: 'Код проекта остаётся вашим',
+      devText: 'Серверная логика живёт в C# и .NET 8. Панель помогает с лицензией, запуском и наблюдением, но не диктует, как строить мир, экономику или интерфейс.',
+      docsCta: 'Перейти к документации',
+      licenseTitle: 'Lifetime-лицензия для одного проекта',
+      licenseText: 'Один платёж, бессрочный доступ к ядру, SDK, панели и обновлениям. Никакой тарифной сетки и ежемесячных списаний.',
+      licenseCta: 'Условия лицензии',
+      licensePrice: '25 000 ₽',
+      codeSampleLabel: 'Пример конфигурации сервера FloV:MP',
+    },
   },
 
   features: {
@@ -994,6 +1016,8 @@ const en: typeof ru = {
     hoursAuto: 'Engine & FastDL CDN: automated operation',
     hoursSupportPrefix: 'Support: ',
     supportHours: 'Mon–Fri, 10:00–19:00 (MSK)',
+    legalDisclaimer: 'FloV:MP is an independent technical platform for managing game projects. Grand Theft Auto and Grand Theft Auto V are trademarks of their respective owners. FloV:MP is not affiliated with them and does not host user-created game projects.',
+    telegramSupport: 'Telegram support',
     taxIdLabel: 'Tax ID',
     descriptor: 'Multiplayer and GTA V project management in one place',
     links: {
@@ -1128,6 +1152,26 @@ const en: typeof ru = {
 
     ctaTitle: 'Deploy your first FloV:MP project',
     ctaSub: 'We prepare the move from RAGE:MP or FiveM, configure the VDS and assist with the first game-server launch.',
+    marketing: {
+      keyartAlt: 'FloV:MP project city scene',
+      heroMeta: ['FloV:MP', 'project infrastructure'],
+      sectionLabels: { start: '01 / START', control: '02 / CONTROL', platform: ['FOUNDATION', 'DASHBOARD', 'SECURITY'], included: '06 / INCLUDED', sdk: '07 / SDK', license: '08 / LICENSE' },
+      dashboardAlt: 'FloV:MP dashboard: project and server overview',
+      dashboardTitle: 'Manage the project, not server windows',
+      dashboardChecks: ['Project with Production / Development / Test environments', 'Console, logs, and commands without SSH', 'Keys, IP binding, and license status'],
+      dashboardCta: 'Open dashboard',
+      platformMeta: ['Network runtime', 'Environment control', 'Project security'],
+      platformDetails: [['C# and CoreCLR on .NET 8', 'Your VDS and UDP 7788', 'Production / Development / Test environments'], ['Web console and streamed logs', 'Resources without server restart', 'FastDL for client files'], ['License bound to a project', 'HMAC server-response verification', 'FloV:ID and VPN policies']],
+      allFeatures: 'Explore all features',
+      devTitle: 'Your project code stays yours',
+      devText: 'Server logic lives in C# and .NET 8. The portal helps with licensing, launch, and monitoring, but it never dictates how you build the world, economy, or interface.',
+      docsCta: 'Read the documentation',
+      licenseTitle: 'Lifetime license for one project',
+      licenseText: 'One payment, perpetual access to the core, SDK, dashboard, and updates. No pricing grid and no recurring charges.',
+      licenseCta: 'License terms',
+      licensePrice: '25,000 ₽',
+      codeSampleLabel: 'FloV:MP server configuration example',
+    },
   },
 
   features: {

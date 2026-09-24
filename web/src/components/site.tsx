@@ -54,7 +54,7 @@ export function Reveal({
 
 /* ---------------- Layout primitives ---------------- */
 export function Container({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`mx-auto w-full max-w-6xl px-5 sm:px-6 ${className}`}>{children}</div>;
+  return <div className={`mx-auto w-full max-w-[1360px] px-5 sm:px-8 ${className}`}>{children}</div>;
 }
 
 export function Section({
@@ -148,7 +148,7 @@ export function BtnLink({
 }: {
   href: string;
   children: React.ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'link';
   external?: boolean;
   className?: string;
   arrow?: boolean;
