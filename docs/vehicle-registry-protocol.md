@@ -208,6 +208,87 @@ seat)` и **`playerLeaveVehicle`** (на сервере — `playerExitVehicle`)
 
 Имена событий FloV:MP в 8c — предложение, утверждаются вместе с API.
 
+## Слой совместимости (пункт 17): игроки, события, сущности
+
+Шире транспорта — чтобы слой `mp.*` / `alt.*` строился по одной таблице.
+Колонка FloV:MP: **есть** — уже в платформе (SDK-события
+`flovmp:native:*`, `StarterResource.NativeApi.cs`), **план** — появится с
+пунктами roadmap. Источники те же: публичные типы RAGE:MP 2.1.9 и
+`AltV.Net` 16.4.21; взяты только имена.
+
+### Пулы сущностей
+
+| RAGE:MP (`mp.*`) | alt:V C# | FloV:MP |
+|---|---|---|
+| `mp.players` | `Alt.GetAllPlayers()` | есть (игроки 3889 — `NativePlayerProxy` как `IPlayer`) |
+| `mp.vehicles` | `Alt.GetAllVehicles()` | реестр транспорта (8a), публичный API — 8c |
+| `mp.objects`, `mp.markers`, `mp.blips`, `mp.labels`, `mp.peds` | `IObject`, `IMarker`, `IBlip`, `ITextLabel`, `IPed` | есть в мире сервера (объекты, маркеры, метки, 3D-надписи, NPC) |
+| `mp.colshapes`, `mp.checkpoints` | `IColShape`, `ICheckpoint` | план |
+| `mp.events` | `Alt.OnServerEvent`, `Alt.On*` | есть (события ресурса) |
+
+Общие методы пула RAGE:MP, которые слою нужно дать: `at(id)`, `exists`,
+`forEach`, `forEachInRange(pos, range)`, `forEachInDimension`,
+`getClosest(pos)`, `toArray`, `length`. У нас есть пространственная сетка
+(`SpatialHashGrid`), так что `forEachInRange` и `getClosest` — без O(n).
+
+### Общие свойства сущности
+
+| RAGE:MP (`EntityMp`) | alt:V C# | Заметка |
+|---|---|---|
+| `id`, `type`, `model` | `Id`, `Type`, `Model` | — |
+| `position`, `dimension`, `alpha` | `Position`, `Dimension`, (нет `alpha` у игрока) | — |
+| `setVariable` / `getVariable` (видят все) | `SetSyncedMetaData` / `GetSyncedMetaData` | у 3889 synced-metadata ещё нет (аудит Sayonara, приоритет 4) |
+| `setOwnVariable` (видит только сам игрок) | `SetLocalMetaData` | у 3889 хранится только на сервере |
+| `data` | `SetMetaData` (только сервер) | — |
+| `dist`, `distSquared` | — (считается через `Position`) | — |
+| `destroy()` | `Destroy()` | — |
+
+### Игрок
+
+| RAGE:MP (`PlayerMp`) | alt:V C# | FloV:MP сейчас |
+|---|---|---|
+| `name`, `socialClub`, `rgscId`, `serial`, `ip` | `Name`, `SocialClubId`, `HardwareIdHash`, `Ip` | есть; `SocialClubId` у 3889 — ID ключа игрока |
+| `health`, `armour` | `Health`, `Armor` | есть, серверные (урон считает сервер) |
+| `heading` | `Rotation.Yaw` | есть |
+| `weapon`, `giveWeapon`, `removeAllWeapons` | `CurrentWeapon`, `GiveWeapon`, `RemoveAllWeapons` | есть (`flovmp:native:weapon`, `disarm`) |
+| `vehicle`, `seat` | `Vehicle`, `Seat` | `null`/0 у 3889 до 8c |
+| `putIntoVehicle`, `removeFromVehicle` | `SetIntoVehicle` | 8c |
+| `spawn(pos)` | `Spawn(pos)` | есть (`flovmp:native:spawn`) |
+| `kick`, `ban` | `Kick` | есть (`flovmp:native:kick`, бан — модерация) |
+| `outputChatBox`, `notify` | `Emit` (своё событие) | есть (чат, `NOTIFY`) |
+| `call(event, args)` (на клиент) | `Emit` / `EmitClient` | есть для alt:V-клиента; для 3889 — свой набор сообщений |
+| `ping`, `packetLoss` | `Ping` | `ping` есть (PING/PONG) |
+| `isAiming`, `isReloading`, `isEnteringVehicle`, `isLeavingVehicle` | `IsAiming`, `IsReloading`, `IsEnteringVehicle`, `IsLeavingVehicle` | `isAiming` — флаг STATE; остальные — план |
+| `setClothes`, `setProp`, `setHeadBlend`, `setFaceFeature` | `SetClothes`, `SetProps`, `SetHeadBlendData`, `SetFaceFeature` | план (внешность — отдельный пункт) |
+| `playAnimation`, `stopAnimation` | (клиент) | план (`EmitInRange` из аудита) |
+
+### Серверные события
+
+| RAGE:MP | alt:V C# | FloV:MP |
+|---|---|---|
+| `playerJoin` / `playerReady` | `OnPlayerConnect` / (клиентское ready) | есть (вход и READY) |
+| `playerQuit` | `OnPlayerDisconnect` | есть (`flovmp:native:left`) |
+| `playerSpawn` | `OnPlayerSpawn` | есть |
+| `playerDeath` | `OnPlayerDead` | есть (смерть объявляет сервер) |
+| `playerDamage` | `OnPlayerDamage` / `OnWeaponDamage` | есть внутри (HIT), событие для ресурса — план |
+| `playerChat`, `playerCommand` | (свои события чата) | есть |
+| `playerWeaponChange` | `OnPlayerWeaponChange` | план (данные уже в STATE) |
+| `playerStreamIn` / `playerStreamOut` | — (клиент) | план (есть на сервере как PADD/PDEL) |
+| `playerEnterColshape` / `playerExitColshape` | `OnColShape` | план |
+| `playerEnterCheckpoint` / `playerExitCheckpoint` | `OnCheckpoint` | план |
+| `playerReachWaypoint` | — | есть (TPM на метку) |
+| `entityCreated` / `entityDestroyed` | `OnBaseObjectCreate` / `OnBaseObjectRemove` | план |
+| `entityModelChange` | — | есть внутри (MODEL) |
+| `serverShutdown` | (остановка ресурса) | есть |
+| `incomingConnection` | `OnConnectionQueueAdd` | есть внутри (баны до WELCOME) |
+| — | `OnPlayerDimensionChange` | есть внутри (снимок мира при смене) |
+| — | `OnPlayerStartTalking` / `OnPlayerStopTalking` | план (голос свой) |
+
+Транспортные события — в таблице выше. Регистрация: RAGE:MP
+`mp.events.add(name, fn)` / `mp.events.addCommand(name, fn)`, alt:V
+`Alt.OnServerEvent` / атрибуты `[ServerEvent]`, у нас — атрибуты
+`[Command]` / `[RemoteEvent]` из `Bridge/RageCompatibility.cs`.
+
 Уже есть в коде: `FloVMP.Core/Bridge/RageCompatibility.cs` — атрибуты
 `[Command]` и `[RemoteEvent]` в стиле серверного C# RAGE:MP (тесты
 `RageCompatibilityTests`). Слой совместимости пункта 17 стоит строить от него.
