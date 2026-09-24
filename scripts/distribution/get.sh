@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  FloV:MP — установка сервера одной командой (Linux: Ubuntu / Debian)
+#  FloV:MP — установка и обновление сервера одной командой
+#  (Linux: Ubuntu / Debian)
 #
+#  Установка с GitHub (основной канал — скачивается быстро и без обрывов):
+#    curl -fsSLo flovmp-get.sh https://github.com/<owner>/<repo>/releases/latest/download/get.sh
+#    sudo bash flovmp-get.sh --github <owner>/<repo> --key FLV-XXXX-XXXX-XXXX-XXXX
+#
+#  Установка с сервера раздачи FloV:MP:
 #    curl -fsSLo flovmp-get.sh http://<адрес раздачи>/cdn/get.sh
-#    sudo bash flovmp-get.sh --key FLV-XXXX-XXXX-XXXX --owner-sc <ваш SocialClubId>
+#    sudo bash flovmp-get.sh --key FLV-XXXX-XXXX-XXXX-XXXX
 #
-#  Что делает: по ключу лицензии получает описание последнего релиза,
-#  проверяет его подпись ключом релизов FloV:MP (вшит ниже), скачивает пакет,
-#  сверяет SHA-256 и запускает установщик из пакета (install.sh) с вашими
-#  параметрами. Подмена пакета — на сервере раздачи или по дороге — не пройдёт.
+#  Обновление потом — одна команда без параметров (ключ и источник
+#  запоминаются при установке):
+#    sudo bash /opt/flovmp/update.sh
 #
-#  Все параметры install.sh передаются как есть (./install.sh --help).
-#  Свой адрес раздачи: --dist http://... или FLOVMP_DIST_URL.
+#  Что делает: получает описание релиза, проверяет его подпись ключом релизов
+#  FloV:MP (вшит ниже), скачивает пакет, сверяет SHA-256 и запускает
+#  установщик из пакета (install.sh) с вашими параметрами. Подмена пакета —
+#  на GitHub, на сервере раздачи или по дороге — не пройдёт.
+#
+#  --github owner/repo  брать релиз с GitHub (без --tag — последний стабильный)
+#  --tag v1.2.3         конкретный релиз с GitHub, например бету
+#  --dist http://...    свой адрес раздачи (или FLOVMP_DIST_URL)
+#  --reinstall          поставить заново ту же версию
+#  Все остальные параметры install.sh передаются как есть (./install.sh --help).
 # =====================================================================
 set -euo pipefail
 
@@ -35,25 +48,56 @@ die() { echo "ОШИБКА: $*" >&2; exit 1; }
 
 KEY=""
 DIR="/opt/flovmp"
+DIR_GIVEN=0
+GITHUB=""
+TAG=""
 REINSTALL=0
 EXTRA=0   # прочие параметры установщика: с ними пропуск обновления не делаем
 PASS=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --key|-k)    [ $# -ge 2 ] || die "после $1 нужен ключ"; KEY="$2"; PASS+=("$1" "$2"); shift 2 ;;
-    --dir)       [ $# -ge 2 ] || die "после --dir нужен путь"; DIR="${2%/}"; PASS+=("$1" "$2"); shift 2 ;;
-    --dist)      [ $# -ge 2 ] || die "после --dist нужен адрес"; DIST="${2%/}"; shift 2 ;;
-    --reinstall) REINSTALL=1; shift ;;
-    *)           PASS+=("$1"); EXTRA=$((EXTRA + 1)); shift ;;
+    --key|-k|-Key) [ $# -ge 2 ] || die "после $1 нужен ключ"; KEY="$2"; shift 2 ;;
+    --dir|-InstallDir) [ $# -ge 2 ] || die "после $1 нужен путь"; DIR="${2%/}"; DIR_GIVEN=1; shift 2 ;;
+    --dist|-Dist)  [ $# -ge 2 ] || die "после $1 нужен адрес"; DIST="${2%/}"; shift 2 ;;
+    --github|-GitHub) [ $# -ge 2 ] || die "после $1 нужно owner/repo"; GITHUB="$2"; shift 2 ;;
+    --tag|-Tag)    [ $# -ge 2 ] || die "после $1 нужен тег релиза"; TAG="$2"; shift 2 ;;
+    --reinstall|-Reinstall) REINSTALL=1; shift ;;
+    *)             PASS+=("$1"); EXTRA=$((EXTRA + 1)); shift ;;
   esac
 done
+
+# Запуск как update.sh из папки установленного сервера: обновляем именно её.
+SELF_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+if [ "$DIR_GIVEN" -eq 0 ] && [ -f "$SELF_DIR/manifest.txt" ] && [ -f "$SELF_DIR/config/flovmp.env" ]; then
+  DIR="$SELF_DIR"
+fi
+DIR="$(readlink -m "$DIR")"
+
+# Источник обновлений запоминается при установке (config/update.env), чтобы
+# обновление было одной командой без параметров. Тег не запоминается: иначе
+# сервер навсегда остался бы на одной бете.
+SOURCE_FILE="$DIR/config/update.env"
+if [ -z "$GITHUB" ] && [ -f "$SOURCE_FILE" ]; then
+  GITHUB="$(sed -n 's/^FLOVMP_UPDATE_GITHUB=//p' "$SOURCE_FILE" | head -1)"
+  [ -n "$GITHUB" ] && echo "  источник обновлений: GitHub $GITHUB (из $SOURCE_FILE)"
+fi
+if [ -n "$GITHUB" ]; then
+  GITHUB="${GITHUB#https://github.com/}"; GITHUB="${GITHUB%/}"; GITHUB="${GITHUB%.git}"
+  [[ "$GITHUB" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "--github ждёт owner/repo, получено: $GITHUB"
+fi
+[ -z "$TAG" ] || [[ "$TAG" =~ ^[A-Za-z0-9._-]+$ ]] || die "неверный тег: $TAG"
+[ -z "$TAG" ] || [ -n "$GITHUB" ] || die "--tag работает только вместе с --github owner/repo"
+
 # Обновление уже установленного сервера: ключ лежит в его настройках, второй
 # раз его вводить не нужно — команда обновления получается короткой.
 if [ -z "$KEY" ] && [ -f "$DIR/config/flovmp.env" ]; then
   KEY="$(sed -n 's/^[[:space:]]*FLOVMP_LICENSE_KEY[[:space:]]*=[[:space:]]*//p' "$DIR/config/flovmp.env" | head -1)"
-  [ -n "$KEY" ] && { echo "  ключ лицензии взят из $DIR/config/flovmp.env"; PASS+=(--key "$KEY"); }
+  [ -n "$KEY" ] && echo "  ключ лицензии взят из $DIR/config/flovmp.env"
 fi
-[ -n "$KEY" ] || die "нужен ключ лицензии: --key FLV-XXXX-XXXX-XXXX (личный кабинет FloV:MP)"
+[ -n "$KEY" ] || die "нужен ключ лицензии: --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+KEY="$(printf '%s' "$KEY" | tr 'a-z' 'A-Z' | tr -cd 'A-Z0-9-')"
+[[ "$KEY" =~ ^FLV(-[0-9A-F]{8}){4}$ ]] || die "ключ не похож на лицензионный: $KEY"
+PASS+=(--key "$KEY" --dir "$DIR")
 [ "$(id -u)" -eq 0 ] || die "запустите через sudo"
 [ -n "$RELEASE_PUBKEY_PEM" ] || die "в загрузчике нет ключа релизов — скачайте get.sh заново"
 
@@ -64,17 +108,30 @@ for tool in curl openssl sha256sum tar base64; do command -v "$tool" >/dev/null 
 
 WORK="$(mktemp -d /tmp/flovmp-get.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
-Q="os=linux&key=$(printf '%s' "$KEY" | tr -cd 'A-Za-z0-9-')"
+Q="os=linux&key=$KEY"
+if [ -n "$GITHUB" ]; then
+  if [ -n "$TAG" ]; then GH="https://github.com/$GITHUB/releases/download/$TAG"
+  else GH="https://github.com/$GITHUB/releases/latest/download"; fi
+fi
 
 fetch() { # url файл — ответ сервера раздачи с понятной ошибкой
   local code
-  code="$(curl -sS --retry 3 --connect-timeout 15 -o "$2" -w '%{http_code}' "$1")" || die "сервер раздачи недоступен: $DIST"
-  [ "$code" = "200" ] || die "сервер раздачи ответил $code: $(head -c 300 "$2" 2>/dev/null)"
+  # -L: GitHub отдаёт файлы релиза через перенаправление на своё хранилище.
+  code="$(curl -sSL --retry 5 --retry-delay 3 --connect-timeout 15 -o "$2" -w '%{http_code}' "$1")" \
+    || die "не удалось скачать $1"
+  [ "$code" = "200" ] || die "$1 ответил $code: $(head -c 300 "$2" 2>/dev/null)"
 }
 
 echo "==> Релиз FloV:MP"
-fetch "$DIST/api/v1/distribution/release?$Q" "$WORK/release.txt"
-fetch "$DIST/api/v1/distribution/release.sig?$Q" "$WORK/release.sig"
+if [ -n "$GITHUB" ]; then
+  echo "  источник: GitHub $GITHUB${TAG:+, релиз $TAG}"
+  fetch "$GH/release-linux.txt" "$WORK/release.txt"
+  fetch "$GH/release-linux.txt.sig" "$WORK/release.sig"
+else
+  echo "  источник: $DIST"
+  fetch "$DIST/api/v1/distribution/release?$Q" "$WORK/release.txt"
+  fetch "$DIST/api/v1/distribution/release.sig?$Q" "$WORK/release.sig"
+fi
 printf '%s\n' "$RELEASE_PUBKEY_PEM" > "$WORK/pub.pem"
 base64 -d "$WORK/release.sig" > "$WORK/release.sig.bin" 2>/dev/null || die "повреждённая подпись релиза"
 openssl dgst -sha256 -verify "$WORK/pub.pem" -signature "$WORK/release.sig.bin" "$WORK/release.txt" >/dev/null 2>&1 \
@@ -98,7 +155,8 @@ if [ -n "$INSTALLED" ]; then
 fi
 
 echo "==> Скачивание пакета"
-fetch "$DIST/api/v1/distribution/download?$Q" "$WORK/$FILE"
+if [ -n "$GITHUB" ]; then fetch "$GH/$FILE" "$WORK/$FILE"
+else fetch "$DIST/api/v1/distribution/download?$Q" "$WORK/$FILE"; fi
 GOT="$(sha256sum "$WORK/$FILE" | cut -d' ' -f1)"
 [ "$GOT" = "$SHA" ] || die "SHA-256 пакета не совпал (ожидали $SHA, получили $GOT) — пакет повреждён или подменён"
 echo "  ✓ SHA-256 совпал"
@@ -109,3 +167,9 @@ tar -xzf "$WORK/$FILE" -C "$WORK" --wildcards '*/install.sh' || die "в паке
 INSTALLER="$(find "$WORK" -mindepth 2 -maxdepth 2 -name install.sh | head -1)"
 [ -n "$INSTALLER" ] || die "в пакете нет install.sh"
 bash "$INSTALLER" --package "$WORK/$FILE" --sha256 "$SHA" "${PASS[@]}"
+
+# Запомнить источник для короткой команды обновления (sudo bash $DIR/update.sh).
+if [ -d "$DIR/config" ]; then
+  { echo "# Откуда берутся обновления FloV:MP (пишет get.sh). Пусто — сервер раздачи."
+    echo "FLOVMP_UPDATE_GITHUB=$GITHUB"; } > "$SOURCE_FILE"
+fi

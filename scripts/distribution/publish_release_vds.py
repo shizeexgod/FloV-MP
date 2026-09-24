@@ -22,7 +22,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
-    ap.add_argument("folder", nargs="?", default=os.path.join(REPO, "dist", "release-1.0.0"))
+    ap.add_argument("folder", nargs="?", default=os.path.join(REPO, "dist", "release"))
     args = ap.parse_args()
     folder = os.path.abspath(args.folder)
     if not os.path.isdir(folder):
@@ -49,8 +49,25 @@ def main():
     result = deploy_vds.run("flovmp-license publish '{}'".format(remote), t=120)
     if result.get("exitCode") != 0:
         sys.exit("публикация релиза завершилась с ошибкой")
+
+    # flovmp-license publish меняет только сам релиз. Загрузчики в /cdn/ (по
+    # ним клиенты ставят и обновляют сервер) обновляем отдельно — иначе VDS
+    # продолжал бы раздавать get.sh/get.ps1 прошлой версии.
+    deploy_vds.step("Загрузчики в /cdn/")
+    loaders = [f for f in ("get.sh", "get.ps1", "flovmp-setup.zip") if f in files]
+    if loaders:
+        cmd = "install -d -m 0755 /var/www/cdn && " + " && ".join(
+            "install -m 0644 '{0}/{1}' /var/www/cdn/{1}".format(remote, f) for f in loaders)
+        if deploy_vds.run(cmd, t=60).get("exitCode") != 0:
+            sys.exit("не удалось обновить загрузчики в /var/www/cdn")
+
+    deploy_vds.step("Проверка")
+    check = deploy_vds.run("sed -n 's/^version=//p' /var/lib/flovmp-license/releases/current/release-*.txt | sort -u", t=60)
+    published = (check.get("output") or "").split()
+    if published != [version]:
+        sys.exit("на VDS текущая версия {}, ожидалась {}".format(published, version))
     deploy_vds.run("rm -rf '{}'".format(remote), quiet=True)
-    print("\nРелиз {} опубликован на VDS.".format(version))
+    print("\nРелиз {} опубликован на VDS, загрузчики в /cdn/ обновлены.".format(version))
 
 
 if __name__ == "__main__":
