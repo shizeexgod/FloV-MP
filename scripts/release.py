@@ -287,8 +287,11 @@ def main():
     elif not os.environ.get("REDL_TOKEN"):
         print("  ! нет REDL_TOKEN — VDS пропущен. Позже: python scripts/distribution/publish_release_vds.py dist/release")
     else:
-        run([sys.executable, "scripts/distribution/publish_release_vds.py", RELEASE],
-            cwd=os.path.join(REPO, "scripts", "distribution"))
+        # run() по умолчанию стартует из корня репозитория. Раньше здесь
+        # одновременно передавался путь от корня и cwd=scripts/distribution,
+        # получалось scripts/distribution/scripts/distribution/... и полный
+        # выпуск всегда падал ровно перед публикацией на VDS.
+        run([sys.executable, os.path.join(REPO, "scripts", "distribution", "publish_release_vds.py"), RELEASE])
 
     step("10/10", "Итоговая проверка")
     if args.no_github:
