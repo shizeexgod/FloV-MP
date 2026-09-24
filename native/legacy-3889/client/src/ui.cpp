@@ -114,7 +114,7 @@ namespace flov::ui
         uint32_t g_loadingAccent = 0xFBBF24;
         // Картинки загрузочного экрана. Логотип зашит в клиент, фон и свой
         // логотип владелец сервера кладёт в %LOCALAPPDATA%\FloVMP\ui.
-        ImFont* g_load = nullptr;   // Jost, только загрузочный экран
+        ImFont* g_load = nullptr;   // Inter, только загрузочный экран
         image::Texture g_logo, g_background;
         bool g_artLoaded = false;
 
@@ -1829,7 +1829,7 @@ namespace flov::ui
             g_title24 = LoadFont(semibold, std::round(24.f * s), true, 112, 113);
             g_mono = LoadFont(mono, std::round(12.5f * s), true, 114, 115);
             g_monoSm = LoadFont(mono, std::round(11.f * s), true, 114, 115);
-            // Отдельный шрифт загрузочного экрана: геометрический гротеск
+            // Отдельный шрифт загрузочного экрана: нейтральный гротеск
             // читается спокойнее в одной короткой строке на весь экран. В чате
             // и консоли остаётся Manrope — он лучше держит плотный текст.
             // Владелец сервера может положить свой шрифт загрузочного экрана

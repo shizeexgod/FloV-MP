@@ -20,10 +20,10 @@
 114 RCDATA "fonts/jbmono-latin.ttf"
 115 RCDATA "fonts/jbmono-cyrillic.ttf"
 
-// Jost (лицензия OFL) — геометрический гротеск для загрузочного
-// экрана. Латиница и кириллица в одном файле.
-116 RCDATA "fonts/jost-400.ttf"
-117 RCDATA "fonts/jost-600.ttf"
+// Inter (лицензия OFL) — шрифт загрузочного экрана. Нейтральный
+// рисунок без характера: одна строка поверх картинки не должна
+// спорить с кадром. Латиница и кириллица в одном файле.
+116 RCDATA "fonts/inter-400.ttf"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 1,0,0,0
