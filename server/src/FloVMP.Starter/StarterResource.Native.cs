@@ -293,6 +293,7 @@ public partial class StarterResource
             voiceToken, voiceOn ? _nativeVoice!.Port : 0, _settings.Float("voice.radius"));
         // Настройки владельца (client.cfg) — до спавна: HUD, мир, ники, клавиши.
         SendClientSettings(session);
+        SendModsInfo(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
         // Версия клиента приходит из его сборки. Не совпала с версией

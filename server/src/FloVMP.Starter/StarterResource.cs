@@ -602,6 +602,7 @@ public partial class StarterResource : Resource
         StartVehiclePersistence(dbReachable ? starterDbConn : null, starterDataDir);
         StartPlayerPersistence(dbReachable ? starterDbConn : null, starterDataDir);
         StartMetrics(starterDataDir);
+        StartMods(starterDataDir);
 
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
@@ -693,6 +694,7 @@ public partial class StarterResource : Resource
         Alt.OnPlayerDead -= OnPlayerDead;
         Alt.OnConsoleCommand -= OnConsoleCommand;
         StopMetrics();
+        StopMods();
         Alt.Log("[FloV:MP Starter] Остановка платформы.");
     }
 
@@ -1325,6 +1327,15 @@ public partial class StarterResource : Resource
                 PrintClientCrashes();
                 break;
 
+            case "mods":
+                PrintModsStatus();
+                break;
+
+            case "reloadmods":
+                Alt.Log("[Console] Пересчитываю моды в фоне (server/mods)…");
+                RebuildMods(startup: false);
+                break;
+
             case "say":
                 if (args.Length == 0)
                 {
@@ -1701,6 +1712,7 @@ public partial class StarterResource : Resource
         using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfStoreSync))
             TickStoreSync();
 
+        PumpMods();
         var nowMs = _clock.ElapsedMilliseconds;
         if (nowMs >= _nextLicenseCheckMs)
         {

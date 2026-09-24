@@ -69,6 +69,16 @@ public sealed class ServerSettings
         new("vehicles.restore_damage", Kind.Bool, "on", false, "Транспорт",
             "после перезапуска машина с теми же повреждениями (off — все встают целыми)"),
 
+        // --- Моды (пункт 4) ---
+        new("mods.serve", Kind.Bool, "on", false, "Моды",
+            "раздавать игрокам моды из server/mods с этого сервера (порт mods.http_port)"),
+        new("mods.http_port", Kind.Int, "0", false, "Моды",
+            "порт раздачи модов, TCP; 0 — порт игры + 20 (7788 → 7808)", 0, 65535),
+        new("mods.public_url", Kind.Text, "", false, "Моды",
+            "свой CDN с копией server/mods (…/manifest.json и …/files/<путь>): для большой карты и сотен игроков. Пусто — раздаёт сам сервер"),
+        new("mods.required", Kind.Bool, "off", false, "Моды",
+            "on — без нужных модов на сервер не пускать (игрок видит, что скачать); off — пускать с предупреждением"),
+
         // --- Метрики и оповещения ---
         new("metrics.log_interval_sec", Kind.Int, "60", false, "Метрики",
             "как часто писать метрики в журнал и flovmp-data/metrics.json, секунд; 0 — не писать", 0, 3600),
