@@ -17,11 +17,22 @@ public class PlayerPersistenceTests
         public readonly Dictionary<string, Dictionary<string, string>> Data = new();
         public ManualResetEventSlim? HoldLoad;
         public ManualResetEventSlim? HoldWrites;
+        // Первое чтение снимает данные сразу, а отдаёт их, только когда отпустят:
+        // так воспроизводится чтение, опоздавшее к следующей загрузке.
+        public ManualResetEventSlim? DelayFirstRead;
+        private int _reads;
         public string Describe => "память";
         public IReadOnlyList<PersistedPlayer> LoadAllStates() { lock (States) return States.Values.ToList(); }
         public void UpsertState(PersistedPlayer p) { lock (States) States[p.Identity] = p; }
         public IReadOnlyDictionary<string, string> LoadData(string identity)
         {
+            if (DelayFirstRead is { } delay && Interlocked.Increment(ref _reads) == 1)
+            {
+                Dictionary<string, string> snap;
+                lock (Data) snap = Data.TryGetValue(identity, out var d0) ? new(d0) : new();
+                delay.Wait(5000);
+                return snap;
+            }
             HoldLoad?.Wait(5000);
             lock (Data) return Data.TryGetValue(identity, out var d) ? new Dictionary<string, string>(d) : new();
         }
@@ -232,5 +243,31 @@ public class PlayerPersistenceTests
         PumpUntil(p, 1);
         Assert.Null(p.GetData("7", "quest"));
         store.HoldWrites.Set();
+    }
+
+    [Fact]
+    public void StaleReadFromPreviousLoad_IsIgnored()
+    {
+        // Второй проход аудита: вошёл — чтение №1 сняло «100» и задержалось;
+        // геймод записал 250, база подтвердила; вышел и тут же зашёл, чтение №2
+        // отдало 250. Опоздавшее чтение №1 принимать нельзя.
+        var delay = new ManualResetEventSlim(false);
+        var store = new MemoryStore { DelayFirstRead = delay };
+        store.Data["7"] = new() { ["money"] = "100" };
+        using var p = new PlayerPersistence(store, _ => { });
+        p.BeginLoadData("7");
+        Thread.Sleep(100);                              // чтение №1 уже сняло 100 и ждёт
+        Assert.Null(p.SetData("7", "money", "250"));
+        Assert.True(p.FlushBlocking(TimeSpan.FromSeconds(5)));   // база подтвердила 250
+        p.Unload("7");
+        store.HoldLoad = new ManualResetEventSlim(false);
+        p.BeginLoadData("7");                           // чтение №2 висит
+        delay.Set();                                    // опоздавшее №1 приходит первым
+        Thread.Sleep(200);
+        p.PumpLoaded();
+        Assert.False(p.IsLoaded("7"));                  // его не приняли
+        store.HoldLoad.Set();                           // теперь №2
+        PumpUntil(p, 1);
+        Assert.Equal("250", p.GetData("7", "money"));
     }
 }

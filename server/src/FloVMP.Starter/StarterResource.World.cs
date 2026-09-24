@@ -56,7 +56,11 @@ public partial class StarterResource
     {
         var n = (name ?? "").Trim();
         if (!GameName.IsMatch(n)) { Alt.LogWarning($"[FloV:MP] мир: IPL «{name}» — латиница, цифры, _ и -, до 64 символов"); return false; }
-        return PutWorld("IPL", n, DimensionAll, loaded ? 1 : 0);
+        if (!PutWorld("IPL", n, DimensionAll, loaded ? 1 : 0)) return false;
+        // Заданный файлом настроек или кодом ресурса IPL принадлежит им, а не
+        // карте: reloadmaps его не заменит и не снимет.
+        _worldFromMaps.Remove(Key("IPL", n));
+        return true;
     }
 
     /// <summary>world.ipls и world.ipls_remove из client.cfg — при старте и reloadsettings.</summary>
@@ -71,11 +75,7 @@ public partial class StarterResource
             _cfgIpls.Remove(gone);
         }
         foreach (var (n, loaded) in wanted)
-            if (PutIpl(n, loaded))
-            {
-                _cfgIpls.Add(n);
-                _worldFromMaps.Remove(Key("IPL", n));   // теперь им владеет файл настроек, а не карта
-            }
+            if (PutIpl(n, loaded)) _cfgIpls.Add(n);
     }
 
     private static IEnumerable<string> SplitList(string? list) =>

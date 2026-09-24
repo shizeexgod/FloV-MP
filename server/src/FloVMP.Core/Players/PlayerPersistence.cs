@@ -280,7 +280,11 @@ public sealed class PlayerPersistence : IDisposable
     private readonly LatestWinsWriter<string> _writer;
     private readonly Dictionary<string, PersistedPlayer> _states = new();
     private readonly Dictionary<string, Dictionary<string, string>> _data = new();
-    private readonly ConcurrentQueue<(string Identity, IReadOnlyDictionary<string, string>? Data, string? Error)> _loaded = new();
+    private readonly ConcurrentQueue<(string Identity, long Gen, IReadOnlyDictionary<string, string>? Data, string? Error)> _loaded = new();
+    // Номер текущей загрузки игрока: ответ прежней (игрок вышел и зашёл, пока
+    // она шла) — устаревшее чтение, его нельзя принять за новое.
+    private readonly Dictionary<string, long> _loadGen = new();
+    private long _nextGen;
     // Чьи данные сейчас грузятся и чьи уже в памяти. Отдельно от _data: запись
     // геймода до окончания загрузки не должна выглядеть как «загружено».
     private readonly HashSet<string> _loading = new();
@@ -334,10 +338,12 @@ public sealed class PlayerPersistence : IDisposable
                 ? pending.ToDictionary(kv => kv.Key, kv => kv.Value.Value, StringComparer.Ordinal)
                 : new Dictionary<string, string?>(StringComparer.Ordinal);
         _sinceLoad[identity] = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var gen = ++_nextGen;
+        _loadGen[identity] = gen;
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            try { _loaded.Enqueue((identity, _store.LoadData(identity), null)); }
-            catch (Exception ex) { _loaded.Enqueue((identity, null, ex.Message)); }
+            try { _loaded.Enqueue((identity, gen, _store.LoadData(identity), null)); }
+            catch (Exception ex) { _loaded.Enqueue((identity, gen, null, ex.Message)); }
         });
     }
 
@@ -347,7 +353,9 @@ public sealed class PlayerPersistence : IDisposable
         var done = new List<(string, string?)>();
         while (_loaded.TryDequeue(out var item))
         {
-            // Игрок успел уйти, пока грузилось, — данные не нужны.
+            // Игрок ушёл, пока грузилось, или это ответ прежней загрузки — не наш.
+            if (!_loadGen.TryGetValue(item.Identity, out var current) || current != item.Gen) continue;
+            _loadGen.Remove(item.Identity);
             if (!_loading.Remove(item.Identity)) continue;
             _loadBase.Remove(item.Identity, out var pendingAtStart);
             _sinceLoad.Remove(item.Identity, out var written);
@@ -417,6 +425,7 @@ public sealed class PlayerPersistence : IDisposable
         _ready.Remove(identity);
         _loadBase.Remove(identity);
         _sinceLoad.Remove(identity);
+        _loadGen.Remove(identity);
         // _unconfirmed не трогаем: очередь дописывает его записи и после ухода.
     }
 
