@@ -39,6 +39,14 @@ public partial class StarterResource
 
     private bool UsesRegistry(uint playerId) => _registryClients.Contains(playerId);
 
+    /// <summary>
+    /// Сидит ли игрок в машине реестра. Только тогда поля машины в его STATE
+    /// ничего не значат; иначе (машина не зарегистрирована) они — единственный
+    /// способ показать её остальным, и работают по старому пути.
+    /// </summary>
+    private bool InRegistryVehicle(uint playerId) =>
+        UsesRegistry(playerId) && _vehicles?.Registry.VehicleOf(playerId) is not null;
+
     private VehiclePersistence? _vehiclePersistence;
 
     /// <summary>
@@ -173,9 +181,9 @@ public partial class StarterResource
     }
 
     /// <summary>
-    /// STATE клиента 1.0.6+: поля машины игнорируются (решение владельца —
-    /// место берём только из VENTER/VLEAVE/VOWN), флаг «в транспорте»
-    /// остаётся для анимаций и проверок урона.
+    /// STATE клиента 1.0.6+ в машине реестра: поля машины игнорируются
+    /// (решение владельца — место берём только из VENTER/VLEAVE/VOWN), флаг
+    /// «в транспорте» остаётся для анимаций и проверок урона.
     /// </summary>
     private static NativePlayerState WithoutVehicleFields(NativePlayerState st) =>
         st.VehicleModel == 0 && st.VehicleOwner == 0 && st.Seat == -1

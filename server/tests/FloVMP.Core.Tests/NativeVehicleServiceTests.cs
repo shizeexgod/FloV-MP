@@ -508,4 +508,16 @@ public class NativeVehicleServiceTests
         svc.HandleSync(2, Sync(v.Id, x: 50), DateTime.UtcNow);
         Assert.Equal(new[] { 2u }, suspects);
     }
+
+    [Fact]
+    public void Api_SetHealthToDestroyed_RaisesDestroyedOnce()
+    {
+        // Аудит: геймод «взрывал» машину через health — событие не приходило.
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        svc.SetHealth(v.Id, 0, -4000);
+        svc.SetHealth(v.Id, 0, -4000);
+        Assert.Equal(new[] { $"destroyed {v.Id}" }, ev.Where(e => e.StartsWith("destroyed")));
+    }
 }

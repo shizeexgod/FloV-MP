@@ -33,6 +33,9 @@ public partial class StarterResource
     private void StartMetrics(string dataDir)
     {
         _webhook = new WebhookNotifier(Alt.LogWarning);
+        // Сторож — до настроек: иначе alerts.hang_sec не доходил до него, и он
+        // работал со своими 15 с (ложные «зависания», а 0 не выключал проверку).
+        _watchdog = new ServerCrashWatchdog { AutoRestartEnabled = false };
         ApplyMetricsSettings();
 
         _runMarkerPath = Path.Combine(dataDir, "running.json");
@@ -47,7 +50,6 @@ public partial class StarterResource
         StartMetricsHttp();
 
         // Сторож зависаний: пульс ставит тик, проверяет отдельный поток.
-        _watchdog = new ServerCrashWatchdog { AutoRestartEnabled = false };
         _watchdog.OnCrashDetected += report =>
         {
             Interlocked.CompareExchange(ref _hangStartedTicks, Environment.TickCount64, 0);

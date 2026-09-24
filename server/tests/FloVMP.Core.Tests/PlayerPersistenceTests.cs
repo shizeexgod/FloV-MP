@@ -16,6 +16,7 @@ public class PlayerPersistenceTests
         public readonly Dictionary<string, PersistedPlayer> States = new();
         public readonly Dictionary<string, Dictionary<string, string>> Data = new();
         public ManualResetEventSlim? HoldLoad;
+        public ManualResetEventSlim? HoldWrites;
         public string Describe => "память";
         public IReadOnlyList<PersistedPlayer> LoadAllStates() { lock (States) return States.Values.ToList(); }
         public void UpsertState(PersistedPlayer p) { lock (States) States[p.Identity] = p; }
@@ -26,6 +27,7 @@ public class PlayerPersistenceTests
         }
         public void SetData(string identity, string key, string? value)
         {
+            HoldWrites?.Wait(10000);
             lock (Data)
             {
                 if (!Data.TryGetValue(identity, out var d)) Data[identity] = d = new();
@@ -188,5 +190,47 @@ public class PlayerPersistenceTests
         fail = false;
         Assert.True(w.FlushBlocking(TimeSpan.FromSeconds(5)));
         Assert.Equal(new[] { "a2", "b1" }, written.OrderBy(x => x));
+    }
+
+    // --- найдено повторным аудитом ---
+
+    [Fact]
+    public void FastReconnect_SeesWritesStillQueued()
+    {
+        // База пишет медленно: последняя запись игрока ещё в очереди, а он уже
+        // перезашёл. Без слоя неподтверждённых записей загрузка отдала бы 100,
+        // и геймод записал бы 100 поверх 250 (потеря денег).
+        var store = new MemoryStore { HoldWrites = new ManualResetEventSlim(false) };
+        store.Data["7"] = new() { ["money"] = "100", ["old"] = "x" };
+        using var p = new PlayerPersistence(store, _ => { });
+        p.BeginLoadData("7");
+        PumpUntil(p, 1);
+        Assert.Null(p.SetData("7", "money", "250"));
+        Assert.Null(p.SetData("7", "old", ""));       // и удаление тоже
+        p.Unload("7");                                // вышел
+
+        p.BeginLoadData("7");                         // тут же зашёл снова — база ещё старая
+        PumpUntil(p, 1);
+        Assert.Equal("250", p.GetData("7", "money"));
+        Assert.Null(p.GetData("7", "old"));
+
+        store.HoldWrites.Set();
+        Assert.True(p.FlushBlocking(TimeSpan.FromSeconds(5)));
+        Assert.Equal("250", store.Data["7"]["money"]);
+    }
+
+    [Fact]
+    public void DeleteDuringLoad_IsNotResurrectedByStoredValue()
+    {
+        // Запись в базу задержана: в момент чтения там ещё лежит «done».
+        var store = new MemoryStore { HoldLoad = new ManualResetEventSlim(false), HoldWrites = new ManualResetEventSlim(false) };
+        store.Data["7"] = new() { ["quest"] = "done" };
+        using var p = new PlayerPersistence(store, _ => { });
+        p.BeginLoadData("7");
+        Assert.Null(p.SetData("7", "quest", ""));    // геймод удалил, пока шла загрузка
+        store.HoldLoad.Set();
+        PumpUntil(p, 1);
+        Assert.Null(p.GetData("7", "quest"));
+        store.HoldWrites.Set();
     }
 }

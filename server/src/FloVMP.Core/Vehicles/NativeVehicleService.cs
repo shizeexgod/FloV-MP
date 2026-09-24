@@ -332,8 +332,14 @@ public sealed class NativeVehicleService
         return true;
     }
 
-    public bool SetHealth(uint vehicleId, float body, float engine) =>
-        Registry.SetHealth(vehicleId, body, engine) && PushToDriver(vehicleId);
+    public bool SetHealth(uint vehicleId, float body, float engine)
+    {
+        var wasDestroyed = Registry.Get(vehicleId)?.Destroyed ?? false;
+        if (!Registry.SetHealth(vehicleId, body, engine)) return false;
+        // Геймод «взорвал» машину сам — событие то же, что при уроне от водителя.
+        if (!wasDestroyed && Registry.Get(vehicleId)!.Destroyed) Destroyed?.Invoke(vehicleId);
+        return PushToDriver(vehicleId);
+    }
 
     /// <summary>Номер есть только в VADD — рассылаем снимок заново всем, кому машина показана.</summary>
     public bool SetPlate(uint vehicleId, string plate)

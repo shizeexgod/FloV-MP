@@ -208,4 +208,20 @@ public class SuspicionLedgerTests
         ac.Report(1, SuspicionKind.Weapon, "rpg", 0);
         Assert.Equal(new[] { SuspicionLevel.Notify }, levels);
     }
+
+    [Fact]
+    public void Restore_KeepsZeroAmmoCounted()
+    {
+        // Аудит: GiveWeapon с нулём превращал сохранённые 0 патронов в «без учёта».
+        var ac = new NativeAntiCheat();
+        var reports = 0;
+        ac.Suspected += (_, type, _, _, _) => { if (type == "ammo") reports++; };
+        ac.Weapons.Issue(1, Pistol, 0);          // так сделал бы GiveWeapon(0)
+        ac.Weapons.Restore(1, Pistol, 0);        // сохранение возвращает ровно 0
+        ac.OnHit(1, Pistol, 0);
+        Assert.Equal(1, reports);
+        Assert.Equal(0, ac.Weapons.AmmoLeft(1, Pistol));
+        ac.Weapons.Restore(1, GameHash.Joaat("weapon_knife"), -1);
+        Assert.Equal(-1, ac.Weapons.AmmoLeft(1, GameHash.Joaat("weapon_knife")));
+    }
 }

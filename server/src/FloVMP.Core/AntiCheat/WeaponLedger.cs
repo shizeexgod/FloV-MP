@@ -66,6 +66,16 @@ public sealed class WeaponLedger
         map[weapon] = map.TryGetValue(weapon, out var left) && left >= 0 ? left + ammo : ammo;
     }
 
+    /// <summary>
+    /// Вернуть учёт как был (сохранение игрока): 0 патронов — это 0, а не «без
+    /// учёта», как у <see cref="Issue"/> с нулём (там 0 — холодное оружие).
+    /// </summary>
+    public void Restore(uint playerId, uint weapon, int ammo)
+    {
+        if (weapon == 0 || weapon == Unarmed) return;
+        MapOf(playerId)[weapon] = ammo < 0 ? -1 : ammo;
+    }
+
     /// <summary>Сервер забрал всё оружие (разоружение, смерть по правилам геймода).</summary>
     public void Clear(uint playerId) => _issued.Remove(playerId);
 

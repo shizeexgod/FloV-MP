@@ -104,7 +104,11 @@ public partial class StarterResource
         if (plan.Dimension && s.Dimension != player.Dimension) player.Dimension = s.Dimension;
         if (plan.Weapons)
             foreach (var w in s.Weapons)
+            {
                 player.GiveWeapon(w.Hash, Math.Max(0, w.Ammo), false);
+                // Учёт — ровно сохранённый: GiveWeapon с нулём записал бы «без учёта».
+                _weaponLedger.Restore(player.Id, w.Hash, w.Ammo);
+            }
         if (plan.Position) NotifyTeleport(player);   // своё возвращение — не «телепорт» для античита
         Alt.Log($"[FloV:MP] [Игроки] {player.Name}: восстановлено" +
                 (plan.Position ? " место" : "") + (plan.Health ? ", здоровье" : "") +

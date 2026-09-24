@@ -71,7 +71,11 @@ public partial class StarterResource
             _cfgIpls.Remove(gone);
         }
         foreach (var (n, loaded) in wanted)
-            if (PutIpl(n, loaded)) _cfgIpls.Add(n);
+            if (PutIpl(n, loaded))
+            {
+                _cfgIpls.Add(n);
+                _worldFromMaps.Remove(Key("IPL", n));   // теперь им владеет файл настроек, а не карта
+            }
     }
 
     private static IEnumerable<string> SplitList(string? list) =>
@@ -369,6 +373,11 @@ public partial class StarterResource
     private void LoadMaps(bool broadcast)
     {
         var dir = Path.Combine(Directory.GetCurrentDirectory(), "config", "maps");
+        // Интерьеры из прежних карт: клиент держит их и при WCLEAR (смена
+        // измерения не должна перезагружать карту), поэтому убранные из файла
+        // нужно снять явным WDEL — иначе они остались бы у игроков до выхода.
+        var oldInteriors = _worldFromMaps.Where(k => k.StartsWith("IPL:", StringComparison.Ordinal) ||
+                                                     k.StartsWith("ISET:", StringComparison.Ordinal)).ToList();
         foreach (var key in _worldFromMaps) _world.Remove(key);
         _worldFromMaps.Clear();
         if (!Directory.Exists(dir))
@@ -409,7 +418,14 @@ public partial class StarterResource
         foreach (var p in _nativePlayers.Values)
         {
             var np = (NativePlayerProxy)(object)p;
-            if (_nativeReady.Contains(np.Session.Id)) SendWorldSnapshot(np.Session, np.DimensionValue);
+            if (!_nativeReady.Contains(np.Session.Id)) continue;
+            SendWorldSnapshot(np.Session, np.DimensionValue);
+            foreach (var key in oldInteriors)
+                if (!_world.ContainsKey(key))
+                {
+                    var colon = key.IndexOf(':');
+                    SendWorldLine(np.Session, NativeProtocol.Format("WDEL", key[..colon], key[(colon + 1)..]));
+                }
         }
     }
 
@@ -464,6 +480,8 @@ public partial class StarterResource
         {
             var name = i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : S(i, "name");
             var loaded = i.ValueKind != JsonValueKind.Object || B(i, "loaded", true);
+            // IPL — один на имя: заданный в client.cfg или кодом ресурса важнее карты.
+            if (GameName.IsMatch(name) && _world.ContainsKey(Key("IPL", name))) continue;
             if (GameName.IsMatch(name)) MapPut("IPL", name, DimensionAll, loaded ? 1 : 0);
             else Alt.LogWarning($"[FloV:MP] карта {map}: IPL «{name}» — латиница, цифры, _ и -");
         }

@@ -286,6 +286,18 @@ public sealed class PlayerPersistence : IDisposable
     private readonly HashSet<string> _loading = new();
     private readonly HashSet<string> _ready = new();
 
+    // Записи, поставленные в очередь, но ещё не подтверждённые хранилищем
+    // (null — удаление). Быстрый перезаход читает базу, пока в очереди лежат
+    // последние записи игрока, — без этого слоя он получил бы старое значение,
+    // а геймод записал бы его обратно поверх нового (потеря или дюп вещей).
+    // Пишет и главный поток, и поток записи — под блокировкой.
+    private readonly Dictionary<string, Dictionary<string, (string? Value, long Seq)>> _unconfirmed = new();
+    private long _seq;
+    // На время загрузки: неподтверждённое на момент её начала и всё, что
+    // геймод записал или удалил, пока она шла.
+    private readonly Dictionary<string, Dictionary<string, string?>> _loadBase = new();
+    private readonly Dictionary<string, Dictionary<string, string?>> _sinceLoad = new();
+
     public PlayerPersistence(IPlayerStore store, Action<string> warn)
     {
         _store = store;
@@ -317,6 +329,11 @@ public sealed class PlayerPersistence : IDisposable
     public void BeginLoadData(string identity)
     {
         if (_ready.Contains(identity) || !_loading.Add(identity)) return;
+        lock (_unconfirmed)
+            _loadBase[identity] = _unconfirmed.TryGetValue(identity, out var pending)
+                ? pending.ToDictionary(kv => kv.Key, kv => kv.Value.Value, StringComparer.Ordinal)
+                : new Dictionary<string, string?>(StringComparer.Ordinal);
+        _sinceLoad[identity] = new Dictionary<string, string?>(StringComparer.Ordinal);
         ThreadPool.QueueUserWorkItem(_ =>
         {
             try { _loaded.Enqueue((identity, _store.LoadData(identity), null)); }
@@ -332,12 +349,17 @@ public sealed class PlayerPersistence : IDisposable
         {
             // Игрок успел уйти, пока грузилось, — данные не нужны.
             if (!_loading.Remove(item.Identity)) continue;
+            _loadBase.Remove(item.Identity, out var pendingAtStart);
+            _sinceLoad.Remove(item.Identity, out var written);
             if (item.Data is not null)
             {
-                // Пока грузилось, геймод мог уже что-то записать — его значения свежее.
+                // Прочитанное из базы — затем то, что до базы ещё не дошло, —
+                // затем записанное и удалённое геймодом, пока шла загрузка.
                 var merged = new Dictionary<string, string>(item.Data, StringComparer.Ordinal);
-                if (_data.TryGetValue(item.Identity, out var early))
-                    foreach (var (k, v) in early) merged[k] = v;
+                foreach (var layer in new[] { pendingAtStart, written })
+                    if (layer is not null)
+                        foreach (var (k, v) in layer)
+                            if (v is null) merged.Remove(k); else merged[k] = v;
                 _data[item.Identity] = merged;
                 _ready.Add(item.Identity);
             }
@@ -366,7 +388,24 @@ public sealed class PlayerPersistence : IDisposable
         else d[key!] = value!;
         var k = key!;
         var v = delete ? null : value;
-        _writer.Enqueue("d:" + identity + "\n" + k, () => _store.SetData(identity, k, v));
+        if (_sinceLoad.TryGetValue(identity, out var duringLoad)) duringLoad[k] = v;
+        long seq;
+        lock (_unconfirmed)
+        {
+            seq = ++_seq;
+            if (!_unconfirmed.TryGetValue(identity, out var mine)) _unconfirmed[identity] = mine = new(StringComparer.Ordinal);
+            mine[k] = (v, seq);
+        }
+        _writer.Enqueue("d:" + identity + "\n" + k, () =>
+        {
+            _store.SetData(identity, k, v);
+            lock (_unconfirmed)
+                if (_unconfirmed.TryGetValue(identity, out var mine) && mine.TryGetValue(k, out var e) && e.Seq == seq)
+                {
+                    mine.Remove(k);
+                    if (mine.Count == 0) _unconfirmed.Remove(identity);
+                }
+        });
         return null;
     }
 
@@ -376,6 +415,9 @@ public sealed class PlayerPersistence : IDisposable
         _data.Remove(identity);
         _loading.Remove(identity);
         _ready.Remove(identity);
+        _loadBase.Remove(identity);
+        _sinceLoad.Remove(identity);
+        // _unconfirmed не трогаем: очередь дописывает его записи и после ухода.
     }
 
     public bool FlushBlocking(TimeSpan timeout)

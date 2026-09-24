@@ -543,9 +543,10 @@ public partial class StarterResource
         {
             var driverProxy = (NativePlayerProxy)(object)driver;
             if (!_nativeReady.Contains(driverId) || !driverProxy.Session.HasState) continue;
-            // У клиента 1.0.6+ поля машины в STATE ничего не значат: его
-            // машины ведёт реестр, а не этот список.
-            if (UsesRegistry(driverId)) continue;
+            // Водителя машины реестра ведёт реестр, а не этот список. Клиент
+            // 1.0.6+ в машине, которой в реестре нет (регистрация трафика
+            // выключена, отказ, ответ ещё в пути), идёт старым путём.
+            if (InRegistryVehicle(driverId)) continue;
             var driverState = driverProxy.State;
             if (driverState.InVehicle && driverState.Seat == -1 && driverState.VehicleModel != 0)
                 _nativeVehicleOwners[driverId] = new NativeVehicleOwner(
@@ -566,7 +567,7 @@ public partial class StarterResource
             // кому NoClip разрешён: иначе это невидимость для любого читера.
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
-            st = UsesRegistry(id) ? WithoutVehicleFields(st) : AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
+            st = InRegistryVehicle(id) ? WithoutVehicleFields(st) : AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
             if (_weaponHistory.TryGetValue(id, out var wh))
             {
                 if (wh.Cur != st.Weapon) _weaponHistory[id] = (wh.Cur, st.Weapon, nowMs);
@@ -641,7 +642,7 @@ public partial class StarterResource
                 // Переходный релиз: старый клиент видит машину игрока 1.0.6+
                 // только полями PSTATE — для него своя строка.
                 string? line;
-                if (!recipientUsesRegistry && UsesRegistry(other))
+                if (!recipientUsesRegistry && InRegistryVehicle(other))
                 {
                     if (!_syncLinesLegacy.TryGetValue(other, out line))
                         _syncLinesLegacy[other] = line = LegacyViewOf(other, info.State).FormatFor(other);
