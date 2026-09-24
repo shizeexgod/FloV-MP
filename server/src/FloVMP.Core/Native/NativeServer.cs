@@ -216,6 +216,12 @@ public sealed class NativeServer : IDisposable
                             session.SetState(state);
                         }
                         break;
+                    case "VSYNC":
+                        // Как STATE: 20 раз в секунду от каждого водителя — мимо
+                        // очереди событий, «последнее побеждает». Кто водитель,
+                        // решает главный поток по реестру.
+                        if (NativeVehicleSync.TryParse(parts, out var vsync)) session.SetVehicleSync(vsync);
+                        break;
                     case "PING":
                         session.Send(NativeProtocol.Format("PONG", parts.Length > 1 ? parts[1] : ""));
                         break;
@@ -344,6 +350,8 @@ public sealed class NativeSession
     private readonly object _stateLock = new();
     private NativePlayerState _state;
     private long _stateVersion;
+    private NativeVehicleSync _vehicleSync;
+    private bool _hasVehicleSync;
     private int _closed;
     private int _closeRequested;
 
@@ -395,6 +403,25 @@ public sealed class NativeSession
     {
         lock (_stateLock) _state = state;
         Interlocked.Increment(ref _stateVersion);
+    }
+
+    /// <summary>Последний VSYNC водителя (реестр транспорта, клиент 1.0.6+).</summary>
+    internal void SetVehicleSync(in NativeVehicleSync sync)
+    {
+        lock (_stateLock) { _vehicleSync = sync; _hasVehicleSync = true; }
+    }
+
+    /// <summary>Забрать последний VSYNC. Промежуточные за тик теряются
+    /// намеренно: нужна только свежая позиция машины, как и со STATE.</summary>
+    public bool TryTakeVehicleSync(out NativeVehicleSync sync)
+    {
+        lock (_stateLock)
+        {
+            sync = _vehicleSync;
+            if (!_hasVehicleSync) return false;
+            _hasVehicleSync = false;
+            return true;
+        }
     }
 
     /// <summary>Сервер сам переместил игрока: пока клиент не пришлёт новое, считаем его там.</summary>
