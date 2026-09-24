@@ -4,6 +4,9 @@
 #include "net.h"
 #include "settings.h"
 #include "ui.h"
+#include "http.h"
+
+#include <thread>
 #include "voice.h"
 #include "world.h"
 
@@ -106,6 +109,9 @@ namespace flov::game
         // Номер показанного этапа загрузки: каждый объявляется один раз
         // и только по факту события, а не по таймеру.
         int g_loadStage = 0;
+
+        // Определена ниже, рядом с остальной работой по загрузочному экрану.
+        void ApplyLoadingArt();
         ULONGLONG g_loadStart = 0, g_spawnAt = 0;
 
         // Показатели для консоли и netgraph.
@@ -1532,6 +1538,7 @@ namespace flov::game
             {
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
                 ApplySettings();
+                ApplyLoadingArt();
                 Log("настройки сервера получены (" + std::to_string((m.size() - 1) / 2) + ")");
                 if (g_loadingActive && g_loadStage < 3)
                 {
@@ -1971,6 +1978,63 @@ namespace flov::game
                 return false;
             }
             return ParseAddress(address, host, port, nullptr, false); // коннектор пишет адрес шлюза
+        }
+
+        /// Фон и логотип загрузочного экрана с сервера.
+        ///
+        /// Владелец указывает ссылки в настройках, клиент кладёт файлы в кэш
+        /// и больше их не скачивает. Имя файла — хэш ссылки, поэтому
+        /// сервер не может именем указать куда-то ещё на диске, а новая
+        /// картинка по той же ссылке требует нового адреса.
+        ///
+        /// Скачивание идёт в отдельном потоке: игровой поток ждать сеть
+        /// не должен. Поэтому картинка с нового сервера появится на экране
+        /// не в эту загрузку, а со следующего входа — или сразу, если она
+        /// успеет скачаться до конца загрузки.
+        void ApplyLoadingArt()
+        {
+            const std::string background = settings::Get("loading.background_url");
+            const std::string logo = settings::Get("loading.logo_url");
+            if (background.empty() && logo.empty())
+            {
+                ui::SetLoadingArt(L"", L"");
+                return;
+            }
+
+            const std::wstring dir = DataDir() + L"@BS@@BS@ui@BS@@BS@cache";
+            CreateDirectoryW((DataDir() + L"@BS@@BS@ui").c_str(), nullptr);
+            CreateDirectoryW(dir.c_str(), nullptr);
+
+            auto pathFor = [&dir](const std::string& url) -> std::wstring
+            {
+                return url.empty() ? std::wstring() : dir + L"@BS@@BS@" + FromUtf8(http::CacheName(url));
+            };
+            const std::wstring backgroundPath = pathFor(background);
+            const std::wstring logoPath = pathFor(logo);
+
+            const bool needBackground = !backgroundPath.empty() &&
+                                        GetFileAttributesW(backgroundPath.c_str()) == INVALID_FILE_ATTRIBUTES;
+            const bool needLogo = !logoPath.empty() &&
+                                  GetFileAttributesW(logoPath.c_str()) == INVALID_FILE_ATTRIBUTES;
+
+            ui::SetLoadingArt(needBackground ? std::wstring() : backgroundPath,
+                              needLogo ? std::wstring() : logoPath);
+            if (!needBackground && !needLogo) return;
+
+            std::thread([background, logo, backgroundPath, logoPath, needBackground, needLogo]
+            {
+                bool got = false;
+                if (needBackground) got |= http::Download(background, backgroundPath);
+                if (needLogo) got |= http::Download(logo, logoPath);
+                if (!got) return;
+                // Показываем только то, что действительно лежит на диске.
+                auto ready = [](const std::wstring& path)
+                {
+                    return !path.empty() && GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES
+                               ? path : std::wstring();
+                };
+                ui::SetLoadingArt(ready(backgroundPath), ready(logoPath));
+            }).detach();
         }
 
         /// Загрузочный экран: закрыть, когда персонаж стоит в загруженном мире.

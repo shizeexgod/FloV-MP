@@ -15,6 +15,7 @@ add_library(flovmp-client SHARED
     src/game.cpp
     src/ui.cpp
     src/image.cpp
+    src/http.cpp
     src/voice.cpp
     src/world.cpp
     res/client.rc
@@ -46,7 +47,7 @@ if (MSVC)
     # Статический CRT: у игрока может не быть нужного VC++ Redistributable.
     set_property(TARGET flovmp-client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
-target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm windowscodecs)
+target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm windowscodecs winhttp)
 
 set_target_properties(flovmp-client PROPERTIES
     OUTPUT_NAME "FloVMP"
@@ -67,6 +68,7 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
         src/common.cpp
         src/ui.cpp
         src/image.cpp
+        src/http.cpp
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_draw.cpp
         ${IMGUI_DIR}/imgui_tables.cpp
@@ -82,7 +84,7 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
         target_compile_options(flovmp-ui-preview PRIVATE /utf-8 /W3 /EHsc)
         set_property(TARGET flovmp-ui-preview PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
-    target_link_libraries(flovmp-ui-preview PRIVATE d3d11 dxgi shell32 ole32 version windowscodecs)
+    target_link_libraries(flovmp-ui-preview PRIVATE d3d11 dxgi shell32 ole32 version windowscodecs winhttp bcrypt)
     set_target_properties(flovmp-ui-preview PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"

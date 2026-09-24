@@ -121,6 +121,9 @@ namespace flov::ui
         std::string g_refusalReason;
         image::Texture g_logo, g_background;
         bool g_artLoaded = false;
+        // Пути, присланные сервером (файлы в кэше). Имеют приоритет
+        // над тем, что игрок положил себе в папку ui.
+        std::wstring g_serverBackground, g_serverLogo;
 
         // Окно игры.
         std::wstring g_title = L"FloV Multiplayer";
@@ -1354,14 +1357,22 @@ namespace flov::ui
         {
             if (g_artLoaded || !g_device) return;
             g_artLoaded = true;
+            image::Release(g_logo);
+            image::Release(g_background);
             const std::wstring dir = DataDir() + L"\\ui\\";
-            g_logo = image::LoadFile(g_device, dir + L"logo.png");
+            // Порядок поиска: картинка с сервера, затем файл в папке игрока,
+            // затем зашитый в клиент логотип. Сервер главнее потому, что
+            // это его оформление, а не настройка игрока.
+            if (!g_serverLogo.empty()) g_logo = image::LoadFile(g_device, g_serverLogo);
+            if (!g_logo) g_logo = image::LoadFile(g_device, dir + L"logo.png");
             if (!g_logo) g_logo = image::LoadResource(g_device, 102);
-            for (const wchar_t* name : { L"loading-background.jpg", L"loading-background.png", L"loading-background.jpeg" })
-            {
-                g_background = image::LoadFile(g_device, dir + name);
-                if (g_background) break;
-            }
+            if (!g_serverBackground.empty()) g_background = image::LoadFile(g_device, g_serverBackground);
+            if (!g_background)
+                for (const wchar_t* name : { L"loading-background.jpg", L"loading-background.png", L"loading-background.jpeg" })
+                {
+                    g_background = image::LoadFile(g_device, dir + name);
+                    if (g_background) break;
+                }
             Log(std::string("ui: загрузочный экран — логотип ") + (g_logo ? "есть" : "нет") +
                 ", фон " + (g_background ? "свой" : "по умолчанию"));
         }
@@ -2258,6 +2269,17 @@ namespace flov::ui
         std::lock_guard lock(g_mutex);
         g_tips = std::move(tips);
         g_loadingAccent = accent;
+    }
+
+    void SetLoadingArt(const std::wstring& backgroundPath, const std::wstring& logoPath)
+    {
+        std::lock_guard lock(g_mutex);
+        if (g_serverBackground == backgroundPath && g_serverLogo == logoPath) return;
+        g_serverBackground = backgroundPath;
+        g_serverLogo = logoPath;
+        // Старые текстуры освободит поток отрисовки: трогать устройство
+        // из игрового потока нельзя.
+        g_artLoaded = false;
     }
 
     void ShowRefusal(const std::string& reason)

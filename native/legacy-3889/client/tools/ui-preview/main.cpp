@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "common.h"
+#include "http.h"
 #include "ui.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -198,6 +199,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
     // Так снимок делает сама программа: чужие окна в кадр не попадают и фокус
     // у пользователя не отбирается.
     std::wstring shotPath, scene = L"hud";
+    std::wstring fetchUrl;
     {
         int count = 0;
         LPWSTR* argv = CommandLineToArgvW(commandLine, &count);
@@ -206,6 +208,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
             const std::wstring arg = argv[i];
             if (arg == L"--shot" && i + 1 < count) shotPath = argv[++i];
             else if (arg == L"--scene" && i + 1 < count) scene = argv[++i];
+            // --fetch <ссылка>: проверить скачивание фона с сервера тем же кодом,
+            // что работает в игре.
+            else if (arg == L"--fetch" && i + 1 < count) fetchUrl = argv[++i];
         }
         if (argv) LocalFree(argv);
     }
@@ -247,6 +252,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
     if (!headless) { ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd); }
 
     // Перехват клавиш Rockstar и переименование окна — только внутри игры.
+    if (!fetchUrl.empty())
+    {
+        const std::string url = flov::ToUtf8(fetchUrl);
+        const std::wstring dir = flov::DataDir() + L"\\ui\\cache";
+        CreateDirectoryW((flov::DataDir() + L"\\ui").c_str(), nullptr);
+        CreateDirectoryW(dir.c_str(), nullptr);
+        const std::wstring path = dir + L"\\" + flov::FromUtf8(flov::http::CacheName(url));
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES || flov::http::Download(url, path))
+            flov::ui::SetLoadingArt(path, L"");
+    }
+
     flov::ui::SetPreviewMode(true);
     flov::ui::Init();
     flov::ui::SetBrand("FloV:MP");
