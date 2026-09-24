@@ -187,15 +187,40 @@ def check_security_regressions(rep):
     # только внутри обработчика — то есть её уровень нельзя настроить файлом.
     reg = ROOT / "server/src/FloVMP.Core/Admin/AdminCommandRegistry.cs"
     starter = ROOT / "server/src/FloVMP.Starter/StarterResource.cs"
+    starter_dir = starter.parent
     if reg.exists() and starter.exists():
         registered = set(re.findall(r'Register\("([^"]+)"', reg.read_text(encoding="utf-8", errors="ignore")))
-        s_txt = starter.read_text(encoding="utf-8", errors="ignore")
+        # StarterResource — partial-класс. Команды могут жить не только в
+        # StarterResource.cs, но и в специализированном обработчике вроде
+        # StarterResource.AntiCheatLedger.cs. Проверка одного файла давала
+        # ложный блокер для реально работающих /ac и /acforgive.
+        main_txt = starter.read_text(encoding="utf-8", errors="ignore")
+        s_txt = "\n".join(
+            p.read_text(encoding="utf-8", errors="ignore")
+            for p in sorted(starter_dir.glob("StarterResource*.cs"))
+        )
         marker = "private void HandleCommand"
-        handled = set(re.findall(r'case "([a-z0-9_]+)":', s_txt[s_txt.find(marker):])) if marker in s_txt else set()
+        handled = set(re.findall(
+            r'case "([a-z0-9_]+)":',
+            main_txt[main_txt.find(marker):] if marker in main_txt else "",
+        ))
+        # Делегированные обработчики сначала отсеивают чужие команды таким
+        # guard-выражением: cmd is not ("one" or "two"). Эти литералы также
+        # являются полноценными обработчиками, если helper вызывается из
+        # центрального HandleCommand.
+        for helper in re.finditer(
+                r'private\s+bool\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{(.+?)\n    \}',
+                s_txt, re.S):
+            name, body = helper.group(1), helper.group(2)
+            if s_txt.count(name + "(") < 2:  # объявлен, но не вызван
+                continue
+            for guard in re.findall(r'cmd\s+is\s+not\s+\(([^)]+)\)', body):
+                handled.update(re.findall(r'"([a-z0-9_]+)"', guard))
         ghost = sorted(registered - handled)
         rep.add(PASS if not ghost else FAIL, "у каждой команды из реестра есть обработчик",
                 ", ".join(ghost) if ghost else "чисто")
-        leftover = sorted(set(re.findall(r'IsAdmin\(player, (\d+)\)', s_txt)))
+        command_text = main_txt[main_txt.find(marker):] if marker in main_txt else ""
+        leftover = sorted(set(re.findall(r'IsAdmin\(player, (\d+)\)', command_text)))
         rep.add(PASS if not leftover else WARN, "нет проверок уровня мимо реестра",
                 "" if not leftover else "уровни зашиты в обработчиках: " + ", ".join(leftover))
 
@@ -207,7 +232,7 @@ def check_security_regressions(rep):
             "help", "me", "do", "b", "ooc", "s", "shout", "w", "whisper",
             "pos", "coords", "clear", "cls", "claimowner", "engine", "lock",
         }
-        handled_cmds = set(re.findall(r'case "([a-z0-9_]+)":', s_txt[s_txt.find(marker):])) if marker in s_txt else set()
+        handled_cmds = handled
         open_to_all = sorted(handled_cmds - registered - PUBLIC_CHAT_COMMANDS)
         rep.add(PASS if not open_to_all else FAIL,
                 "нет админ-команд мимо реестра (иначе доступны всем)",
