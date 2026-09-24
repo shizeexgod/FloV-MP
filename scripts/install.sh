@@ -530,15 +530,15 @@ find_dotnet() {
   return 1
 }
 if DOTNET_DIR="$(find_dotnet)"; then
-  ok ".NET 8 Runtime: $DOTNET_DIR"
+  ok ".NET 10 Runtime: $DOTNET_DIR"
 else
-  info "Установка .NET 8 Runtime (официальный скрипт Microsoft)..."
+  info "Установка .NET 10 Runtime (официальный скрипт Microsoft)..."
   curl -fsSL --retry 3 https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh || die "не удалось скачать dotnet-install.sh"
-  bash /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir /usr/share/dotnet >/dev/null || die "не удалось установить .NET 8"
+  bash /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet >/dev/null || die "не удалось установить .NET 10"
   rm -f /tmp/dotnet-install.sh
   ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet 2>/dev/null || true
-  DOTNET_DIR="$(find_dotnet)" || die ".NET 8 установлен, но не найден — проверьте /usr/share/dotnet"
-  ok ".NET 8 Runtime: $DOTNET_DIR"
+  DOTNET_DIR="$(find_dotnet)" || die ".NET 10 установлен, но не найден — проверьте /usr/share/dotnet"
+  ok ".NET 10 Runtime: $DOTNET_DIR"
 fi
 
 # ---------------------------------------------------------------------

@@ -35,7 +35,7 @@ if ! has_sdk; then
     [ "$(id -u)" -eq 0 ] || { echo "Установка SDK требует root: sudo $0 --install-sdk" >&2; exit 1; }
     echo "==> Установка .NET SDK 8 в /usr/share/dotnet"
     curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-    bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet
+    bash /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet
     rm -f /tmp/dotnet-install.sh
     export PATH="/usr/share/dotnet:$PATH" DOTNET_ROOT=/usr/share/dotnet
   else

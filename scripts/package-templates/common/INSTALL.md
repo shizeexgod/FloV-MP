@@ -15,7 +15,7 @@
 | | Windows | Linux |
 |---|---|---|
 | Система | Windows 10/11 или Windows Server 2019+ (x64) | Ubuntu 22.04 / 24.04, Debian 12 |
-| .NET | [.NET 8 Runtime x64](https://dotnet.microsoft.com/download/dotnet/8.0) | ставится установщиком |
+| .NET | [.NET 10 Runtime x64](https://dotnet.microsoft.com/download/dotnet/10.0) | ставится установщиком |
 | База данных | необязательна (MariaDB — по желанию) | MariaDB ставится установщиком |
 | Память / диск | от 4 ГБ / 2 ГБ | от 4 ГБ / 2 ГБ |
 | Интернет | нужен: сервер раз в 5 минут подтверждает лицензию | то же |
@@ -118,7 +118,7 @@ cd flovmp-server-*/
 sudo ./install.sh --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX --owner-sc <ваш SocialClubId>
 ```
 
-Установщик ставит .NET 8 и MariaDB, создаёт базу со случайным паролем,
+Установщик ставит .NET 10 и MariaDB, создаёт базу со случайным паролем,
 копирует сервер в `/opt/flovmp`, создаёт службы `flovmp` и `flovmp-voice`,
 открывает порты и запускает сервер. Состояние лицензии:
 

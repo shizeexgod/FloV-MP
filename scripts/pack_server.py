@@ -42,6 +42,8 @@ except Exception:
     pass
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Рантайм, под который собран сервер (server/Directory.Build.props).
+DOTNET_VERSION = "10.0.0"
 TEMPLATES = os.path.join(REPO, "scripts", "package-templates")
 
 # Файлы клиента: в пакет не попадают никогда, обновление их не трогает.
@@ -64,6 +66,31 @@ FORBIDDEN_IN_PACKAGE = [
     "config/flovmp.env", "server/server.toml", "voice/voice.toml",
     "server/config/admins.json", "config/admins.json", "license.flv", "license.lease",
 ]
+
+
+def allow_newer_dotnet(path):
+    """Разрешить хосту alt:V старший рантайм .NET.
+
+    AltV.Net.Host.dll собран под net8.0 и своим файлом настроек требует
+    ровно Microsoft.NETCore.App 8. Наши сборки с 1.0.7 идут под net10.0, и на
+    восьмёрке хост их просто не загрузит. Пересборка хоста при этом не
+    нужна: проверено живым запуском 24.09.2026 — сборка под net8.0
+    спокойно исполняется на 10.0.10, ресурсы грузятся, сервер стартует.
+
+    Файл правим у себя в пакете, а не в бэкапе движка: бэкап — внешняя
+    зависимость, его нельзя менять молча.
+    """
+    with io.open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    options = data.setdefault("runtimeOptions", {})
+    framework = options.setdefault("framework", {})
+    framework["name"] = "Microsoft.NETCore.App"
+    framework["version"] = DOTNET_VERSION
+    # LatestMajor — чтобы следующий major тоже подошёл без правки здесь.
+    options["rollForward"] = "LatestMajor"
+    with io.open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write(chr(10))
 
 def load_private_markers():
     """Частный брендинг и идентификаторы владельца — из scripts/private-markers.txt
@@ -219,7 +246,7 @@ def publish_dotnet(publish_root, skip_build, with_connector, with_host):
         run(["dotnet", "publish", "launcher/src/FloVMP.Connect/FloVMP.Connect.csproj",
              "-c", "Release", "-o", connector, "--nologo", "-v", "q"])
     if with_host:
-        # Один exe без распаковки: .NET 8 и так нужен серверу C#.
+        # Один exe без распаковки: .NET 10 и так нужен серверу C#.
         log("[build] FloVMP.ServerHost (FloVMP-Server.exe)")
         run(["dotnet", "publish", "server/src/FloVMP.ServerHost/FloVMP.ServerHost.csproj",
              "-c", "Release", "-r", "win-x64", "--self-contained", "false",
@@ -271,6 +298,7 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
     copy(os.path.join(altv, "coreclr-module", br, plat, "AltV.Net.Host.dll"), S("server", "FloV.Net.Host.dll"))
     copy(os.path.join(altv, "coreclr-module", br, plat, "AltV.Net.Host.runtimeconfig.json"),
          S("server", "FloV.Net.Host.runtimeconfig.json"))
+    allow_newer_dotnet(S("server", "FloV.Net.Host.runtimeconfig.json"))
     if target_os == "linux":
         copy(os.path.join(altv, "coreclr-module", br, plat, "modules", "libcsharp-module.so"),
              S("server", "modules", "libcsharp-module.so"))

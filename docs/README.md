@@ -34,7 +34,7 @@
 
 | Файл | О чём |
 |---|---|
-| [engine/engine-recon.md](engine/engine-recon.md) | Разведка бинарников alt:V, сборка рантайма, требование .NET 8 |
+| [engine/engine-recon.md](engine/engine-recon.md) | Разведка бинарников alt:V, сборка рантайма, требование .NET 10 |
 | [engine/server-config.md](engine/server-config.md) | Формат `server.toml` и `resource.toml`, запуск с `disableDependencyDownload = true` |
 | [engine/telemetry-sentry.md](engine/telemetry-sentry.md) | Отключение встроенной Sentry-телеметрии сервера (нулевой оверхед) |
 | [engine/core-hardening.md](engine/core-hardening.md) | Харденинг ядра: защита от DoS (64KB лимит), IP rate limiting (30/10s), MaxInFlight (64), устранение утечек памяти в античите |

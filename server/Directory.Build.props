@@ -2,12 +2,20 @@
 
   <!--
     Общие настройки для всех C#-проектов сервера FloV:MP.
-    Целевой фреймворк — net8.0: под него собран coreclr-module alt:V
-    (AltV.Net.Host.runtimeconfig.json → Microsoft.NETCore.App 8.0.0).
-    Не поднимать до net9/net10 без пересборки хоста alt:V.
+
+    Целевой фреймворк — net10.0 (переведено 24.09.2026).
+
+    Здесь раньше стояло net8.0 с пометкой «не поднимать без пересборки
+    хоста alt:V». Проверено живым запуском: пересборка не нужна.
+    AltV.Net.Host.dll собран под net8.0, но спокойно исполняется на более
+    новом рантайме — достаточно разрешить ему старший major в
+    FloV.Net.Host.runtimeconfig.json. Это делает pack_server.py при упаковке.
+
+    Если меняете версию здесь — меняйте и там, иначе хост попытается
+    загрузить наши сборки на старом рантайме и ресурс не загрузится.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

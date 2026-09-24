@@ -5,7 +5,7 @@
     Результат попадает в ..\server\resources\gamemode и подключается сервером.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Gamemode</AssemblyName>

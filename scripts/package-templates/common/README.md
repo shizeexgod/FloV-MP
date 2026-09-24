@@ -18,7 +18,7 @@ sudo ./install.sh --owner-sc <ваш SocialClubId>
 Установщик сам:
 
 1. проверяет целостность пакета;
-2. ставит зависимости, .NET 8 и MariaDB;
+2. ставит зависимости, .NET 10 и MariaDB;
 3. копирует сервер в `/opt/flovmp`;
 4. создаёт базу и отдельного пользователя со случайным паролем;
 5. настраивает голосовой чат;
@@ -41,7 +41,7 @@ sudo ./install.sh --owner-sc <ваш SocialClubId>
 
 ## Запуск на Windows
 
-Нужен [.NET 8 Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/8.0).
+Нужен [.NET 10 Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 1. Распакуйте `flovmp-server-*-windows.zip` во временную папку.
 2. Запустите `install.cmd` (или `powershell -ExecutionPolicy Bypass -File install.ps1 -InstallDir C:\FloVMP`).

@@ -18,7 +18,7 @@ if [ ! -f "$ROOT/server/server.toml" ]; then
   exit 1
 fi
 
-# .NET 8 нужен серверным ресурсам на C#. Ищем там, куда его кладут и
+# .NET 10 нужен серверным ресурсам на C#. Ищем там, куда его кладут и
 # официальный скрипт Microsoft, и пакеты дистрибутивов.
 DOTNET_FOUND=""
 for d in "${DOTNET_ROOT:-}" /usr/share/dotnet /usr/lib/dotnet /opt/dotnet /usr/local/share/dotnet; do
@@ -29,7 +29,7 @@ for d in "${DOTNET_ROOT:-}" /usr/share/dotnet /usr/lib/dotnet /opt/dotnet /usr/l
   fi
 done
 if [ -z "$DOTNET_FOUND" ]; then
-  echo "[FloV:MP] Не найден .NET 8 Runtime. Установите его: sudo ./install.sh (или вручную dotnet-runtime-8.0)." >&2
+  echo "[FloV:MP] Не найден .NET 10 Runtime. Установите его: sudo ./install.sh (или вручную dotnet-runtime-10.0)." >&2
   exit 1
 fi
 export DOTNET_ROOT="$DOTNET_FOUND"

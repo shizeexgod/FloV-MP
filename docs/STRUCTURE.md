@@ -16,7 +16,7 @@ RP-Project/
 │   ├── modules/               # Нативные модули движка (csharp-module, js-module)
 │   ├── data/                  # Бинарные кэши моделей (vehicles, peds, weapons, clothes)
 │   ├── resources/
-│   │   └── flovmp-core/       # Скомпилированный C# Core/Gamemode (.NET 8)
+│   │   └── flovmp-core/       # Скомпилированный C# Core/Gamemode (.NET 10)
 │   │       ├── FloVMP.Core.dll
 │   │       ├── FloVMP.Gamemode.dll
 │   │       └── resource.toml
@@ -143,7 +143,7 @@ grace; после отзыва, истечения lease или grace вход �
 ## 7. Расширение логики и разработка RP-геймплея
 
 Разработчик проекта может создавать собственные C# сборки и подключать их к FloV:MP:
-1. Создать проект C# Class Library (.NET 8).
+1. Создать проект C# Class Library (.NET 10).
 2. Подключить зависимость от `FloVMP.Core.dll` (из `server/resources/flovmp-core/`).
 3. Зарегистрировать собственные подсистемы через интерфейсы `FloVMP.Core`:
    - Наследование от `FloVMP.Core.Systems`

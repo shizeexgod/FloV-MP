@@ -8,7 +8,7 @@
 # authority.pem (закрытый ключ подписи лицензий — только при первой установке),
 # get.sh, get.ps1 (загрузчики для покупателей).
 #
-# Ставит: .NET 8 Runtime (если нет), базу flovmp_licensing и пользователя в
+# Ставит: .NET 10 Runtime (если нет), базу flovmp_licensing и пользователя в
 # MariaDB (случайный пароль), /etc/flovmp-license/license.env (600),
 # /opt/flovmp-license, службу flovmp-license (127.0.0.1:7800, пользователь
 # flovmp-license), в nginx — внутреннюю папку для отдачи пакетов.
@@ -24,11 +24,11 @@ DBUSER=flovmp_license
 [ "$(id -u)" -eq 0 ] || { echo "запустите через sudo"; exit 1; }
 [ -f "$SRC/flovmp-license/flovmp-license.dll" ] || { echo "нет $SRC/flovmp-license/flovmp-license.dll"; exit 1; }
 
-echo "==> .NET 8"
+echo "==> .NET 10"
 DOTNET="$(command -v dotnet || true)"
 if [ -z "$DOTNET" ] || ! "$DOTNET" --list-runtimes 2>/dev/null | grep -q "Microsoft.NETCore.App 8\."; then
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-  bash /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir /usr/share/dotnet
+  bash /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet
   ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet
   DOTNET=/usr/bin/dotnet
 fi
