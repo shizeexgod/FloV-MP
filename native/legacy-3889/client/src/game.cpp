@@ -1108,6 +1108,7 @@ namespace flov::game
                           const std::string& typed = "")
         {
             ResetSession();
+            ui::HideRefusal();
             g_reconnectLeft = 0;   // ручное подключение отменяет автопопытки
             g_host = host;
             g_port = port;
@@ -1490,6 +1491,9 @@ namespace flov::game
             else if (type == "KICK" || type == "REJECT")
             {
                 Chat("{ef4444}[FloV:MP] " + at(1));
+                // До входа в игру чат выключен, и игрок просто не увидел бы
+                // причину: бан, лицензия, нет места. Показываем экран отказа.
+                ui::ShowRefusal(at(1));
             }
             else if (type == "NET_FAILED" || type == "NET_CLOSED")
             {
@@ -1518,7 +1522,11 @@ namespace flov::game
                     ui::Notify("Связь с сервером потеряна. Переподключение… (1 из " +
                                std::to_string(kReconnectTries) + ")", 4000);
                 }
-                else ui::Notify(at(1) + "  (F9 — подключиться снова)", 9000);
+                else if (!at(1).empty() && at(1).find("выход через меню") == std::string::npos)
+                {
+                    // Собственный выход — не отказ, экран на него не показываем.
+                    ui::ShowRefusal(at(1));
+                }
             }
             else if (type == "CFG")
             {

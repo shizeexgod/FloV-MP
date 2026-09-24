@@ -115,6 +115,10 @@ namespace flov::ui
         // Картинки загрузочного экрана. Логотип зашит в клиент, фон и свой
         // логотип владелец сервера кладёт в %LOCALAPPDATA%\FloVMP\ui.
         ImFont* g_load = nullptr;   // Inter, только загрузочный экран
+        ImFont* g_loadBig = nullptr;   // он же крупно — причина отказа
+        bool g_refusal = false;
+        ULONGLONG g_refusalAt = 0;
+        std::string g_refusalReason;
         image::Texture g_logo, g_background;
         bool g_artLoaded = false;
 
@@ -1384,22 +1388,14 @@ namespace flov::ui
             dl->AddImage((ImTextureID)texture.view, ImVec2(0, 0), ImVec2(w, h), uv0, uv1, Rgba(255, 255, 255, alpha));
         }
 
-        void DrawLoading(ImDrawList* dl, float w, float h)
+        /// Подложка экранов до спавна: картинка владельца сервера и
+        /// затемнение снизу. Общая для загрузки и отказа — игрок не должен
+        /// видеть два разных оформления подряд.
+        void DrawBackdrop(ImDrawList* dl, float w, float h, float fade)
         {
-            const auto now = GetTickCount64();
-            float fade = 1.f;
-            if (!g_loading)
-            {
-                if (!g_loadingHiddenAt || now - g_loadingHiddenAt > 400) return;
-                fade = 1.f - (now - g_loadingHiddenAt) / 400.f;
-            }
-            else fade = std::min(1.f, (now - g_loadingShownAt) / 150.f);
             const float s = g_s;
             const uint32_t acc = g_loadingAccent;
             EnsureLoadingArt();
-
-            // Фон: картинка владельца сервера во весь экран, иначе тёмная
-            // подложка со свечением акцента — чёрного экрана игрок не видит никогда.
             dl->AddRectFilled(ImVec2(0, 0), ImVec2(w, h), Rgba(9, 9, 11, fade));
             if (g_background) DrawCover(dl, g_background, w, h, fade);
             else
@@ -1415,48 +1411,123 @@ namespace flov::ui
                                             Rgb(acc, 0.f), Rgb(acc, 0.02f * fade));
             }
 
-            // Нижний край фотографии плавно уходит в темноту: сначала
-            // длинный мягкий переход, потом короткий резкий, и внизу — ровная
-            // тёмная полоса, на которой живут логотип и полоса прогресса.
             // Нижний край фотографии уходит в темноту, как в лоадерах RAGE:MP.
             //
             // Переход рисуется многими узкими полосами со сглаженной
             // кривой (smootherstep): у неё нулевой наклон на обоих концах, поэтому
             // ни в начале, ни в конце затемнения не видно границы. Полос
             // много и каждая тонкая — изломы между ними не читаются глазом.
+            const float top = h * 0.42f;
+            const float solid = h * 0.88f;          // ниже — ровный тёмный цвет
+            const int bands = 96;
+            // Без фотографии гасить нечего: полное затемнение съело бы
+            // подсветку акцентом и экран стал бы ровно чёрным.
+            const float depth = g_background ? 0.985f : 0.55f;
+            auto curve = [](float t)
             {
-                const float top = h * 0.42f;
-                const float solid = h * 0.88f;          // ниже — ровный тёмный цвет
-                const int bands = 96;
-                // Без фотографии гасить нечего: полное затемнение съело бы
-                // подсветку акцентом и экран стал бы ровно чёрным.
-                const float depth = g_background ? 0.985f : 0.55f;
-                auto curve = [](float t)
-                {
-                    const float v = std::clamp(t, 0.f, 1.f);
-                    return v * v * v * (v * (v * 6.f - 15.f) + 10.f);
-                };
-                for (int i = 0; i < bands; ++i)
-                {
-                    const float y0 = top + (solid - top) * (i / (float)bands);
-                    const float y1 = top + (solid - top) * ((i + 1) / (float)bands);
-                    const float a0 = curve(i / (float)bands) * depth;
-                    const float a1 = curve((i + 1) / (float)bands) * depth;
-                    // Полосы идут встык и не накладываются, поэтому каждая красит
-                    // свою полную плотность, а не приращение к предыдущей.
-                    // Без нахлёста по высоте: лишний пиксель снизу закрашивался дважды,
-                    // и на каждой границе появлялась тёмная полоска.
-                    dl->AddRectFilledMultiColor(ImVec2(0, y0), ImVec2(w, y1),
-                                                Rgba(7, 7, 9, a0 * fade), Rgba(7, 7, 9, a0 * fade),
-                                                Rgba(7, 7, 9, a1 * fade), Rgba(7, 7, 9, a1 * fade));
-                }
-                dl->AddRectFilled(ImVec2(0, solid), ImVec2(w, h), Rgba(7, 7, 9, depth * fade));
+                const float v = std::clamp(t, 0.f, 1.f);
+                return v * v * v * (v * (v * 6.f - 15.f) + 10.f);
+            };
+            for (int i = 0; i < bands; ++i)
+            {
+                const float y0 = top + (solid - top) * (i / (float)bands);
+                const float y1 = top + (solid - top) * ((i + 1) / (float)bands);
+                const float a0 = curve(i / (float)bands) * depth;
+                const float a1 = curve((i + 1) / (float)bands) * depth;
+                // Полосы идут встык и не накладываются, поэтому каждая красит
+                // свою полную плотность, а не приращение к предыдущей. Без нахлёста
+                // по высоте: лишний пиксель закрашивался дважды, и на каждой
+                // границе появлялась тёмная полоска.
+                dl->AddRectFilledMultiColor(ImVec2(0, y0), ImVec2(w, y1),
+                                            Rgba(7, 7, 9, a0 * fade), Rgba(7, 7, 9, a0 * fade),
+                                            Rgba(7, 7, 9, a1 * fade), Rgba(7, 7, 9, a1 * fade));
             }
+            dl->AddRectFilled(ImVec2(0, solid), ImVec2(w, h), Rgba(7, 7, 9, depth * fade));
+
+            // Логотип слева снизу — одинаково на обоих экранах.
+            if (g_logo)
+            {
+                const float margin = std::min(72 * s, w * 0.07f);
+                const float side = std::min(104 * s, h * 0.14f);
+                const ImVec2 p0(margin, h - margin - side);
+                dl->AddImage((ImTextureID)g_logo.view, p0, ImVec2(p0.x + side, p0.y + side),
+                             ImVec2(0, 0), ImVec2(1, 1), Rgba(255, 255, 255, fade));
+            }
+        }
+
+        /// Экран отказа: та же подложка, что и при загрузке, плюс причина
+        /// по центру и подсказка, как попробовать снова.
+        void DrawRefusal(ImDrawList* dl, float w, float h)
+        {
+            if (!g_refusal) return;
+            const auto now = GetTickCount64();
+            const float fade = std::min(1.f, (now - g_refusalAt) / 220.f);
+            const float s = g_s;
+            const uint32_t acc = g_loadingAccent;
+
+            DrawBackdrop(dl, w, h, fade);
+            // Здесь ничего не грузится, и картинка не должна спорить с текстом.
+            dl->AddRectFilled(ImVec2(0, 0), ImVec2(w, h), Rgba(7, 7, 9, 0.86f * fade));
+
+            ImFont* font = g_load ? g_load : g_text;
+            ImFont* big = g_loadBig ? g_loadBig : font;
+            // Блок выровнен по левому краю туда же, где стоит логотип:
+            // центрованный заголовок при левом тексте выглядит случайно.
+            const float margin = std::min(72 * s, w * 0.07f);
+            const float colW = std::min(820 * s, w - margin * 2);
+            const float lineH = Px(big) * 1.34f;
+            const float reasonH = DrawWrapped(dl, big, ImVec2(margin, 0), 0, colW, lineH,
+                                              g_refusalReason, 0xF4F4F5, 0.f, false, true);
+            const float blockH = 13 * s + 26 * s + reasonH + 26 * s + 1 + 24 * s + Px(font);
+            float y = (h - blockH) / 2;
+
+            // Ключевая строка вразрядку — как на загрузочном экране.
+            {
+                const std::string kicker = "CONNECTION REFUSED";
+                const float size = 13 * s, track = 2.4f * s;
+                float cx = margin;
+                for (char c : kicker)
+                {
+                    const std::string ch(1, c);
+                    Text(dl, font, ImVec2(cx, y), Rgb(acc, fade), ch, size);
+                    cx += Measure(font, ch, size).x + track;
+                }
+                y += size + 26 * s;
+            }
+
+            // Причина от сервера: текст владельца, показываем как есть.
+            DrawWrapped(dl, big, ImVec2(margin, y), 0, colW, lineH, g_refusalReason, 0xF4F4F5, fade, true, false);
+            y += reasonH + 26 * s;
+
+            dl->AddLine(ImVec2(margin, y), ImVec2(margin + 120 * s, y), Rgba(255, 255, 255, 0.14f * fade));
+            y += 24 * s;
+
+            // Подсказка: клавиша и действие.
+            {
+                const float kbdW = Kbd(dl, ImVec2(margin, y), "F9", fade);
+                Text(dl, font, ImVec2(margin + kbdW + 10 * s, y + 2 * s),
+                     Rgba(255, 255, 255, 0.55f * fade), "to try again", 14 * s);
+            }
+        }
+
+        void DrawLoading(ImDrawList* dl, float w, float h)
+        {
+            const auto now = GetTickCount64();
+            float fade = 1.f;
+            if (!g_loading)
+            {
+                if (!g_loadingHiddenAt || now - g_loadingHiddenAt > 400) return;
+                fade = 1.f - (now - g_loadingHiddenAt) / 400.f;
+            }
+            else fade = std::min(1.f, (now - g_loadingShownAt) / 150.f);
+            const float s = g_s;
+            const uint32_t acc = g_loadingAccent;
+
+            DrawBackdrop(dl, w, h, fade);
 
             const float margin = std::min(72 * s, w * 0.07f);
             const float barH = 6 * s;
-            const float logoBottom = h - margin;
-            const float barBottom = logoBottom;
+            const float barBottom = h - margin;
             const float barTop = barBottom - barH;
             const float radius = barH / 2;
 
@@ -1537,14 +1608,6 @@ namespace flov::ui
                 }
             }
 
-            // --- слева снизу: только логотип ----------------------------------------
-            if (g_logo)
-            {
-                const float side = std::min(104 * s, h * 0.14f);
-                const ImVec2 p0(margin, logoBottom - side);
-                dl->AddImage((ImTextureID)g_logo.view, p0, ImVec2(p0.x + side, p0.y + side),
-                             ImVec2(0, 0), ImVec2(1, 1), Rgba(255, 255, 255, fade));
-            }
         }
 
         // --- прочее: водяной знак, netgraph, микрофон, уведомления, окно F9 ----------------
@@ -1695,6 +1758,17 @@ namespace flov::ui
             g_s = std::max(0.6f, h / 1080.f);
             std::lock_guard lock(g_mutex);
             g_click = ImVec2(g_clickN.x * w, g_clickN.y * h);
+            if (g_refusal)
+            {
+                DrawRefusal(dl, w, h);
+                // Окно F9 рисуется внутри DrawHud. Без этого вызова игрок нажимал
+                // бы F9, окно открывалось и оставалось невидимым — выйти с экрана
+                // отказа было бы нечем.
+                DrawHud(dl, w, h);
+                g_clickPending = false;
+                g_wheel = 0;
+                return;
+            }
             if (g_loading || g_loadingHiddenAt)
             {
                 DrawLoading(dl, w, h);
@@ -1839,6 +1913,7 @@ namespace flov::ui
             // передаётся только тогда, когда своего файла нет.
             const bool hasOwnFont = FileExists(ownFont);
             g_load = LoadFont({ ownFont.c_str() }, std::round(18.f * s), false, hasOwnFont ? 0 : 116, 0);
+            g_loadBig = LoadFont({ ownFont.c_str() }, std::round(28.f * s), false, hasOwnFont ? 0 : 116, 0);
 
             ImGui_ImplDX11_Init(g_device, g_context);
             QueryPerformanceFrequency(&g_freq);
@@ -2183,6 +2258,30 @@ namespace flov::ui
         std::lock_guard lock(g_mutex);
         g_tips = std::move(tips);
         g_loadingAccent = accent;
+    }
+
+    void ShowRefusal(const std::string& reason)
+    {
+        std::lock_guard lock(g_mutex);
+        // Загрузка больше не идёт: показывать полосу поверх отказа нечестно.
+        g_loading = false;
+        g_loadingHiddenAt = 0;
+        g_refusal = true;
+        g_refusalAt = GetTickCount64();
+        g_refusalReason = reason.empty() ? std::string("Сервер отклонил подключение") : reason.substr(0, 400);
+    }
+
+    void HideRefusal()
+    {
+        std::lock_guard lock(g_mutex);
+        g_refusal = false;
+        g_refusalReason.clear();
+    }
+
+    bool RefusalVisible()
+    {
+        std::lock_guard lock(g_mutex);
+        return g_refusal;
     }
 
     // --- окно игры ---------------------------------------------------------------------------------

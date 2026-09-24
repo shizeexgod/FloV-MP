@@ -9,6 +9,7 @@
 // Это средство разработки. В поставку клиента оно не входит.
 //
 //   F1 — игровой HUD          F2 — загрузочный экран
+//   --scene refused | banned — экран отказа
 //   F3 — меню Esc             F4 — уведомление
 //   T  — чат                  F8 — консоль
 //   Esc — выйти (когда ничего не открыто)
@@ -276,6 +277,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         if (scene == L"loading") { flov::ui::ShowLoading(""); flov::ui::LoadingStep("Loading the surroundings", 62.f); }
         else if (scene == L"menu") ShowMenu();
         else if (scene == L"connect") flov::ui::OpenConnectDialog("188.127.229.224:7798", "Дмитрий_Соколов");
+        else if (scene == L"refused") flov::ui::ShowRefusal("[Лицензия] Срок действия лицензии сервера истёк. Обратитесь к владельцу проекта.");
+        else if (scene == L"banned") flov::ui::ShowRefusal("Вы заблокированы на этом сервере до 01.10.2026. Причина: использование стороннего программного обеспечения.");
     }
 
     int frame = 0;
