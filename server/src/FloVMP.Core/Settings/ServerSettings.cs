@@ -36,6 +36,14 @@ public sealed class ServerSettings
         new("world.weather", Kind.Text, "", false, "Мир", "погода при старте: EXTRASUNNY, CLEAR, CLOUDS, RAIN... Пусто — у каждого своя"),
         new("world.time", Kind.Text, "", false, "Мир", "время при старте, ЧЧ:ММ. Пусто — у каждого своё"),
         new("world.freeze_time", Kind.Bool, "off", true, "Мир", "остановить часы (время не идёт)"),
+        new("world.mp_map", Kind.Bool, "off", true, "Мир",
+            "карта сетевой игры: интерьеры квартир, офисов и дополнений (нужна большинству RP-интерьеров)"),
+        new("world.ipls", Kind.Text, "", false, "Мир",
+            "части карты (IPL), которые загрузить всем: имена через запятую, например hei_yacht_heist, TrevorsTrailerTidy"),
+        new("world.ipls_remove", Kind.Text, "", false, "Мир",
+            "части карты (IPL), которые убрать у всех: имена через запятую"),
+        new("world.name", Kind.Text, "main", false, "Мир",
+            "имя мира в базе (машины и игроки): несколько серверов на одной базе с разными именами не видят данных друг друга"),
 
         // --- транспорт ---
         new("vehicles.power", Kind.Float, "1", true, "Транспорт",
@@ -45,7 +53,88 @@ public sealed class ServerSettings
         new("vehicles.max_registered", Kind.Int, "1000", false, "Транспорт",
             "потолок машин в реестре сервера (свои, /car и трафик, в который сели игроки)", 1, 100000),
         new("vehicles.abandoned_ttl_sec", Kind.Int, "300", false, "Транспорт",
-            "через сколько секунд убирать пустую несохраняемую машину; 0 — никогда", 0, 86400),
+            "через сколько секунд убирать машину трафика, в которую садились: пустую и без игроков рядом; 0 — никогда. Машины /car и геймода сами не исчезают", 0, 86400),
+        new("vehicles.register_traffic", Kind.Bool, "on", false, "Транспорт",
+            "брать в реестр машину трафика, в которую сел игрок (off — ездить можно только на машинах сервера и геймода)"),
+        new("vehicles.register_cooldown_sec", Kind.Float, "2", false, "Транспорт",
+            "не чаще одной регистрации машины трафика на игрока за столько секунд", 0, 60),
+        new("vehicles.enter_distance", Kind.Float, "10", false, "Транспорт",
+            "дальше скольких метров от машины сервер не сажает в неё (защита от «телепорта в машину»)", 2, 50),
+        new("vehicles.plate_format", Kind.Text, "99AAA999", false, "Транспорт",
+            "шаблон случайного номера: 9 — цифра, A — буква, остальное как есть (латиница, цифры, пробел), до 8 символов"),
+        new("vehicles.persistence", Kind.Bool, "on", false, "Транспорт",
+            "сохранять машины, помеченные «сохраняемая», и возвращать их после перезапуска (off — сохраняет ваш геймод сам)"),
+        new("vehicles.save_interval_sec", Kind.Int, "30", false, "Транспорт",
+            "как часто записывать изменившиеся сохраняемые машины, секунд (при парковке — сразу)", 5, 3600),
+        new("vehicles.restore_damage", Kind.Bool, "on", false, "Транспорт",
+            "после перезапуска машина с теми же повреждениями (off — все встают целыми)"),
+
+        // --- Метрики и оповещения ---
+        new("metrics.log_interval_sec", Kind.Int, "60", false, "Метрики",
+            "как часто писать метрики в журнал и flovmp-data/metrics.json, секунд; 0 — не писать", 0, 3600),
+        new("metrics.http_port", Kind.Int, "0", false, "Метрики",
+            "порт страницы метрик (/metrics — JSON, /metrics.prom — Prometheus); 0 — выключена", 0, 65535),
+        new("metrics.http_bind", Kind.Text, "127.0.0.1", false, "Метрики",
+            "адрес страницы метрик: 127.0.0.1 — только с этой машины, 0.0.0.0 — снаружи (только с metrics.token)"),
+        new("metrics.token", Kind.Text, "", false, "Метрики",
+            "токен страницы метрик: ?token=… или заголовок Authorization: Bearer …"),
+        new("alerts.webhook_url", Kind.Text, "", false, "Метрики",
+            "куда слать оповещения: webhook Discord, Slack, Mattermost или свой; пусто — только журнал и администраторы"),
+        new("alerts.admins_chat", Kind.Bool, "on", false, "Метрики", "дублировать оповещения администраторам в игре"),
+        new("alerts.tick_ms", Kind.Float, "250", false, "Метрики",
+            "оповестить, если тик длился дольше, мс (рывок у всех игроков); 0 — не проверять", 0, 60000),
+        new("alerts.min_tick_rate", Kind.Float, "0", false, "Метрики",
+            "оповестить, если при игроках тиков в секунду меньше; 0 — не проверять", 0, 10000),
+        new("alerts.errors_per_window", Kind.Int, "10", false, "Метрики",
+            "оповестить, если ошибок за окно метрик больше; 0 — не проверять", 0, 100000),
+        new("alerts.memory_mb", Kind.Int, "0", false, "Метрики", "оповестить, если процесс занял больше, МБ; 0 — не проверять", 0, 1000000),
+        new("alerts.hang_sec", Kind.Int, "30", false, "Метрики",
+            "оповестить, если главный поток сервера не отвечает столько секунд (зависание); 0 — не проверять", 0, 3600),
+        new("alerts.cooldown_min", Kind.Int, "10", false, "Метрики", "не повторять одно и то же оповещение чаще, минут", 1, 1440),
+
+        // --- Сохранение игрока ---
+        new("players.persistence", Kind.Bool, "on", false, "Игроки",
+            "сохранять игроков и восстанавливать при входе (off — всё делает ваш геймод)"),
+        new("players.save_interval_sec", Kind.Int, "60", false, "Игроки",
+            "как часто сохранять игроков в игре, секунд (при выходе и остановке сервера — всегда)", 10, 3600),
+        new("players.restore_position", Kind.Bool, "on", false, "Игроки",
+            "появляться там, где вышел (off — точка появления; нужно, если у вас выбор персонажа)"),
+        new("players.restore_health", Kind.Bool, "on", false, "Игроки", "восстанавливать здоровье и броню (вышедший мёртвым появляется целым)"),
+        new("players.restore_model", Kind.Bool, "on", false, "Игроки", "восстанавливать модель персонажа"),
+        new("players.restore_weapons", Kind.Bool, "off", false, "Игроки",
+            "возвращать оружие, выданное сервером. Патроны — выдано минус попадания: промахи сервер не видит, поэтому перезаход возвращает отстрелянное мимо. Включайте, если патроны не ценность экономики"),
+        new("players.restore_dimension", Kind.Bool, "off", false, "Игроки",
+            "возвращать в то же измерение (обычно измерения временные — квартиры, миссии)"),
+        new("players.data", Kind.Bool, "on", false, "Игроки",
+            "хранилище «ключ → значение» для геймода (инвентарь, деньги) — flovmp:player:data:*"),
+
+        // --- Античит (вторая линия) ---
+        new("anticheat.notify_score", Kind.Float, "50", false, "Античит",
+            "счёт подозрений, при котором администраторам в чат уходит предупреждение; 0 — не предупреждать", 0, 100000),
+        new("anticheat.kick_score", Kind.Float, "0", false, "Античит",
+            "счёт, при котором игрока отключает; 0 — никогда (по умолчанию решает администратор или ваш геймод)", 0, 100000),
+        new("anticheat.decay_per_minute", Kind.Float, "5", false, "Античит",
+            "сколько очков подозрений тает за минуту: у честного игрока с лагами счёт не копится", 0, 10000),
+        new("anticheat.weight_movement", Kind.Float, "10", false, "Античит", "вес: телепорт, скорость, полёт", 0, 10000),
+        new("anticheat.weight_hit", Kind.Float, "5", false, "Античит", "вес: отклонённое попадание (дальность, частота, чужое оружие)", 0, 10000),
+        new("anticheat.weight_weapon", Kind.Float, "25", false, "Античит", "вес: запрещённое или невыданное оружие в руках", 0, 10000),
+        new("anticheat.weight_ammo", Kind.Float, "10", false, "Античит", "вес: попаданий больше, чем выдано патронов", 0, 10000),
+        new("anticheat.weight_timescale", Kind.Float, "30", false, "Античит", "вес: часы игры разогнаны (speedhack)", 0, 10000),
+        new("anticheat.weight_vehicle", Kind.Float, "10", false, "Античит", "вес: машина (чужой VSYNC, физика, запрещённая модель)", 0, 10000),
+        new("anticheat.weight_model", Kind.Float, "25", false, "Античит", "вес: модель персонажа не из разрешённых", 0, 10000),
+        new("anticheat.weapon_blacklist", Kind.Text,
+            "weapon_minigun, weapon_rpg, weapon_hominglauncher, weapon_grenadelauncher, weapon_railgun, weapon_rayminigun, weapon_raypistol, weapon_emplauncher",
+            false, "Античит", "оружие, которого не должно быть ни у кого: имена через запятую (пусто — без списка)"),
+        new("anticheat.issued_weapons_only", Kind.Bool, "off", false, "Античит",
+            "оружие только от сервера: всё, что не выдано командой или геймодом, — подозрение"),
+        new("anticheat.ammo_accounting", Kind.Bool, "on", false, "Античит",
+            "сверять попадания с выданными сервером патронами (оружие, выданное с 0 патронов, не считается)"),
+        new("anticheat.ped_whitelist", Kind.Text, "", false, "Античит",
+            "модели персонажа, которые можно носить, через запятую; пусто — любые (spawn.model и выданные сервером можно всегда)"),
+        new("anticheat.vehicle_blacklist", Kind.Text, "rhino, khanjali, lazer, hydra, oppressor, oppressor2, deluxo", false, "Античит",
+            "машины, которые не берутся в реестр как «трафик» (такие не ездят по улицам — значит, созданы читом); сервер и геймод создавать их могут"),
+        new("anticheat.timescale_ratio", Kind.Float, "1.25", false, "Античит",
+            "во сколько раз часы игры могут обгонять сервер, прежде чем это подозрение (speedhack)", 1.05, 10),
 
         // --- Появление -------------------------------------------------------------
         new("spawn.points", Kind.Text, "198.8, -935.6, 30.7, 140", false, "Появление",
@@ -148,6 +237,23 @@ public sealed class ServerSettings
     public bool Bool(string key) => Get(key) is "on" or "true" or "1" or "yes";
     public int Int(string key) => int.Parse(Get(key), CultureInfo.InvariantCulture);
     public float Float(string key) => float.Parse(Get(key), CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Поменять значение из кода (событие flovmp:settings:set от геймода) с той
+    /// же проверкой, что строка файла: опечатка не должна поставить серверу
+    /// бессмысленное значение. false — ключа нет или значение не подходит.
+    /// </summary>
+    public bool TrySet(string key, string value, out string error)
+    {
+        error = "";
+        if (!ByKey.TryGetValue(key ?? "", out var def)) { error = $"неизвестный ключ «{key}»"; return false; }
+        var normalized = Normalize(def, (value ?? "").Trim(), out var why);
+        if (normalized is null) { error = why; return false; }
+        _values[def.Key] = normalized;
+        return true;
+    }
+
+    public static bool IsClientKey(string key) => ByKey.TryGetValue(key, out var d) && d.Client;
 
     /// <summary>Ключи оформления платформы: менять их можно только с Source Kit.</summary>
     public static readonly IReadOnlySet<string> BrandingKeys =

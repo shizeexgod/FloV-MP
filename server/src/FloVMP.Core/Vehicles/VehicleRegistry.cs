@@ -39,12 +39,16 @@ public sealed class RegisteredVehicle
     /// <summary>Растёт при каждом изменении того, что видят клиенты: по нему
     /// рассылка решает, слать ли VSTATE.</summary>
     public long Version { get; internal set; } = 1;
+    /// <summary>Двигатель дошёл до −4000 — в игре машина взорвана. Сбрасывается ремонтом.</summary>
+    public bool Destroyed { get; internal set; }
 
     // --- runtime ---
     public VehicleOrigin Origin { get; }
     /// <summary>Кто создал или зарегистрировал машину (0 — сервер).</summary>
     public uint RegisteredBy { get; }
-    public long LastOccupiedMs { get; internal set; }
+    /// <summary>Когда машина последний раз была нужна: в ней сидели или рядом
+    /// был игрок. От этого момента считается уборка брошенного трафика.</summary>
+    public long LastActiveMs { get; internal set; }
     internal readonly SortedDictionary<int, uint> Seats = new();
     public IReadOnlyDictionary<int, uint> Occupants => Seats;
     public uint Driver => Seats.TryGetValue(VehicleRegistry.DriverSeat, out var d) ? d : 0;
@@ -58,15 +62,17 @@ public sealed class RegisteredVehicle
         Dimension = dimension;
         Origin = origin;
         RegisteredBy = registeredBy;
-        LastOccupiedMs = nowMs;
+        LastActiveMs = nowMs;
     }
 
     public RegisteredVehicleView View() => new(Id, Model, X, Y, Z, Rx, Ry, Rz, Vx, Vy, Vz, Dimension,
         EngineOn, SirenOn, Locked, BodyHealth, EngineHealth, Plate);
 }
 
-/// <summary>Кто теперь сидит на месте: из этого рассылка собирает VOWN.</summary>
-public readonly record struct SeatChange(uint VehicleId, int Seat, uint PlayerId);
+/// <summary>Кто теперь сидит на месте (PlayerId, 0 — никто) и кто сидел до
+/// этого: из первого рассылка собирает VOWN, из второго — событие «вышел»
+/// для геймода.</summary>
+public readonly record struct SeatChange(uint VehicleId, int Seat, uint PlayerId, uint PreviousPlayerId = 0);
 
 public enum EnterResult { Ok, NoVehicle, BadSeat, OtherDimension, TooFar, Locked, SeatTaken }
 public enum SyncResult { Applied, Unchanged, NoVehicle, NotDriver }
@@ -83,10 +89,12 @@ public sealed class VehicleRegistry
 {
     public const int DriverSeat = -1;
     public const int MaxSeat = 15;
-    /// <summary>Сесть можно только рядом с машиной: дальше — это телепорт в чужую машину.</summary>
-    public const float MaxEnterDistance = 10f;
-    /// <summary>Одна регистрация трафика на игрока за столько мс (решение владельца).</summary>
-    public const long TrafficRegisterIntervalMs = 2000;
+    /// <summary>Сесть можно только рядом с машиной: дальше — это телепорт в
+    /// чужую машину (vehicles.enter_distance, по умолчанию 10 м).</summary>
+    public float MaxEnterDistance { get; set; } = 10f;
+    /// <summary>Одна регистрация трафика на игрока за столько мс
+    /// (vehicles.register_cooldown_sec, по умолчанию 2 с).</summary>
+    public long TrafficRegisterIntervalMs { get; set; } = 2000;
     public const int MaxPlateLength = 8;
 
     private readonly Dictionary<uint, RegisteredVehicle> _vehicles = new();
@@ -104,6 +112,23 @@ public sealed class VehicleRegistry
 
     /// <summary>Потолок машин на сервер (vehicles.max_registered).</summary>
     public int MaxRegistered { get; set; }
+
+    /// <summary>
+    /// Шаблон случайного номера (vehicles.plate_format): 9 — цифра, A — буква,
+    /// остальное как есть, до 8 символов. Номер — часть стиля проекта, поэтому
+    /// он настраивается владельцем, а не зашит «как в GTA».
+    /// </summary>
+    public string PlateFormat
+    {
+        get => _plateFormat;
+        set => _plateFormat = ValidPlateFormat(value) ? value.ToUpperInvariant() : DefaultPlateFormat;
+    }
+    public const string DefaultPlateFormat = "99AAA999";
+    private string _plateFormat = DefaultPlateFormat;
+
+    public static bool ValidPlateFormat(string? format) =>
+        !string.IsNullOrWhiteSpace(format) && format.Length <= MaxPlateLength &&
+        format.All(ch => ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or ' ');
     public int Count => _vehicles.Count;
     public IEnumerable<RegisteredVehicle> All => _vehicles.Values;
 
@@ -115,6 +140,26 @@ public sealed class VehicleRegistry
 
     public RegisteredVehicle? VehicleOf(uint playerId) =>
         _playerSeats.TryGetValue(playerId, out var s) ? Get(s.VehicleId) : null;
+
+    /// <summary>
+    /// Ближайшая «своя» машина игрока (созданная им или угнанная им из
+    /// трафика) в радиусе и его измерении. Нужна командам, которые старый
+    /// клиент выполнял снаружи машины (/dv, /lock): без этого переход на
+    /// реестр был бы регрессом. Владелец-персонаж и ключи — забота геймода.
+    /// </summary>
+    public RegisteredVehicle? NearestOwned(uint playerId, float x, float y, float z, int dimension, float radius)
+    {
+        RegisteredVehicle? best = null;
+        var bestD2 = radius * radius;
+        foreach (var v in _vehicles.Values)
+        {
+            if (v.RegisteredBy != playerId || v.Dimension != dimension) continue;
+            var dx = v.X - x; var dy = v.Y - y; var dz = v.Z - z;
+            var d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 <= bestD2) { best = v; bestD2 = d2; }
+        }
+        return best;
+    }
 
     /// <summary>Пересадки с последнего вызова — для рассылки VOWN.</summary>
     public List<SeatChange> DrainSeatChanges()
@@ -198,8 +243,8 @@ public sealed class VehicleRegistry
         if (!_playerSeats.Remove(playerId, out var s)) return false;
         if (!_vehicles.TryGetValue(s.VehicleId, out var v)) return true;
         v.Seats.Remove(s.Seat);
-        v.LastOccupiedMs = nowMs;
-        _seatChanges.Add(new SeatChange(v.Id, s.Seat, 0));
+        v.LastActiveMs = nowMs;
+        _seatChanges.Add(new SeatChange(v.Id, s.Seat, 0, playerId));
         if (s.Seat == DriverSeat && (v.Vx != 0 || v.Vy != 0 || v.Vz != 0))
         {
             v.Vx = v.Vy = v.Vz = 0;
@@ -220,7 +265,12 @@ public sealed class VehicleRegistry
     public RegisteredVehicle? Remove(uint vehicleId)
     {
         if (!_vehicles.Remove(vehicleId, out var v)) return null;
-        foreach (var occupant in v.Seats.Values) _playerSeats.Remove(occupant);
+        // Сидевшие в ней — «вышли»: геймоду нужно это событие, как и при обычном выходе.
+        foreach (var (seat, occupant) in v.Seats)
+        {
+            _playerSeats.Remove(occupant);
+            _seatChanges.Add(new SeatChange(v.Id, seat, 0, occupant));
+        }
         v.Seats.Clear();
         return v;
     }
@@ -257,6 +307,7 @@ public sealed class VehicleRegistry
         if (!_vehicles.TryGetValue(vehicleId, out var v)) return false;
         v.BodyHealth = Math.Clamp(body, 0f, NativeVehicleProtocol.MaxHealth);
         v.EngineHealth = Math.Clamp(engine, NativeVehicleProtocol.MinEngineHealth, NativeVehicleProtocol.MaxHealth);
+        v.Destroyed = v.EngineHealth <= NativeVehicleProtocol.MinEngineHealth;
         v.Version++;
         return true;
     }
@@ -274,17 +325,29 @@ public sealed class VehicleRegistry
         return p is not null && Mutate(vehicleId, v => v.Plate = p);
     }
 
+    /// <summary>Рядом с машиной есть игрок — она нужна, уборка откладывается.</summary>
+    public void MarkActive(RegisteredVehicle v, long nowMs)
+    {
+        if (nowMs > v.LastActiveMs) v.LastActiveMs = nowMs;
+    }
+
     /// <summary>
-    /// Непостоянные машины, в которых никого нет дольше ttl, — удалить. Иначе
-    /// каждая машина трафика, в которую кто-то садился, навсегда занимала бы
-    /// место под потолком. ttl 0 — не удалять никогда.
+    /// Уборка брошенного трафика — как у самой GTA и у FiveM: машина из
+    /// трафика игры, в которую кто-то садился, исчезает только когда в ней
+    /// никого нет и рядом давно никого не было. Иначе каждая такая машина
+    /// навсегда занимала бы место под потолком реестра.
+    ///
+    /// Машины сервера (/car, API) не трогаем никогда — как в alt:V и RAGE:MP,
+    /// их убирает только команда или геймод: выйти из своей машины и
+    /// вернуться к ней должно быть можно всегда. ttl 0 — не убирать и трафик.
     /// </summary>
     public List<RegisteredVehicle> CollectAbandoned(long nowMs, long ttlMs)
     {
         var removed = new List<RegisteredVehicle>();
         if (ttlMs <= 0) return removed;
         foreach (var v in _vehicles.Values)
-            if (!v.Persistent && v.IsEmpty && nowMs - v.LastOccupiedMs >= ttlMs) removed.Add(v);
+            if (v.Origin == VehicleOrigin.Traffic && !v.Persistent && v.IsEmpty && nowMs - v.LastActiveMs >= ttlMs)
+                removed.Add(v);
         foreach (var v in removed) _vehicles.Remove(v.Id);
         return removed;
     }
@@ -300,7 +363,7 @@ public sealed class VehicleRegistry
     private void Seat(RegisteredVehicle v, uint playerId, int seat, long nowMs)
     {
         v.Seats[seat] = playerId;
-        v.LastOccupiedMs = nowMs;
+        v.LastActiveMs = nowMs;
         _playerSeats[playerId] = (v.Id, seat);
         _seatChanges.Add(new SeatChange(v.Id, seat, playerId));
     }
@@ -327,12 +390,47 @@ public sealed class VehicleRegistry
         return clean.Length > MaxPlateLength ? clean[..MaxPlateLength] : clean;
     }
 
-    /// <summary>Номер как у машин в игре: 2 цифры, 3 буквы, 3 цифры.</summary>
+    /// <summary>Случайный номер по шаблону <see cref="PlateFormat"/>.</summary>
     private string RandomPlate()
     {
-        Span<char> c = stackalloc char[8];
-        for (var i = 0; i < 8; i++)
-            c[i] = i is >= 2 and <= 4 ? (char)('A' + _random.Next(26)) : (char)('0' + _random.Next(10));
+        Span<char> c = stackalloc char[_plateFormat.Length];
+        for (var i = 0; i < c.Length; i++)
+            c[i] = _plateFormat[i] switch
+            {
+                '9' => (char)('0' + _random.Next(10)),
+                'A' => (char)('A' + _random.Next(26)),
+                var literal => literal,
+            };
         return new string(c);
     }
+
+    /// <summary>
+    /// Вернуть сохранённую машину с её прежним ID: по нему геймод связал свои
+    /// данные (владелец, тюнинг). null — ID уже занят или потолок. Новые
+    /// машины после этого получают ID выше восстановленных.
+    /// </summary>
+    public RegisteredVehicle? Restore(PersistedVehicle p, bool restoreDamage, long nowMs)
+    {
+        if (p.Id == 0 || p.Model == 0 || _vehicles.ContainsKey(p.Id) || _vehicles.Count >= MaxRegistered) return null;
+        var v = new RegisteredVehicle(p.Id, p.Model, NormalizePlate(p.Plate) ?? RandomPlate(), p.Dimension,
+            VehicleOrigin.Server, 0, nowMs)
+        {
+            X = p.X, Y = p.Y, Z = p.Z, Rx = p.Rx, Ry = p.Ry, Rz = p.Rz,
+            Locked = p.Locked,
+            Persistent = true,
+        };
+        if (restoreDamage)
+        {
+            v.BodyHealth = Math.Clamp(p.BodyHealth, 0f, NativeVehicleProtocol.MaxHealth);
+            v.EngineHealth = Math.Clamp(p.EngineHealth, NativeVehicleProtocol.MinEngineHealth, NativeVehicleProtocol.MaxHealth);
+            v.Destroyed = v.EngineHealth <= NativeVehicleProtocol.MinEngineHealth;
+        }
+        _vehicles[v.Id] = v;
+        if (v.Id >= _nextId) _nextId = v.Id == uint.MaxValue ? 1 : v.Id + 1;
+        return v;
+    }
+
+    /// <summary>Снимок для хранилища.</summary>
+    public static PersistedVehicle Snapshot(RegisteredVehicle v) => new(v.Id, v.Model, v.Plate,
+        v.X, v.Y, v.Z, v.Rx, v.Ry, v.Rz, v.Dimension, v.Locked, v.BodyHealth, v.EngineHealth);
 }

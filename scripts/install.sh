@@ -480,6 +480,25 @@ else
     done
     ok "порты $GAME_PORT, $VOICE_PUBLIC_PORT, $VOICE_INTERNAL_PORT, $((GAME_PORT + 10)) свободны"
   fi
+  # Второй сервер на той же машине с именами базы по умолчанию: шаг 6 сменил
+  # бы пароль общего пользователя (ALTER USER) — и первый сервер молча терял
+  # доступ к базе, а оба писали бы в одну. Проверяем до любых изменений.
+  if [ "$USE_DB" -eq 1 ] && command -v mysql >/dev/null 2>&1 && mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
+    DB_TAKEN="$(mysql -u root -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE User='$DB_USER'; SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$DB_NAME';" 2>/dev/null | paste -sd' ')"
+    case "$DB_TAKEN" in
+      "0 0"|"") ;;
+      *) die "в MariaDB уже есть база $DB_NAME или пользователь $DB_USER (другой сервер FloV:MP на этой машине?). Чтобы не сломать его, для второго сервера укажите свои имена, например: --db-name flovmp_server2 --db-user flovmp2 --service flovmp2 --port 7800 — или --no-db" ;;
+    esac
+  fi
+fi
+
+# Сетевой движок alt:V открывает сокет сразу для IPv4 и IPv6. Если IPv6 в ядре
+# выключен совсем (ipv6.disable=1 — так бывает на дешёвых VDS и в контейнерах),
+# сервер падает при старте с «Failed to create host», хотя порт свободен.
+if [ ! -e /proc/net/if_inet6 ]; then
+  warn "в системе выключен IPv6 — движок сервера не сможет открыть порт (ошибка «Failed to create host»)."
+  warn "  Включите IPv6: уберите ipv6.disable=1 из GRUB_CMDLINE_LINUX в /etc/default/grub, затем update-grub и перезагрузка."
+  warn "  Внешний IPv6-адрес не нужен — достаточно, чтобы IPv6 был включён в ядре."
 fi
 
 # ---------------------------------------------------------------------
@@ -1008,5 +1027,5 @@ echo "   SocialClubId игрока виден в логе при его подк
 echo
 echo "  Ваш сервер (код):       $INSTALL_DIR/gamemode — сборка: sudo $INSTALL_DIR/gamemode/build.sh --install-sdk --restart"
 echo "  Резервная копия базы:   $INSTALL_DIR/scripts/backup-db.sh"
-echo "  Обновление:             распакуйте новый пакет и запустите его ./install.sh"
+echo "  Обновление:             sudo bash $INSTALL_DIR/update.sh   (ключ и источник берутся из установки)"
 echo "${C_GREEN}=====================================================================${C_OFF}"

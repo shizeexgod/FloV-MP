@@ -66,8 +66,38 @@ namespace flov::game
             int adminLevel = 0;
         };
 
+        /// Машина серверного реестра (сервер 1.0.6+, пункт 8 roadmap). Сущность
+        /// сервера, а не поле STATE водителя: у неё свой ID, она остаётся, когда
+        /// водитель вышел. Протокол — docs/vehicle-registry-protocol.md.
+        struct NetVehicle
+        {
+            uint32_t id = 0;
+            Hash model = 0;
+            std::string plate;
+            State s;                            // позиция, поворот, скорость — как у игроков
+            bool engine = false, siren = false, locked = false;
+            float body = 1000.f, engineHp = 1000.f;
+            std::map<int, int> seats;           // место (-1 — водитель) → ID игрока
+            Vehicle handle = 0;
+            bool frozen = false;
+            float frozenX = 0, frozenY = 0, frozenZ = 0;
+            int appliedLock = -1;               // что уже выставлено в игре: не дёргать натив каждый кадр
+            int warpSeat = -2;                  // сервер посадил нас (VOWN), а машина ещё грузится
+        };
+
         Net g_net;
         std::map<int, Remote> g_remotes;
+        std::map<uint32_t, NetVehicle> g_netVehicles;
+        std::map<int, std::pair<uint32_t, int>> g_netSeats;   // ID игрока → (машина, место)
+        // Наша посадка: в какой машине и на каком месте мы сейчас по мнению игры.
+        Vehicle g_localVeh = 0;
+        int g_localSeat = -2;
+        uint32_t g_localVehId = 0;
+        uint32_t g_leftVehId = 0;
+        ULONGLONG g_leftAt = 0;
+        // Регистрация машины трафика (VREQ → VREG/VREJ).
+        uint32_t g_nextReqId = 1, g_pendingReq = 0;
+        Vehicle g_pendingReqHandle = 0, g_rejectedHandle = 0;
         int g_myId = 0;
         std::string g_myName, g_serverName;
         int g_adminLevel = 0;
@@ -119,6 +149,7 @@ namespace flov::game
         struct Cfg
         {
             bool peds = false, traffic = false, parked = false, police = false, ambient = false, freezeTime = false;
+            bool mpMap = false;   // карта сетевой игры: интерьеры квартир, офисов и DLC
             bool minimap = true, abilityBar = false, areaNames = false, vehicleNames = false, weaponWheel = false;
             bool pauseMenu = false, playerBlips = false, watermark = false;
             bool tags = true, tagId = true, tagHealth = true, tagArmor = true, tagVoice = true, tagAdmin = false, tagSpace = true;
@@ -192,6 +223,23 @@ namespace flov::game
             if (!e) return nullptr;
             for (auto& [id, r] : g_remotes)
                 if (r.ped == e || r.veh == e) return &r;
+            // Машина реестра — «чья» она для попаданий и наездов: её водителя.
+            for (auto& [vid, v] : g_netVehicles)
+            {
+                if (v.handle != e) continue;
+                const auto d = v.seats.find(-1);
+                if (d == v.seats.end()) return nullptr;
+                const auto it = g_remotes.find(d->second);
+                return it != g_remotes.end() ? &it->second : nullptr;
+            }
+            return nullptr;
+        }
+
+        NetVehicle* NetVehicleByHandle(Entity e)
+        {
+            if (!e) return nullptr;
+            for (auto& [id, v] : g_netVehicles)
+                if (v.handle == e) return &v;
             return nullptr;
         }
 
@@ -315,6 +363,80 @@ namespace flov::game
             return true;
         }
 
+        /// Ведёт локальную копию чужой машины к состоянию с сервера: цель —
+        /// последняя позиция плюс скорость × возраст строки; коррекция скоростью,
+        /// а не телепортом. Один механизм и для PSTATE старых клиентов, и для
+        /// VSTATE реестра — у обоих одинаковые поля позиции, скорости и поворота.
+        void SteerVehicle(Vehicle veh, const State& s, float dt)
+        {
+            const float tx = s.x + s.vx * dt, ty = s.y + s.vy * dt, tz = s.z + s.vz * dt;
+            const Vector3 p = n::GET_ENTITY_COORDS(veh, TRUE);
+            const float err2 = Dist2(p.x, p.y, p.z, tx, ty, tz);
+            if (err2 > 12.f * 12.f)
+            {
+                n::SET_ENTITY_COORDS_NO_OFFSET(veh, tx, ty, tz, FALSE, FALSE, FALSE);
+                n::SET_ENTITY_VELOCITY(veh, s.vx, s.vy, s.vz);
+            }
+            else
+            {
+                // Коррекция скоростью, а не телепортом: физика машины сохраняется,
+                // движение без рывков. Высоту на земле ведут колёса и подвеска:
+                // вертикальную скорость трогаем только в воздухе или при заметном
+                // расхождении — иначе машина «висела» в паре сантиметров над дорогой.
+                const bool air = n::IS_ENTITY_IN_AIR(veh) != 0;
+                const float ez = tz - p.z;
+                const Vector3 cur = n::GET_ENTITY_VELOCITY(veh);
+                const float vz = air || std::fabs(ez) > 0.75f ? s.vz + ez * 4.f : cur.z;
+                n::SET_ENTITY_VELOCITY(veh, s.vx + (tx - p.x) * 4.f, s.vy + (ty - p.y) * 4.f, vz);
+            }
+            const Vector3 rot = n::GET_ENTITY_ROTATION(veh, 2);
+            auto diff = [](float a, float b) { return std::fabs(std::fmod(b - a + 540.f, 360.f) - 180.f); };
+            // Наклон (тангаж, крен) на земле тоже задаёт подвеска: правим его
+            // только при большом расхождении (перевернулся, прыжок).
+            const bool tilt = n::IS_ENTITY_IN_AIR(veh) || diff(rot.x, s.rx) > 12.f || diff(rot.y, s.ry) > 12.f;
+            if (tilt || diff(rot.z, s.rz) > 0.5f)
+                n::SET_ENTITY_ROTATION(veh, tilt ? AngleLerp(rot.x, s.rx, 0.5f) : rot.x, tilt ? AngleLerp(rot.y, s.ry, 0.5f) : rot.y,
+                                       AngleLerp(rot.z, s.rz, 0.5f), 2, TRUE);
+        }
+
+        /// Посадить персонажа чужого игрока на место в машине (если место свободно).
+        void SeatRemotePed(Remote& r, Vehicle veh, int seat)
+        {
+            const Ped ped = r.ped;
+            if (n::GET_VEHICLE_PED_IS_IN(ped, FALSE) == veh && r.inVehicleSeat) return;
+            Ped busy = n::GET_PED_IN_VEHICLE_SEAT(veh, seat);
+            // Место занял случайный прохожий (сел в машину сам) — убираем его,
+            // иначе игрок навсегда остаётся снаружи и «телепортируется» рядом.
+            if (busy && busy != ped && !FindByEntity(busy) && busy != n::PLAYER_PED_ID())
+                DeleteEntity(busy);
+            if (n::IS_VEHICLE_SEAT_FREE(veh, seat) || n::GET_PED_IN_VEHICLE_SEAT(veh, seat) == ped)
+            {
+                n::SET_PED_INTO_VEHICLE(ped, veh, seat);
+                r.inVehicleSeat = true;
+            }
+        }
+
+        /// Игрок сидит в машине реестра (место известно из VOWN, а не из PSTATE).
+        /// true — позицию персонажа ведёт машина, дальше UpdateRemote не нужен.
+        bool SeatInNetVehicle(Remote& r)
+        {
+            const auto it = g_netSeats.find(r.id);
+            if (it == g_netSeats.end()) return false;
+            const auto v = g_netVehicles.find(it->second.first);
+            if (v == g_netVehicles.end()) return false;
+            const Vehicle veh = v->second.handle;
+            if (!veh || !n::DOES_ENTITY_EXIST(veh))
+            {
+                // Машина ещё грузится: персонаж едет по своим координатам, а не стоит столбом.
+                n::SET_ENTITY_COORDS_NO_OFFSET(r.ped, r.cur.x, r.cur.y, r.cur.z, FALSE, FALSE, FALSE);
+                n::SET_ENTITY_HEADING(r.ped, r.cur.heading);
+                r.inVehicleSeat = false;
+                return true;
+            }
+            SeatRemotePed(r, veh, it->second.second);
+            return true;
+        }
+
         void UpdateRemote(Remote& r, ULONGLONG now, const Vector3& me)
         {
             if (!r.hasState) return;
@@ -362,6 +484,9 @@ namespace flov::game
                 r.weapon = weapon;
             }
 
+            // Сервер 1.0.6+: место в машине реестра — из VOWN (поля машины в PSTATE пусты).
+            if (SeatInNetVehicle(r)) return;
+
             const float dt = std::min(0.25f, (float)(now - s.received) / 1000.f);
             const bool inVehicle = (s.flags & FInVehicle) != 0 && s.vehModel != 0;
             if (inVehicle)
@@ -372,34 +497,7 @@ namespace flov::game
                 {
                     if (!EnsureRemoteVehicle(r)) return;
                     veh = r.veh;
-                    const float tx = s.x + s.vx * dt, ty = s.y + s.vy * dt, tz = s.z + s.vz * dt;
-                    const Vector3 p = n::GET_ENTITY_COORDS(veh, TRUE);
-                    const float err2 = Dist2(p.x, p.y, p.z, tx, ty, tz);
-                    if (err2 > 12.f * 12.f)
-                    {
-                        n::SET_ENTITY_COORDS_NO_OFFSET(veh, tx, ty, tz, FALSE, FALSE, FALSE);
-                        n::SET_ENTITY_VELOCITY(veh, s.vx, s.vy, s.vz);
-                    }
-                    else
-                    {
-                        // Коррекция скоростью, а не телепортом: физика машины сохраняется,
-                        // движение без рывков. Высоту на земле ведут колёса и подвеска:
-                        // вертикальную скорость трогаем только в воздухе или при заметном
-                        // расхождении — иначе машина «висела» в паре сантиметров над дорогой.
-                        const bool air = n::IS_ENTITY_IN_AIR(veh) != 0;
-                        const float ez = tz - p.z;
-                        const Vector3 cur = n::GET_ENTITY_VELOCITY(veh);
-                        const float vz = air || std::fabs(ez) > 0.75f ? s.vz + ez * 4.f : cur.z;
-                        n::SET_ENTITY_VELOCITY(veh, s.vx + (tx - p.x) * 4.f, s.vy + (ty - p.y) * 4.f, vz);
-                    }
-                    const Vector3 rot = n::GET_ENTITY_ROTATION(veh, 2);
-                    auto diff = [](float a, float b) { return std::fabs(std::fmod(b - a + 540.f, 360.f) - 180.f); };
-                    // Наклон (тангаж, крен) на земле тоже задаёт подвеска: правим его
-                    // только при большом расхождении (перевернулся, прыжок).
-                    const bool tilt = n::IS_ENTITY_IN_AIR(veh) || diff(rot.x, s.rx) > 12.f || diff(rot.y, s.ry) > 12.f;
-                    if (tilt || diff(rot.z, s.rz) > 0.5f)
-                        n::SET_ENTITY_ROTATION(veh, tilt ? AngleLerp(rot.x, s.rx, 0.5f) : rot.x, tilt ? AngleLerp(rot.y, s.ry, 0.5f) : rot.y,
-                                               AngleLerp(rot.z, s.rz, 0.5f), 2, TRUE);
+                    SteerVehicle(veh, s, dt);
                     // Прочность чужой машины держим целой (см. EnsureRemoteVehicle).
                     n::SET_VEHICLE_ENGINE_HEALTH(veh, 1000.f);
                     n::SET_VEHICLE_BODY_HEALTH(veh, 1000.f);
@@ -423,19 +521,7 @@ namespace flov::game
                         return;
                     }
                 }
-                if (n::GET_VEHICLE_PED_IS_IN(ped, FALSE) != veh || !r.inVehicleSeat)
-                {
-                    Ped busy = n::GET_PED_IN_VEHICLE_SEAT(veh, s.seat);
-                    // Место занял случайный прохожий (сел в машину сам) — убираем его,
-                    // иначе игрок навсегда остаётся снаружи и «телепортируется» рядом.
-                    if (busy && busy != ped && !FindByEntity(busy) && busy != n::PLAYER_PED_ID())
-                        DeleteEntity(busy);
-                    if (n::IS_VEHICLE_SEAT_FREE(veh, s.seat) || n::GET_PED_IN_VEHICLE_SEAT(veh, s.seat) == ped)
-                    {
-                        n::SET_PED_INTO_VEHICLE(ped, veh, s.seat);
-                        r.inVehicleSeat = true;
-                    }
-                }
+                SeatRemotePed(r, veh, s.seat);
                 return;
             }
 
@@ -561,6 +647,365 @@ namespace flov::game
             ui::CloseMenu();
         }
 
+        // --- машины серверного реестра (сервер 1.0.6+) ------------------------------
+
+        void DeleteNetVehicleEntity(NetVehicle& v)
+        {
+            if (!v.handle) return;
+            // Машину, в которой сидим мы сами, из-под себя не удаляем — только
+            // отпускаем (как у машин игроков старого пути).
+            if (n::GET_VEHICLE_PED_IS_IN(n::PLAYER_PED_ID(), FALSE) == v.handle)
+                n::SET_ENTITY_AS_NO_LONGER_NEEDED(&v.handle);
+            else
+                DeleteEntity(v.handle);
+            v.handle = 0;
+            v.frozen = false;
+            v.appliedLock = -1;
+        }
+
+        /// Локальная копия машины реестра. Скриптовая сущность (mission entity,
+        /// не сетевая): её не трогает ни трафик игры, ни его уборка — живёт,
+        /// пока её держит сервер. Модель грузится без ожидания, по кадрам.
+        bool EnsureNetVehicle(NetVehicle& v)
+        {
+            if (v.handle && n::DOES_ENTITY_EXIST(v.handle)) return true;
+            v.handle = 0;
+            if (!n::IS_MODEL_IN_CDIMAGE(v.model) || !n::IS_MODEL_A_VEHICLE(v.model))
+            {
+                static std::set<Hash> reported;
+                if (reported.insert(v.model).second) Log("машина реестра: неизвестная модель " + std::to_string(v.model));
+                return false;
+            }
+            n::REQUEST_MODEL(v.model);
+            if (!n::HAS_MODEL_LOADED(v.model)) return false;
+            v.handle = n::CREATE_VEHICLE(v.model, v.s.x, v.s.y, v.s.z, v.s.rz, FALSE, TRUE);
+            n::SET_MODEL_AS_NO_LONGER_NEEDED(v.model);
+            if (!v.handle) return false;
+            n::SET_ENTITY_AS_MISSION_ENTITY(v.handle, TRUE, TRUE);
+            n::SET_ENTITY_ROTATION(v.handle, v.s.rx, v.s.ry, v.s.rz, 2, TRUE);
+            n::SET_VEHICLE_HAS_BEEN_OWNED_BY_PLAYER(v.handle, TRUE);
+            n::SET_VEHICLE_NEEDS_TO_BE_HOTWIRED(v.handle, FALSE);
+            n::SET_VEHICLE_IS_STOLEN(v.handle, FALSE);
+            if (!v.plate.empty()) n::SET_VEHICLE_NUMBER_PLATE_TEXT(v.handle, const_cast<char*>(v.plate.c_str()));
+            v.frozen = false;
+            v.appliedLock = -1;
+            Log("машина реестра " + std::to_string(v.id) + ": создана, модель " + std::to_string(v.model));
+            return true;
+        }
+
+        int DriverOf(const NetVehicle& v)
+        {
+            const auto d = v.seats.find(-1);
+            return d != v.seats.end() ? d->second : 0;
+        }
+
+        /// Каждый кадр: создать/убрать копии по дальности, вести машины чужих
+        /// водителей (SteerVehicle — тот же механизм, что для PSTATE), а машины
+        /// без водителя держать замороженными на земле там, где их бросили.
+        void UpdateNetVehicles(ULONGLONG now, const Vector3& myPos)
+        {
+            const Ped me = n::PLAYER_PED_ID();
+            const Vehicle mine = n::IS_PED_IN_ANY_VEHICLE(me, FALSE) ? n::GET_VEHICLE_PED_IS_IN(me, FALSE) : 0;
+            for (auto& [id, v] : g_netVehicles)
+            {
+                const bool inside = v.handle && v.handle == mine;
+                if (!inside && Dist2(v.s.x, v.s.y, v.s.z, myPos.x, myPos.y, myPos.z) > 350.f * 350.f)
+                {
+                    DeleteNetVehicleEntity(v);   // далеко: как персонажи игроков, вернётся мгновенно
+                    continue;
+                }
+                if (!EnsureNetVehicle(v)) continue;
+                const Vehicle veh = v.handle;
+
+                // Сервер посадил нас (/car), а машина только что догрузилась.
+                if (v.warpSeat != -2)
+                {
+                    n::SET_PED_INTO_VEHICLE(me, veh, v.warpSeat);
+                    g_localVeh = veh;
+                    g_localSeat = v.warpSeat;
+                    g_localVehId = v.id;
+                    v.warpSeat = -2;
+                }
+
+                const int lock = v.locked ? 2 : 1;
+                if (v.appliedLock != lock)
+                {
+                    n::SET_VEHICLE_DOORS_LOCKED(veh, lock);
+                    v.appliedLock = lock;
+                }
+
+                const bool meDriving = inside && n::GET_PED_IN_VEHICLE_SEAT(veh, -1) == me;
+                const int driver = DriverOf(v);
+                if (meDriving || driver == g_myId)
+                {
+                    // Физику считаем мы: только снять заморозку, если сели в стоявшую.
+                    if (v.frozen) { n::FREEZE_ENTITY_POSITION(veh, FALSE); v.frozen = false; }
+                    continue;
+                }
+                if (driver != 0)
+                {
+                    if (v.frozen) { n::FREEZE_ENTITY_POSITION(veh, FALSE); v.frozen = false; }
+                    const float dt = std::min(0.25f, (float)(now - v.s.received) / 1000.f);
+                    SteerVehicle(veh, v.s, dt);
+                    // Прочность — серверная: локальные столкновения не должны
+                    // довести копию до взрыва, которого на сервере не было.
+                    n::SET_VEHICLE_ENGINE_HEALTH(veh, v.engineHp);
+                    n::SET_VEHICLE_BODY_HEALTH(veh, v.body);
+                    n::SET_VEHICLE_PETROL_TANK_HEALTH(veh, 1000.f);
+                }
+                else if (!v.frozen || Dist2(v.frozenX, v.frozenY, v.frozenZ, v.s.x, v.s.y, v.s.z) > 0.25f)
+                {
+                    // Без водителя физику никто не считает: у всех машина стоит на
+                    // последней позиции из VSYNC — заморожена и поставлена на землю.
+                    n::FREEZE_ENTITY_POSITION(veh, FALSE);
+                    n::SET_ENTITY_COORDS_NO_OFFSET(veh, v.s.x, v.s.y, v.s.z, FALSE, FALSE, FALSE);
+                    n::SET_ENTITY_ROTATION(veh, v.s.rx, v.s.ry, v.s.rz, 2, TRUE);
+                    n::SET_ENTITY_VELOCITY(veh, 0.f, 0.f, 0.f);
+                    n::SET_VEHICLE_ON_GROUND_PROPERLY(veh);
+                    n::FREEZE_ENTITY_POSITION(veh, TRUE);
+                    v.frozen = true;
+                    v.frozenX = v.s.x; v.frozenY = v.s.y; v.frozenZ = v.s.z;
+                }
+                if ((bool)n::GET_IS_VEHICLE_ENGINE_RUNNING(veh) != v.engine) n::SET_VEHICLE_ENGINE_ON(veh, v.engine, TRUE, TRUE);
+                if ((bool)n::IS_VEHICLE_SIREN_ON(veh) != v.siren) n::SET_VEHICLE_SIREN(veh, v.siren);
+            }
+        }
+
+        /// Наша посадка: сели — VENTER (машина реестра) или VREQ (за руль машины
+        /// трафика), вышли — VLEAVE, за рулём — VSYNC. Сервер старше 1.0.6 этих
+        /// строк не знает и молча их пропускает; машины у него идут через STATE,
+        /// поля которого клиент заполняет как раньше.
+        void LocalVehicleTick(bool sendSync)
+        {
+            const Ped me = n::PLAYER_PED_ID();
+            const Vehicle veh = n::IS_PED_IN_ANY_VEHICLE(me, FALSE) ? n::GET_VEHICLE_PED_IS_IN(me, FALSE) : 0;
+            const int seat = veh ? SeatOf(me, veh) : -2;
+            if (veh != g_localVeh || seat != g_localSeat)
+            {
+                NetVehicle* nv = veh ? NetVehicleByHandle(veh) : nullptr;
+                if (g_localVehId && (!nv || nv->id != g_localVehId))
+                {
+                    g_net.Send({ "VLEAVE", std::to_string(g_localVehId) });
+                    g_leftVehId = g_localVehId;
+                    g_leftAt = GetTickCount64();
+                }
+                g_localVeh = veh;
+                g_localSeat = seat;
+                g_localVehId = nv ? nv->id : 0;
+                if (nv)
+                    g_net.Send({ "VENTER", std::to_string(nv->id), std::to_string(seat) });
+                else if (veh && seat == -1 && !FindByEntity(veh) && veh != g_rejectedHandle && veh != g_pendingReqHandle)
+                {
+                    // Сели за руль машины трафика: просим сервер взять её в реестр,
+                    // иначе остальные не увидят её после нашего выхода.
+                    g_pendingReq = g_nextReqId++;
+                    g_pendingReqHandle = veh;
+                    g_net.Send({ "VREQ", std::to_string(g_pendingReq), std::to_string(n::GET_ENTITY_MODEL(veh)) });
+                }
+            }
+
+            // VSYNC — только водитель, с той же частотой, что STATE.
+            if (!sendSync || !g_localVehId || g_localSeat != -1 || !veh) return;
+            const Vector3 p = n::GET_ENTITY_COORDS(veh, TRUE);
+            const Vector3 rot = n::GET_ENTITY_ROTATION(veh, 2);
+            const Vector3 vel = n::GET_ENTITY_VELOCITY(veh);
+            g_net.Send({ "VSYNC", std::to_string(g_localVehId), F(p.x), F(p.y), F(p.z), F(rot.x), F(rot.y), F(rot.z),
+                         F(vel.x), F(vel.y), F(vel.z), n::GET_IS_VEHICLE_ENGINE_RUNNING(veh) ? "1" : "0",
+                         n::IS_VEHICLE_SIREN_ON(veh) ? "1" : "0", F(n::GET_VEHICLE_BODY_HEALTH(veh)),
+                         F(n::GET_VEHICLE_ENGINE_HEALTH(veh)) });
+            // Своя копия помнит, где машину бросили, — пригодится после выхода.
+            if (auto it = g_netVehicles.find(g_localVehId); it != g_netVehicles.end())
+            {
+                auto& s = it->second.s;
+                s.x = p.x; s.y = p.y; s.z = p.z; s.rx = rot.x; s.ry = rot.y; s.rz = rot.z;
+                s.vx = vel.x; s.vy = vel.y; s.vz = vel.z;
+            }
+        }
+
+        /// VOWN: кто сидит на месте. Для нас это истина сервера: посадил — садимся,
+        /// место не наше, а мы на нём — это отказ на VENTER, выходим.
+        void ApplySeat(NetVehicle& v, int playerId, int seat)
+        {
+            const auto prev = v.seats.find(seat);
+            if (prev != v.seats.end() && prev->second != playerId)
+            {
+                const auto old = g_netSeats.find(prev->second);
+                if (old != g_netSeats.end() && old->second == std::make_pair(v.id, seat)) g_netSeats.erase(old);
+                v.seats.erase(prev);
+            }
+            if (playerId > 0)
+            {
+                // Пересел из другой машины или с другого места — прежнее освобождаем.
+                const auto was = g_netSeats.find(playerId);
+                if (was != g_netSeats.end() && was->second != std::make_pair(v.id, seat))
+                {
+                    const auto other = g_netVehicles.find(was->second.first);
+                    if (other != g_netVehicles.end())
+                    {
+                        const auto os = other->second.seats.find(was->second.second);
+                        if (os != other->second.seats.end() && os->second == playerId) other->second.seats.erase(os);
+                    }
+                }
+                v.seats[seat] = playerId;
+                g_netSeats[playerId] = { v.id, seat };
+            }
+
+            const Ped me = n::PLAYER_PED_ID();
+            const bool meThere = v.handle && n::GET_VEHICLE_PED_IS_IN(me, FALSE) == v.handle && SeatOf(me, v.handle) == seat;
+            if (playerId == g_myId)
+            {
+                // Только что вышли сами — запоздавший VOWN не должен сажать обратно.
+                if (meThere || (g_leftVehId == v.id && GetTickCount64() - g_leftAt < 1500)) return;
+                if (v.handle && n::DOES_ENTITY_EXIST(v.handle))
+                {
+                    n::SET_PED_INTO_VEHICLE(me, v.handle, seat);
+                    g_localVeh = v.handle;
+                    g_localSeat = seat;
+                    g_localVehId = v.id;
+                }
+                else v.warpSeat = seat;   // машина ещё грузится — посадим, когда появится
+            }
+            else if (meThere)
+            {
+                // Сервер не подтвердил наше место (закрыта, занято, далеко).
+                Log("машина реестра " + std::to_string(v.id) + ": сервер не посадил на место " + std::to_string(seat));
+                n::TASK_LEAVE_VEHICLE(me, v.handle, 16);
+            }
+        }
+
+        /// Сообщения реестра транспорта. true — сообщение обработано.
+        bool HandleVehicleMessage(const std::vector<std::string>& m)
+        {
+            const std::string& type = m[0];
+            auto at = [&m](size_t i) -> std::string { return i < m.size() ? m[i] : std::string(); };
+            const ULONGLONG now = GetTickCount64();
+            if (type == "VADD" && m.size() >= 11)
+            {
+                const uint32_t id = ToUInt(m[1]);
+                if (!id) return true;
+                auto& v = g_netVehicles[id];
+                const Hash model = ToUInt(m[2]);
+                if (v.handle && v.model != model) DeleteNetVehicleEntity(v);
+                v.id = id;
+                v.model = model;
+                v.s.x = ToFloat(m[3]); v.s.y = ToFloat(m[4]); v.s.z = ToFloat(m[5]);
+                v.s.rx = ToFloat(m[6]); v.s.ry = ToFloat(m[7]); v.s.rz = ToFloat(m[8]);
+                v.s.vx = v.s.vy = v.s.vz = 0.f;
+                v.s.received = now;
+                const int flags = ToInt(m[10]);
+                v.engine = (flags & 1) != 0; v.siren = (flags & 2) != 0; v.locked = (flags & 4) != 0;
+                v.plate = at(11).substr(0, 8);
+                v.frozen = false;   // снимок: встать на новое место, даже если копия уже была
+                return true;
+            }
+            if (type == "VSTATE" && m.size() >= 16)
+            {
+                const auto it = g_netVehicles.find(ToUInt(m[1]));
+                if (it == g_netVehicles.end()) return true;
+                auto& v = it->second;
+                v.s.x = ToFloat(m[2]); v.s.y = ToFloat(m[3]); v.s.z = ToFloat(m[4]);
+                v.s.rx = ToFloat(m[5]); v.s.ry = ToFloat(m[6]); v.s.rz = ToFloat(m[7]);
+                v.s.vx = ToFloat(m[8]); v.s.vy = ToFloat(m[9]); v.s.vz = ToFloat(m[10]);
+                v.s.received = now;
+                v.engine = m[11] == "1"; v.siren = m[12] == "1"; v.locked = m[13] == "1";
+                v.body = ToFloat(m[14], 1000.f); v.engineHp = ToFloat(m[15], 1000.f);
+                return true;
+            }
+            if (type == "VDEL")
+            {
+                const auto it = g_netVehicles.find(ToUInt(at(1)));
+                if (it == g_netVehicles.end()) return true;
+                for (const auto& [seat, playerId] : it->second.seats)
+                {
+                    const auto s = g_netSeats.find(playerId);
+                    if (s != g_netSeats.end() && s->second.first == it->first) g_netSeats.erase(s);
+                }
+                // Сервер убрал машину (/dv, уборка) — убираем и там, где сидим сами.
+                if (it->second.handle && n::DOES_ENTITY_EXIST(it->second.handle)) DeleteEntity(it->second.handle);
+                if (g_localVehId == it->first) { g_localVehId = 0; g_localVeh = 0; g_localSeat = -2; }
+                g_netVehicles.erase(it);
+                return true;
+            }
+            if (type == "VOWN")
+            {
+                const auto it = g_netVehicles.find(ToUInt(at(1)));
+                if (it != g_netVehicles.end()) ApplySeat(it->second, ToInt(at(2)), std::clamp(ToInt(at(3), -1), -1, 15));
+                return true;
+            }
+            if (type == "VREG")
+            {
+                const uint32_t req = ToUInt(at(1)), id = ToUInt(at(2));
+                if (req != g_pendingReq || !id) return true;
+                const Vehicle veh = g_pendingReqHandle;
+                g_pendingReq = 0;
+                g_pendingReqHandle = 0;
+                if (!veh || !n::DOES_ENTITY_EXIST(veh))
+                {
+                    // Машины у нас уже нет — не держим место водителя на сервере.
+                    g_net.Send({ "VLEAVE", std::to_string(id) });
+                    return true;
+                }
+                auto& v = g_netVehicles[id];
+                v.id = id;
+                v.model = n::GET_ENTITY_MODEL(veh);
+                v.handle = veh;
+                // Машина трафика стала машиной сервера: игра больше не должна её убирать.
+                n::SET_ENTITY_AS_MISSION_ENTITY(veh, TRUE, TRUE);
+                const Vector3 p = n::GET_ENTITY_COORDS(veh, TRUE);
+                v.s.x = p.x; v.s.y = p.y; v.s.z = p.z;
+                v.s.received = now;
+                if (g_localVeh == veh && g_localSeat == -1) g_localVehId = id;
+                // Пока шёл ответ, мы уже вышли: сервер записал нас водителем — снимаем.
+                else g_net.Send({ "VLEAVE", std::to_string(id) });
+                Log("машина трафика зарегистрирована сервером: " + std::to_string(id));
+                return true;
+            }
+            if (type == "VREJ")
+            {
+                if (ToUInt(at(1)) != g_pendingReq) return true;
+                // Не просим снова, пока не пересядем: иначе упрёмся в лимит частоты.
+                g_rejectedHandle = g_pendingReqHandle;
+                g_pendingReq = 0;
+                g_pendingReqHandle = 0;
+                Log("сервер не взял машину в реестр: " + at(2));
+                return true;
+            }
+            if (type == "VSET" && m.size() >= 7)
+            {
+                const auto it = g_netVehicles.find(ToUInt(m[1]));
+                if (it == g_netVehicles.end()) return true;
+                auto& v = it->second;
+                const float oldBody = v.body, oldEngine = v.engineHp;
+                v.engine = m[2] == "1"; v.siren = m[3] == "1"; v.locked = m[4] == "1";
+                v.body = ToFloat(m[5], 1000.f); v.engineHp = ToFloat(m[6], 1000.f);
+                const Vehicle veh = v.handle;
+                if (!veh || !n::DOES_ENTITY_EXIST(veh)) return true;
+                // Команду сервера (ремонт, двигатель, замок) исполняет тот, кто ведёт машину, — мы.
+                if ((v.body > oldBody || v.engineHp > oldEngine) && v.body >= 1000.f && v.engineHp >= 1000.f)
+                {
+                    n::SET_VEHICLE_FIXED(veh);
+                    n::SET_VEHICLE_DIRT_LEVEL(veh, 0.f);
+                }
+                n::SET_VEHICLE_ENGINE_HEALTH(veh, v.engineHp);
+                n::SET_VEHICLE_BODY_HEALTH(veh, v.body);
+                if ((bool)n::GET_IS_VEHICLE_ENGINE_RUNNING(veh) != v.engine) n::SET_VEHICLE_ENGINE_ON(veh, v.engine, TRUE, TRUE);
+                if ((bool)n::IS_VEHICLE_SIREN_ON(veh) != v.siren) n::SET_VEHICLE_SIREN(veh, v.siren);
+                v.appliedLock = -1;   // замок выставит UpdateNetVehicles
+                return true;
+            }
+            return false;
+        }
+
+        void ClearNetVehicles()
+        {
+            for (auto& [id, v] : g_netVehicles) DeleteNetVehicleEntity(v);
+            g_netVehicles.clear();
+            g_netSeats.clear();
+            g_localVeh = 0; g_localSeat = -2; g_localVehId = 0;
+            g_leftVehId = 0;
+            g_pendingReq = 0; g_pendingReqHandle = 0; g_rejectedHandle = 0;
+        }
+
         void SendLocalState()
         {
             const Ped ped = n::PLAYER_PED_ID();
@@ -584,7 +1029,7 @@ namespace flov::game
                 s.seat = SeatOf(ped, veh);
                 Remote* owner = FindByEntity(veh);
                 s.vehOwner = owner ? owner->id : g_myId;
-                if (!owner) g_lastOwnVehicle = veh;
+                if (!owner && !NetVehicleByHandle(veh)) g_lastOwnVehicle = veh;
                 pos = n::GET_ENTITY_COORDS(veh, TRUE);
                 vel = n::GET_ENTITY_VELOCITY(veh);
                 const Vector3 rot = n::GET_ENTITY_ROTATION(veh, 2);
@@ -716,6 +1161,16 @@ namespace flov::game
             n::SET_VEHICLE_POPULATION_BUDGET(g_cfg.traffic ? 3 : 0);
             n::SET_NUMBER_OF_PARKED_VEHICLES(g_cfg.parked ? -1 : 0);
             n::PAUSE_CLOCK(g_cfg.freezeTime);
+            // Карта сетевой игры — один раз за запуск игры: большинство RP-интерьеров
+            // (квартиры, офисы, клубы из DLC) есть только в ней. Обратно в сюжетную
+            // карту игра не переключается — выход с сервера её не вернёт.
+            static bool mpMapLoaded = false;
+            if (g_cfg.mpMap && !mpMapLoaded)
+            {
+                n::ON_ENTER_MP();
+                mpMapLoaded = true;
+                Log("мир: включена карта сетевой игры (world.mp_map)");
+            }
         }
 
         /// Полоска способности под мини-картой. (Scaleform «minimap» здесь не
@@ -1077,10 +1532,12 @@ namespace flov::game
         void ResetSession()
         {
             world::Clear();
+            world::ResetInteriors();   // карта — как до сервера
             ui::CloseMenu();
             g_serverKeys.clear();
             for (auto& [id, r] : g_remotes) DestroyRemote(r);
             g_remotes.clear();
+            ClearNetVehicles();
             g_roster.clear();
             g_allowed.clear();
             if (g_noclip) SetNoClip(false, false);
@@ -1188,6 +1645,7 @@ namespace flov::game
             auto& c = g_cfg;
             c.peds = Bool("world.peds"); c.traffic = Bool("world.traffic"); c.parked = Bool("world.parked_vehicles");
             c.police = Bool("world.police"); c.ambient = Bool("world.ambient_events"); c.freezeTime = Bool("world.freeze_time");
+            c.mpMap = Bool("world.mp_map");
             c.minimap = Bool("hud.minimap"); c.abilityBar = Bool("hud.ability_bar"); c.areaNames = Bool("hud.area_names");
             c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel");
             c.pauseMenu = false; // legacy config key; native GTA pause is never allowed
@@ -1238,6 +1696,7 @@ namespace flov::game
             const std::string& type = m[0];
             auto at = [&m](size_t i) -> std::string { return i < m.size() ? m[i] : std::string(); };
             if (world::Handle(m)) return;
+            if (HandleVehicleMessage(m)) return;
 
             if (type == "PSTATE" && m.size() >= 20)
             {
@@ -1606,6 +2065,12 @@ namespace flov::game
             {
                 if ((r.ped && n::HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY(me, r.ped, TRUE)) ||
                     (r.veh && n::HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY(me, r.veh, TRUE)))
+                    byRemote = true;
+            }
+            for (auto& [id, v] : g_netVehicles)
+            {
+                const int driver = DriverOf(v);
+                if (v.handle && driver != 0 && driver != g_myId && n::HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY(me, v.handle, TRUE))
                     byRemote = true;
             }
             if (byRemote)
@@ -2081,14 +2546,20 @@ namespace flov::game
             UndoRemoteDamage(me);
             DetectHits(me);
             const Vector3 myPos = n::GET_ENTITY_COORDS(me, TRUE);
+            // Машины реестра — до игроков: персонажей сажают в уже созданные копии.
+            UpdateNetVehicles(now, myPos);
             for (auto& [id, r] : g_remotes) UpdateRemote(r, now, myPos);
             world::Tick(myPos.x, myPos.y, myPos.z);
 
+            bool stateSent = false;
             if (now >= g_nextState && g_readySent)
             {
                 g_nextState = now + kStateIntervalMs;
                 SendLocalState();
+                stateSent = true;
             }
+            // Посадка/высадка — каждый кадр (чтобы не пропустить короткую), VSYNC — вместе со STATE.
+            if (g_readySent) LocalVehicleTick(stateSent);
             if (now >= g_nextPing)
             {
                 g_nextPing = now + 2000;
