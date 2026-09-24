@@ -263,6 +263,7 @@ inline void ATTACH_ENTITY_TO_ENTITY(Entity entity1, Entity entity2, int boneInde
 inline void DETACH_ENTITY(Entity entity, BOOL p1, BOOL p2) { nv::invoke<void>(0x961AC54BF0613F5D, entity, p1, p2); }
 inline char* GET_VEHICLE_NUMBER_PLATE_TEXT(Vehicle vehicle) { return nv::invoke<char*>(0x7CE1CCB9B293020E, vehicle); }
 inline float GET_VEHICLE_ENGINE_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xC45D23BAF168AAB8, vehicle); }
+inline float GET_VEHICLE_BODY_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xF271147EB7B40F12, vehicle); }
 inline Object CREATE_OBJECT_NO_OFFSET(Hash objectHash, float posX, float posY, float posZ, BOOL networkHandle, BOOL createHandle, BOOL dynamic) { return nv::invoke<Object>(0x9A294B2138ABB884, objectHash, posX, posY, posZ, networkHandle, createHandle, dynamic); }
 inline Blip ADD_BLIP_FOR_COORD(float x, float y, float z) { return nv::invoke<Blip>(0x5A039BB0BCA604B6, x, y, z); }
 inline void BEGIN_TEXT_COMMAND_SET_BLIP_NAME(char* gxtentry) { nv::invoke<void>(0xF9113A30DE5C6670, gxtentry); }
