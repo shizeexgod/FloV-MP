@@ -14,6 +14,7 @@ add_library(flovmp-client SHARED
     src/net.cpp
     src/game.cpp
     src/ui.cpp
+    src/image.cpp
     src/voice.cpp
     src/world.cpp
     res/client.rc
@@ -45,7 +46,7 @@ if (MSVC)
     # Статический CRT: у игрока может не быть нужного VC++ Redistributable.
     set_property(TARGET flovmp-client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
-target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm)
+target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm windowscodecs)
 
 set_target_properties(flovmp-client PROPERTIES
     OUTPUT_NAME "FloVMP"
@@ -54,3 +55,37 @@ set_target_properties(flovmp-client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
 )
+
+# --- средство разработки: предпросмотр интерфейса без GTA V --------------------
+# Отдельное окно DirectX 11, в которое ui.cpp рисует настоящий интерфейс
+# клиента. В поставку не входит, собирается только локально.
+option(FLOVMP_BUILD_UI_PREVIEW "Собрать средство предпросмотра интерфейса" ON)
+if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
+    add_executable(flovmp-ui-preview WIN32
+        tools/ui-preview/main.cpp
+        res/client.rc
+        src/common.cpp
+        src/ui.cpp
+        src/image.cpp
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
+    )
+    target_compile_features(flovmp-ui-preview PRIVATE cxx_std_20)
+    target_include_directories(flovmp-ui-preview PRIVATE src ${IMGUI_DIR})
+    target_compile_definitions(flovmp-ui-preview PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
+        WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
+        IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
+    if (MSVC)
+        target_compile_options(flovmp-ui-preview PRIVATE /utf-8 /W3 /EHsc)
+        set_property(TARGET flovmp-ui-preview PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+    target_link_libraries(flovmp-ui-preview PRIVATE d3d11 dxgi shell32 ole32 version windowscodecs)
+    set_target_properties(flovmp-ui-preview PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
+    )
+endif()

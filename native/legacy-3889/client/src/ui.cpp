@@ -12,6 +12,7 @@
 #include "common.h"
 #include "invoke.h"
 #include "settings.h"
+#include "image.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -111,6 +112,10 @@ namespace flov::ui
         float g_loadingPercent = -1.f, g_loadingShownPercent = 0.f;
         std::vector<std::string> g_tips;
         uint32_t g_loadingAccent = 0xFBBF24;
+        // Картинки загрузочного экрана. Логотип зашит в клиент, фон и свой
+        // логотип владелец сервера кладёт в %LOCALAPPDATA%\FloVMP\ui.
+        image::Texture g_logo, g_background;
+        bool g_artLoaded = false;
 
         // Окно игры.
         std::wstring g_title = L"FloV Multiplayer";
@@ -120,6 +125,7 @@ namespace flov::ui
         HWND g_hwnd = nullptr;
         HHOOK g_keyboardHook = nullptr;
         WNDPROC g_originalWndProc = nullptr;
+        bool g_previewMode = false;   // средство предпросмотра вне игры
         ID3D11Device* g_device = nullptr;
         ID3D11DeviceContext* g_context = nullptr;
         bool g_imguiReady = false;
@@ -717,11 +723,11 @@ namespace flov::ui
         }
 
         /// Обрезать строку по ширине с «…».
-        std::string Fit(ImFont* f, const std::string& s, float width)
+        std::string Fit(ImFont* f, const std::string& s, float width, float size = 0)
         {
-            if (Measure(f, s).x <= width) return s;
+            if (Measure(f, s, size).x <= width) return s;
             std::string out = s;
-            while (!out.empty() && Measure(f, out + "…").x > width)
+            while (!out.empty() && Measure(f, out + "…", size).x > width)
             {
                 out.pop_back();
                 while (!out.empty() && (out.back() & 0xC0) == 0x80) out.pop_back();
@@ -1327,6 +1333,48 @@ namespace flov::ui
         }
 
         // --- загрузочный экран ------------------------------------------------------------
+        /// Логотип и фон грузим один раз, когда устройство уже готово.
+        /// Свои файлы владельца сервера лежат в папке ui рядом с журналом:
+        /// logo.png и loading-background.(jpg|png). Логотип FloV:MP зашит
+        /// в клиент и используется, пока своего нет.
+        void EnsureLoadingArt()
+        {
+            if (g_artLoaded || !g_device) return;
+            g_artLoaded = true;
+            const std::wstring dir = DataDir() + L"\\ui\\";
+            g_logo = image::LoadFile(g_device, dir + L"logo.png");
+            if (!g_logo) g_logo = image::LoadResource(g_device, 102);
+            for (const wchar_t* name : { L"loading-background.jpg", L"loading-background.png", L"loading-background.jpeg" })
+            {
+                g_background = image::LoadFile(g_device, dir + name);
+                if (g_background) break;
+            }
+            Log(std::string("ui: загрузочный экран — логотип ") + (g_logo ? "есть" : "нет") +
+                ", фон " + (g_background ? "свой" : "по умолчанию"));
+        }
+
+        /// Картинка на весь экран без искажения пропорций (как object-fit: cover).
+        void DrawCover(ImDrawList* dl, const image::Texture& texture, float w, float h, float alpha)
+        {
+            if (!texture || texture.width <= 0 || texture.height <= 0) return;
+            const float screen = w / h;
+            const float picture = (float)texture.width / (float)texture.height;
+            ImVec2 uv0(0, 0), uv1(1, 1);
+            if (picture > screen)
+            {
+                const float keep = screen / picture;          // режем по бокам
+                uv0.x = (1.f - keep) / 2.f;
+                uv1.x = uv0.x + keep;
+            }
+            else if (picture < screen)
+            {
+                const float keep = picture / screen;          // режем сверху и снизу
+                uv0.y = (1.f - keep) / 2.f;
+                uv1.y = uv0.y + keep;
+            }
+            dl->AddImage((ImTextureID)texture.view, ImVec2(0, 0), ImVec2(w, h), uv0, uv1, Rgba(255, 255, 255, alpha));
+        }
+
         void DrawLoading(ImDrawList* dl, float w, float h)
         {
             const auto now = GetTickCount64();
@@ -1339,73 +1387,122 @@ namespace flov::ui
             else fade = std::min(1.f, (now - g_loadingShownAt) / 150.f);
             const float s = g_s;
             const uint32_t acc = g_loadingAccent;
+            EnsureLoadingArt();
 
+            // Фон: картинка владельца сервера во весь экран, иначе тёмная
+            // подложка со свечением акцента — чёрного экрана игрок не видит никогда.
             dl->AddRectFilled(ImVec2(0, 0), ImVec2(w, h), Rgba(9, 9, 11, fade));
-            // Мягкое свечение акцента в центре (как radial-gradient прежнего экрана).
-            for (int i = 0; i < 6; ++i)
-                dl->AddCircleFilled(ImVec2(w / 2, h * 0.4f), (760 - i * 110) * s, Rgb(acc, 0.012f * fade), 96);
-
-            const float cw = std::min(460 * s, w - 48 * s);
-            const float x0 = (w - cw) / 2;
-            float y = h * 0.5f - 110 * s;
-
-            // Бренд: квадратик + FLOV:MP вразрядку.
-            {
-                std::string brand = g_brand;
-                for (auto& c : brand) c = (char)toupper((unsigned char)c); // латиница — прописными, как раньше
-                const float track = 2.1f * s;
-                float bw = 0;
-                for (char c : brand) bw += Measure(g_bold, std::string(1, c), 13 * s).x + track;
-                const float bx = (w - (bw + 19 * s)) / 2;
-                dl->AddRectFilled(ImVec2(bx, y + 4 * s), ImVec2(bx + 9 * s, y + 13 * s), Rgb(acc, fade), 2 * s);
-                float cx = bx + 19 * s;
-                for (char c : brand)
-                {
-                    const std::string ch(1, c);
-                    Text(dl, g_bold, ImVec2(cx, y), Rgb(acc, fade), ch, 13 * s);
-                    cx += Measure(g_bold, ch, 13 * s).x + track;
-                }
-            }
-            y += 44 * s;
-
-            const std::string title = Fit(g_title24, g_loadingTitle.empty() ? "Подключение…" : g_loadingTitle, cw);
-            Text(dl, g_title24, ImVec2((w - Measure(g_title24, title).x) / 2, y), Rgba(244, 244, 245, fade), title);
-            y += Px(g_title24) + 10 * s;
-            const std::string step = Fit(g_text, g_loadingStep, cw);
-            Text(dl, g_text, ImVec2((w - Measure(g_text, step).x) / 2, y), Rgba(161, 161, 170, fade), step);
-            y += Px(g_text) + 24 * s;
-
-            // Полоса прогресса.
-            const ImVec2 b0(x0, y), b1(x0 + cw, y + 4 * s);
-            dl->AddRectFilled(ImVec2(b0.x - 1, b0.y - 1), ImVec2(b1.x + 1, b1.y + 1), Rgba(39, 39, 42, fade), 2 * s);
-            dl->AddRectFilled(b0, b1, Rgba(23, 23, 27, fade), 2 * s);
-            if (g_loadingPercent >= 0)
-            {
-                g_loadingShownPercent += (g_loadingPercent - g_loadingShownPercent) * 0.12f;
-                dl->AddRectFilled(b0, ImVec2(b0.x + cw * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f), b1.y), Rgb(acc, fade), 2 * s);
-                const std::string pct = std::to_string((int)std::lround(g_loadingPercent)) + "%";
-                Text(dl, g_mono, ImVec2((w - Measure(g_mono, pct).x) / 2, b1.y + 10 * s), Rgba(113, 113, 122, fade), pct);
-            }
+            if (g_background) DrawCover(dl, g_background, w, h, fade);
             else
             {
-                // Неизвестный прогресс: бегущий отрезок, честнее выдуманных процентов.
-                const float t = (float)((now - g_loadingShownAt) % 1400) / 1400.f;
-                const float seg = cw * 0.35f;
-                const float sx = b0.x - seg + (cw + seg) * t;
-                dl->PushClipRect(b0, b1, true);
-                dl->AddRectFilled(ImVec2(sx, b0.y), ImVec2(sx + seg, b1.y), Rgb(acc, fade), 2 * s);
-                dl->PopClipRect();
+                // Подложка без картинки: наклонная подсветка акцентом. Кругов
+                // много и каждый почти прозрачный — иначе на месте свечения
+                // видны кольца, как у нескольких вложенных окружностей.
+                dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(w, h),
+                                            Rgba(16, 16, 20, fade), Rgba(12, 12, 16, fade),
+                                            Rgba(8, 8, 10, fade), Rgba(10, 10, 13, fade));
+                const ImVec2 centre(w * 0.34f, h * 0.36f);
+                const float radius = std::max(w, h) * 0.78f;
+                for (int i = 0; i < 56; ++i)
+                    dl->AddCircleFilled(centre, radius * (1.f - i / 56.f), Rgb(acc, 0.0022f * fade), 72);
             }
-            y += 4 * s + 26 * s + 34 * s;
 
-            // Подсказка, меняется каждые 7 секунд.
+            // Затемнение снизу: текст и полоса читаются на любой картинке.
+            dl->AddRectFilledMultiColor(ImVec2(0, h * 0.40f), ImVec2(w, h),
+                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f),
+                                        Rgba(6, 6, 8, 0.86f * fade), Rgba(6, 6, 8, 0.86f * fade));
+            // Второй слой у самого низа: на светлой картинке одного градиента
+            // не хватает, и подпись с подсказкой теряются в кадре.
+            dl->AddRectFilledMultiColor(ImVec2(0, h * 0.74f), ImVec2(w, h),
+                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f),
+                                        Rgba(6, 6, 8, 0.72f * fade), Rgba(6, 6, 8, 0.72f * fade));
+            dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(w, h * 0.22f),
+                                        Rgba(6, 6, 8, 0.5f * fade), Rgba(6, 6, 8, 0.5f * fade),
+                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f));
+
+            const float margin = std::min(72 * s, w * 0.07f);
+            const float barH = 6 * s;
+            const float barBottom = h - margin;
+            const float barTop = barBottom - barH;
+
+            // --- справа снизу: этап, процент, полоса -----------------------------
+            const float rightW = std::min(520 * s, w * 0.42f);
+            const float rx0 = w - margin - rightW;
+            {
+                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW * 0.72f);
+                const float stepY = barTop - Px(g_text) - 16 * s;
+                Text(dl, g_text, ImVec2(rx0, stepY), Rgba(228, 228, 231, fade), step, 15 * s);
+
+                if (g_loadingPercent >= 0)
+                {
+                    const std::string pct = std::to_string((int)std::lround(g_loadingPercent)) + "%";
+                    const float pw = Measure(g_mono, pct, 15 * s).x;
+                    Text(dl, g_mono, ImVec2(w - margin - pw, stepY), Rgb(acc, fade), pct, 15 * s);
+                }
+
+                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.11f * fade), barH / 2);
+                if (g_loadingPercent >= 0)
+                {
+                    g_loadingShownPercent += (g_loadingPercent - g_loadingShownPercent) * 0.12f;
+                    const float fill = rightW * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f);
+                    if (fill > 1.f)
+                    {
+                        dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx0 + fill, barBottom), Rgb(acc, fade), barH / 2);
+                        dl->AddCircleFilled(ImVec2(rx0 + fill, (barTop + barBottom) / 2), barH * 1.5f, Rgb(acc, 0.3f * fade), 20);
+                    }
+                }
+                else
+                {
+                    // Неизвестный прогресс: бегущий отрезок, честнее выдуманных процентов.
+                    const float t = (float)((now - g_loadingShownAt) % 1400) / 1400.f;
+                    const float seg = rightW * 0.32f;
+                    const float sx = rx0 - seg + (rightW + seg) * t;
+                    dl->PushClipRect(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), true);
+                    dl->AddRectFilled(ImVec2(sx, barTop), ImVec2(sx + seg, barBottom), Rgb(acc, fade), barH / 2);
+                    dl->PopClipRect();
+                }
+            }
+
+            // --- слева снизу: логотип, имя сервера, платформа -------------------
+            const float logoSide = std::min(96 * s, h * 0.13f);
+            const float blockTop = barBottom - logoSide;
+            float textX = margin;
+            if (g_logo)
+            {
+                dl->AddImage((ImTextureID)g_logo.view, ImVec2(margin, blockTop),
+                             ImVec2(margin + logoSide, blockTop + logoSide),
+                             ImVec2(0, 0), ImVec2(1, 1), Rgba(255, 255, 255, fade));
+                textX = margin + logoSide + 22 * s;
+            }
+
+            const float nameSize = 32 * s;
+            const float subSize = 13 * s;
+            const float titleMax = std::max(120 * s, rx0 - textX - 40 * s);
+            const std::string title = Fit(g_title24, g_loadingTitle.empty() ? "Подключение\u2026" : g_loadingTitle, titleMax, nameSize);
+            const float nameY = blockTop + (logoSide - nameSize - subSize - 14 * s) / 2;
+            Text(dl, g_title24, ImVec2(textX, nameY), Rgba(250, 250, 252, fade), title, nameSize);
+            {
+                std::string platform = g_brand;
+                for (auto& c : platform) c = (char)toupper((unsigned char)c);
+                float cx = textX;
+                for (char c : platform)
+                {
+                    const std::string ch(1, c);
+                    Text(dl, g_bold, ImVec2(cx, nameY + nameSize + 14 * s), Rgb(acc, 0.9f * fade), ch, subSize);
+                    cx += Measure(g_bold, ch, subSize).x + 2.1f * s;
+                }
+            }
+
+            // Подсказка над левым блоком: то, что спрашивают чаще всего.
             if (!g_tips.empty())
             {
-                dl->AddLine(ImVec2(x0, y - 18 * s), ImVec2(x0 + cw, y - 18 * s), Rgba(28, 28, 32, fade));
                 const auto& tip = g_tips[((now - g_loadingShownAt) / 7000 + g_loadingShownAt / 7) % g_tips.size()];
-                const float lineH = Px(g_textSm) * 1.5f;
-                const float tw = std::min(cw, Measure(g_textSm, StripColors(tip)).x + 2);
-                DrawWrapped(dl, g_textSm, ImVec2((w - tw) / 2, y), 0, tw, lineH, tip, 0x71717A, fade, false, false);
+                const float tipW = std::min(560 * s, rx0 - margin - 40 * s);
+                if (tipW > 80 * s)
+                {
+                    const float lineH = Px(g_text) * 1.5f;
+                    DrawWrapped(dl, g_text, ImVec2(margin, blockTop - 22 * s - lineH), 0, tipW, lineH, tip, 0x9A9AA4, fade, false, false);
+                }
             }
         }
 
@@ -1655,7 +1752,7 @@ namespace flov::ui
 
             LoadIcons();
             g_originalWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc)));
-            if (!g_keyboardHook)
+            if (!g_keyboardHook && !g_previewMode)
             {
                 // Модуль хука — наш ASI, а не GTA5.exe: с чужим handle Windows
                 // хук ставить отказывается, и оверлей Rockstar снова вылезал бы.
@@ -1666,7 +1763,7 @@ namespace flov::ui
                 if (g_keyboardHook) Log("ui: перехват клавиш Rockstar включён");
                 else Log("ui: не удалось поставить перехват клавиш, ошибка " + std::to_string(GetLastError()));
             }
-            PostMessageW(g_hwnd, kMsgApplyTitle, 0, 0);
+            if (!g_previewMode) PostMessageW(g_hwnd, kMsgApplyTitle, 0, 0);
             g_imguiReady = true;
             Log("ui: оверлей готов (" + std::to_string(desc.BufferDesc.Width) + "x" + std::to_string(desc.BufferDesc.Height) + ")");
         }
@@ -1736,6 +1833,16 @@ namespace flov::ui
         SetLogHook(&LogToConsole);
         if (shv::presentCallbackRegister) shv::presentCallbackRegister(OnPresent);
         else Log("ui: ScriptHookV без presentCallbackRegister — оверлей недоступен");
+    }
+
+    void Present(void* swapChain)
+    {
+        if (swapChain) OnPresent(swapChain);
+    }
+
+    void SetPreviewMode(bool on)
+    {
+        g_previewMode = on;
     }
 
     void Shutdown()

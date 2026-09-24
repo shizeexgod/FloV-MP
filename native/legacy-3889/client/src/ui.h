@@ -44,6 +44,15 @@ namespace flov::ui
     void Init();
     void Shutdown();
 
+    /// Отрисовать кадр поверх переданного swap chain. В игре это делает
+    /// ScriptHookV своим колбэком Present; отдельно нужно только средству
+    /// предпросмотра (tools/ui-preview), чтобы видеть интерфейс без GTA V.
+    void Present(void* swapChain);
+    /// Режим предпросмотра: не ставить перехват клавиш Rockstar и не менять
+    /// заголовок чужого окна — средство запускается на рабочем столе, а не
+    /// внутри игры.
+    void SetPreviewMode(bool on);
+
     // --- чат ---------------------------------------------------------------
     /// Строка чата: author (может быть пустым) и текст с цветами {rrggbb}.
     void AddChat(const std::string& textWithColors, const std::string& author = "", uint32_t authorRgb = 0xFFFFFF);
