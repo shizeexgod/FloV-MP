@@ -4,6 +4,7 @@
 Собрать архив установки для клиента на Windows: flovmp-setup.zip.
 
   python scripts/distribution/make_setup_zip.py
+  python scripts/distribution/make_setup_zip.py --github shizeexgod/FloV-MP-releases
 
 Внутри — УСТАНОВИТЬ.cmd (двойной щелчок), flovmp-setup.ps1 (спрашивает ключ и
 папку, запоминает их) и get.ps1 с вшитым открытым ключом релизов. Сам архив
@@ -12,6 +13,7 @@
 
 Результат: dist/cdn/flovmp-setup.zip — его кладут на VDS в /var/www/cdn.
 """
+import argparse
 import io
 import os
 import re
@@ -34,6 +36,14 @@ def read(path):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    ap = argparse.ArgumentParser()
+    # Источник по умолчанию для архива: GitHub-релизы вместо сервера раздачи.
+    # У части клиентов большие файлы с VDS обрываются, с GitHub — нет.
+    ap.add_argument("--github", default="", help="owner/repo релизов на GitHub")
+    ap.add_argument("--out", default=OUT)
+    args = ap.parse_args()
+    if args.github and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.github):
+        sys.exit("--github ждёт owner/repo")
     loader = read(LOADER)
     key = re.search(r"\$ReleasePubKeyXml = '([^']*)'", loader)
     if not key or len(key.group(1)) < 100:
@@ -45,9 +55,15 @@ def main():
     for required in ("УСТАНОВИТЬ.cmd", "flovmp-setup.ps1", "ПРОЧТИ-МЕНЯ.txt"):
         if required not in files:
             sys.exit("нет файла шаблона: " + required)
+    if args.github:
+        # flovmp-setup.ps1 читает настройки.txt при каждом запуске и дописывает
+        # в него ключ и папку; здесь — только откуда брать релиз.
+        files["настройки.txt"] = ("# Настройки установки FloV:MP. Файл читается при каждом запуске.\n"
+                                  "github = {}\n".format(args.github))
 
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
+    out = os.path.abspath(args.out)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for name, text in files.items():
             if name.endswith(CRLF):
                 text = text.replace("\n", "\r\n")
@@ -58,7 +74,8 @@ def main():
             info.create_system = 0
             info.flag_bits |= 0x800  # имена файлов в UTF-8 — кириллица в проводнике
             z.writestr(info, data)
-    print("готово: {} ({} КБ, файлов {})".format(OUT, os.path.getsize(OUT) // 1024 + 1, len(files)))
+    print("готово: {} ({} КБ, файлов {}{})".format(out, os.path.getsize(out) // 1024 + 1, len(files),
+                                                    ", источник GitHub " + args.github if args.github else ""))
     print("на VDS: положить в /var/www/cdn/flovmp-setup.zip (делает setup-vds.sh)")
 
 

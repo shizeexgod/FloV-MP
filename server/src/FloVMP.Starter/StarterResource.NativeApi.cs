@@ -109,13 +109,20 @@ public partial class StarterResource
         var np = (NativePlayerProxy)(object)player;
         var s = np.State;
         var pos = player.Position;
+        // Клиент 1.0.6+: машина и место — из реестра, поля STATE у него не значат ничего.
+        var (vehicleModel, seat) = (s.VehicleModel, s.Seat);
+        if (UsesRegistry(np.Session.Id))
+        {
+            var rv = _vehicles?.Registry.VehicleOf(np.Session.Id);
+            (vehicleModel, seat) = rv is null ? (0u, -1) : (rv.Model, _vehicles!.Registry.SeatOf(np.Session.Id).Seat);
+        }
         Alt.Emit("flovmp:native:state", id, player.Name,
             pos.X, pos.Y, pos.Z, s.Heading,
             (int)player.Health, (int)player.Armor,
             s.Weapon.ToString(CultureInfo.InvariantCulture),
             np.DimensionValue,
             s.InVehicle,
-            s.VehicleModel.ToString(CultureInfo.InvariantCulture),
-            s.Seat);
+            vehicleModel.ToString(CultureInfo.InvariantCulture),
+            seat);
     }
 }

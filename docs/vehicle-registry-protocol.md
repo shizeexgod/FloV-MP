@@ -23,9 +23,14 @@
 - **Машина без водителя** стоит на последней позиции из `VSYNC`, у всех
   заморожена и поставлена на землю; первый севший за руль становится
   водителем. Передача физики ближайшему игроку — позже.
-- **Брошенные машины.** `vehicles.abandoned_ttl_sec` (по умолчанию 300,
-  0 — никогда): непостоянная машина, в которой никого нет, удаляется через
-  столько секунд после того, как в ней последний раз кто-то был.
+- **Выход из машины её не удаляет.** Машина остаётся стоять у всех на месте,
+  где её бросили. Машины сервера (`/car`, API геймода) платформа не убирает
+  никогда — как в alt:V и RAGE:MP: только `/dv` или геймод.
+- **Брошенный трафик** (уточнено владельцем 24.09): машина из трафика игры,
+  в которую кто-то садился, убирается, только когда она пустая и рядом
+  (в радиусе видимости) не было ни одного игрока `vehicles.abandoned_ttl_sec`
+  секунд (по умолчанию 300, 0 — никогда). Так делает сама GTA и FiveM.
+  Сохраняемые (`persistent`) не трогаются.
 - **Версии.** Из `HELLO` сравниваем `major.minor.patch`, суффикс
   (`-beta`) игнорируем, `dev` считается новым клиентом. Ниже 1.0.6 — путь
   через `STATE`, как в 1.0.4/1.0.5; 1.0.6 и выше — реестр. Старый путь
@@ -92,6 +97,10 @@
 5. **`VREQ`, когда игрок уже в машине реестра**, сначала высаживает его из
    неё (как `VLEAVE`), потом регистрирует новую.
 6. **Смена измерения или выход игрока** освобождает его место.
+   Старый клиент (< 1.0.6), севший пассажиром к водителю 1.0.6+, для
+   остальных остаётся пешим; сервер пишет об этом отдельную строку в журнал
+   (`[FloV:MP Транспорт] переходный период 1.0.6: …`) — раз на поездку.
+   `/dv` снаружи убирает ближайшую свою машину в радиусе 10 м.
 7. **Водитель вышел** — машина останавливается: скорость обнуляется,
    остальным уходит `VSTATE` с нулевой скоростью.
 8. **Дистанция `VENTER`** — не дальше 10 м от последнего `STATE` игрока.
@@ -101,6 +110,61 @@
     ID игроков по смыслу (разные сообщения). В 8d сохранённые машины
     возвращаются с тем же ID, а новые получают ID выше максимального
     сохранённого.
+
+## Сохранение (8d)
+
+- Таблица `vehicles` (миграция `sql/migrations/003_vehicles.sql`), ключ
+  (`world`, `id`); без базы — `flovmp-data/vehicles.json`. Режим пишется в
+  журнал при старте.
+- Сохраняются только машины с флагом `persistent`: по таймеру
+  (`vehicles.save_interval_sec`, только изменившиеся), сразу при парковке
+  (вышел водитель), при создании через API, перед остановкой сервера.
+  `/dv`, `flovmp:vehicle:remove` и снятие флага удаляют строку.
+- Запись идёт в фоновом потоке, «последнее побеждает» по каждой машине:
+  упавшая база не тормозит тик и не теряет свежее состояние.
+- При старте машины встают с теми же ID (новые ID — выше), заглушёнными; с
+  повреждениями или целыми (`vehicles.restore_damage`); ресурсам —
+  `flovmp:vehicles:loaded (количество)`.
+- Проверено на MariaDB 10.11: миграция, повторный накат, запись, удаление,
+  изоляция миров, фоновая очередь.
+
+## Что настраивает владелец сервера
+
+Платформа — рабочий макет по умолчанию; поведение меняется без правки
+платформы: файлом `client.cfg` или из кода ресурса (`flovmp:settings:set`).
+
+| Что | Как |
+|---|---|
+| Потолок машин, уборка брошенного трафика | `vehicles.max_registered`, `vehicles.abandoned_ttl_sec` |
+| Можно ли угонять машины трафика, как часто | `vehicles.register_traffic`, `vehicles.register_cooldown_sec` |
+| С какого расстояния можно сесть | `vehicles.enter_distance` |
+| Формат номеров | `vehicles.plate_format` (или свой номер каждой машине через API) |
+| Сохранение: вкл/выкл, частота, повреждения, мир | `vehicles.persistence`, `vehicles.save_interval_sec`, `vehicles.restore_damage`, `world.name` |
+| Кто может `/car`, `/dv`, `/fix`, `/lock` | `server/config/admin-commands.cfg`: 0 — всем, 1…8 — с уровня |
+| Ключи, владельцы, аренда, гаражи | геймод: `flovmp:vehicle:lock`/`putInto`/`create` + свои таблицы по ID машины |
+
+## Клиент (8b, `native/legacy-3889/client/src/game.cpp`)
+
+- **Копии машин реестра** — скриптовые сущности игры (mission entity, не
+  сетевые): их не трогает ни трафик игры, ни его уборка. Дальше 350 м копия
+  убирается, как персонажи игроков, и мгновенно создаётся при возврате.
+- **Чужой водитель** — копию ведёт тот же механизм, что машины старого пути
+  (`SteerVehicle`: цель = позиция + скорость × возраст строки, коррекция
+  скоростью, поворот через подвеску). Прочность копии — серверная.
+- **Без водителя** — копия заморожена и поставлена на землю на последней
+  позиции с сервера; сел за руль — заморозка снимается.
+- **Посадка своя:** сел в машину реестра — `VENTER`; за руль машины
+  трафика — `VREQ` (после `VREJ` для этой машины повторно не просит); вышел
+  — `VLEAVE`; за рулём — `VSYNC` вместе с каждым `STATE` (50 мс).
+- **`VOWN` про себя:** сервер посадил (`/car`) — садимся (машина грузится —
+  посадим, когда появится); место занято не нами, а мы на нём — выходим
+  (отказ на `VENTER`). Запоздавший `VOWN` в первые 1,5 с после своего
+  выхода обратно не сажает.
+- **Совместимость:** поля машины в `STATE` клиент заполняет как раньше —
+  на сервере 1.0.5 всё работает старым путём, а новые сообщения сервер 1.0.5
+  молча пропускает. Машины старых клиентов (`PSTATE`) показываются как раньше.
+- **Не сделано в 8b:** ESP транспорта (F3) пока показывает только машины
+  старого пути — это UI, отложено до согласования.
 
 ## Соответствие имён FloV:MP ↔ RAGE:MP ↔ alt:V
 
@@ -174,7 +238,94 @@
 seat)` и **`playerLeaveVehicle`** (на сервере — `playerExitVehicle`).
 Слой совместимости должен различать сторону.
 
-Имена событий FloV:MP в 8c — предложение, утверждаются вместе с API.
+Имена событий FloV:MP реализованы в 8c; полный справочник с сигнатурами —
+`scripts/package-templates/common/sdk/template/README.md`, раздел «Транспорт».
+Сверх таблицы: команды `flovmp:vehicle:create` (ответ `…:created` по ключу),
+`remove`, `putInto`, `removeFrom`, `engine`, `lock`, `repair`, `health`,
+`plate`, `persistent`, `query`/`queryAll` (ответ `…:state`). Отдельного
+события смены места нет: пересел = `leave` + `enter`. `flovmp:vehicle:siren`
+не сделано (сирену включает водитель).
+
+## Слой совместимости (пункт 17): игроки, события, сущности
+
+Шире транспорта — чтобы слой `mp.*` / `alt.*` строился по одной таблице.
+Колонка FloV:MP: **есть** — уже в платформе (SDK-события
+`flovmp:native:*`, `StarterResource.NativeApi.cs`), **план** — появится с
+пунктами roadmap. Источники те же: публичные типы RAGE:MP 2.1.9 и
+`AltV.Net` 16.4.21; взяты только имена.
+
+### Пулы сущностей
+
+| RAGE:MP (`mp.*`) | alt:V C# | FloV:MP |
+|---|---|---|
+| `mp.players` | `Alt.GetAllPlayers()` | есть (игроки 3889 — `NativePlayerProxy` как `IPlayer`) |
+| `mp.vehicles` | `Alt.GetAllVehicles()` | реестр транспорта (8a), публичный API — 8c |
+| `mp.objects`, `mp.markers`, `mp.blips`, `mp.labels`, `mp.peds` | `IObject`, `IMarker`, `IBlip`, `ITextLabel`, `IPed` | есть в мире сервера (объекты, маркеры, метки, 3D-надписи, NPC) |
+| `mp.colshapes`, `mp.checkpoints` | `IColShape`, `ICheckpoint` | план |
+| `mp.events` | `Alt.OnServerEvent`, `Alt.On*` | есть (события ресурса) |
+
+Общие методы пула RAGE:MP, которые слою нужно дать: `at(id)`, `exists`,
+`forEach`, `forEachInRange(pos, range)`, `forEachInDimension`,
+`getClosest(pos)`, `toArray`, `length`. У нас есть пространственная сетка
+(`SpatialHashGrid`), так что `forEachInRange` и `getClosest` — без O(n).
+
+### Общие свойства сущности
+
+| RAGE:MP (`EntityMp`) | alt:V C# | Заметка |
+|---|---|---|
+| `id`, `type`, `model` | `Id`, `Type`, `Model` | — |
+| `position`, `dimension`, `alpha` | `Position`, `Dimension`, (нет `alpha` у игрока) | — |
+| `setVariable` / `getVariable` (видят все) | `SetSyncedMetaData` / `GetSyncedMetaData` | у 3889 synced-metadata ещё нет (аудит Sayonara, приоритет 4) |
+| `setOwnVariable` (видит только сам игрок) | `SetLocalMetaData` | у 3889 хранится только на сервере |
+| `data` | `SetMetaData` (только сервер) | — |
+| `dist`, `distSquared` | — (считается через `Position`) | — |
+| `destroy()` | `Destroy()` | — |
+
+### Игрок
+
+| RAGE:MP (`PlayerMp`) | alt:V C# | FloV:MP сейчас |
+|---|---|---|
+| `name`, `socialClub`, `rgscId`, `serial`, `ip` | `Name`, `SocialClubId`, `HardwareIdHash`, `Ip` | есть; `SocialClubId` у 3889 — ID ключа игрока |
+| `health`, `armour` | `Health`, `Armor` | есть, серверные (урон считает сервер) |
+| `heading` | `Rotation.Yaw` | есть |
+| `weapon`, `giveWeapon`, `removeAllWeapons` | `CurrentWeapon`, `GiveWeapon`, `RemoveAllWeapons` | есть (`flovmp:native:weapon`, `disarm`) |
+| `vehicle`, `seat` | `Vehicle`, `Seat` | `null`/0 у 3889 до 8c |
+| `putIntoVehicle`, `removeFromVehicle` | `SetIntoVehicle` | 8c |
+| `spawn(pos)` | `Spawn(pos)` | есть (`flovmp:native:spawn`) |
+| `kick`, `ban` | `Kick` | есть (`flovmp:native:kick`, бан — модерация) |
+| `outputChatBox`, `notify` | `Emit` (своё событие) | есть (чат, `NOTIFY`) |
+| `call(event, args)` (на клиент) | `Emit` / `EmitClient` | есть для alt:V-клиента; для 3889 — свой набор сообщений |
+| `ping`, `packetLoss` | `Ping` | `ping` есть (PING/PONG) |
+| `isAiming`, `isReloading`, `isEnteringVehicle`, `isLeavingVehicle` | `IsAiming`, `IsReloading`, `IsEnteringVehicle`, `IsLeavingVehicle` | `isAiming` — флаг STATE; остальные — план |
+| `setClothes`, `setProp`, `setHeadBlend`, `setFaceFeature` | `SetClothes`, `SetProps`, `SetHeadBlendData`, `SetFaceFeature` | план (внешность — отдельный пункт) |
+| `playAnimation`, `stopAnimation` | (клиент) | план (`EmitInRange` из аудита) |
+
+### Серверные события
+
+| RAGE:MP | alt:V C# | FloV:MP |
+|---|---|---|
+| `playerJoin` / `playerReady` | `OnPlayerConnect` / (клиентское ready) | есть (вход и READY) |
+| `playerQuit` | `OnPlayerDisconnect` | есть (`flovmp:native:left`) |
+| `playerSpawn` | `OnPlayerSpawn` | есть |
+| `playerDeath` | `OnPlayerDead` | есть (смерть объявляет сервер) |
+| `playerDamage` | `OnPlayerDamage` / `OnWeaponDamage` | есть внутри (HIT), событие для ресурса — план |
+| `playerChat`, `playerCommand` | (свои события чата) | есть |
+| `playerWeaponChange` | `OnPlayerWeaponChange` | план (данные уже в STATE) |
+| `playerStreamIn` / `playerStreamOut` | — (клиент) | план (есть на сервере как PADD/PDEL) |
+| `playerEnterColshape` / `playerExitColshape` | `OnColShape` | план |
+| `playerEnterCheckpoint` / `playerExitCheckpoint` | `OnCheckpoint` | план |
+| `playerReachWaypoint` | — | есть (TPM на метку) |
+| `entityCreated` / `entityDestroyed` | `OnBaseObjectCreate` / `OnBaseObjectRemove` | план |
+| `entityModelChange` | — | есть внутри (MODEL) |
+| `serverShutdown` | (остановка ресурса) | есть |
+| `incomingConnection` | `OnConnectionQueueAdd` | есть внутри (баны до WELCOME) |
+| — | `OnPlayerDimensionChange` | есть внутри (снимок мира при смене) |
+| — | `OnPlayerStartTalking` / `OnPlayerStopTalking` | план (голос свой) |
+
+Транспортные события — в таблице выше. Регистрация: RAGE:MP
+`mp.events.add(name, fn)` / `mp.events.addCommand(name, fn)`, alt:V
+`Alt.OnServerEvent` / атрибуты `[ServerEvent]`, у нас — атрибуты
+`[Command]` / `[RemoteEvent]` из `Bridge/RageCompatibility.cs`.
 
 Уже есть в коде: `FloVMP.Core/Bridge/RageCompatibility.cs` — атрибуты
 `[Command]` и `[RemoteEvent]` в стиле серверного C# RAGE:MP (тесты

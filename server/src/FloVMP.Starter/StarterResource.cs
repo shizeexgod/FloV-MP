@@ -564,6 +564,7 @@ public partial class StarterResource : Resource
             }
             _antiCheat = new FloVMP.Core.AntiCheat.AntiCheatService(acConfig);
             _antiCheat.OnDetection += OnAntiCheatDetection;
+            StartSuspicionLedger(antiCheatMode);
             Alt.Log($"[FloV:MP Starter] Проверка движения включена (режим {antiCheatMode}; off/log/strict — FLOVMP_ANTICHEAT).");
         }
 
@@ -596,6 +597,11 @@ public partial class StarterResource : Resource
         // или reloadadmins в консоли).
         if (dbReachable)
             _adminManager.AttachStore(new FloVMP.Core.Admin.MySqlAdminStore(starterDbConn));
+
+        // Сохранённые машины мира — до входа первых игроков (8d).
+        StartVehiclePersistence(dbReachable ? starterDbConn : null, starterDataDir);
+        StartPlayerPersistence(dbReachable ? starterDbConn : null, starterDataDir);
+        StartMetrics(starterDataDir);
 
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
@@ -650,10 +656,15 @@ public partial class StarterResource : Resource
         Alt.OnServer<string, string, int>("flovmp:commands:register", OnRegisterModCommand);
         Alt.OnServer<float, float, float, float>("flovmp:settings:spawn", OnSpawnSetting);
         Alt.OnServer<bool>("flovmp:settings:respawn", OnRespawnSetting);
+        Alt.OnServer<string, string>("flovmp:settings:set", OnSettingSet);
 
         // Мир и интерфейс для клиентов b3889: события ресурсов и файлы карт.
         RegisterWorldApi();
         RegisterNativeApi();
+        RegisterVehicleApi();
+        RegisterAntiCheatApi();
+        RegisterPlayerApi();
+        RegisterMetricsApi();
         LoadMaps(broadcast: false);
 
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
@@ -666,6 +677,10 @@ public partial class StarterResource : Resource
     public override void OnStop()
     {
         _licenseRemoteCts.Cancel();
+        // Машины — пока игроки ещё на сервере: позиция машины, в которой едут
+        // прямо сейчас, тоже должна пережить перезапуск.
+        StopVehiclePersistence();
+        StopPlayerPersistence();
         StopNativeGateway();
         // Баны на диск до отписки от событий: выданный в последнюю секунду бан
         // обязан пережить перезапуск.
@@ -677,6 +692,7 @@ public partial class StarterResource : Resource
         Alt.OnPlayerDisconnect -= OnPlayerDisconnect;
         Alt.OnPlayerDead -= OnPlayerDead;
         Alt.OnConsoleCommand -= OnConsoleCommand;
+        StopMetrics();
         Alt.Log("[FloV:MP Starter] Остановка платформы.");
     }
 
@@ -739,6 +755,7 @@ public partial class StarterResource : Resource
         var player = PlayerById((uint)ev.AccountId);
         Alt.LogWarning($"[FloV:MP Античит] {ev.DetectionType}: {(player?.Name ?? ev.Username)} " +
                        $"(ID {ev.AccountId}) — {ev.Details}");
+        ReportSuspicion((uint)ev.AccountId, FloVMP.Core.AntiCheat.SuspicionKind.Movement, $"{ev.DetectionType}: {ev.Details}");
 
         if (player is null || !player.Exists) return;
         if (ev.SuggestedAction != FloVMP.Core.AntiCheat.AntiCheatAction.TeleportBack) return;
@@ -775,6 +792,7 @@ public partial class StarterResource : Resource
 
             _antiCheat.CheckMovement(id, vec, InAnyVehicle(player));
         }
+        TickSuspicionChecks(nowMs);
     }
 
     /// <summary>
@@ -1004,15 +1022,18 @@ public partial class StarterResource : Resource
             return;
         }
 
-        // Чистый спавн игрока — точка, модель, здоровье и броня из config/client.cfg.
-        var (spawnPos, spawnHeading) = NextSpawn();
-        player.Model = SpawnModel();
+        // Спавн — точка, модель, здоровье и броня из config/client.cfg, а
+        // вернувшийся игрок — там, где вышел (что именно — players.restore_*).
+        var restore = PlanRestore(player);
+        var (spawnPos, spawnHeading) = SpawnPointFor(restore);
+        player.Model = SpawnModelFor(restore);
         player.Spawn(spawnPos, 0);
         // Rotation в alt:V — в радианах, курс — в градусах.
         player.Rotation = new Rotation(0, 0, spawnHeading * MathF.PI / 180f);
         player.Health = (ushort)_settings.Int("spawn.health");
         player.MaxHealth = 200;
         player.Armor = (ushort)_settings.Int("spawn.armor");
+        ApplyRestore(player, restore);
 
         // Автоматическое распознавание Основателя (8)
         // БЕЗ БЭКДОРОВ. Раньше здесь были: захардкоженный ник (любой
@@ -1296,6 +1317,10 @@ public partial class StarterResource : Resource
                 }
                 break;
 
+            case "metrics":
+                Alt.Log("[Console] " + (_metrics.Last?.ToLogLine() ?? "метрики ещё не собраны (первое окно — через минуту после запуска)"));
+                break;
+
             case "say":
                 if (args.Length == 0)
                 {
@@ -1497,6 +1522,8 @@ public partial class StarterResource : Resource
 
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
+        // Первым делом: дальше чистятся учёт оружия и признак «вошёл в мир».
+        SavePlayerOnLeave(player);
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         var wasAdmin = _rosterLevels.TryRemove(player.Id, out _);
         _clientReady.TryRemove(player.Id, out _);
@@ -1504,6 +1531,7 @@ public partial class StarterResource : Resource
         DestroyAdminVehicle(player.Id);
         _adminLevels.TryRemove(player.Id, out _);
         _antiCheat?.RemovePlayer((int)player.Id);
+        ForgetSuspicions(player.Id);
         _sessionAdminRanks.TryRemove(player.Id, out _);
         _godModes.TryRemove(player.Id, out _);
         _pendingRespawns.RemoveAll(r => r.Player == player);
@@ -1656,6 +1684,14 @@ public partial class StarterResource : Resource
 
     public override void OnTick()
     {
+        var tickStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        try { OnTickCore(); }
+        catch { _metrics.RecordError(); throw; }
+        finally { TickMetrics(tickStart); }
+    }
+
+    private void OnTickCore()
+    {
         using var _perfTick = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfTick);
 
         using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfStoreSync))
@@ -1686,6 +1722,7 @@ public partial class StarterResource : Resource
 
         using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAntiCheat))
             TickAntiCheat(nowMs);
+        TickPlayerPersistence(nowMs);
 
         TickNative(nowMs);
 
@@ -1801,6 +1838,7 @@ public partial class StarterResource : Resource
                 return;
             }
         if (IsNative(player) && HandleNativeVehicleCommand(player, cmd, parts)) return;
+        if (HandleAntiCheatCommand(player, cmd, parts)) return;
         if (!_settings.Bool("chat.rp_commands") && cmd is "me" or "do" or "b" or "ooc" or "s" or "shout" or "w" or "whisper"
             && !_modCommands.ContainsKey(cmd))
         {

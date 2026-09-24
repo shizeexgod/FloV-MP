@@ -84,7 +84,7 @@ PLACEHOLDERS = [
 ]
 
 LINUX_EXECUTABLES = {
-    "install.sh", "start.sh", "start-voice.sh",
+    "install.sh", "update.sh", "start.sh", "start-voice.sh",
     "scripts/lib-env.sh", "scripts/backup-db.sh", "scripts/build-gamemode.sh",
     "sdk/template/build.sh",
     "server/flovmp-server", "server/flovmp-crash-handler",
@@ -342,6 +342,9 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
 
     if target_os == "linux":
         copy(os.path.join(REPO, "scripts", "install.sh"), S("install.sh"))
+        # Загрузчик внутри установки: обновление — одна команда «sudo bash update.sh»,
+        # ключ и источник (GitHub или сервер раздачи) он берёт из самой установки.
+        copy(os.path.join(REPO, "scripts", "distribution", "get.sh"), S("update.sh"))
     else:
         if not host_dir or not os.path.isfile(os.path.join(host_dir, "FloVMP-Server.exe")):
             fail("нет FloVMP-Server.exe — соберите без --skip-build")
@@ -474,7 +477,7 @@ def verify_stage(stage, target_os, entries):
                 "client-b3889/uninstall-client.cmd", "client-b3889/server.txt.example",
                 "client-b3889/README.md"]
     if target_os == "linux":
-        required += ["install.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",
+        required += ["install.sh", "update.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",
                      "server/flovmp-server", "voice/altv-voice-server", "server/modules/libcsharp-module.so"]
     else:
         required += ["FloVMP-Server.exe", "install.ps1", "install.cmd", "scripts/lib.ps1", "scripts/build-gamemode.ps1",

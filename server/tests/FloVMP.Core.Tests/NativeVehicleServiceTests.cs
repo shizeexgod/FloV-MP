@@ -225,22 +225,55 @@ public class NativeVehicleServiceTests
     }
 
     [Fact]
-    public void Abandoned_IsRemovedWithVDel()
+    public void ServerVehicle_StaysAfterExit_NoMatterHowLong()
     {
+        // Вышел из своей машины (/car) — она стоит, пока её не уберут командой.
         var (svc, host) = Make();
         host.Add(1, 0, 0);
         host.Add(2, 5, 0);
         var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
         Replicate(svc, host, now: 0);
         svc.HandleLeave(1, new[] { "VLEAVE", v.Id.ToString() }, 1_000);
-
+        host.Players.Clear(); // все разошлись
         host.Sent.Clear();
-        Replicate(svc, host, now: 300_999);
-        Assert.Empty(host.To(2, "VDEL"));
-        Replicate(svc, host, now: 301_000);
-        Assert.Single(host.To(2, "VDEL"));
-        Assert.Single(host.To(1, "VDEL"));
-        Assert.Null(svc.Registry.Get(v.Id));
+        Replicate(svc, host, now: 100_000_000);
+        Assert.NotNull(svc.Registry.Get(v.Id));
+    }
+
+    private static uint TrafficCar(NativeVehicleService svc, Host host, uint driver)
+    {
+        svc.HandleRequest(driver, new[] { "VREQ", "1", Adder.ToString() }, 0);
+        return uint.Parse(host.To(driver, "VREG")[0][2]);
+    }
+
+    [Fact]
+    public void AbandonedTraffic_StaysWhileAnyoneIsNear_EvenOldClient()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(3, 50, 0, registry: false); // старый клиент рядом
+        var id = TrafficCar(svc, host, 1);
+        svc.HandleLeave(1, new[] { "VLEAVE", id.ToString() }, 1_000);
+        host.Players.Remove(1);
+        for (long t = 0; t <= 1_000_000; t += 100_000) Replicate(svc, host, now: t);
+        Assert.NotNull(svc.Registry.Get(id));
+    }
+
+    [Fact]
+    public void AbandonedTraffic_IsRemovedWhenNobodyNearForTtl_WithVDel()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(2, 5000, 0);
+        var id = TrafficCar(svc, host, 1);
+        svc.HandleLeave(1, new[] { "VLEAVE", id.ToString() }, 1_000);
+        Replicate(svc, host, now: 2_000);          // водитель ещё рядом
+        host.Add(1, 5000, 10);                       // ушёл далеко
+        host.Sent.Clear();
+        Replicate(svc, host, now: 301_999);
+        Assert.NotNull(svc.Registry.Get(id));
+        Replicate(svc, host, now: 302_000);
+        Assert.Null(svc.Registry.Get(id));
     }
 
     [Fact]
@@ -312,5 +345,179 @@ public class NativeVehicleServiceTests
         svc.Replicate(0, host.Players.Values.ToList(), radius: 400, maxStreamed: 5, abandonedTtlMs: 0);
         Assert.DoesNotContain(host.To(1, "VDEL"), p => p[1] == own.Id.ToString());
         Assert.Equal(5, host.To(1, "VADD").Count);
+    }
+
+    // ------------------------------------------------------------ 8c: API и события
+
+    private static (NativeVehicleService Svc, Host Host, List<string> Events) MakeWithEvents()
+    {
+        var (svc, host) = Make();
+        var ev = new List<string>();
+        svc.PlayerEnteredVehicle += (p, v, seat) => ev.Add($"enter {p} {v} {seat}");
+        svc.PlayerLeftVehicle += (p, v, seat) => ev.Add($"leave {p} {v} {seat}");
+        svc.Damaged += (v, b, e, d) => ev.Add($"damage {v} {b} {e} {d}");
+        svc.Destroyed += v => ev.Add($"destroyed {v}");
+        svc.Removed += (v, why) => ev.Add($"removed {v} {why}");
+        return (svc, host, ev);
+    }
+
+    [Fact]
+    public void Api_Create_StandsEmptyAndIsReplicated()
+    {
+        var (svc, host, _) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.Create(Adder, 5, 0, 30, 90, 0, "RP 001", persistent: true, 0)!;
+        Assert.Equal("RP 001", v.Plate);
+        Assert.True(v.Persistent);
+        Assert.True(v.IsEmpty);
+        Replicate(svc, host);
+        Assert.Contains(host.To(1, "VADD"), p => p[1] == v.Id.ToString() && p[11] == "RP 001");
+    }
+
+    [Fact]
+    public void Events_EnterLeaveAndSeatSwitch()
+    {
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        svc.HandleEnter(1, new[] { "VENTER", v.Id.ToString(), "0" }, 0);
+        svc.HandleEnter(1, new[] { "VENTER", v.Id.ToString(), "-1" }, 0);
+        svc.HandleLeave(1, new[] { "VLEAVE", v.Id.ToString() }, 0);
+        Assert.Equal(new[]
+        {
+            $"enter 1 {v.Id} 0",
+            $"leave 1 {v.Id} 0", $"enter 1 {v.Id} -1",   // пересел = вышел + сел
+            $"leave 1 {v.Id} -1",
+        }, ev);
+    }
+
+    [Fact]
+    public void Api_PutInto_SendsSnapshotFirst_AndBumpsOccupant()
+    {
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        host.Add(2, 3000, 0);   // далеко: машина ему не показана
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        svc.HandleEnter(1, new[] { "VENTER", v.Id.ToString(), "-1" }, 0);
+        host.Sent.Clear();
+        ev.Clear();
+
+        Assert.Null(svc.PutInto(2, v.Id, -1, 0));
+        Assert.Equal(new[] { "VADD", "VSTATE", "VOWN", "VOWN" }, host.To(2).Select(p => p[0]).Take(4));
+        Assert.Contains(host.To(2, "VOWN"), p => p[2] == "2" && p[3] == "-1");
+        // Прежний водитель узнаёт, что место не его, — его клиент выйдет.
+        Assert.Contains(host.To(1, "VOWN"), p => p[2] != "1" && p[3] == "-1");
+        Assert.Equal(new[] { $"leave 1 {v.Id} -1", $"enter 2 {v.Id} -1" }, ev);
+    }
+
+    [Fact]
+    public void Api_PutInto_Refusals()
+    {
+        var (svc, host, _) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        host.Add(2, 0, 0, registry: false);
+        host.Add(3, 0, 0, dim: 5);
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        Assert.Equal("игрока нет на сервере", svc.PutInto(9, v.Id, -1, 0));
+        Assert.Equal("у игрока клиент старше 1.0.6", svc.PutInto(2, v.Id, -1, 0));
+        Assert.Equal("машины нет", svc.PutInto(1, 999, -1, 0));
+        Assert.Equal("нет такого места", svc.PutInto(1, v.Id, 16, 0));
+        Assert.Equal("машина в другом измерении", svc.PutInto(3, v.Id, -1, 0));
+    }
+
+    [Fact]
+    public void Api_RemoveFrom_TellsPlayerSeatIsNotTheirs()
+    {
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
+        host.Sent.Clear();
+        ev.Clear();
+        Assert.True(svc.RemoveFrom(1, 0));
+        Assert.Contains(host.To(1, "VOWN"), p => p[1] == v.Id.ToString() && p[2] == "0" && p[3] == "-1");
+        Assert.Equal(new[] { $"leave 1 {v.Id} -1" }, ev);
+        Assert.False(svc.RemoveFrom(1, 0));
+    }
+
+    [Fact]
+    public void Events_DamageAndDestroyedOnce_RepairRearms()
+    {
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
+        ev.Clear();
+        svc.HandleSync(1, new NativeVehicleSync(v.Id, 1, 0, 30, 0, 0, 0, 0, 0, 0, true, false, 900, 700), DateTime.UtcNow);
+        svc.HandleSync(1, new NativeVehicleSync(v.Id, 2, 0, 30, 0, 0, 0, 0, 0, 0, true, false, 900, -4000), DateTime.UtcNow);
+        svc.HandleSync(1, new NativeVehicleSync(v.Id, 3, 0, 30, 0, 0, 0, 0, 0, 0, true, false, 900, -4000), DateTime.UtcNow);
+        Assert.Equal(new[] { $"damage {v.Id} 100 300 1", $"damage {v.Id} 0 4700 1", $"destroyed {v.Id}" }, ev);
+
+        svc.Repair(v.Id);
+        Assert.False(v.Destroyed);
+        ev.Clear();
+        svc.HandleSync(1, new NativeVehicleSync(v.Id, 4, 0, 30, 0, 0, 0, 0, 0, 0, true, false, 1000, -4000), DateTime.UtcNow);
+        Assert.Contains($"destroyed {v.Id}", ev);
+    }
+
+    [Fact]
+    public void Events_RemoveReportsOccupantsAndReason()
+    {
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
+        ev.Clear();
+        svc.Remove(v.Id, "command");
+        Assert.Equal(new[] { $"leave 1 {v.Id} -1", $"removed {v.Id} command" }, ev);
+    }
+
+    [Fact]
+    public void Api_SetPlate_ResendsSnapshotToViewers()
+    {
+        var (svc, host, _) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        Replicate(svc, host);
+        host.Sent.Clear();
+        Assert.True(svc.SetPlate(v.Id, "police 1"));
+        Assert.Equal("POLICE 1", Assert.Single(host.To(1, "VADD"))[11]);
+    }
+
+    [Fact]
+    public void AntiCheat_BlacklistedTrafficModelIsRefusedAndSuspected()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        var rhino = FloVMP.Core.AntiCheat.GameHash.Joaat("rhino");
+        var suspects = new List<string>();
+        svc.Suspicious += (p, d) => suspects.Add($"{p}: {d}");
+        svc.TrafficModelAllowed = m => m != rhino;
+        svc.HandleRequest(1, new[] { "VREQ", "4", rhino.ToString() }, 0);
+        Assert.Equal("4", Assert.Single(host.To(1, "VREJ"))[1]);
+        Assert.Single(suspects);
+        Assert.Equal(0, svc.Registry.Count);
+    }
+
+    [Fact]
+    public void AntiCheat_ForeignVSyncIsSuspected()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(2, 1, 0);
+        var suspects = new List<uint>();
+        svc.Suspicious += (p, _) => suspects.Add(p);
+        var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
+        svc.HandleSync(2, Sync(v.Id, x: 50), DateTime.UtcNow);
+        Assert.Equal(new[] { 2u }, suspects);
+    }
+
+    [Fact]
+    public void Api_SetHealthToDestroyed_RaisesDestroyedOnce()
+    {
+        // Аудит: геймод «взрывал» машину через health — событие не приходило.
+        var (svc, host, ev) = MakeWithEvents();
+        host.Add(1, 0, 0);
+        var v = svc.Create(Adder, 1, 0, 30, 0, 0, null, false, 0)!;
+        svc.SetHealth(v.Id, 0, -4000);
+        svc.SetHealth(v.Id, 0, -4000);
+        Assert.Equal(new[] { $"destroyed {v.Id}" }, ev.Where(e => e.StartsWith("destroyed")));
     }
 }

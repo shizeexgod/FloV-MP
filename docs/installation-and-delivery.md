@@ -10,7 +10,23 @@
 
 Два способа — оба с ключом лицензии, оба проверяют целостность сами.
 
-### Способ 1: одной командой (с VDS раздачи FloV:MP)
+### Способ 1: одной командой
+
+Основной канал — GitHub-релизы (скачивается быстро, без обрывов больших
+файлов, как бывало с VDS):
+
+```bash
+# Linux
+curl -fsSLo flovmp-get.sh https://github.com/shizeexgod/FloV-MP-releases/releases/latest/download/get.sh
+sudo bash flovmp-get.sh --github shizeexgod/FloV-MP-releases --key FLV-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX
+# обновление потом:
+sudo bash /opt/flovmp/update.sh
+```
+
+Windows — см. README репозитория релизов (`-GitHub shizeexgod/FloV-MP-releases`).
+Выпуск релиза владельцем — `python scripts/release.py` (все шаги от тестов до VDS).
+
+С VDS раздачи FloV:MP (тот же загрузчик без `--github`):
 
 **Linux (Ubuntu / Debian):**
 

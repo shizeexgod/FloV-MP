@@ -28,13 +28,90 @@ public partial class StarterResource
     private NativeVehicleService CreateVehicleService()
     {
         var mode = (Environment.GetEnvironmentVariable("FLOVMP_ANTICHEAT") ?? "log").Trim().ToLowerInvariant();
-        return new NativeVehicleService(new VehicleHost(this), new VehicleRegistry(_settings.Int("vehicles.max_registered")))
+        var service = new NativeVehicleService(new VehicleHost(this), new VehicleRegistry(_settings.Int("vehicles.max_registered")))
         {
             PhysicsChecks = mode != "off",
         };
+        WireVehicleEvents(service);
+        WireVehicleAntiCheat(service);
+        return service;
     }
 
     private bool UsesRegistry(uint playerId) => _registryClients.Contains(playerId);
+
+    /// <summary>
+    /// Сидит ли игрок в машине реестра. Только тогда поля машины в его STATE
+    /// ничего не значат; иначе (машина не зарегистрирована) они — единственный
+    /// способ показать её остальным, и работают по старому пути.
+    /// </summary>
+    private bool InRegistryVehicle(uint playerId) =>
+        UsesRegistry(playerId) && _vehicles?.Registry.VehicleOf(playerId) is not null;
+
+    private VehiclePersistence? _vehiclePersistence;
+
+    /// <summary>
+    /// Сохранение машин (8d): хранилище по настройке vehicles.persistence,
+    /// подъём сохранённых машин и событие flovmp:vehicles:loaded ресурсам.
+    /// </summary>
+    private void StartVehiclePersistence(string? dbConnection, string dataDir)
+    {
+        if (!_settings.Bool("vehicles.persistence"))
+        {
+            Alt.Log("[FloV:MP] [Транспорт] Сохранение машин платформой выключено (vehicles.persistence = off) — его делает ваш геймод.");
+            return;
+        }
+        try
+        {
+            var world = WorldName();
+            var store = VehicleStoreFactory.Create(dbConnection, world, Path.Combine(dataDir, "vehicles.json"));
+            _vehiclePersistence = new VehiclePersistence(store, Alt.LogWarning);
+            Vehicles.AttachPersistence(_vehiclePersistence);
+            ApplyVehicleSettings();
+            var (restored, skipped) = Vehicles.RestoreSaved(_settings.Bool("vehicles.restore_damage"), _clock.ElapsedMilliseconds);
+            Alt.Log($"[FloV:MP] [Транспорт] Машины сохраняются: {store.Describe}. Восстановлено: {restored}" +
+                    (skipped > 0 ? $", пропущено {skipped} (потолок vehicles.max_registered или повтор ID)." : "."));
+            Alt.Emit("flovmp:vehicles:loaded", restored);
+        }
+        catch (Exception ex)
+        {
+            // Без машин сервер работать может, без запуска — нет.
+            Alt.LogError($"[FloV:MP] [Транспорт] Сохранённые машины не подняты: {ex.Message}");
+        }
+    }
+
+    /// <summary>Имя мира в базе (world.name): одно на машины и игроков.</summary>
+    private string WorldName()
+    {
+        var world = _settings.Get("world.name").Trim();
+        return world.Length is 0 or > 32 ? "main" : world;
+    }
+
+    private void StopVehiclePersistence()
+    {
+        if (_vehiclePersistence is null) return;
+        try
+        {
+            var saved = Vehicles.SaveAll();
+            var ok = _vehiclePersistence.FlushBlocking(TimeSpan.FromSeconds(10));
+            Alt.Log($"[FloV:MP] [Транспорт] Машины сохранены перед остановкой ({saved} изменились)" +
+                    (ok ? "." : " — НЕ всё успело записаться, проверьте хранилище."));
+            _vehiclePersistence.Dispose();
+        }
+        catch (Exception ex) { Alt.LogWarning($"[FloV:MP] [Транспорт] Сохранение перед остановкой: {ex.Message}"); }
+        _vehiclePersistence = null;
+    }
+
+    /// <summary>Настройки транспорта из client.cfg (и flovmp:settings:set) — на лету.</summary>
+    private void ApplyVehicleSettings()
+    {
+        var v = Vehicles;
+        v.Registry.MaxRegistered = _settings.Int("vehicles.max_registered");
+        v.Registry.PlateFormat = _settings.Get("vehicles.plate_format");
+        v.Registry.MaxEnterDistance = _settings.Float("vehicles.enter_distance");
+        v.Registry.TrafficRegisterIntervalMs = (long)(_settings.Float("vehicles.register_cooldown_sec") * 1000);
+        v.AllowTrafficRegistration = _settings.Bool("vehicles.register_traffic");
+        v.SaveIntervalMs = _settings.Int("vehicles.save_interval_sec") * 1000L;
+    }
 
     private void OnVehicleClientJoined(NativeSession session)
     {
@@ -52,6 +129,7 @@ public partial class StarterResource
     {
         _vehicles?.PlayerLeft(playerId, _clock.ElapsedMilliseconds);
         _registryClients.Remove(playerId);
+        _legacyPassengerNoted.Remove(playerId);
     }
 
     private void OnVehicleMessage(NativeSession session, string[] p)
@@ -81,10 +159,12 @@ public partial class StarterResource
     private void ReplicateVehicles(long nowMs)
     {
         if (_vehicles is null && _registryClients.Count == 0) return;
-        Vehicles.Registry.MaxRegistered = _settings.Int("vehicles.max_registered");
+        ApplyVehicleSettings();
+        // Все игроки 3889, не только 1.0.6+: рядом стоящий старый клиент тоже
+        // не даёт убрать машину как брошенную. Рассылку сервис шлёт только 1.0.6+.
         _vehicleRecipients.Clear();
-        foreach (var id in _registryClients)
-            if (_nativeReady.Contains(id) && TryGetVehiclePlayer(id, out var pl))
+        foreach (var id in _nativeReady)
+            if (TryGetVehiclePlayer(id, out var pl))
                 _vehicleRecipients.Add(pl);
         Vehicles.Replicate(nowMs, _vehicleRecipients, _settings.Float("sync.stream_radius"),
             _settings.Int("sync.max_streamed"), _settings.Int("vehicles.abandoned_ttl_sec") * 1000L);
@@ -101,9 +181,9 @@ public partial class StarterResource
     }
 
     /// <summary>
-    /// STATE клиента 1.0.6+: поля машины игнорируются (решение владельца —
-    /// место берём только из VENTER/VLEAVE/VOWN), флаг «в транспорте»
-    /// остаётся для анимаций и проверок урона.
+    /// STATE клиента 1.0.6+ в машине реестра: поля машины игнорируются
+    /// (решение владельца — место берём только из VENTER/VLEAVE/VOWN), флаг
+    /// «в транспорте» остаётся для анимаций и проверок урона.
     /// </summary>
     private static NativePlayerState WithoutVehicleFields(NativePlayerState st) =>
         st.VehicleModel == 0 && st.VehicleOwner == 0 && st.Seat == -1
@@ -159,8 +239,18 @@ public partial class StarterResource
             case "dv":
             case "delveh":
             case "destroyveh":
-                if (current is null) { SendChatMessage(player, "{fde047}[Транспорт] Сядьте в машину, которую нужно убрать."); return true; }
-                Vehicles.Remove(current.Id);
+                // Как у старого клиента: убрать можно и стоя рядом — ближайшую
+                // свою машину в радиусе DeleteOwnRadius (решение владельца).
+                var doomed = current ?? (np.Session.HasState
+                    ? Vehicles.Registry.NearestOwned(id, np.State.X, np.State.Y, np.State.Z, np.DimensionValue, DeleteOwnRadius)
+                    : null);
+                if (doomed is null)
+                {
+                    SendChatMessage(player, $"{{fde047}}[Транспорт] Рядом нет вашей машины: сядьте в неё или подойдите ближе {DeleteOwnRadius:0} м.");
+                    return true;
+                }
+                Vehicles.Remove(doomed.Id, "command");
+                SendChatMessage(player, "{34d399}[Транспорт] Машина убрана.");
                 return true;
             case "engine":
                 if (current is null) { SendChatMessage(player, "{fde047}[Транспорт] Вы должны находиться в транспортном средстве."); return true; }
@@ -178,6 +268,30 @@ public partial class StarterResource
         }
         return false;
     }
+
+    // Старый клиент пассажиром в машине реестра: одна строка на поездку, а
+    // не 20 в секунду (STATE идёт с такой частотой).
+    private readonly Dictionary<uint, uint> _legacyPassengerNoted = new();
+
+    /// <summary>
+    /// Клиент ниже 1.0.6 сел пассажиром к водителю 1.0.6+: машину реестра он
+    /// видит только полями PSTATE, а его место сервер подтвердить не может —
+    /// для остальных он остаётся пешим. Это ограничение переходного релиза,
+    /// а не баг: владельцу сервера пишем об этом отдельной строкой.
+    /// </summary>
+    private void NoteLegacyPassengerRefused(uint passengerId, uint driverId)
+    {
+        var vehicleId = _vehicles?.Registry.VehicleOf(driverId)?.Id ?? 0;
+        if (_legacyPassengerNoted.TryGetValue(passengerId, out var noted) && noted == vehicleId) return;
+        _legacyPassengerNoted[passengerId] = vehicleId;
+        var name = _nativePlayers.TryGetValue(passengerId, out var p) ? ((NativePlayerProxy)(object)p).Session.Name : "?";
+        Alt.LogWarning($"[FloV:MP Транспорт] переходный период 1.0.6: {name} [{passengerId}] со старым клиентом " +
+                       $"не может ехать пассажиром в машине реестра {vehicleId} (водитель [{driverId}]) — " +
+                       "для остальных он высажен. Обновление клиента игрока это снимет.");
+    }
+
+    /// <summary>/dv снаружи: своя машина не дальше этого, м.</summary>
+    private const float DeleteOwnRadius = 10f;
 
     private RegisteredVehicle? LastOwnVehicle(uint playerId)
     {
