@@ -27,6 +27,8 @@ public static class AdminCommandRegistry
         Register("noclip", 8, "/noclip", "Полёт сквозь стены (F4)");
         Register("fly", 8, "/fly", "Полёт сквозь стены (алиас /noclip)");
         Register("tpm", 8, "/tpm", "Телепорт на метку карты (F5)");
+        Register("ac", 8, "/ac <ID>", "Подозрения античита: счёт и последние срабатывания");
+        Register("acforgive", 8, "/acforgive <ID>", "Сбросить подозрения античита игрока");
         Register("tp", 8, "/tp <X> <Y> <Z>", "Телепорт по координатам");
         Register("goto", 8, "/goto <ID/ник>", "Телепортироваться к игроку");
         Register("gethere", 8, "/gethere <ID/ник>", "Телепортировать игрока к себе");

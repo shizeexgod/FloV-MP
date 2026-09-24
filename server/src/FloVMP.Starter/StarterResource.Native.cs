@@ -115,7 +115,7 @@ public partial class StarterResource
     {
         lock (_reportedUnsupported)
             if (!_reportedUnsupported.Add(member)) return;
-        Alt.LogWarning($"[FloV:MP b3889] IPlayer.{member} у нативного клиента не поддерживается — вызов пропущен.");
+        Alt.LogWarning($"[FloV:MP b3889] {(member.Contains('.') ? "I" + member : "IPlayer." + member)} у нативного клиента не поддерживается — вызов пропущен.");
     }
 
     private void StartNativeGateway()
@@ -249,6 +249,7 @@ public partial class StarterResource
             }
             catch (Exception ex)
             {
+                _metrics.RecordError();
                 Alt.LogError($"[FloV:MP b3889] Ошибка обработки {ev.GetType().Name} от [{ev.Session.Id}] {ev.Session.Name}: {ex}");
             }
         }
@@ -483,8 +484,10 @@ public partial class StarterResource
                 _hitWarnedAt[session.Id] = now;
                 Alt.LogWarning($"[FloV:MP Античит] {why}: [{session.Id}] {session.Name} → [{victimId}] {victim.Session.Name} — отклонено.");
             }
+            ReportSuspicion(session.Id, FloVMP.Core.AntiCheat.SuspicionKind.Hit, why);
             return;
         }
+        if (weapon != WeaponUnarmed) _ledgerAc?.OnHit(session.Id, weapon, now);
         _lastHitAt[(session.Id, victimId)] = now;
         // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
         // и тряски экрана), и итоговые значения: изменённый клиент не может
@@ -540,9 +543,10 @@ public partial class StarterResource
         {
             var driverProxy = (NativePlayerProxy)(object)driver;
             if (!_nativeReady.Contains(driverId) || !driverProxy.Session.HasState) continue;
-            // У клиента 1.0.6+ поля машины в STATE ничего не значат: его
-            // машины ведёт реестр, а не этот список.
-            if (UsesRegistry(driverId)) continue;
+            // Водителя машины реестра ведёт реестр, а не этот список. Клиент
+            // 1.0.6+ в машине, которой в реестре нет (регистрация трафика
+            // выключена, отказ, ответ ещё в пути), идёт старым путём.
+            if (InRegistryVehicle(driverId)) continue;
             var driverState = driverProxy.State;
             if (driverState.InVehicle && driverState.Seat == -1 && driverState.VehicleModel != 0)
                 _nativeVehicleOwners[driverId] = new NativeVehicleOwner(
@@ -563,7 +567,7 @@ public partial class StarterResource
             // кому NoClip разрешён: иначе это невидимость для любого читера.
             if ((st.Flags & NativePlayerState.FlagNoClip) != 0 && !MayUse(player, "noclip"))
                 st = st with { Flags = st.Flags & ~NativePlayerState.FlagNoClip };
-            st = UsesRegistry(id) ? WithoutVehicleFields(st) : AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
+            st = InRegistryVehicle(id) ? WithoutVehicleFields(st) : AuthorizeVehicleState((uint)id, np.DimensionValue, st, nowMs);
             if (_weaponHistory.TryGetValue(id, out var wh))
             {
                 if (wh.Cur != st.Weapon) _weaponHistory[id] = (wh.Cur, st.Weapon, nowMs);
@@ -638,7 +642,7 @@ public partial class StarterResource
                 // Переходный релиз: старый клиент видит машину игрока 1.0.6+
                 // только полями PSTATE — для него своя строка.
                 string? line;
-                if (!recipientUsesRegistry && UsesRegistry(other))
+                if (!recipientUsesRegistry && InRegistryVehicle(other))
                 {
                     if (!_syncLinesLegacy.TryGetValue(other, out line))
                         _syncLinesLegacy[other] = line = LegacyViewOf(other, info.State).FormatFor(other);
@@ -674,7 +678,12 @@ public partial class StarterResource
     /// </summary>
     private NativePlayerState AuthorizeVehicleState(uint playerId, int dimension, NativePlayerState state, long nowMs)
     {
-        if (!state.InVehicle || state.VehicleModel == 0) return state;
+        if (!state.InVehicle || state.VehicleModel == 0)
+        {
+            // Вышел — следующая поездка снова попадёт в журнал переходного периода.
+            _legacyPassengerNoted.Remove(playerId);
+            return state;
+        }
         if (state.Seat == -1)
             return state with { VehicleOwner = (int)playerId };
 
@@ -684,6 +693,7 @@ public partial class StarterResource
             nowMs - owner.SeenAt <= NativeSyncIntervalMs * 4 &&
             DistanceSquared(state.X, state.Y, state.Z, owner.X, owner.Y, owner.Z) <= 25f * 25f)
             return state;
+        if (ownerId != 0 && UsesRegistry(ownerId)) NoteLegacyPassengerRefused(playerId, ownerId);
 
         return state with
         {
@@ -759,6 +769,7 @@ public partial class StarterResource
     private bool GiveWeaponWithName(IPlayer player, uint hash, string name, int ammo)
     {
         if (player is not NativePlayerProxy np) return false;
+        NoteWeaponIssued(np.Session.Id, hash, ammo);
         np.Session.Send("WEAPON", hash, ammo, true, name);
         return true;
     }
@@ -768,6 +779,7 @@ public partial class StarterResource
     {
         if (player is not NativePlayerProxy np) return false;
         np.NoteModel(hash);   // иначе player.Model на сервере остался бы прежним
+        NoteModelIssued(np.Session.Id, hash);
         np.Session.Send("MODEL", hash, name);
         return true;
     }

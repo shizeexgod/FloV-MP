@@ -56,9 +56,12 @@ public class AntiCheatConfig
         0xB1CA77B1, // RPG
         0x63AB0442, // Homing Launcher
         0xA284510B, // Grenade Launcher
-        0x6D544C39, // Railgun
-        0xB62D1F67, // Widowmaker
-        0xAF113F9E, // Up-n-Atomizer
-        0x787F0BB,  // Compact EMP Launcher
+        // Хэши сверены с joaat имён (weapon_railgun и т.д.): прежние значения
+        // для railgun, up-n-atomizer и EMP были с опечатками и не совпадали
+        // ни с одним оружием — оно проходило мимо списка.
+        0x6D544C99, // Railgun (weapon_railgun)
+        0xB62D1F67, // Widowmaker (weapon_rayminigun)
+        0xAF3696A1, // Up-n-Atomizer (weapon_raypistol)
+        0xDB26713A, // Compact EMP Launcher (weapon_emplauncher)
     };
 }
