@@ -114,6 +114,9 @@ namespace flov::ui
     bool LoadingVisible();
     /// Подсказки внизу загрузочного экрана ({rrggbb} — цвет) и цвет акцента.
     void SetLoadingStyle(std::vector<std::string> tips, uint32_t accent);
+    /// Фон и логотип экранов до спавна. Пустой путь — вернуться к тому,
+    /// что лежит в папке игрока, и к зашитому в клиент логотипу.
+    void SetLoadingArt(const std::wstring& backgroundPath, const std::wstring& logoPath);
 
     // --- экран отказа ---------------------------------------------------------
     /// Сервер не пустил игрока или выгнал его: бан, лицензия, нет
