@@ -39,6 +39,8 @@ public sealed class RegisteredVehicle
     /// <summary>Растёт при каждом изменении того, что видят клиенты: по нему
     /// рассылка решает, слать ли VSTATE.</summary>
     public long Version { get; internal set; } = 1;
+    /// <summary>Двигатель дошёл до −4000 — в игре машина взорвана. Сбрасывается ремонтом.</summary>
+    public bool Destroyed { get; internal set; }
 
     // --- runtime ---
     public VehicleOrigin Origin { get; }
@@ -67,8 +69,10 @@ public sealed class RegisteredVehicle
         EngineOn, SirenOn, Locked, BodyHealth, EngineHealth, Plate);
 }
 
-/// <summary>Кто теперь сидит на месте: из этого рассылка собирает VOWN.</summary>
-public readonly record struct SeatChange(uint VehicleId, int Seat, uint PlayerId);
+/// <summary>Кто теперь сидит на месте (PlayerId, 0 — никто) и кто сидел до
+/// этого: из первого рассылка собирает VOWN, из второго — событие «вышел»
+/// для геймода.</summary>
+public readonly record struct SeatChange(uint VehicleId, int Seat, uint PlayerId, uint PreviousPlayerId = 0);
 
 public enum EnterResult { Ok, NoVehicle, BadSeat, OtherDimension, TooFar, Locked, SeatTaken }
 public enum SyncResult { Applied, Unchanged, NoVehicle, NotDriver }
@@ -221,7 +225,7 @@ public sealed class VehicleRegistry
         if (!_vehicles.TryGetValue(s.VehicleId, out var v)) return true;
         v.Seats.Remove(s.Seat);
         v.LastActiveMs = nowMs;
-        _seatChanges.Add(new SeatChange(v.Id, s.Seat, 0));
+        _seatChanges.Add(new SeatChange(v.Id, s.Seat, 0, playerId));
         if (s.Seat == DriverSeat && (v.Vx != 0 || v.Vy != 0 || v.Vz != 0))
         {
             v.Vx = v.Vy = v.Vz = 0;
@@ -242,7 +246,12 @@ public sealed class VehicleRegistry
     public RegisteredVehicle? Remove(uint vehicleId)
     {
         if (!_vehicles.Remove(vehicleId, out var v)) return null;
-        foreach (var occupant in v.Seats.Values) _playerSeats.Remove(occupant);
+        // Сидевшие в ней — «вышли»: геймоду нужно это событие, как и при обычном выходе.
+        foreach (var (seat, occupant) in v.Seats)
+        {
+            _playerSeats.Remove(occupant);
+            _seatChanges.Add(new SeatChange(v.Id, seat, 0, occupant));
+        }
         v.Seats.Clear();
         return v;
     }
@@ -279,6 +288,7 @@ public sealed class VehicleRegistry
         if (!_vehicles.TryGetValue(vehicleId, out var v)) return false;
         v.BodyHealth = Math.Clamp(body, 0f, NativeVehicleProtocol.MaxHealth);
         v.EngineHealth = Math.Clamp(engine, NativeVehicleProtocol.MinEngineHealth, NativeVehicleProtocol.MaxHealth);
+        v.Destroyed = v.EngineHealth <= NativeVehicleProtocol.MinEngineHealth;
         v.Version++;
         return true;
     }

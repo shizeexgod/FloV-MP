@@ -654,6 +654,7 @@ public partial class StarterResource : Resource
         // Мир и интерфейс для клиентов b3889: события ресурсов и файлы карт.
         RegisterWorldApi();
         RegisterNativeApi();
+        RegisterVehicleApi();
         LoadMaps(broadcast: false);
 
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.

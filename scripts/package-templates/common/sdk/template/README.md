@@ -117,11 +117,15 @@ Alt.Emit("flovmp:world:remove", "object", "bench1");
 
 | Работает | Не работает |
 |---|---|
-| `Id`, `Name`, `Position`, `Rotation`, `Dimension`, `Health`, `Armor`, `Model`, `CurrentWeapon` | `Vehicle` — всегда `null`, `Seat` — всегда 0 |
-| `IsDead`, `IsInVehicle`, `Spawn`, `Kick`, `GiveWeapon`, `RemoveAllWeapons`, `Emit`, `SetLocalMetaData` | всё остальное из alt:V API — вызов пропускается с предупреждением в журнале |
+| `Id`, `Name`, `Position`, `Rotation`, `Dimension`, `Health`, `Armor`, `Model`, `CurrentWeapon` | всё остальное из alt:V API — вызов пропускается с предупреждением в журнале |
+| `IsDead`, `IsInVehicle`, `Spawn`, `Kick`, `GiveWeapon`, `RemoveAllWeapons`, `Emit`, `SetLocalMetaData` | |
+| `Vehicle`, `Seat` — машина серверного реестра (клиент 1.0.6+; у старых клиентов `null` и 0) | |
 
-«Игрок в машине?» — `player.IsInVehicle`. Какая именно машина — платформа
-пока не сообщает: транспорт 3889 живёт в игре игрока, а не в движке.
+`player.Vehicle` у игрока 3889 — машина реестра. У неё работают `Id`,
+`Model`, `Position`, `Rotation`, `Velocity`, `Dimension`, `NumberplateText`,
+`EngineOn`, `SirenActive` (чтение), `LockState`, `BodyHealth`, `EngineHealth`,
+`Driver`, `Repair()`, `Destroy()`. `Seat` — в нумерации alt:V (водитель — 1).
+Передавать этот объект в функции движка alt:V нельзя: у него нет сущности движка.
 
 Игрок 3889 для ресурсов — это его ID (у него нет сущности движка alt:V).
 События о нём приходят с номером:
@@ -161,6 +165,55 @@ Alt.OnServer<int, string, float, float, float, float, int, int, string, int, boo
 // Игрок вышел: сохранить данные, снять таймеры, закрыть сделки.
 Alt.OnServer<int, string, string>("flovmp:native:left", (id, nick, reason) => { });
 ```
+
+## Транспорт (клиент 1.0.6+)
+
+Машины — сущности сервера: у каждой свой ID, машина остаётся стоять, когда из
+неё вышли, здоровье кузова и двигателя считает сервер. Машины, созданные
+вашим ресурсом или `/car`, платформа сама не убирает — только `/dv` или вы.
+Машины городского трафика, в которые садились игроки, убираются, если стоят
+пустыми и рядом никого нет (`vehicles.abandoned_ttl_sec`).
+
+Места: **−1 — водитель**, 0…15 — пассажиры (как в нативах GTA; в RAGE:MP
+водитель — 0, в alt:V — 1).
+
+```csharp
+// Создать: ключ запроса (любая строка), модель, x y z, курс, измерение,
+// номер (пусто — случайный), сохранять ли между перезапусками.
+Alt.Emit("flovmp:vehicle:create", "garage-42", "sultan", 200f, -930f, 30f, 90f, 0, "RP 042", true);
+Alt.OnServer<string, int, string>("flovmp:vehicle:created", (key, vehicleId, error) =>
+{
+    // vehicleId == 0 — отказ, причина в error
+});
+
+Alt.Emit("flovmp:vehicle:putInto", playerId, vehicleId, -1);  // посадить за руль
+Alt.Emit("flovmp:vehicle:removeFrom", playerId);              // высадить
+Alt.Emit("flovmp:vehicle:engine", vehicleId, true);
+Alt.Emit("flovmp:vehicle:lock", vehicleId, true);
+Alt.Emit("flovmp:vehicle:repair", vehicleId);
+Alt.Emit("flovmp:vehicle:health", vehicleId, 1000f, 1000f);   // кузов 0..1000, двигатель -4000..1000
+Alt.Emit("flovmp:vehicle:plate", vehicleId, "RP 042");        // латиница, цифры, пробел, до 8
+Alt.Emit("flovmp:vehicle:persistent", vehicleId, true);
+Alt.Emit("flovmp:vehicle:remove", vehicleId);
+
+// Прочитать состояние: запрос и ответ отдельным событием.
+Alt.Emit("flovmp:vehicle:query", vehicleId);
+Alt.Emit("flovmp:vehicle:queryAll");
+Alt.OnServer<int, string, float, float, float, float, int, string, bool, bool, bool, float, float, int, bool, bool>(
+    "flovmp:vehicle:state",
+    (id, model, x, y, z, heading, dimension, plate, engineOn, locked, sirenOn,
+     bodyHealth, engineHealth, driverId, persistent, fromTraffic) => { });
+
+// События
+Alt.OnServer<int, int, int>("flovmp:vehicle:enter", (playerId, vehicleId, seat) => { });
+Alt.OnServer<int, int, int>("flovmp:vehicle:leave", (playerId, vehicleId, seat) => { }); // пересел = leave + enter
+Alt.OnServer<int, float, float, int>("flovmp:vehicle:damage", (vehicleId, bodyLoss, engineLoss, driverId) => { });
+Alt.OnServer<int>("flovmp:vehicle:destroyed", vehicleId => { });                        // двигатель дошёл до −4000
+Alt.OnServer<int, string>("flovmp:vehicle:removed", (vehicleId, reason) => { });        // api, command, abandoned
+```
+
+Свои данные машины (владелец-персонаж, страховка, тюнинг) храните в своих
+таблицах по ID машины.
 
 Интерфейс игроку — по его ID:
 

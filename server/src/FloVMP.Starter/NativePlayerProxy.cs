@@ -164,8 +164,9 @@ public class NativePlayerProxy : DispatchProxy
                 }
             case "get_IsDead": return DeadReported || (s.HasState && State.Dead);
             case "get_IsInVehicle": return s.HasState && State.InVehicle;
-            case "get_Vehicle": return null;
-            case "get_Seat": return (byte)0;
+            // Машина серверного реестра (клиент 1.0.6+); у старых клиентов — null.
+            case "get_Vehicle": return Owner.VehicleProxyFor(s.Id);
+            case "get_Seat": return Owner.AltSeatFor(s.Id);
             case "get_Model": return s.HasState && State.PedModel != 0 ? State.PedModel : _model;
             case "set_Model":
                 _model = (uint)args[0]!;

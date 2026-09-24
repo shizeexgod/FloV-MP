@@ -50,6 +50,19 @@ public sealed class NativeVehicleService
     }
 
     public VehicleRegistry Registry { get; }
+
+    // --- события для геймода (8c): StarterResource превращает их в Alt.Emit ---
+
+    /// <summary>Игрок сел: (игрок, машина, место; −1 — водитель).</summary>
+    public event Action<uint, uint, int>? PlayerEnteredVehicle;
+    /// <summary>Игрок вышел или его высадили: (игрок, машина, место).</summary>
+    public event Action<uint, uint, int>? PlayerLeftVehicle;
+    /// <summary>Урон по данным водителя: (машина, потеря кузова, потеря двигателя, водитель).</summary>
+    public event Action<uint, float, float, uint>? Damaged;
+    /// <summary>Двигатель дошёл до −4000 — машина взорвана.</summary>
+    public event Action<uint>? Destroyed;
+    /// <summary>Машина убрана из реестра: (машина, причина: api, command, abandoned).</summary>
+    public event Action<uint, string>? Removed;
     /// <summary>Режим античита (FLOVMP_ANTICHEAT): в off нарушения физики не пишутся.</summary>
     public bool PhysicsChecks { get; set; } = true;
 
@@ -138,7 +151,17 @@ public sealed class NativeVehicleService
             _physics.ValidateTick((int)v.Id, (int)playerId, new Vector3D(s.X, s.Y, s.Z),
                 new Vector3D(s.Vx, s.Vy, s.Vz), s.BodyHealth, isInAir: false, nowUtc);
         }
-        Registry.ApplyDriverSync(playerId, s);
+        var body = v.BodyHealth;
+        var engine = v.EngineHealth;
+        var wasDestroyed = v.Destroyed;
+        if (Registry.ApplyDriverSync(playerId, s) != SyncResult.Applied) return;
+        if (v.BodyHealth < body || v.EngineHealth < engine)
+            Damaged?.Invoke(v.Id, body - v.BodyHealth, engine - v.EngineHealth, playerId);
+        if (!wasDestroyed && v.EngineHealth <= NativeVehicleProtocol.MinEngineHealth)
+        {
+            v.Destroyed = true;
+            Destroyed?.Invoke(v.Id);
+        }
     }
 
     /// <summary>Игрок ушёл или сменил измерение: место освобождается.</summary>
@@ -173,11 +196,59 @@ public sealed class NativeVehicleService
     }
 
     /// <summary>Удалить машину и сразу убрать её у всех, кому она показана.</summary>
-    public bool Remove(uint vehicleId)
+    public bool Remove(uint vehicleId, string reason = "api")
     {
         var v = Registry.Remove(vehicleId);
         if (v is null) return false;
         Forget(vehicleId);
+        FlushSeatChanges();   // сидевшим — событие «вышел»
+        Removed?.Invoke(vehicleId, reason);
+        return true;
+    }
+
+    /// <summary>Машина от геймода (API): стоит пустой, пока в неё не сядут.</summary>
+    public RegisteredVehicle? Create(uint model, float x, float y, float z, float heading, int dimension,
+        string? plate, bool persistent, long nowMs) =>
+        Registry.Create(model, x, y, z, 0, 0, heading, dimension, nowMs, plate, persistent);
+
+    /// <summary>
+    /// Посадить игрока (API). null — посажен, иначе причина отказа. Игроку,
+    /// которому машина ещё не показана, сначала уходит её снимок: иначе VOWN
+    /// пришёл бы про машину, которой у него нет.
+    /// </summary>
+    public string? PutInto(uint playerId, uint vehicleId, int seat, long nowMs)
+    {
+        if (!_host.TryGetPlayer(playerId, out var pl)) return "игрока нет на сервере";
+        if (!pl.UsesRegistry) return "у игрока клиент старше 1.0.6";
+        var v = Registry.Get(vehicleId);
+        if (v is null) return "машины нет";
+        if (seat < VehicleRegistry.DriverSeat || seat > VehicleRegistry.MaxSeat) return "нет такого места";
+        if (v.Dimension != pl.Dimension) return "машина в другом измерении";
+        if (!VisibleOf(playerId).ContainsKey(vehicleId)) SendSnapshot(playerId, v);
+        Registry.PutInto(playerId, vehicleId, seat, nowMs);
+        FlushSeatChanges();
+        return null;
+    }
+
+    /// <summary>Высадить игрока (API): его клиент получит VOWN «место не ваше» и выйдет.</summary>
+    public bool RemoveFrom(uint playerId, long nowMs)
+    {
+        if (Registry.SeatOf(playerId).VehicleId == 0) return false;
+        Registry.Leave(playerId, nowMs);
+        FlushSeatChanges();
+        return true;
+    }
+
+    public bool SetHealth(uint vehicleId, float body, float engine) =>
+        Registry.SetHealth(vehicleId, body, engine) && PushToDriver(vehicleId);
+
+    /// <summary>Номер есть только в VADD — рассылаем снимок заново всем, кому машина показана.</summary>
+    public bool SetPlate(uint vehicleId, string plate)
+    {
+        if (!Registry.SetPlate(vehicleId, plate)) return false;
+        var v = Registry.Get(vehicleId)!;
+        foreach (var (playerId, visible) in _visible)
+            if (visible.ContainsKey(vehicleId)) SendSnapshot(playerId, v);
         return true;
     }
 
@@ -235,6 +306,7 @@ public sealed class NativeVehicleService
         {
             _grid.Remove(v.Id);
             Forget(v.Id);
+            Removed?.Invoke(v.Id, "abandoned");
             _host.Warn($"[FloV:MP] Машина трафика {v.Id} ({v.Plate}) убрана: пустая, рядом никого не было {abandonedTtlMs / 1000} с.");
         }
 
@@ -316,6 +388,14 @@ public sealed class NativeVehicleService
             var line = NativeVehicleProtocol.FormatOwner(c.VehicleId, c.PlayerId, c.Seat);
             foreach (var (playerId, visible) in _visible)
                 if (visible.ContainsKey(c.VehicleId)) _host.Send(playerId, line);
+            // Сам севший и тот, кого сместили, узнают о своём месте всегда —
+            // даже если машина ещё не попала в их рассылку.
+            foreach (var who in new[] { c.PlayerId, c.PreviousPlayerId })
+                if (who != 0 && (!_visible.TryGetValue(who, out var seen) || !seen.ContainsKey(c.VehicleId)))
+                    _host.Send(who, line);
+            if (c.PreviousPlayerId != 0 && c.PreviousPlayerId != c.PlayerId)
+                PlayerLeftVehicle?.Invoke(c.PreviousPlayerId, c.VehicleId, c.Seat);
+            if (c.PlayerId != 0) PlayerEnteredVehicle?.Invoke(c.PlayerId, c.VehicleId, c.Seat);
         }
     }
 

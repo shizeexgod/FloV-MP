@@ -117,7 +117,7 @@ public class VehicleRegistryTests
         Assert.Equal(0f, v.Vx);
         Assert.Equal(5f, v.X); // стоит там, где бросили
         Assert.Equal(500, v.LastActiveMs);
-        Assert.Equal(new[] { new SeatChange(v.Id, -1, 0) }, r.DrainSeatChanges());
+        Assert.Equal(new[] { new SeatChange(v.Id, -1, 0, 3) }, r.DrainSeatChanges());
         Assert.Equal((0u, 0), r.SeatOf(3));
     }
 
@@ -190,8 +190,8 @@ public class VehicleRegistryTests
         Assert.Empty(r.CollectAbandoned(nowMs: 1_299_000, ttlMs: 300_000));
         r.MarkActive(driven!, 1_200_000); // рядом прошёл игрок
         Assert.Empty(r.CollectAbandoned(nowMs: 1_400_000, ttlMs: 300_000));
-        Assert.Equal(new[] { driven.Id }, r.CollectAbandoned(nowMs: 1_500_000, ttlMs: 300_000).Select(v => v.Id));
-        Assert.NotNull(r.Get(kept.Id)); // сохраняемую не трогаем
+        Assert.Equal(new[] { driven!.Id }, r.CollectAbandoned(nowMs: 1_500_000, ttlMs: 300_000).Select(v => v.Id));
+        Assert.NotNull(r.Get(kept!.Id)); // сохраняемую не трогаем
     }
 
     [Fact]

@@ -206,7 +206,13 @@
 seat)` и **`playerLeaveVehicle`** (на сервере — `playerExitVehicle`).
 Слой совместимости должен различать сторону.
 
-Имена событий FloV:MP в 8c — предложение, утверждаются вместе с API.
+Имена событий FloV:MP реализованы в 8c; полный справочник с сигнатурами —
+`scripts/package-templates/common/sdk/template/README.md`, раздел «Транспорт».
+Сверх таблицы: команды `flovmp:vehicle:create` (ответ `…:created` по ключу),
+`remove`, `putInto`, `removeFrom`, `engine`, `lock`, `repair`, `health`,
+`plate`, `persistent`, `query`/`queryAll` (ответ `…:state`). Отдельного
+события смены места нет: пересел = `leave` + `enter`. `flovmp:vehicle:siren`
+не сделано (сирену включает водитель).
 
 ## Слой совместимости (пункт 17): игроки, события, сущности
 

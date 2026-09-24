@@ -115,7 +115,7 @@ public partial class StarterResource
     {
         lock (_reportedUnsupported)
             if (!_reportedUnsupported.Add(member)) return;
-        Alt.LogWarning($"[FloV:MP b3889] IPlayer.{member} у нативного клиента не поддерживается — вызов пропущен.");
+        Alt.LogWarning($"[FloV:MP b3889] {(member.Contains('.') ? "I" + member : "IPlayer." + member)} у нативного клиента не поддерживается — вызов пропущен.");
     }
 
     private void StartNativeGateway()

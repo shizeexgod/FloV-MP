@@ -28,10 +28,12 @@ public partial class StarterResource
     private NativeVehicleService CreateVehicleService()
     {
         var mode = (Environment.GetEnvironmentVariable("FLOVMP_ANTICHEAT") ?? "log").Trim().ToLowerInvariant();
-        return new NativeVehicleService(new VehicleHost(this), new VehicleRegistry(_settings.Int("vehicles.max_registered")))
+        var service = new NativeVehicleService(new VehicleHost(this), new VehicleRegistry(_settings.Int("vehicles.max_registered")))
         {
             PhysicsChecks = mode != "off",
         };
+        WireVehicleEvents(service);
+        return service;
     }
 
     private bool UsesRegistry(uint playerId) => _registryClients.Contains(playerId);
@@ -172,7 +174,7 @@ public partial class StarterResource
                     SendChatMessage(player, $"{{fde047}}[Транспорт] Рядом нет вашей машины: сядьте в неё или подойдите ближе {DeleteOwnRadius:0} м.");
                     return true;
                 }
-                Vehicles.Remove(doomed.Id);
+                Vehicles.Remove(doomed.Id, "command");
                 SendChatMessage(player, "{34d399}[Транспорт] Машина убрана.");
                 return true;
             case "engine":

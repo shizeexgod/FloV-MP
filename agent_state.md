@@ -26,7 +26,10 @@ Updated: 2026-09-24 (реестр транспорта 8a — серверное
   GET_VEHICLE_BODY_HEALTH (хэш 0xF271147EB7B40F12 — сверить генератором по SDK).
   `game.cpp` компилируется (MinGW, объектник); полная сборка ASI и игра — у
   владельца (MSVC).
-- Дальше: 8c — публичный API, 8d — сохранение.
+- 8c — публичный API: события `flovmp:vehicle:*` (`StarterResource.VehicleApi.cs`),
+  `IPlayer.Vehicle`/`Seat` у 3889 через `NativeVehicleProxy`; события входа,
+  выхода, урона, уничтожения, удаления из `NativeVehicleService`. Тесты 508.
+- Дальше: 8d — сохранение.
 
 ### 2026-09-21 — GTA V Legacy 1.0.3889.0: собственный клиент, проверен вживую
 
