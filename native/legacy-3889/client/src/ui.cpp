@@ -722,6 +722,14 @@ namespace flov::ui
             return y - origin.y + lineH;
         }
 
+        /// Длина строки в символах UTF-8, а не в байтах.
+        size_t Utf8Length(const std::string& text)
+        {
+            size_t count = 0;
+            for (unsigned char c : text) if ((c & 0xC0) != 0x80) ++count;
+            return count;
+        }
+
         /// Обрезать строку по ширине с «…».
         std::string Fit(ImFont* f, const std::string& s, float width, float size = 0)
         {
@@ -1445,20 +1453,35 @@ namespace flov::ui
             }
 
             const float margin = std::min(72 * s, w * 0.07f);
-            const float barH = 4 * s;
+            const float barH = 3 * s;
             const float barBottom = h - margin;
             const float barTop = barBottom - barH;
             const float radius = barH / 2;
 
             // --- справа снизу: этап над полосой, по правому краю -------------
-            const float barW = std::min(560 * s, w * 0.44f);
+            const float barW = std::min(330 * s, w * 0.28f);
             const float rx0 = w - margin - barW;
             const float rx1 = w - margin;
             {
-                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Connecting" : g_loadingStep, barW, 14 * s);
-                const float tw = Measure(g_text, step, 14 * s).x;
-                Text(dl, g_text, ImVec2(rx1 - tw, barTop - Px(g_text) - 16 * s),
-                     Rgba(255, 255, 255, 0.85f * fade), step, 14 * s);
+                const float stepSize = 17 * s;
+                const float track = 0.7f * s;   // лёгкая разрядка: строка дышит
+                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Connecting" : g_loadingStep,
+                                             barW + 120 * s - Utf8Length(g_loadingStep) * track, stepSize);
+                const float tw = Measure(g_text, step, stepSize).x + Utf8Length(step) * track;
+                const ImU32 stepColor = Rgba(255, 255, 255, 0.9f * fade);
+                float cx = rx1 - tw;
+                const float stepY = barTop - Px(g_text) - 18 * s;
+                for (size_t i = 0; i < step.size();)
+                {
+                    // Шаг по символам UTF-8, иначе разрядка порвёт кириллицу.
+                    size_t len = 1;
+                    const unsigned char c = (unsigned char)step[i];
+                    if (c >= 0xF0) len = 4; else if (c >= 0xE0) len = 3; else if (c >= 0xC0) len = 2;
+                    const std::string ch = step.substr(i, len);
+                    Text(dl, g_text, ImVec2(cx, stepY), stepColor, ch, stepSize);
+                    cx += Measure(g_text, ch, stepSize).x + track;
+                    i += len;
+                }
 
                 // Дорожка: тонкая и почти незаметная, весь цвет — у заполненной части.
                 dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx1, barBottom), Rgba(255, 255, 255, 0.1f * fade), radius);
