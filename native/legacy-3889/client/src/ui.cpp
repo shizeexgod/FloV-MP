@@ -114,6 +114,7 @@ namespace flov::ui
         uint32_t g_loadingAccent = 0xFBBF24;
         // Картинки загрузочного экрана. Логотип зашит в клиент, фон и свой
         // логотип владелец сервера кладёт в %LOCALAPPDATA%\FloVMP\ui.
+        ImFont* g_load = nullptr;   // Jost, только загрузочный экран
         image::Texture g_logo, g_background;
         bool g_artLoaded = false;
 
@@ -1454,23 +1455,26 @@ namespace flov::ui
 
             const float margin = std::min(72 * s, w * 0.07f);
             const float barH = 3 * s;
-            const float barBottom = h - margin;
+            const float logoBottom = h - margin;
+            // Полоса приподнята над нижним краём сильнее, чем логотип.
+            const float barBottom = logoBottom - 26 * s;
             const float barTop = barBottom - barH;
             const float radius = barH / 2;
 
             // --- справа снизу: этап над полосой, по правому краю -------------
-            const float barW = std::min(330 * s, w * 0.28f);
+            const float barW = std::min(255 * s, w * 0.2f);
             const float rx0 = w - margin - barW;
             const float rx1 = w - margin;
             {
-                const float stepSize = 17 * s;
+                ImFont* stepFont = g_load ? g_load : g_text;
+                const float stepSize = 18 * s;
                 const float track = 0.7f * s;   // лёгкая разрядка: строка дышит
-                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Connecting" : g_loadingStep,
+                const std::string step = Fit(stepFont, g_loadingStep.empty() ? "Connecting" : g_loadingStep,
                                              barW + 120 * s - Utf8Length(g_loadingStep) * track, stepSize);
-                const float tw = Measure(g_text, step, stepSize).x + Utf8Length(step) * track;
+                const float tw = Measure(stepFont, step, stepSize).x + Utf8Length(step) * track;
                 const ImU32 stepColor = Rgba(255, 255, 255, 0.9f * fade);
                 float cx = rx1 - tw;
-                const float stepY = barTop - Px(g_text) - 18 * s;
+                const float stepY = barTop - Px(stepFont) - 16 * s;
                 for (size_t i = 0; i < step.size();)
                 {
                     // Шаг по символам UTF-8, иначе разрядка порвёт кириллицу.
@@ -1478,8 +1482,8 @@ namespace flov::ui
                     const unsigned char c = (unsigned char)step[i];
                     if (c >= 0xF0) len = 4; else if (c >= 0xE0) len = 3; else if (c >= 0xC0) len = 2;
                     const std::string ch = step.substr(i, len);
-                    Text(dl, g_text, ImVec2(cx, stepY), stepColor, ch, stepSize);
-                    cx += Measure(g_text, ch, stepSize).x + track;
+                    Text(dl, stepFont, ImVec2(cx, stepY), stepColor, ch, stepSize);
+                    cx += Measure(stepFont, ch, stepSize).x + track;
                     i += len;
                 }
 
@@ -1538,7 +1542,7 @@ namespace flov::ui
             if (g_logo)
             {
                 const float side = std::min(104 * s, h * 0.14f);
-                const ImVec2 p0(margin, barBottom - side);
+                const ImVec2 p0(margin, logoBottom - side);
                 dl->AddImage((ImTextureID)g_logo.view, p0, ImVec2(p0.x + side, p0.y + side),
                              ImVec2(0, 0), ImVec2(1, 1), Rgba(255, 255, 255, fade));
             }
@@ -1819,6 +1823,10 @@ namespace flov::ui
             g_title24 = LoadFont(semibold, std::round(24.f * s), true, 112, 113);
             g_mono = LoadFont(mono, std::round(12.5f * s), true, 114, 115);
             g_monoSm = LoadFont(mono, std::round(11.f * s), true, 114, 115);
+            // Отдельный шрифт загрузочного экрана: геометрический гротеск
+            // читается спокойнее в одной короткой строке на весь экран. В чате
+            // и консоли остаётся Manrope — он лучше держит плотный текст.
+            g_load = LoadFont(regular, std::round(18.f * s), false, 116, 0);
 
             ImGui_ImplDX11_Init(g_device, g_context);
             QueryPerformanceFrequency(&g_freq);
