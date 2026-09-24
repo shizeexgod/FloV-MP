@@ -244,10 +244,43 @@ Alt.Emit("flovmp:settings:set", "vehicles.plate_format", "RP 9999");  // сво�
 Что настраивается в транспорте: `vehicles.max_registered`, `vehicles.abandoned_ttl_sec`,
 `vehicles.register_traffic`, `vehicles.register_cooldown_sec`, `vehicles.enter_distance`,
 `vehicles.plate_format`, `vehicles.persistence`, `vehicles.save_interval_sec`,
-`vehicles.restore_damage`, `vehicles.world` — описание каждой в `client.cfg`.
+`vehicles.restore_damage`, `world.name` — описание каждой в `client.cfg`.
 Уровни доступа к встроенным командам (`/car`, `/dv`, `/fix` …) — в
 `server/config/admin-commands.cfg`: 0 — доступна всем, 1…8 — с этого уровня
 администратора (8 — только владелец).
+
+## Сохранение игрока
+
+Платформа сама сохраняет игрока (при выходе, раз в `players.save_interval_sec` и
+перед остановкой сервера) и восстанавливает при входе: место, здоровье и броню,
+модель, оружие, выданное сервером. Что восстанавливать — `players.restore_*` в
+`client.cfg`: например, при выборе персонажа поставьте `players.restore_position = off`
+и спавните игрока сами. `players.persistence = off` — всё делает ваш геймод.
+
+Свои данные игрока (инвентарь, деньги, навыки) можно хранить без своего кода работы
+с базой — хранилище «ключ → значение», значение — строка (обычно JSON), до 64 КБ,
+до 200 ключей на игрока. Данные грузятся в фоне при входе:
+
+```csharp
+Alt.OnServer<int, bool>("flovmp:player:dataLoaded", (id, ok) =>
+    Alt.Emit("flovmp:player:data:get", id, "inventory"));
+Alt.OnServer<int, string, string, bool>("flovmp:player:data", (id, key, value, found) =>
+{
+    // found == false — такого ключа у игрока ещё нет (новый игрок)
+});
+Alt.Emit("flovmp:player:data:set", id, "inventory", "{\"water\":2}");
+Alt.Emit("flovmp:player:data:set", id, "inventory", "");   // пусто — удалить
+Alt.Emit("flovmp:player:save", id);                         // сохранить сейчас, не ждать таймера
+```
+
+Игрок узнаётся по постоянному ID (`player.SocialClubId`): у клиента 3889 — ID его
+ключа, у клиента alt:V — SocialClub. Таблицы — `players` и `player_data` (миграция
+004), без базы — `flovmp-data/players.json`.
+
+Патроны оружия сохраняются по учёту сервера: выдано минус засчитанные попадания.
+Промахи сервер не видит, поэтому после перезахода патронов может оказаться
+больше, чем было. Если патроны у вас — ценность экономики, храните оружие в
+своём инвентаре и поставьте `players.restore_weapons = off`.
 
 ## Античит: журнал подозрений
 

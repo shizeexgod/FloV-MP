@@ -139,7 +139,7 @@
 | Можно ли угонять машины трафика, как часто | `vehicles.register_traffic`, `vehicles.register_cooldown_sec` |
 | С какого расстояния можно сесть | `vehicles.enter_distance` |
 | Формат номеров | `vehicles.plate_format` (или свой номер каждой машине через API) |
-| Сохранение: вкл/выкл, частота, повреждения, мир | `vehicles.persistence`, `vehicles.save_interval_sec`, `vehicles.restore_damage`, `vehicles.world` |
+| Сохранение: вкл/выкл, частота, повреждения, мир | `vehicles.persistence`, `vehicles.save_interval_sec`, `vehicles.restore_damage`, `world.name` |
 | Кто может `/car`, `/dv`, `/fix`, `/lock` | `server/config/admin-commands.cfg`: 0 — всем, 1…8 — с уровня |
 | Ключи, владельцы, аренда, гаражи | геймод: `flovmp:vehicle:lock`/`putInto`/`create` + свои таблицы по ID машины |
 

@@ -22,7 +22,9 @@ public sealed class NativeAntiCheat
     private static readonly uint Parachute = GameHash.Joaat("gadget_parachute");
 
     public SuspicionLedger Ledger { get; } = new();
-    public WeaponLedger Weapons { get; } = new();
+    /// <summary>Учёт выданного оружия. Общий с сохранением игрока: он ведётся,
+    /// даже когда античит выключен, поэтому объект передаёт платформа.</summary>
+    public WeaponLedger Weapons { get; init; } = new();
     public ClockDriftDetector Clock { get; } = new();
 
     public Dictionary<SuspicionKind, float> Weights { get; } = new()

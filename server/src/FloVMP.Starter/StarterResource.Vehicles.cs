@@ -54,8 +54,7 @@ public partial class StarterResource
         }
         try
         {
-            var world = _settings.Get("vehicles.world").Trim();
-            if (world.Length == 0 || world.Length > 32) world = "main";
+            var world = WorldName();
             var store = VehicleStoreFactory.Create(dbConnection, world, Path.Combine(dataDir, "vehicles.json"));
             _vehiclePersistence = new VehiclePersistence(store, Alt.LogWarning);
             Vehicles.AttachPersistence(_vehiclePersistence);
@@ -70,6 +69,13 @@ public partial class StarterResource
             // Без машин сервер работать может, без запуска — нет.
             Alt.LogError($"[FloV:MP] [Транспорт] Сохранённые машины не подняты: {ex.Message}");
         }
+    }
+
+    /// <summary>Имя мира в базе (world.name): одно на машины и игроков.</summary>
+    private string WorldName()
+    {
+        var world = _settings.Get("world.name").Trim();
+        return world.Length is 0 or > 32 ? "main" : world;
     }
 
     private void StopVehiclePersistence()

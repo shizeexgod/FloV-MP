@@ -600,6 +600,7 @@ public partial class StarterResource : Resource
 
         // Сохранённые машины мира — до входа первых игроков (8d).
         StartVehiclePersistence(dbReachable ? starterDbConn : null, starterDataDir);
+        StartPlayerPersistence(dbReachable ? starterDbConn : null, starterDataDir);
 
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
@@ -661,6 +662,7 @@ public partial class StarterResource : Resource
         RegisterNativeApi();
         RegisterVehicleApi();
         RegisterAntiCheatApi();
+        RegisterPlayerApi();
         LoadMaps(broadcast: false);
 
         // Клиенты GTA V Legacy b3889 (ASI на ScriptHookV) — свой TCP-шлюз.
@@ -676,6 +678,7 @@ public partial class StarterResource : Resource
         // Машины — пока игроки ещё на сервере: позиция машины, в которой едут
         // прямо сейчас, тоже должна пережить перезапуск.
         StopVehiclePersistence();
+        StopPlayerPersistence();
         StopNativeGateway();
         // Баны на диск до отписки от событий: выданный в последнюю секунду бан
         // обязан пережить перезапуск.
@@ -1016,15 +1019,18 @@ public partial class StarterResource : Resource
             return;
         }
 
-        // Чистый спавн игрока — точка, модель, здоровье и броня из config/client.cfg.
-        var (spawnPos, spawnHeading) = NextSpawn();
-        player.Model = SpawnModel();
+        // Спавн — точка, модель, здоровье и броня из config/client.cfg, а
+        // вернувшийся игрок — там, где вышел (что именно — players.restore_*).
+        var restore = PlanRestore(player);
+        var (spawnPos, spawnHeading) = SpawnPointFor(restore);
+        player.Model = SpawnModelFor(restore);
         player.Spawn(spawnPos, 0);
         // Rotation в alt:V — в радианах, курс — в градусах.
         player.Rotation = new Rotation(0, 0, spawnHeading * MathF.PI / 180f);
         player.Health = (ushort)_settings.Int("spawn.health");
         player.MaxHealth = 200;
         player.Armor = (ushort)_settings.Int("spawn.armor");
+        ApplyRestore(player, restore);
 
         // Автоматическое распознавание Основателя (8)
         // БЕЗ БЭКДОРОВ. Раньше здесь были: захардкоженный ник (любой
@@ -1509,6 +1515,8 @@ public partial class StarterResource : Resource
 
     private void OnPlayerDisconnect(IPlayer player, string reason)
     {
+        // Первым делом: дальше чистятся учёт оружия и признак «вошёл в мир».
+        SavePlayerOnLeave(player);
         Alt.Log($"[FloV:MP] Игрок {player.Name} (ID: {player.Id}) отключился ({reason}).");
         var wasAdmin = _rosterLevels.TryRemove(player.Id, out _);
         _clientReady.TryRemove(player.Id, out _);
@@ -1699,6 +1707,7 @@ public partial class StarterResource : Resource
 
         using (FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfAntiCheat))
             TickAntiCheat(nowMs);
+        TickPlayerPersistence(nowMs);
 
         TickNative(nowMs);
 

@@ -210,115 +210,40 @@ public static class VehicleStoreFactory
 }
 
 /// <summary>
-/// Запись машин мимо игрового потока. Сохранение идёт из тика (раз в
-/// несколько секунд и при парковке), а запрос к базе — десятки миллисекунд:
-/// на главном потоке это был бы рывок у всех игроков. Здесь «последнее
-/// побеждает» по каждой машине: если база легла, в памяти остаётся свежее
-/// состояние, и оно уйдёт, как только база вернётся, — а не пачка устаревших.
+/// Запись машин мимо игрового потока (<see cref="Database.LatestWinsWriter{TKey}"/>):
+/// сохранения идут из тика, а запрос к базе — десятки миллисекунд.
 /// </summary>
 public sealed class VehiclePersistence : IDisposable
 {
     private readonly IVehicleStore _store;
-    private readonly Action<string> _warn;
-    private readonly object _lock = new();
-    private readonly Dictionary<uint, PersistedVehicle?> _pending = new();   // null — удалить
-    private readonly AutoResetEvent _signal = new(false);
-    private readonly Thread _worker;
-    private volatile bool _stopping;
-    private long _lastWarnMs;
+    private readonly Database.LatestWinsWriter<uint> _writer;
 
     public VehiclePersistence(IVehicleStore store, Action<string> warn)
     {
         _store = store;
-        _warn = warn;
-        _worker = new Thread(Run) { IsBackground = true, Name = "flovmp-vehicle-store" };
-        _worker.Start();
+        _writer = new Database.LatestWinsWriter<uint>("flovmp-vehicle-store", "[Транспорт] машины", warn);
     }
 
     public string Describe => _store.Describe;
     public IReadOnlyList<PersistedVehicle> LoadAll() => _store.LoadAll();
 
     /// <summary>Сколько изменений ещё не записано (для диагностики и тестов).</summary>
-    public int Pending { get { lock (_lock) return _pending.Count; } }
+    public int Pending => _writer.Pending;
 
-    public void Save(PersistedVehicle vehicle)
-    {
-        lock (_lock) _pending[vehicle.Id] = vehicle;
-        _signal.Set();
-    }
-
-    public void Delete(uint id)
-    {
-        lock (_lock) _pending[id] = null;
-        _signal.Set();
-    }
+    public void Save(PersistedVehicle vehicle) => _writer.Enqueue(vehicle.Id, () => _store.Upsert(vehicle));
+    public void Delete(uint id) => _writer.Enqueue(id, () => _store.Delete(id));
 
     /// <summary>Дождаться записи всего накопленного (остановка сервера).</summary>
     public bool FlushBlocking(TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            _signal.Set();
-            if (Pending == 0 && !_writing) { _store.Flush(); return true; }
-            Thread.Sleep(20);
-        }
+        var ok = _writer.FlushBlocking(timeout);
         _store.Flush();
-        return Pending == 0;
-    }
-
-    private volatile bool _writing;
-
-    private void Run()
-    {
-        while (!_stopping)
-        {
-            _signal.WaitOne(1000);
-            List<KeyValuePair<uint, PersistedVehicle?>> batch;
-            lock (_lock)
-            {
-                if (_pending.Count == 0) continue;
-                batch = _pending.ToList();
-                _pending.Clear();
-                _writing = true;
-            }
-            try
-            {
-                for (var i = 0; i < batch.Count; i++)
-                {
-                    var (id, v) = batch[i];
-                    try
-                    {
-                        if (v is null) _store.Delete(id);
-                        else _store.Upsert(v);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Вернуть в очередь эту и все оставшиеся, если за это
-                        // время по ним не пришло более свежее состояние.
-                        lock (_lock)
-                            for (var j = i; j < batch.Count; j++) _pending.TryAdd(batch[j].Key, batch[j].Value);
-                        var now = Environment.TickCount64;
-                        if (now - _lastWarnMs > 30_000)
-                        {
-                            _lastWarnMs = now;
-                            _warn($"[FloV:MP] [Транспорт] машины не сохранены ({ex.Message}) — повторю, когда хранилище ответит.");
-                        }
-                        Thread.Sleep(1000);
-                        break;
-                    }
-                }
-            }
-            finally { _writing = false; }
-        }
+        return ok;
     }
 
     public void Dispose()
     {
-        FlushBlocking(TimeSpan.FromSeconds(5));
-        _stopping = true;
-        _signal.Set();
-        _worker.Join(2000);
+        _writer.Dispose();
         (_store as IDisposable)?.Dispose();
     }
 }

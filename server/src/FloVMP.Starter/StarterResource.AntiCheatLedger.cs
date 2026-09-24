@@ -25,7 +25,7 @@ public partial class StarterResource
     private void StartSuspicionLedger(string mode)
     {
         _acStrict = mode == "strict";
-        _ledgerAc = new NativeAntiCheat();
+        _ledgerAc = new NativeAntiCheat { Weapons = _weaponLedger };
         _ledgerAc.Suspected += (player, type, weight, score, details) =>
         {
             var name = PlayerById(player)?.Name ?? "?";
@@ -116,12 +116,20 @@ public partial class StarterResource
         }
     }
 
+    // Что сервер выдал игроку: для античита (патроны, «только выданное») и для
+    // сохранения игрока — ведётся всегда, даже с выключенным античитом.
+    private readonly WeaponLedger _weaponLedger = new();
+
     /// <summary>Сервер выдал оружие — учёт патронов и «только выданное».</summary>
-    internal void NoteWeaponIssued(uint playerId, uint weapon, int ammo) => _ledgerAc?.Weapons.Issue(playerId, weapon, ammo);
-    internal void NoteWeaponsCleared(uint playerId) => _ledgerAc?.Weapons.Clear(playerId);
+    internal void NoteWeaponIssued(uint playerId, uint weapon, int ammo) => _weaponLedger.Issue(playerId, weapon, ammo);
+    internal void NoteWeaponsCleared(uint playerId) => _weaponLedger.Clear(playerId);
     internal void NoteModelIssued(uint playerId, uint model) => _ledgerAc?.NoteIssuedModel(playerId, model);
 
-    private void ForgetSuspicions(uint playerId) => _ledgerAc?.RemovePlayer(playerId);
+    private void ForgetSuspicions(uint playerId)
+    {
+        _ledgerAc?.RemovePlayer(playerId);
+        _weaponLedger.Remove(playerId);
+    }
 
     // --- API для геймода -------------------------------------------------------------
 

@@ -36,6 +36,8 @@ public sealed class ServerSettings
         new("world.weather", Kind.Text, "", false, "Мир", "погода при старте: EXTRASUNNY, CLEAR, CLOUDS, RAIN... Пусто — у каждого своя"),
         new("world.time", Kind.Text, "", false, "Мир", "время при старте, ЧЧ:ММ. Пусто — у каждого своё"),
         new("world.freeze_time", Kind.Bool, "off", true, "Мир", "остановить часы (время не идёт)"),
+        new("world.name", Kind.Text, "main", false, "Мир",
+            "имя мира в базе (машины и игроки): несколько серверов на одной базе с разными именами не видят данных друг друга"),
 
         // --- транспорт ---
         new("vehicles.power", Kind.Float, "1", true, "Транспорт",
@@ -60,8 +62,22 @@ public sealed class ServerSettings
             "как часто записывать изменившиеся сохраняемые машины, секунд (при парковке — сразу)", 5, 3600),
         new("vehicles.restore_damage", Kind.Bool, "on", false, "Транспорт",
             "после перезапуска машина с теми же повреждениями (off — все встают целыми)"),
-        new("vehicles.world", Kind.Text, "main", false, "Транспорт",
-            "имя мира в базе: несколько серверов на одной базе с разными именами не видят машин друг друга"),
+
+        // --- Сохранение игрока ---
+        new("players.persistence", Kind.Bool, "on", false, "Игроки",
+            "сохранять игроков и восстанавливать при входе (off — всё делает ваш геймод)"),
+        new("players.save_interval_sec", Kind.Int, "60", false, "Игроки",
+            "как часто сохранять игроков в игре, секунд (при выходе и остановке сервера — всегда)", 10, 3600),
+        new("players.restore_position", Kind.Bool, "on", false, "Игроки",
+            "появляться там, где вышел (off — точка появления; нужно, если у вас выбор персонажа)"),
+        new("players.restore_health", Kind.Bool, "on", false, "Игроки", "восстанавливать здоровье и броню (вышедший мёртвым появляется целым)"),
+        new("players.restore_model", Kind.Bool, "on", false, "Игроки", "восстанавливать модель персонажа"),
+        new("players.restore_weapons", Kind.Bool, "on", false, "Игроки",
+            "возвращать оружие, выданное сервером, с патронами по учёту сервера"),
+        new("players.restore_dimension", Kind.Bool, "off", false, "Игроки",
+            "возвращать в то же измерение (обычно измерения временные — квартиры, миссии)"),
+        new("players.data", Kind.Bool, "on", false, "Игроки",
+            "хранилище «ключ → значение» для геймода (инвентарь, деньги) — flovmp:player:data:*"),
 
         // --- Античит (вторая линия) ---
         new("anticheat.notify_score", Kind.Float, "50", false, "Античит",

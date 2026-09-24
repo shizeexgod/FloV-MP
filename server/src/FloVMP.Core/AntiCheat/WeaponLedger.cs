@@ -74,6 +74,10 @@ public sealed class WeaponLedger
     public bool WasIssued(uint playerId, uint weapon) =>
         weapon == 0 || weapon == Unarmed || (_issued.TryGetValue(playerId, out var map) && map.ContainsKey(weapon));
 
+    /// <summary>Что у игрока по учёту сервера: (оружие, патроны; −1 — без учёта). Для сохранения игрока.</summary>
+    public IReadOnlyList<(uint Weapon, int Ammo)> Snapshot(uint playerId) =>
+        _issued.TryGetValue(playerId, out var map) ? map.Select(kv => (kv.Key, kv.Value)).ToList() : new List<(uint, int)>();
+
     public int AmmoLeft(uint playerId, uint weapon) =>
         _issued.TryGetValue(playerId, out var map) && map.TryGetValue(weapon, out var left) ? left : -1;
 
