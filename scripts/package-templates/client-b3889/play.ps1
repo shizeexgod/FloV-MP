@@ -45,6 +45,14 @@ if (Get-Process GTA5 -ErrorAction SilentlyContinue) {
     Say 'GTA V уже запущена: нажмите F9 в игре — адрес уже подставлен.' Yellow
     exit 0
 }
+# Моды сервера (карта, машины) — до запуска: GTA читает папку mods только при старте.
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'mods-sync.ps1') -GtaDir $gta -Address $Address
+$modsCode = $LASTEXITCODE
+# 0 — моды на месте или их нет; 4 — список не получен (сервер скажет при входе).
+if ($modsCode -ne 0 -and $modsCode -ne 4) {
+    Say 'Игра не запущена: моды сервера не готовы (причина выше). Исправьте и запустите play.cmd снова.' Red
+    exit $modsCode
+}
 Say "Сервер $Address. Запускаю GTA V..."
 Say 'Игра откроется сразу в мире сервера — ничего выбирать не нужно.' Green
 

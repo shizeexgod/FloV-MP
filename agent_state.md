@@ -16,6 +16,15 @@ Updated: 2026-09-24 (после 1.0.6-beta: 10 находок ревью, пун
   (HttpWebRequest.AddRange, 206/200/416). Проверено сервером с обрывами
   (`scratchpad/rangesrv.py`); PowerShell 7 в облаке — `dotnet tool install
   --global PowerShell`; все 26 .ps1 разбираются без ошибок.
+- Пункт 4 (моды), решения владельца: 1а (OpenIV.asi — официально отдельно
+  не раздаётся, только через ASI Manager программы OpenIV → play.cmd
+  проверяет и объясняет), 2а (папкой mods управляет FloV:MP, свои моды игрока
+  — в mods.player-<дата>, возврат при удалении), 3 (отказ через экран отказа
+  при mods.required), 4 (update.rpf раздаём целиком), 5 (CDN). Сервер:
+  `FloVMP.Core/Mods` + `StarterResource.Mods.cs`; клиент: `mods-sync.ps1`,
+  `CheckServerMods` в game.cpp. Проверено: mods-sync против настоящего
+  ModFileServer под PowerShell 7 (установка, повтор, обновление/удаление).
+- Desktop-агент перевёл сервер на .NET 10 (пункт 25) и делает пункт 22.
 - VERSION = 1.0.7-beta (готовится, не выпущен).
 - Строк кода (без документации и сторонних библиотек): ~75 тыс.
 

@@ -54,6 +54,14 @@ public partial class StarterResource
                 var cache = new ModHashCache(_modsCachePath);
                 var m = ModManifest.Build(_modsRoot, cache, stop);
                 cache.Save();
+                // Готовый список для своего CDN (mods.public_url): на CDN кладутся
+                // этот файл как manifest.json и копия server/mods как files/.
+                if (m.Files.Count > 0)
+                {
+                    var cdn = Path.Combine(Path.GetDirectoryName(_modsCachePath)!, "mods-cdn-manifest.json");
+                    File.WriteAllText(cdn + ".tmp", m.ToJson());
+                    File.Move(cdn + ".tmp", cdn, overwrite: true);
+                }
                 var changed = m.Digest != _mods.Digest;
                 _mods = m;
                 foreach (var skipped in m.Skipped.Take(20)) Console.WriteLine("[FloV:MP] [Моды] пропущен " + skipped);

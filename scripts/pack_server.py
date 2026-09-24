@@ -502,7 +502,7 @@ def verify_stage(stage, target_os, entries):
                 "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/template/Gamemode.csproj",
                 "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md",
                 "client-b3889/FloVMP.asi", "client-b3889/install-client.cmd", "client-b3889/play.cmd",
-                "client-b3889/uninstall-client.cmd", "client-b3889/server.txt.example",
+                "client-b3889/uninstall-client.cmd", "client-b3889/server.txt.example", "client-b3889/mods-sync.ps1",
                 "client-b3889/README.md"]
     if target_os == "linux":
         required += ["install.sh", "update.sh", "start.sh", "start-voice.sh", "scripts/lib-env.sh", "scripts/build-gamemode.sh",

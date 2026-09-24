@@ -224,6 +224,21 @@ if ($Uninstall) {
     if ($state -and $state.AddedNoBattlEye) { Set-NoBattlEye $dir $false | Out-Null; Say 'BattlEye снова включён (убран -nobattleye из args.txt).' }
     if ($state -and $state.AddedStraightToGame) { Set-StraightToGame $dir $false | Out-Null; Say 'Стартовая страница GTA возвращена (убран -scOfflineOnly).' }
     if ($state -and $state.Shortcut) { Remove-Item $state.Shortcut -Force -ErrorAction SilentlyContinue }
+    # Моды серверов (mods-sync.ps1): папку mods убираем, только если её вёл FloV:MP,
+    # и возвращаем моды, которые были у игрока до нас.
+    $mods = Join-Path $dir 'mods'
+    if (Test-Path (Join-Path $mods '.flovmp-mods.json')) {
+        Remove-Item $mods -Recurse -Force -ErrorAction SilentlyContinue
+        Say 'Моды серверов FloV:MP удалены из папки mods.'
+    }
+    if ($state -and $state.PSObject.Properties['PlayerModsBackup'] -and $state.PlayerModsBackup -and (Test-Path $state.PlayerModsBackup)) {
+        if (-not (Test-Path $mods)) {
+            Move-Item $state.PlayerModsBackup $mods
+            Say 'Ваши прежние моды возвращены в папку mods.' Green
+        } else {
+            Say "Ваши прежние моды лежат в $($state.PlayerModsBackup) — папка mods занята, верните их вручную." Yellow
+        }
+    }
     Remove-Item $StateFile -Force -ErrorAction SilentlyContinue
     Say 'Клиент FloV:MP удалён. Игра в исходном состоянии.' Green
     Finish 0

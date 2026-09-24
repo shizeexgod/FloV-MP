@@ -125,6 +125,9 @@ namespace flov::game
         // Автопереподключение: перезапуск сервера не должен выгонять игрока
         // в меню — клиент сам возвращается, пока не кончатся попытки.
         int g_reconnectLeft = 0;
+        // Отключились сами по решению клиента (моды сервера не те): это отказ,
+        // а не сбой связи — автопереподключения быть не должно.
+        bool g_leftByChoice = false;
         ULONGLONG g_reconnectAt = 0;
         constexpr int kReconnectTries = 5;
         int g_port = 0;
@@ -144,6 +147,8 @@ namespace flov::game
 
         // Определена ниже, рядом с остальной работой по загрузочному экрану.
         void ApplyLoadingArt();
+        void CheckServerMods(const std::string& source, const std::string& digest, int count,
+                             const std::string& bytes, bool required);
         ULONGLONG g_loadStart = 0, g_spawnAt = 0;
 
         // Показатели для консоли и netgraph.
@@ -1998,7 +2003,8 @@ namespace flov::game
                 ResetSession();
                 Chat(std::string(kicked ? "{ef4444}" : "{fde047}") + "[FloV:MP] " + at(1));
                 // Кик, бан и собственный выход — это решение, а не сбой: не возвращаемся.
-                const bool byChoice = kicked || at(1).find("выход через меню") != std::string::npos;
+                const bool byChoice = kicked || g_leftByChoice || at(1).find("выход через меню") != std::string::npos;
+                g_leftByChoice = false;
                 if (wasInGame && !byChoice && !g_host.empty())
                 {
                     g_reconnectLeft = kReconnectTries;
@@ -2012,6 +2018,7 @@ namespace flov::game
                     ui::ShowRefusal(at(1));
                 }
             }
+            else if (type == "MODS") CheckServerMods(at(1), at(2), ToInt(at(3)), at(4), at(5) == "1");
             else if (type == "CFG")
             {
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
@@ -2303,6 +2310,67 @@ namespace flov::game
             trim(host); trim(name);
             if (name.empty()) name = n::GET_PLAYER_NAME(n::PLAYER_ID());
             ui::OpenConnectDialog(host, name);
+        }
+
+        /// Моды сервера (пункт 4): их ставит play.cmd до запуска игры
+        /// (mods-sync.ps1 пишет GTA\mods\.flovmp-mods.json с отпечатком набора).
+        /// Здесь только сверка: подменить моды в запущенной игре нельзя — GTA
+        /// читает их при старте. Заодно запоминаем, откуда их качать, чтобы
+        /// следующий play.cmd знал адрес CDN, даже если его нет в server.txt.
+        void CheckServerMods(const std::string& source, const std::string& digest, int count,
+                             const std::string& bytes, bool required)
+        {
+            if (digest.size() != 64 || count <= 0) return;
+            const std::string url = !source.empty() && source[0] == ':'
+                ? "http://" + g_host + source + "/mods"
+                : source;
+            if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0)
+            {
+                // Ключ — адрес игры (порт шлюза − 10), как его передаёт play.cmd.
+                const std::string key = g_host + ":" + std::to_string(g_port - 10);
+                const std::wstring path = DataDir() + L"\\mods-sources.txt";
+                std::string kept;
+                if (FILE* f = nullptr; _wfopen_s(&f, path.c_str(), L"rb") == 0 && f)
+                {
+                    char line[1024];
+                    while (fgets(line, sizeof line, f))
+                        if (std::string(line).rfind(key + "=", 0) != 0) kept += line;
+                    fclose(f);
+                }
+                if (FILE* f = nullptr; _wfopen_s(&f, path.c_str(), L"wb") == 0 && f)
+                {
+                    fprintf(f, "%s%s=%s\n", kept.c_str(), key.c_str(), url.c_str());
+                    fclose(f);
+                }
+            }
+
+            wchar_t exe[MAX_PATH]{};
+            GetModuleFileNameW(nullptr, exe, MAX_PATH);
+            std::wstring dir(exe);
+            dir = dir.substr(0, dir.find_last_of(L"\\/"));
+            std::string marker;
+            if (FILE* f = nullptr; _wfopen_s(&f, (dir + L"\\mods\\.flovmp-mods.json").c_str(), L"rb") == 0 && f)
+            {
+                char buf[4096]{};
+                marker.assign(buf, fread(buf, 1, sizeof buf - 1, f));
+                fclose(f);
+            }
+            const bool same = marker.find("\"" + digest + "\"") != std::string::npos;
+            // Моды из папки mods игра подхватывает только через OpenIV.asi.
+            const bool loader = GetModuleHandleW(L"OpenIV.asi") != nullptr;
+            if (same && loader) { Log("моды сервера на месте (" + std::to_string(count) + " файлов)"); return; }
+
+            const long long mb = _atoi64(bytes.c_str()) / (1024 * 1024);
+            const std::string why = !same
+                ? "Моды сервера не установлены или устарели (" + std::to_string(count) + " файлов, " + std::to_string(mb) + " МБ)."
+                : "Моды сервера на месте, но игра их не видит: не установлен OpenIV.asi (OpenIV → Tools → ASI Manager).";
+            Log("моды: " + why);
+            if (required)
+            {
+                g_leftByChoice = true;
+                g_net.Disconnect(why + " Закройте игру и зайдите через play.cmd — он скачает моды.");
+            }
+            else ui::Notify(why + " Мир сервера может выглядеть иначе — закройте игру и зайдите через play.cmd.", 12000);
         }
 
         /// «/car модель» проверяется здесь, до сервера: машину создаёт сервер
