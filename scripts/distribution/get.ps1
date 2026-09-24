@@ -84,6 +84,57 @@ try {
         }
     }
 
+    # Пакет — десятки мегабайт, а у части провайдеров длинные загрузки
+    # обрываются. Докачиваем с места обрыва (HTTP Range: GitHub и nginx раздачи
+    # его поддерживают); сервер без Range — качаем целиком заново.
+    # Invoke-WebRequest в Windows PowerShell 5.1 докачивать не умеет.
+    function Download([string]$Url, [string]$Out) {
+        if (Test-Path -LiteralPath $Out) { Remove-Item -LiteralPath $Out -Force }
+        $resume = $true
+        for ($try = 1; $try -le 8; $try++) {
+            $have = if (Test-Path -LiteralPath $Out) { (Get-Item -LiteralPath $Out).Length } else { 0 }
+            $response = $null
+            try {
+                $request = [Net.HttpWebRequest]::Create($Url)
+                $request.Timeout = 30000
+                $request.ReadWriteTimeout = 60000
+                $request.UserAgent = 'FloVMP-get'
+                if ($resume -and $have -gt 0) { $request.AddRange([long]$have) }
+                try { $response = $request.GetResponse() }
+                catch [Net.WebException] {
+                    $r = $_.Exception.Response
+                    if ($r) {
+                        $code = [int]$r.StatusCode
+                        $r.Close()
+                        if ($code -eq 416) { return }   # уже скачан целиком — проверит SHA-256
+                        if ($code -ge 400) { Fail "$Url ответил $code" }
+                    }
+                    throw
+                }
+                $append = $have -gt 0 -and [int]$response.StatusCode -eq 206
+                if ($have -gt 0 -and -not $append -and $resume) {
+                    Write-Host '  сервер не поддерживает докачку — качаю пакет заново' -ForegroundColor Yellow
+                    $resume = $false
+                }
+                $mode = if ($append) { [IO.FileMode]::Append } else { [IO.FileMode]::Create }
+                $before = if ($append) { $have } else { 0 }
+                $expected = $response.ContentLength
+                $file = New-Object IO.FileStream($Out, $mode, [IO.FileAccess]::Write)
+                try { $response.GetResponseStream().CopyTo($file) } finally { $file.Dispose(); $response.Close() }
+                $got = (Get-Item -LiteralPath $Out).Length - $before
+                if ($expected -ge 0 -and $got -lt $expected) { throw 'поток закрылся раньше конца файла' }
+                return
+            }
+            catch {
+                if ($response) { $response.Close() }
+                $mb = if (Test-Path -LiteralPath $Out) { [math]::Floor((Get-Item -LiteralPath $Out).Length / 1MB) } else { 0 }
+                Write-Host "  связь оборвалась на $mb МБ — докачиваю (попытка $($try + 1) из 8)" -ForegroundColor Yellow
+                Start-Sleep -Seconds ($try * 2)
+            }
+        }
+        Fail "не удалось скачать ${Url}: связь рвётся. Повторите позже"
+    }
+
     Write-Host '==> Релиз FloV:MP' -ForegroundColor Cyan
     $releaseFile = Join-Path $work 'release.txt'
     if ($GitHubBase) {
@@ -121,8 +172,8 @@ try {
 
     Write-Host '==> Скачивание пакета' -ForegroundColor Cyan
     $zip = Join-Path $work $info.file
-    if ($GitHubBase) { Fetch "$GitHubBase/$($info.file)" $zip }
-    else { Fetch "$Dist/api/v1/distribution/download?$q" $zip }
+    if ($GitHubBase) { Download "$GitHubBase/$($info.file)" $zip }
+    else { Download "$Dist/api/v1/distribution/download?$q" $zip }
     $got = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($got -ne $info.sha256) { Fail "SHA-256 пакета не совпал (ожидали $($info.sha256), получили $got)" }
     Write-Host '  SHA-256 совпал' -ForegroundColor Green

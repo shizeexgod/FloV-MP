@@ -12,6 +12,10 @@ Updated: 2026-09-24 (после 1.0.6-beta: 10 находок ревью, пун
 - Пункт 12: `FloVMP.Core/Diagnostics/ClientCrash.cs` (разбор CRASH, счёт
   мест), `StarterResource.ClientCrash.cs`, клиент `crash.cpp` (SEH-фильтр,
   MiniDumpWriteDump через dbghelp, pending.txt), `bot.py --crash-test`.
+- Пункт 5: докачка в `get.sh` (curl -C -, код 33 → заново) и `get.ps1`
+  (HttpWebRequest.AddRange, 206/200/416). Проверено сервером с обрывами
+  (`scratchpad/rangesrv.py`); PowerShell 7 в облаке — `dotnet tool install
+  --global PowerShell`; все 26 .ps1 разбираются без ошибок.
 - VERSION = 1.0.7-beta (готовится, не выпущен).
 - Строк кода (без документации и сторонних библиотек): ~75 тыс.
 

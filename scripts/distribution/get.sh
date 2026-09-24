@@ -122,6 +122,32 @@ fetch() { # url файл — ответ сервера раздачи с пон�
   [ "$code" = "200" ] || die "$1 ответил $code: $(head -c 300 "$2" 2>/dev/null)"
 }
 
+# Пакет — десятки мегабайт, а у части провайдеров длинные загрузки
+# обрываются. Докачиваем с места обрыва (HTTP Range: GitHub и nginx раздачи
+# его поддерживают), а не начинаем заново; сервер без Range — качаем целиком.
+download() { # url файл
+  local try code rc resume=1
+  rm -f "$2"
+  for try in 1 2 3 4 5 6 7 8; do
+    if [ "$resume" -eq 1 ]; then
+      if code="$(curl -sSL --connect-timeout 15 --speed-limit 1024 --speed-time 60 -C - -o "$2" -w '%{http_code}' "$1")"; then rc=0; else rc=$?; fi
+    else
+      if code="$(curl -sSL --connect-timeout 15 --speed-limit 1024 --speed-time 60 -o "$2" -w '%{http_code}' "$1")"; then rc=0; else rc=$?; fi
+    fi
+    case "$rc:$code" in
+      0:200|0:206) return 0 ;;
+      *:416) return 0 ;;                      # уже скачан целиком — проверит SHA-256
+      33:*) resume=0; rm -f "$2"               # сервер не умеет докачку — заново целиком
+            echo "  сервер не поддерживает докачку — качаю пакет заново (попытка $((try + 1)) из 8)"
+            continue ;;
+      0:4*|0:5*) die "$1 ответил $code" ;;
+    esac
+    echo "  связь оборвалась на $(( $(stat -c%s "$2" 2>/dev/null || echo 0) / 1048576 )) МБ — докачиваю (попытка $((try + 1)) из 8)"
+    sleep $((try * 2))
+  done
+  die "не удалось скачать $1: связь рвётся. Повторите позже или скачайте пакет вручную (--package)"
+}
+
 echo "==> Релиз FloV:MP"
 if [ -n "$GITHUB" ]; then
   echo "  источник: GitHub $GITHUB${TAG:+, релиз $TAG}"
@@ -155,8 +181,8 @@ if [ -n "$INSTALLED" ]; then
 fi
 
 echo "==> Скачивание пакета"
-if [ -n "$GITHUB" ]; then fetch "$GH/$FILE" "$WORK/$FILE"
-else fetch "$DIST/api/v1/distribution/download?$Q" "$WORK/$FILE"; fi
+if [ -n "$GITHUB" ]; then download "$GH/$FILE" "$WORK/$FILE"
+else download "$DIST/api/v1/distribution/download?$Q" "$WORK/$FILE"; fi
 GOT="$(sha256sum "$WORK/$FILE" | cut -d' ' -f1)"
 [ "$GOT" = "$SHA" ] || die "SHA-256 пакета не совпал (ожидали $SHA, получили $GOT) — пакет повреждён или подменён"
 echo "  ✓ SHA-256 совпал"
