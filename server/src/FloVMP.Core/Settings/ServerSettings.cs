@@ -36,6 +36,12 @@ public sealed class ServerSettings
         new("world.weather", Kind.Text, "", false, "Мир", "погода при старте: EXTRASUNNY, CLEAR, CLOUDS, RAIN... Пусто — у каждого своя"),
         new("world.time", Kind.Text, "", false, "Мир", "время при старте, ЧЧ:ММ. Пусто — у каждого своё"),
         new("world.freeze_time", Kind.Bool, "off", true, "Мир", "остановить часы (время не идёт)"),
+        new("world.mp_map", Kind.Bool, "off", true, "Мир",
+            "карта сетевой игры: интерьеры квартир, офисов и дополнений (нужна большинству RP-интерьеров)"),
+        new("world.ipls", Kind.Text, "", false, "Мир",
+            "части карты (IPL), которые загрузить всем: имена через запятую, например hei_yacht_heist, TrevorsTrailerTidy"),
+        new("world.ipls_remove", Kind.Text, "", false, "Мир",
+            "части карты (IPL), которые убрать у всех: имена через запятую"),
         new("world.name", Kind.Text, "main", false, "Мир",
             "имя мира в базе (машины и игроки): несколько серверов на одной базе с разными именами не видят данных друг друга"),
 

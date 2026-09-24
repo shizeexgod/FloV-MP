@@ -18,6 +18,7 @@
 | Раздел | Что настраивается |
 |---|---|
 | Мир | прохожие, трафик, припаркованные машины, полиция и розыск, поезда и самолёты, погода при старте, время, остановка часов |
+| Интерьеры | `world.mp_map` — карта сетевой игры (интерьеры квартир, офисов, DLC), `world.ipls` / `world.ipls_remove` — части карты по имени; в JSON-картах — `ipls`, `interiorSets`; из кода — `flovmp:world:ipl`, `flovmp:world:interiorSet` |
 | Метрики и оповещения | `metrics.log_interval_sec`, страница `metrics.http_port` / `metrics.http_bind` / `metrics.token`; оповещения: `alerts.webhook_url`, `alerts.admins_chat`, пороги `alerts.tick_ms`, `alerts.min_tick_rate`, `alerts.errors_per_window`, `alerts.memory_mb`, `alerts.hang_sec`, повторы `alerts.cooldown_min`; команда консоли `metrics` |
 | Игроки | сохранение и восстановление при входе: `players.persistence`, `players.save_interval_sec`, что восстанавливать — `players.restore_position`, `players.restore_health`, `players.restore_model`, `players.restore_weapons`, `players.restore_dimension`; хранилище данных геймода — `players.data`; имя мира в базе — `world.name` |
 | Античит | журнал подозрений с весами: `anticheat.notify_score` (предупредить администраторов), `anticheat.kick_score` (отключать; 0 — никогда), `anticheat.decay_per_minute`, веса `anticheat.weight_*`, списки `anticheat.weapon_blacklist`, `anticheat.ped_whitelist`, `anticheat.vehicle_blacklist` (имена через запятую), `anticheat.issued_weapons_only`, `anticheat.ammo_accounting`, `anticheat.timescale_ratio`; `/ac <ID>`, `/acforgive <ID>` |

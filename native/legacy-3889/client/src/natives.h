@@ -264,6 +264,17 @@ inline void DETACH_ENTITY(Entity entity, BOOL p1, BOOL p2) { nv::invoke<void>(0x
 inline char* GET_VEHICLE_NUMBER_PLATE_TEXT(Vehicle vehicle) { return nv::invoke<char*>(0x7CE1CCB9B293020E, vehicle); }
 inline float GET_VEHICLE_ENGINE_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xC45D23BAF168AAB8, vehicle); }
 inline float GET_VEHICLE_BODY_HEALTH(Vehicle vehicle) { return nv::invoke<float>(0xF271147EB7B40F12, vehicle); }
+inline void REQUEST_IPL(char* iplName) { nv::invoke<void>(0x41B4893843BBDB74, iplName); }
+inline void REMOVE_IPL(char* iplName) { nv::invoke<void>(0xEE6C5AD3ECE0A82D, iplName); }
+inline BOOL IS_IPL_ACTIVE(char* iplName) { return nv::invoke<BOOL>(0x88A741E44A2B3495, iplName); }
+inline int GET_INTERIOR_AT_COORDS(float x, float y, float z) { return nv::invoke<int>(0xB0F7F8663821D9C3, x, y, z); }
+inline BOOL IS_VALID_INTERIOR(int interiorID) { return nv::invoke<BOOL>(0x26B0E73D7EAAF4D3, interiorID); }
+inline void REFRESH_INTERIOR(int interiorID) { nv::invoke<void>(0x41F37C3427C75AE0, interiorID); }
+inline void ACTIVATE_INTERIOR_ENTITY_SET(int interiorID, char* propName) { nv::invoke<void>(0x55E86AF2712B36A1, interiorID, propName); }
+inline void DEACTIVATE_INTERIOR_ENTITY_SET(int interiorID, char* propName) { nv::invoke<void>(0x420BD37289EEE162, interiorID, propName); }
+inline BOOL IS_INTERIOR_ENTITY_SET_ACTIVE(int interiorID, char* propName) { return nv::invoke<BOOL>(0x35F7DD45E8C0A16D, interiorID, propName); }
+inline void PIN_INTERIOR_IN_MEMORY(int interiorID) { nv::invoke<void>(0x2CA429C029CCF247, interiorID); }
+inline void ON_ENTER_MP() { nv::invoke<void>(0x0888C3502DBBEEF5); }
 inline Object CREATE_OBJECT_NO_OFFSET(Hash objectHash, float posX, float posY, float posZ, BOOL networkHandle, BOOL createHandle, BOOL dynamic) { return nv::invoke<Object>(0x9A294B2138ABB884, objectHash, posX, posY, posZ, networkHandle, createHandle, dynamic); }
 inline Blip ADD_BLIP_FOR_COORD(float x, float y, float z) { return nv::invoke<Blip>(0x5A039BB0BCA604B6, x, y, z); }
 inline void BEGIN_TEXT_COMMAND_SET_BLIP_NAME(char* gxtentry) { nv::invoke<void>(0xF9113A30DE5C6670, gxtentry); }

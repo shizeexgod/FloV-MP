@@ -40,7 +40,42 @@ public partial class StarterResource
     private static readonly Dictionary<string, string> KindByName = new(StringComparer.OrdinalIgnoreCase)
     {
         ["object"] = "OBJ", ["blip"] = "BLIP", ["marker"] = "MARKER", ["label"] = "LABEL", ["npc"] = "NPC",
+        ["ipl"] = "IPL", ["interiorSet"] = "ISET",
     };
+
+    // IPL — часть карты игры по имени (интерьер больницы, яхта, квартиры),
+    // набор интерьера — его оформление (мебель, вывески). Имена — как в игре.
+    private static readonly System.Text.RegularExpressions.Regex GameName =
+        new("^[A-Za-z0-9_-]{1,64}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // Какие IPL сейчас заданы файлом настроек: при reloadsettings убранные из
+    // файла возвращаются игре, а заданные ресурсом не трогаются.
+    private readonly HashSet<string> _cfgIpls = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool PutIpl(string? name, bool loaded)
+    {
+        var n = (name ?? "").Trim();
+        if (!GameName.IsMatch(n)) { Alt.LogWarning($"[FloV:MP] мир: IPL «{name}» — латиница, цифры, _ и -, до 64 символов"); return false; }
+        return PutWorld("IPL", n, DimensionAll, loaded ? 1 : 0);
+    }
+
+    /// <summary>world.ipls и world.ipls_remove из client.cfg — при старте и reloadsettings.</summary>
+    private void ApplyIplSettings()
+    {
+        var wanted = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in SplitList(_settings.Get("world.ipls"))) wanted[n] = true;
+        foreach (var n in SplitList(_settings.Get("world.ipls_remove"))) wanted[n] = false;
+        foreach (var gone in _cfgIpls.Where(n => !wanted.ContainsKey(n)).ToList())
+        {
+            RemoveWorld("IPL", gone);
+            _cfgIpls.Remove(gone);
+        }
+        foreach (var (n, loaded) in wanted)
+            if (PutIpl(n, loaded)) _cfgIpls.Add(n);
+    }
+
+    private static IEnumerable<string> SplitList(string? list) =>
+        (list ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private void RegisterWorldApi()
     {
@@ -70,6 +105,17 @@ public partial class StarterResource
             (id, model, x, y, z, heading, scenario, dim) =>
                 PutWorld("NPC", id, dim, ModelHash(model), x, y, z, heading, Clean(scenario, 64)));
         // Убрать элемент: вид (object, blip, marker, label, npc) и ID.
+        // Часть карты: имя IPL, загрузить (true) или убрать (false). Во всех измерениях.
+        Alt.OnServer<string, bool>("flovmp:world:ipl", (name, loaded) => PutIpl(name, loaded));
+        // Набор интерьера: ID, точка внутри интерьера, имя набора, включить.
+        Alt.OnServer<string, float, float, float, string, bool>("flovmp:world:interiorSet", (id, x, y, z, set, on) =>
+        {
+            var name = (set ?? "").Trim();
+            if (!GameName.IsMatch(name)) { Alt.LogWarning($"[FloV:MP] мир: набор интерьера «{set}» — латиница, цифры, _ и -, до 64 символов"); return; }
+            if (!Finite(x) || !Finite(y) || !Finite(z)) { Alt.LogWarning("[FloV:MP] мир: набор интерьера — недопустимые координаты"); return; }
+            PutWorld("ISET", id, DimensionAll, x, y, z, name, on);
+        });
+
         Alt.OnServer<string, string>("flovmp:world:remove", (kind, id) =>
         {
             if (KindByName.TryGetValue(kind ?? "", out var k)) RemoveWorld(k, id);
@@ -412,6 +458,23 @@ public partial class StarterResource
         n = 0;
         foreach (var p in Arr("npcs"))
             MapPut("NPC", $"{map}#n{n++}", Dim(p), ModelHash(S(p, "model")), F(p, "x"), F(p, "y"), F(p, "z"), F(p, "heading"), Clean(S(p, "scenario"), 64));
+        // Интерьерные моды обычно идут со списком IPL: карта включает их сама.
+        // Строка — загрузить; объект {"name", "loaded": false} — убрать.
+        foreach (var i in Arr("ipls"))
+        {
+            var name = i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : S(i, "name");
+            var loaded = i.ValueKind != JsonValueKind.Object || B(i, "loaded", true);
+            if (GameName.IsMatch(name)) MapPut("IPL", name, DimensionAll, loaded ? 1 : 0);
+            else Alt.LogWarning($"[FloV:MP] карта {map}: IPL «{name}» — латиница, цифры, _ и -");
+        }
+        n = 0;
+        foreach (var s in Arr("interiorSets"))
+        {
+            var set = S(s, "set");
+            if (GameName.IsMatch(set))
+                MapPut("ISET", $"{map}#i{n++}", DimensionAll, F(s, "x"), F(s, "y"), F(s, "z"), set, B(s, "enabled", true));
+            else Alt.LogWarning($"[FloV:MP] карта {map}: набор интерьера «{set}» — латиница, цифры, _ и -");
+        }
     }
 
     /// <summary>Расстановка Menyoo (SpoonerPlacements): объекты и NPC.</summary>
@@ -470,8 +533,13 @@ public partial class StarterResource
           "markers": [ { "type": 1, "x": 200, "y": -930, "z": 29, "scale": 1.5, "color": "#ff3d8ab4", "distance": 60 } ],
           "labels":  [ { "x": 200, "y": -930, "z": 31, "text": "{ff3d8a}Мэрия{ffffff} — вход", "distance": 20 } ],
           "npcs":    [ { "model": "a_m_y_business_01", "x": 201, "y": -931, "z": 29.7, "heading": 180,
-                         "scenario": "WORLD_HUMAN_STAND_MOBILE" } ]
+                         "scenario": "WORLD_HUMAN_STAND_MOBILE" } ],
+          "ipls":    [ "hei_yacht_heist", { "name": "fakeint", "loaded": false } ],
+          "interiorSets": [ { "x": -1152.0, "y": -1520.0, "z": 10.6, "set": "office_chairs", "enabled": true } ]
         }
+        ipls — части карты игры (интерьеры, яхта, квартиры): загрузить или убрать.
+        interiorSets — оформление интерьера по точке внутри него (мебель, вывески).
+        Большинству интерьеров квартир и офисов нужна world.mp_map = on в client.cfg.
         "dimension": "all" — видно во всех измерениях.
 
         Модели — любые, что есть в игре у игроков (имя или хэш 0x...). Свои

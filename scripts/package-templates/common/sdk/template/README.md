@@ -108,7 +108,17 @@ Alt.Emit("flovmp:world:label", "jobText", 200f, -930f, 31f, "{ff3d8a}Работ�
 // NPC: ID, модель, x y z, поворот, сценарий, измерение
 Alt.Emit("flovmp:world:npc", "clerk", "a_m_y_business_01", 201f, -931f, 29.7f, 180f, "WORLD_HUMAN_STAND_MOBILE", 0);
 Alt.Emit("flovmp:world:remove", "object", "bench1");
+
+// интерьеры: часть карты (IPL) по имени — загрузить или убрать у всех
+Alt.Emit("flovmp:world:ipl", "hei_yacht_heist", true);
+// оформление интерьера (мебель, вывески): ID, точка внутри, имя набора, включить
+Alt.Emit("flovmp:world:interiorSet", "office1", -1152f, -1520f, 10.6f, "office_chairs", true);
+Alt.Emit("flovmp:world:remove", "ipl", "hei_yacht_heist");   // вернуть как было в игре
 ```
+
+Большинству интерьеров квартир, офисов и дополнений нужна карта сетевой игры —
+`world.mp_map = on` в `client.cfg`. Постоянный список IPL — `world.ipls` и
+`world.ipls_remove` там же, или `"ipls"` в JSON-карте из `server/config/maps`.
 
 Измерение `int.MinValue` — «во всех измерениях».
 

@@ -146,6 +146,7 @@ namespace flov::game
         struct Cfg
         {
             bool peds = false, traffic = false, parked = false, police = false, ambient = false, freezeTime = false;
+            bool mpMap = false;   // карта сетевой игры: интерьеры квартир, офисов и DLC
             bool minimap = true, abilityBar = false, areaNames = false, vehicleNames = false, weaponWheel = false;
             bool pauseMenu = false, playerBlips = false, watermark = false;
             bool tags = true, tagId = true, tagHealth = true, tagArmor = true, tagVoice = true, tagAdmin = false, tagSpace = true;
@@ -1157,6 +1158,16 @@ namespace flov::game
             n::SET_VEHICLE_POPULATION_BUDGET(g_cfg.traffic ? 3 : 0);
             n::SET_NUMBER_OF_PARKED_VEHICLES(g_cfg.parked ? -1 : 0);
             n::PAUSE_CLOCK(g_cfg.freezeTime);
+            // Карта сетевой игры — один раз за запуск игры: большинство RP-интерьеров
+            // (квартиры, офисы, клубы из DLC) есть только в ней. Обратно в сюжетную
+            // карту игра не переключается — выход с сервера её не вернёт.
+            static bool mpMapLoaded = false;
+            if (g_cfg.mpMap && !mpMapLoaded)
+            {
+                n::ON_ENTER_MP();
+                mpMapLoaded = true;
+                Log("мир: включена карта сетевой игры (world.mp_map)");
+            }
         }
 
         /// Полоска способности под мини-картой. (Scaleform «minimap» здесь не
@@ -1518,6 +1529,7 @@ namespace flov::game
         void ResetSession()
         {
             world::Clear();
+            world::ResetInteriors();   // карта — как до сервера
             ui::CloseMenu();
             g_serverKeys.clear();
             for (auto& [id, r] : g_remotes) DestroyRemote(r);
@@ -1627,6 +1639,7 @@ namespace flov::game
             auto& c = g_cfg;
             c.peds = Bool("world.peds"); c.traffic = Bool("world.traffic"); c.parked = Bool("world.parked_vehicles");
             c.police = Bool("world.police"); c.ambient = Bool("world.ambient_events"); c.freezeTime = Bool("world.freeze_time");
+            c.mpMap = Bool("world.mp_map");
             c.minimap = Bool("hud.minimap"); c.abilityBar = Bool("hud.ability_bar"); c.areaNames = Bool("hud.area_names");
             c.vehicleNames = Bool("hud.vehicle_names"); c.weaponWheel = Bool("hud.weapon_wheel");
             c.pauseMenu = false; // legacy config key; native GTA pause is never allowed

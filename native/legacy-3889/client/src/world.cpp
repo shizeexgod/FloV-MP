@@ -52,6 +52,59 @@ namespace flov::world
         std::map<Hash, ULONGLONG> g_modelWait;   // модель запрошена с этого момента
         ULONGLONG g_nextScan = 0;
 
+        // Интерьеры и части карты (пункт 9 roadmap). Для каждого запоминаем, каким
+        // он был у игры до сервера: при отключении карта возвращается как была, и
+        // в одиночной игре не остаются чужие интерьеры.
+        struct Ipl { bool loaded = false; bool original = false; };
+        struct InteriorSet
+        {
+            float x = 0, y = 0, z = 0;
+            std::string set;
+            bool on = false;
+            bool applied = false;        // интерьер нашёлся и набор выставлен
+            bool original = false;       // был ли набор включён до сервера
+            bool originalKnown = false;
+        };
+        std::map<std::string, Ipl> g_ipls;
+        std::map<std::string, InteriorSet> g_sets;
+        ULONGLONG g_nextSetScan = 0;
+
+        char* C(const std::string& s) { return const_cast<char*>(s.c_str()); }
+
+        void SetIpl(const std::string& name, bool loaded)
+        {
+            if (loaded) n::REQUEST_IPL(C(name));
+            else n::REMOVE_IPL(C(name));
+        }
+
+        /// Набор оформления интерьера по координатам. Интерьер может ещё не
+        /// существовать (его IPL только что запрошен или игрок далеко) — тогда
+        /// повторим в Tick.
+        void ApplySet(InteriorSet& s)
+        {
+            const int interior = n::GET_INTERIOR_AT_COORDS(s.x, s.y, s.z);
+            if (!interior || !n::IS_VALID_INTERIOR(interior)) { s.applied = false; return; }
+            if (!s.originalKnown)
+            {
+                s.original = n::IS_INTERIOR_ENTITY_SET_ACTIVE(interior, C(s.set)) != 0;
+                s.originalKnown = true;
+            }
+            if (s.on) n::ACTIVATE_INTERIOR_ENTITY_SET(interior, C(s.set));
+            else n::DEACTIVATE_INTERIOR_ENTITY_SET(interior, C(s.set));
+            n::REFRESH_INTERIOR(interior);
+            s.applied = true;
+        }
+
+        void RestoreSet(const InteriorSet& s)
+        {
+            if (!s.originalKnown || s.original == s.on) return;
+            const int interior = n::GET_INTERIOR_AT_COORDS(s.x, s.y, s.z);
+            if (!interior || !n::IS_VALID_INTERIOR(interior)) return;
+            if (s.original) n::ACTIVATE_INTERIOR_ENTITY_SET(interior, C(s.set));
+            else n::DEACTIVATE_INTERIOR_ENTITY_SET(interior, C(s.set));
+            n::REFRESH_INTERIOR(interior);
+        }
+
         std::string at(const std::vector<std::string>& m, size_t i) { return i < m.size() ? m[i] : std::string(); }
 
         float Dist2(float ax, float ay, float az, float bx, float by, float bz)
@@ -186,9 +239,43 @@ namespace flov::world
                                           ToInt(at(m, 8), 61), ToInt(at(m, 9), 138), ToInt(at(m, 10), 180) };
         else if (t == "WLABEL")
             g_labels[at(m, 1)] = Label3D{ ToFloat(at(m, 2)), ToFloat(at(m, 3)), ToFloat(at(m, 4)), ToFloat(at(m, 5), 20.f), at(m, 6) };
+        else if (t == "WIPL")
+        {
+            const std::string name = at(m, 1);
+            if (name.empty()) return true;
+            const bool loaded = at(m, 2) == "1";
+            auto it = g_ipls.find(name);
+            if (it == g_ipls.end()) it = g_ipls.emplace(name, Ipl{ loaded, n::IS_IPL_ACTIVE(C(name)) != 0 }).first;
+            it->second.loaded = loaded;
+            SetIpl(name, loaded);
+            g_nextSetScan = 0;   // наборы этого интерьера могли ждать его загрузки
+        }
+        else if (t == "WISET")
+        {
+            auto& s = g_sets[at(m, 1)];
+            const std::string set = at(m, 5);
+            if (!s.set.empty() && s.set != set) RestoreSet(s);   // тот же ID, другой набор — вернуть прежний
+            const bool keepOriginal = s.set == set;
+            const bool original = s.original, known = s.originalKnown;
+            s = InteriorSet{ ToFloat(at(m, 2)), ToFloat(at(m, 3)), ToFloat(at(m, 4)), set, at(m, 6) == "1" };
+            if (keepOriginal) { s.original = original; s.originalKnown = known; }
+            if (!s.set.empty()) ApplySet(s);
+        }
         else if (t == "WDEL")
         {
             const std::string kind = at(m, 1), id = at(m, 2);
+            if (kind == "IPL")
+            {
+                auto it = g_ipls.find(id);
+                if (it != g_ipls.end()) { SetIpl(id, it->second.original); g_ipls.erase(it); }
+                return true;
+            }
+            if (kind == "ISET")
+            {
+                auto it = g_sets.find(id);
+                if (it != g_sets.end()) { RestoreSet(it->second); g_sets.erase(it); }
+                return true;
+            }
             if (kind == "OBJ") { auto it = g_objs.find(id); if (it != g_objs.end()) { Delete(it->second.handle); g_objs.erase(it); } }
             else if (kind == "NPC") { auto it = g_npcs.find(id); if (it != g_npcs.end()) { Delete(it->second.handle); g_npcs.erase(it); } }
             else if (kind == "BLIP") { auto it = g_blips.find(id); if (it != g_blips.end()) { RemoveBlip(it->second); g_blips.erase(it); } }
@@ -203,6 +290,13 @@ namespace flov::world
     void Tick(float x, float y, float z)
     {
         const ULONGLONG now = GetTickCount64();
+        // Наборы, чей интерьер ещё не был загружен, — раз в секунду.
+        if (now >= g_nextSetScan && !g_sets.empty())
+        {
+            g_nextSetScan = now + 1000;
+            for (auto& [id, s] : g_sets)
+                if (!s.applied) ApplySet(s);
+        }
         if (now >= g_nextScan)
         {
             g_nextScan = now + kScanMs;
@@ -283,6 +377,15 @@ namespace flov::world
         g_toSpawnObj.clear(); g_toSpawnNpc.clear(); g_modelWait.clear();
     }
 
+    void ResetInteriors()
+    {
+        for (const auto& [id, s] : g_sets) RestoreSet(s);
+        for (const auto& [name, ipl] : g_ipls)
+            if (ipl.loaded != ipl.original) SetIpl(name, ipl.original);
+        g_sets.clear();
+        g_ipls.clear();
+    }
+
     std::string Summary()
     {
         int objs = 0, npcs = 0;
@@ -291,6 +394,7 @@ namespace flov::world
         return "объекты " + std::to_string(objs) + "/" + std::to_string(g_objs.size()) +
                ", NPC " + std::to_string(npcs) + "/" + std::to_string(g_npcs.size()) +
                ", метки " + std::to_string(g_blips.size()) + ", маркеры " + std::to_string(g_markers.size()) +
-               ", надписи " + std::to_string(g_labels.size());
+               ", надписи " + std::to_string(g_labels.size()) + ", IPL " + std::to_string(g_ipls.size()) +
+               ", наборы интерьеров " + std::to_string(g_sets.size());
     }
 }

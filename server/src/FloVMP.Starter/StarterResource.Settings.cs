@@ -33,6 +33,7 @@ public partial class StarterResource
             Alt.Log($"[FloV:MP] Настройки из кода ресурса поверх client.cfg: {string.Join(", ", _settingOverrides.Keys)}");
         ApplyAntiCheatSettings();
         ApplyMetricsSettings();
+        ApplyIplSettings();
 
         // Погода и время по умолчанию — только если владелец их задал; команда
         // /weather и /time администратора по-прежнему меняют их на ходу.
@@ -80,6 +81,7 @@ public partial class StarterResource
         Alt.Log($"[FloV:MP] Ресурс изменил настройку: {key} = {_settings.Get(key)}");
         ApplyAntiCheatSettings();
         ApplyMetricsSettings();
+        ApplyIplSettings();
         if (ServerSettings.IsClientKey(key))
             foreach (var p in _nativePlayers.Values)
                 SendClientSettings(((NativePlayerProxy)(object)p).Session);
