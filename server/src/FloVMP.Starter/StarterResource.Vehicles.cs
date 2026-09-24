@@ -52,6 +52,7 @@ public partial class StarterResource
     {
         _vehicles?.PlayerLeft(playerId, _clock.ElapsedMilliseconds);
         _registryClients.Remove(playerId);
+        _legacyPassengerNoted.Remove(playerId);
     }
 
     private void OnVehicleMessage(NativeSession session, string[] p)
@@ -82,9 +83,11 @@ public partial class StarterResource
     {
         if (_vehicles is null && _registryClients.Count == 0) return;
         Vehicles.Registry.MaxRegistered = _settings.Int("vehicles.max_registered");
+        // Все игроки 3889, не только 1.0.6+: рядом стоящий старый клиент тоже
+        // не даёт убрать машину как брошенную. Рассылку сервис шлёт только 1.0.6+.
         _vehicleRecipients.Clear();
-        foreach (var id in _registryClients)
-            if (_nativeReady.Contains(id) && TryGetVehiclePlayer(id, out var pl))
+        foreach (var id in _nativeReady)
+            if (TryGetVehiclePlayer(id, out var pl))
                 _vehicleRecipients.Add(pl);
         Vehicles.Replicate(nowMs, _vehicleRecipients, _settings.Float("sync.stream_radius"),
             _settings.Int("sync.max_streamed"), _settings.Int("vehicles.abandoned_ttl_sec") * 1000L);
@@ -159,8 +162,18 @@ public partial class StarterResource
             case "dv":
             case "delveh":
             case "destroyveh":
-                if (current is null) { SendChatMessage(player, "{fde047}[Транспорт] Сядьте в машину, которую нужно убрать."); return true; }
-                Vehicles.Remove(current.Id);
+                // Как у старого клиента: убрать можно и стоя рядом — ближайшую
+                // свою машину в радиусе DeleteOwnRadius (решение владельца).
+                var doomed = current ?? (np.Session.HasState
+                    ? Vehicles.Registry.NearestOwned(id, np.State.X, np.State.Y, np.State.Z, np.DimensionValue, DeleteOwnRadius)
+                    : null);
+                if (doomed is null)
+                {
+                    SendChatMessage(player, $"{{fde047}}[Транспорт] Рядом нет вашей машины: сядьте в неё или подойдите ближе {DeleteOwnRadius:0} м.");
+                    return true;
+                }
+                Vehicles.Remove(doomed.Id);
+                SendChatMessage(player, "{34d399}[Транспорт] Машина убрана.");
                 return true;
             case "engine":
                 if (current is null) { SendChatMessage(player, "{fde047}[Транспорт] Вы должны находиться в транспортном средстве."); return true; }
@@ -178,6 +191,30 @@ public partial class StarterResource
         }
         return false;
     }
+
+    // Старый клиент пассажиром в машине реестра: одна строка на поездку, а
+    // не 20 в секунду (STATE идёт с такой частотой).
+    private readonly Dictionary<uint, uint> _legacyPassengerNoted = new();
+
+    /// <summary>
+    /// Клиент ниже 1.0.6 сел пассажиром к водителю 1.0.6+: машину реестра он
+    /// видит только полями PSTATE, а его место сервер подтвердить не может —
+    /// для остальных он остаётся пешим. Это ограничение переходного релиза,
+    /// а не баг: владельцу сервера пишем об этом отдельной строкой.
+    /// </summary>
+    private void NoteLegacyPassengerRefused(uint passengerId, uint driverId)
+    {
+        var vehicleId = _vehicles?.Registry.VehicleOf(driverId)?.Id ?? 0;
+        if (_legacyPassengerNoted.TryGetValue(passengerId, out var noted) && noted == vehicleId) return;
+        _legacyPassengerNoted[passengerId] = vehicleId;
+        var name = _nativePlayers.TryGetValue(passengerId, out var p) ? ((NativePlayerProxy)(object)p).Session.Name : "?";
+        Alt.LogWarning($"[FloV:MP Транспорт] переходный период 1.0.6: {name} [{passengerId}] со старым клиентом " +
+                       $"не может ехать пассажиром в машине реестра {vehicleId} (водитель [{driverId}]) — " +
+                       "для остальных он высажен. Обновление клиента игрока это снимет.");
+    }
+
+    /// <summary>/dv снаружи: своя машина не дальше этого, м.</summary>
+    private const float DeleteOwnRadius = 10f;
 
     private RegisteredVehicle? LastOwnVehicle(uint playerId)
     {

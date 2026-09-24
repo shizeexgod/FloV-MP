@@ -674,7 +674,12 @@ public partial class StarterResource
     /// </summary>
     private NativePlayerState AuthorizeVehicleState(uint playerId, int dimension, NativePlayerState state, long nowMs)
     {
-        if (!state.InVehicle || state.VehicleModel == 0) return state;
+        if (!state.InVehicle || state.VehicleModel == 0)
+        {
+            // Вышел — следующая поездка снова попадёт в журнал переходного периода.
+            _legacyPassengerNoted.Remove(playerId);
+            return state;
+        }
         if (state.Seat == -1)
             return state with { VehicleOwner = (int)playerId };
 
@@ -684,6 +689,7 @@ public partial class StarterResource
             nowMs - owner.SeenAt <= NativeSyncIntervalMs * 4 &&
             DistanceSquared(state.X, state.Y, state.Z, owner.X, owner.Y, owner.Z) <= 25f * 25f)
             return state;
+        if (ownerId != 0 && UsesRegistry(ownerId)) NoteLegacyPassengerRefused(playerId, ownerId);
 
         return state with
         {

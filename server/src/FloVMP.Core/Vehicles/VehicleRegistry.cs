@@ -44,7 +44,9 @@ public sealed class RegisteredVehicle
     public VehicleOrigin Origin { get; }
     /// <summary>Кто создал или зарегистрировал машину (0 — сервер).</summary>
     public uint RegisteredBy { get; }
-    public long LastOccupiedMs { get; internal set; }
+    /// <summary>Когда машина последний раз была нужна: в ней сидели или рядом
+    /// был игрок. От этого момента считается уборка брошенного трафика.</summary>
+    public long LastActiveMs { get; internal set; }
     internal readonly SortedDictionary<int, uint> Seats = new();
     public IReadOnlyDictionary<int, uint> Occupants => Seats;
     public uint Driver => Seats.TryGetValue(VehicleRegistry.DriverSeat, out var d) ? d : 0;
@@ -58,7 +60,7 @@ public sealed class RegisteredVehicle
         Dimension = dimension;
         Origin = origin;
         RegisteredBy = registeredBy;
-        LastOccupiedMs = nowMs;
+        LastActiveMs = nowMs;
     }
 
     public RegisteredVehicleView View() => new(Id, Model, X, Y, Z, Rx, Ry, Rz, Vx, Vy, Vz, Dimension,
@@ -115,6 +117,26 @@ public sealed class VehicleRegistry
 
     public RegisteredVehicle? VehicleOf(uint playerId) =>
         _playerSeats.TryGetValue(playerId, out var s) ? Get(s.VehicleId) : null;
+
+    /// <summary>
+    /// Ближайшая «своя» машина игрока (созданная им или угнанная им из
+    /// трафика) в радиусе и его измерении. Нужна командам, которые старый
+    /// клиент выполнял снаружи машины (/dv, /lock): без этого переход на
+    /// реестр был бы регрессом. Владелец-персонаж и ключи — забота геймода.
+    /// </summary>
+    public RegisteredVehicle? NearestOwned(uint playerId, float x, float y, float z, int dimension, float radius)
+    {
+        RegisteredVehicle? best = null;
+        var bestD2 = radius * radius;
+        foreach (var v in _vehicles.Values)
+        {
+            if (v.RegisteredBy != playerId || v.Dimension != dimension) continue;
+            var dx = v.X - x; var dy = v.Y - y; var dz = v.Z - z;
+            var d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 <= bestD2) { best = v; bestD2 = d2; }
+        }
+        return best;
+    }
 
     /// <summary>Пересадки с последнего вызова — для рассылки VOWN.</summary>
     public List<SeatChange> DrainSeatChanges()
@@ -198,7 +220,7 @@ public sealed class VehicleRegistry
         if (!_playerSeats.Remove(playerId, out var s)) return false;
         if (!_vehicles.TryGetValue(s.VehicleId, out var v)) return true;
         v.Seats.Remove(s.Seat);
-        v.LastOccupiedMs = nowMs;
+        v.LastActiveMs = nowMs;
         _seatChanges.Add(new SeatChange(v.Id, s.Seat, 0));
         if (s.Seat == DriverSeat && (v.Vx != 0 || v.Vy != 0 || v.Vz != 0))
         {
@@ -274,17 +296,29 @@ public sealed class VehicleRegistry
         return p is not null && Mutate(vehicleId, v => v.Plate = p);
     }
 
+    /// <summary>Рядом с машиной есть игрок — она нужна, уборка откладывается.</summary>
+    public void MarkActive(RegisteredVehicle v, long nowMs)
+    {
+        if (nowMs > v.LastActiveMs) v.LastActiveMs = nowMs;
+    }
+
     /// <summary>
-    /// Непостоянные машины, в которых никого нет дольше ttl, — удалить. Иначе
-    /// каждая машина трафика, в которую кто-то садился, навсегда занимала бы
-    /// место под потолком. ttl 0 — не удалять никогда.
+    /// Уборка брошенного трафика — как у самой GTA и у FiveM: машина из
+    /// трафика игры, в которую кто-то садился, исчезает только когда в ней
+    /// никого нет и рядом давно никого не было. Иначе каждая такая машина
+    /// навсегда занимала бы место под потолком реестра.
+    ///
+    /// Машины сервера (/car, API) не трогаем никогда — как в alt:V и RAGE:MP,
+    /// их убирает только команда или геймод: выйти из своей машины и
+    /// вернуться к ней должно быть можно всегда. ttl 0 — не убирать и трафик.
     /// </summary>
     public List<RegisteredVehicle> CollectAbandoned(long nowMs, long ttlMs)
     {
         var removed = new List<RegisteredVehicle>();
         if (ttlMs <= 0) return removed;
         foreach (var v in _vehicles.Values)
-            if (!v.Persistent && v.IsEmpty && nowMs - v.LastOccupiedMs >= ttlMs) removed.Add(v);
+            if (v.Origin == VehicleOrigin.Traffic && !v.Persistent && v.IsEmpty && nowMs - v.LastActiveMs >= ttlMs)
+                removed.Add(v);
         foreach (var v in removed) _vehicles.Remove(v.Id);
         return removed;
     }
@@ -300,7 +334,7 @@ public sealed class VehicleRegistry
     private void Seat(RegisteredVehicle v, uint playerId, int seat, long nowMs)
     {
         v.Seats[seat] = playerId;
-        v.LastOccupiedMs = nowMs;
+        v.LastActiveMs = nowMs;
         _playerSeats[playerId] = (v.Id, seat);
         _seatChanges.Add(new SeatChange(v.Id, seat, playerId));
     }

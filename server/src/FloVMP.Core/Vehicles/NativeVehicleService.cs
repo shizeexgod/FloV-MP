@@ -209,24 +209,36 @@ public sealed class NativeVehicleService
     // ---------------------------------------------------------------- рассылка
 
     /// <summary>
-    /// Раз в тик синхронизации: брошенные машины, затем каждому клиенту 1.0.6+
-    /// — машины в радиусе его измерения. Вошла — снимок (VADD, VSTATE, VOWN),
-    /// изменилась — VSTATE с частотой по дальности, вышла — VDEL.
+    /// Раз в тик синхронизации. players — все игроки 3889: и старые клиенты
+    /// держат машину «нужной», пока стоят рядом. Затем уборка брошенного
+    /// трафика и каждому клиенту 1.0.6+ — машины в радиусе его измерения.
+    /// Вошла — снимок (VADD, VSTATE, VOWN), изменилась — VSTATE с частотой по
+    /// дальности, вышла — VDEL.
     /// </summary>
-    public void Replicate(long nowMs, IEnumerable<VehiclePlayer> recipients, float radius, int maxStreamed, long abandonedTtlMs)
+    public void Replicate(long nowMs, IReadOnlyList<VehiclePlayer> players, float radius, int maxStreamed, long abandonedTtlMs)
     {
         _tick++;
-        foreach (var v in Registry.CollectAbandoned(nowMs, abandonedTtlMs))
-        {
-            Forget(v.Id);
-            _host.Warn($"[FloV:MP] Машина {v.Id} ({v.Plate}) убрана: никого не было дольше {abandonedTtlMs / 1000} с.");
-        }
-
         _grid.Clear();
         _stateLines.Clear();
         foreach (var v in Registry.All) _grid.InsertOrUpdate(v.Id, new Vector3D(v.X, v.Y, v.Z), v.Dimension);
 
-        foreach (var pl in recipients)
+        // Машина, которую кто-то видит, не брошена: игрок отошёл к дому или
+        // магазину — вернётся к ней. Уборка только там, где никого нет.
+        foreach (var pl in players)
+        {
+            if (!pl.HasState) continue;
+            _candidates.Clear();
+            _grid.FindInRadius(new Vector3D(pl.X, pl.Y, pl.Z), radius, pl.Dimension, _candidates, use3D: false);
+            foreach (var id in _candidates) Registry.MarkActive(Registry.Get(id)!, nowMs);
+        }
+        foreach (var v in Registry.CollectAbandoned(nowMs, abandonedTtlMs))
+        {
+            _grid.Remove(v.Id);
+            Forget(v.Id);
+            _host.Warn($"[FloV:MP] Машина трафика {v.Id} ({v.Plate}) убрана: пустая, рядом никого не было {abandonedTtlMs / 1000} с.");
+        }
+
+        foreach (var pl in players)
         {
             if (!pl.UsesRegistry) continue;
             var visible = VisibleOf(pl.Id);

@@ -225,22 +225,55 @@ public class NativeVehicleServiceTests
     }
 
     [Fact]
-    public void Abandoned_IsRemovedWithVDel()
+    public void ServerVehicle_StaysAfterExit_NoMatterHowLong()
     {
+        // Вышел из своей машины (/car) — она стоит, пока её не уберут командой.
         var (svc, host) = Make();
         host.Add(1, 0, 0);
         host.Add(2, 5, 0);
         var v = svc.SpawnForPlayer(1, Adder, 0, 0)!;
         Replicate(svc, host, now: 0);
         svc.HandleLeave(1, new[] { "VLEAVE", v.Id.ToString() }, 1_000);
-
+        host.Players.Clear(); // все разошлись
         host.Sent.Clear();
-        Replicate(svc, host, now: 300_999);
-        Assert.Empty(host.To(2, "VDEL"));
-        Replicate(svc, host, now: 301_000);
-        Assert.Single(host.To(2, "VDEL"));
-        Assert.Single(host.To(1, "VDEL"));
-        Assert.Null(svc.Registry.Get(v.Id));
+        Replicate(svc, host, now: 100_000_000);
+        Assert.NotNull(svc.Registry.Get(v.Id));
+    }
+
+    private static uint TrafficCar(NativeVehicleService svc, Host host, uint driver)
+    {
+        svc.HandleRequest(driver, new[] { "VREQ", "1", Adder.ToString() }, 0);
+        return uint.Parse(host.To(driver, "VREG")[0][2]);
+    }
+
+    [Fact]
+    public void AbandonedTraffic_StaysWhileAnyoneIsNear_EvenOldClient()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(3, 50, 0, registry: false); // старый клиент рядом
+        var id = TrafficCar(svc, host, 1);
+        svc.HandleLeave(1, new[] { "VLEAVE", id.ToString() }, 1_000);
+        host.Players.Remove(1);
+        for (long t = 0; t <= 1_000_000; t += 100_000) Replicate(svc, host, now: t);
+        Assert.NotNull(svc.Registry.Get(id));
+    }
+
+    [Fact]
+    public void AbandonedTraffic_IsRemovedWhenNobodyNearForTtl_WithVDel()
+    {
+        var (svc, host) = Make();
+        host.Add(1, 0, 0);
+        host.Add(2, 5000, 0);
+        var id = TrafficCar(svc, host, 1);
+        svc.HandleLeave(1, new[] { "VLEAVE", id.ToString() }, 1_000);
+        Replicate(svc, host, now: 2_000);          // водитель ещё рядом
+        host.Add(1, 5000, 10);                       // ушёл далеко
+        host.Sent.Clear();
+        Replicate(svc, host, now: 301_999);
+        Assert.NotNull(svc.Registry.Get(id));
+        Replicate(svc, host, now: 302_000);
+        Assert.Null(svc.Registry.Get(id));
     }
 
     [Fact]

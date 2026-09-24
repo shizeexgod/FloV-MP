@@ -116,7 +116,7 @@ public class VehicleRegistryTests
         Assert.True(r.Leave(3, nowMs: 500));
         Assert.Equal(0f, v.Vx);
         Assert.Equal(5f, v.X); // стоит там, где бросили
-        Assert.Equal(500, v.LastOccupiedMs);
+        Assert.Equal(500, v.LastActiveMs);
         Assert.Equal(new[] { new SeatChange(v.Id, -1, 0) }, r.DrainSeatChanges());
         Assert.Equal((0u, 0), r.SeatOf(3));
     }
@@ -164,30 +164,42 @@ public class VehicleRegistryTests
     }
 
     [Fact]
-    public void CollectAbandoned_RemovesOnlyEmptyNonPersistentAfterTtl()
+    public void CollectAbandoned_NeverTouchesServerVehicles()
+    {
+        // Как в alt:V и RAGE:MP: машину /car или геймода платформа сама не убирает.
+        var r = new VehicleRegistry();
+        var car = r.Create(Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0)!;
+        Assert.Empty(r.CollectAbandoned(nowMs: 10_000_000, ttlMs: 300_000));
+        Assert.NotNull(r.Get(car.Id));
+    }
+
+    [Fact]
+    public void CollectAbandoned_RemovesOnlyEmptyTrafficAfterTtl()
     {
         var r = new VehicleRegistry();
-        var empty = r.Create(Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0)!;
-        var kept = r.Create(Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0, persistent: true)!;
         var (driven, _) = r.RegisterTraffic(9, Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0);
+        var (kept, _) = r.RegisterTraffic(8, Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0);
+        kept!.Persistent = true;
+        r.Leave(8, nowMs: 0);
 
-        Assert.Empty(r.CollectAbandoned(nowMs: 299_000, ttlMs: 300_000));
-        var removed = r.CollectAbandoned(nowMs: 300_000, ttlMs: 300_000);
-        Assert.Equal(new[] { empty.Id }, removed.Select(v => v.Id));
-        Assert.NotNull(r.Get(kept.Id));
-        Assert.NotNull(r.Get(driven!.Id));
+        // Пока в машине сидят — не трогаем, сколько бы ни прошло.
+        Assert.Empty(r.CollectAbandoned(nowMs: 1_000_000, ttlMs: 300_000));
 
-        // Отсчёт — от момента, когда в машине последний раз кто-то был.
-        r.Leave(9, nowMs: 400_000);
-        Assert.Empty(r.CollectAbandoned(nowMs: 600_000, ttlMs: 300_000));
-        Assert.Single(r.CollectAbandoned(nowMs: 700_000, ttlMs: 300_000));
+        // Отсчёт — от момента, когда машина последний раз была нужна.
+        r.Leave(9, nowMs: 1_000_000);
+        Assert.Empty(r.CollectAbandoned(nowMs: 1_299_000, ttlMs: 300_000));
+        r.MarkActive(driven!, 1_200_000); // рядом прошёл игрок
+        Assert.Empty(r.CollectAbandoned(nowMs: 1_400_000, ttlMs: 300_000));
+        Assert.Equal(new[] { driven.Id }, r.CollectAbandoned(nowMs: 1_500_000, ttlMs: 300_000).Select(v => v.Id));
+        Assert.NotNull(r.Get(kept.Id)); // сохраняемую не трогаем
     }
 
     [Fact]
     public void CollectAbandoned_ZeroTtlMeansNever()
     {
         var r = new VehicleRegistry();
-        r.Create(Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0);
+        r.RegisterTraffic(1, Adder, 0, 0, 0, 0, 0, 0, 0, nowMs: 0);
+        r.Leave(1, 0);
         Assert.Empty(r.CollectAbandoned(nowMs: long.MaxValue / 2, ttlMs: 0));
     }
 
@@ -199,6 +211,21 @@ public class VehicleRegistryTests
         r.Remove(v!.Id);
         Assert.Equal((0u, 0), r.SeatOf(3));
         Assert.False(r.Leave(3, 0));
+    }
+
+    [Fact]
+    public void NearestOwned_FindsOnlyOwnInRadiusAndDimension()
+    {
+        var r = new VehicleRegistry();
+        var far = r.Create(Adder, 20, 0, 0, 0, 0, 0, 0, 0, registeredBy: 5)!;
+        var near = r.Create(Adder, 4, 0, 0, 0, 0, 0, 0, 0, registeredBy: 5)!;
+        r.Create(Adder, 1, 0, 0, 0, 0, 0, 0, 0, registeredBy: 6);           // чужая ближе
+        r.Create(Adder, 1, 0, 0, 0, 0, 0, dimension: 3, 0, registeredBy: 5); // своя, но в другом измерении
+
+        Assert.Same(near, r.NearestOwned(5, 0, 0, 0, 0, 10));
+        Assert.Null(r.NearestOwned(5, 0, 0, 0, 0, 3));
+        Assert.Null(r.NearestOwned(7, 0, 0, 0, 0, 100));
+        Assert.Same(far, r.NearestOwned(5, 25, 0, 0, 0, 10));
     }
 
     [Fact]
