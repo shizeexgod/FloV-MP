@@ -1407,49 +1407,83 @@ namespace flov::ui
                     dl->AddCircleFilled(centre, radius * (1.f - i / 56.f), Rgb(acc, 0.0022f * fade), 72);
             }
 
-            // Затемнение снизу: текст и полоса читаются на любой картинке.
-            dl->AddRectFilledMultiColor(ImVec2(0, h * 0.40f), ImVec2(w, h),
-                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f),
-                                        Rgba(6, 6, 8, 0.86f * fade), Rgba(6, 6, 8, 0.86f * fade));
-            // Второй слой у самого низа: на светлой картинке одного градиента
-            // не хватает, и подпись с подсказкой теряются в кадре.
-            dl->AddRectFilledMultiColor(ImVec2(0, h * 0.74f), ImVec2(w, h),
-                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f),
-                                        Rgba(6, 6, 8, 0.72f * fade), Rgba(6, 6, 8, 0.72f * fade));
-            dl->AddRectFilledMultiColor(ImVec2(0, 0), ImVec2(w, h * 0.22f),
-                                        Rgba(6, 6, 8, 0.5f * fade), Rgba(6, 6, 8, 0.5f * fade),
-                                        Rgba(6, 6, 8, 0.f), Rgba(6, 6, 8, 0.f));
+            // Нижний край фотографии плавно уходит в темноту: сначала
+            // длинный мягкий переход, потом короткий резкий, и внизу — ровная
+            // тёмная полоса, на которой живут логотип и полоса прогресса.
+            // Нижний край фотографии уходит в темноту. Переход собран из
+            // многих полос с нарастающей плотностью: два-три больших градиента
+            // дают видимый стык на границе, а здесь его нет.
+            {
+                const float top = h * 0.48f;
+                const int bands = 18;
+                for (int i = 0; i < bands; ++i)
+                {
+                    const float y0 = top + (h - top) * (i / (float)bands);
+                    const float y1 = top + (h - top) * ((i + 1) / (float)bands);
+                    // Доля закрытого растёт по кубу: сверху почти прозрачно,
+                    // внизу — ровный тёмный цвет под логотипом и полосой.
+                    const float t0 = i / (float)bands, t1 = (i + 1) / (float)bands;
+                    // К низу экрана фотография должна уйти почти полностью ещё до
+                    // полосы прогресса, иначе статус и логотип теряются в кадре.
+                    auto curve = [](float t) { const float v = std::clamp(t / 0.84f, 0.f, 1.f); return 0.975f * v * std::sqrt(v); };
+                    const float a0 = curve(t0), a1 = curve(t1);
+                    // Полосы идут встык и не накладываются, поэтому каждая красит
+                    // свою полную плотность, а не приращение к предыдущей.
+                    dl->AddRectFilledMultiColor(ImVec2(0, y0), ImVec2(w, y1 + 1),
+                                                Rgba(7, 7, 9, a0 * fade), Rgba(7, 7, 9, a0 * fade),
+                                                Rgba(7, 7, 9, a1 * fade), Rgba(7, 7, 9, a1 * fade));
+                }
+                dl->AddRectFilled(ImVec2(0, h * 0.965f), ImVec2(w, h), Rgba(7, 7, 9, 0.99f * fade));
+            }
 
             const float margin = std::min(72 * s, w * 0.07f);
-            const float barH = 6 * s;
+            const float barH = 8 * s;
             const float barBottom = h - margin;
             const float barTop = barBottom - barH;
 
             // --- справа снизу: этап, процент, полоса -----------------------------
-            const float rightW = std::min(520 * s, w * 0.42f);
+            const float rightW = std::min(560 * s, w * 0.44f);
             const float rx0 = w - margin - rightW;
             {
-                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW * 0.72f);
-                const float stepY = barTop - Px(g_text) - 16 * s;
-                Text(dl, g_text, ImVec2(rx0, stepY), Rgba(228, 228, 231, fade), step, 15 * s);
+                const std::string step = Fit(g_text, g_loadingStep.empty() ? "Подключение\u2026" : g_loadingStep, rightW * 0.7f, 16 * s);
+                const float stepY = barTop - Px(g_text) - 18 * s;
+                Text(dl, g_text, ImVec2(rx0, stepY), Rgba(236, 236, 240, fade), step, 16 * s);
 
                 if (g_loadingPercent >= 0)
                 {
                     const std::string pct = std::to_string((int)std::lround(g_loadingPercent)) + "%";
-                    const float pw = Measure(g_mono, pct, 15 * s).x;
-                    Text(dl, g_mono, ImVec2(w - margin - pw, stepY), Rgb(acc, fade), pct, 15 * s);
+                    const float pw = Measure(g_mono, pct, 16 * s).x;
+                    Text(dl, g_mono, ImVec2(w - margin - pw, stepY), Rgb(acc, fade), pct, 16 * s);
                 }
 
-                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.11f * fade), barH / 2);
+                // Дорожка с тонкой обводкой: на светлом кадре одной заливки мало.
+                const float r = barH / 2;
+                dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.07f * fade), r);
+                dl->AddRect(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), Rgba(255, 255, 255, 0.11f * fade), r, 0, 1.f);
+
+                auto fillSegment = [&](float x0, float x1)
+                {
+                    if (x1 - x0 < 1.f) return;
+                    dl->PushClipRect(ImVec2(rx0, barTop - barH * 2), ImVec2(w - margin, barBottom + barH * 2), true);
+                    // Свечение под полосой и градиент по длине: заливка не выглядит
+                    // плоской плашкой, а конец читается как живой край.
+                    for (int i = 1; i <= 3; ++i)
+                        dl->AddRectFilled(ImVec2(x0, barTop - i * s), ImVec2(x1, barBottom + i * s),
+                                          Rgb(acc, 0.05f * fade), r + i * s);
+                    dl->AddRectFilledMultiColor(ImVec2(x0, barTop), ImVec2(x1, barBottom),
+                                                Rgb(acc, 0.62f * fade), Rgb(acc, fade),
+                                                Rgb(acc, fade), Rgb(acc, 0.62f * fade));
+                    dl->AddRectFilled(ImVec2(x1 - r * 2, barTop), ImVec2(x1, barBottom), Rgb(acc, fade), r);
+                    // Блик верхней кромки — полоса смотрится объёмной.
+                    dl->AddRectFilled(ImVec2(x0 + r, barTop + s), ImVec2(x1 - r, barTop + 2.4f * s),
+                                      Rgba(255, 255, 255, 0.3f * fade), s);
+                    dl->PopClipRect();
+                };
+
                 if (g_loadingPercent >= 0)
                 {
                     g_loadingShownPercent += (g_loadingPercent - g_loadingShownPercent) * 0.12f;
-                    const float fill = rightW * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f);
-                    if (fill > 1.f)
-                    {
-                        dl->AddRectFilled(ImVec2(rx0, barTop), ImVec2(rx0 + fill, barBottom), Rgb(acc, fade), barH / 2);
-                        dl->AddCircleFilled(ImVec2(rx0 + fill, (barTop + barBottom) / 2), barH * 1.5f, Rgb(acc, 0.3f * fade), 20);
-                    }
+                    fillSegment(rx0, rx0 + rightW * std::clamp(g_loadingShownPercent / 100.f, 0.f, 1.f));
                 }
                 else
                 {
@@ -1457,52 +1491,17 @@ namespace flov::ui
                     const float t = (float)((now - g_loadingShownAt) % 1400) / 1400.f;
                     const float seg = rightW * 0.32f;
                     const float sx = rx0 - seg + (rightW + seg) * t;
-                    dl->PushClipRect(ImVec2(rx0, barTop), ImVec2(w - margin, barBottom), true);
-                    dl->AddRectFilled(ImVec2(sx, barTop), ImVec2(sx + seg, barBottom), Rgb(acc, fade), barH / 2);
-                    dl->PopClipRect();
+                    fillSegment(std::max(rx0, sx), std::min(w - margin, sx + seg));
                 }
             }
 
-            // --- слева снизу: логотип, имя сервера, платформа -------------------
-            const float logoSide = std::min(96 * s, h * 0.13f);
-            const float blockTop = barBottom - logoSide;
-            float textX = margin;
+            // --- слева снизу: только логотип ----------------------------------------
             if (g_logo)
             {
-                dl->AddImage((ImTextureID)g_logo.view, ImVec2(margin, blockTop),
-                             ImVec2(margin + logoSide, blockTop + logoSide),
+                const float side = std::min(104 * s, h * 0.14f);
+                const ImVec2 p0(margin, barBottom - side);
+                dl->AddImage((ImTextureID)g_logo.view, p0, ImVec2(p0.x + side, p0.y + side),
                              ImVec2(0, 0), ImVec2(1, 1), Rgba(255, 255, 255, fade));
-                textX = margin + logoSide + 22 * s;
-            }
-
-            const float nameSize = 32 * s;
-            const float subSize = 13 * s;
-            const float titleMax = std::max(120 * s, rx0 - textX - 40 * s);
-            const std::string title = Fit(g_title24, g_loadingTitle.empty() ? "Подключение\u2026" : g_loadingTitle, titleMax, nameSize);
-            const float nameY = blockTop + (logoSide - nameSize - subSize - 14 * s) / 2;
-            Text(dl, g_title24, ImVec2(textX, nameY), Rgba(250, 250, 252, fade), title, nameSize);
-            {
-                std::string platform = g_brand;
-                for (auto& c : platform) c = (char)toupper((unsigned char)c);
-                float cx = textX;
-                for (char c : platform)
-                {
-                    const std::string ch(1, c);
-                    Text(dl, g_bold, ImVec2(cx, nameY + nameSize + 14 * s), Rgb(acc, 0.9f * fade), ch, subSize);
-                    cx += Measure(g_bold, ch, subSize).x + 2.1f * s;
-                }
-            }
-
-            // Подсказка над левым блоком: то, что спрашивают чаще всего.
-            if (!g_tips.empty())
-            {
-                const auto& tip = g_tips[((now - g_loadingShownAt) / 7000 + g_loadingShownAt / 7) % g_tips.size()];
-                const float tipW = std::min(560 * s, rx0 - margin - 40 * s);
-                if (tipW > 80 * s)
-                {
-                    const float lineH = Px(g_text) * 1.5f;
-                    DrawWrapped(dl, g_text, ImVec2(margin, blockTop - 22 * s - lineH), 0, tipW, lineH, tip, 0x9A9AA4, fade, false, false);
-                }
             }
         }
 
@@ -1672,7 +1671,24 @@ namespace flov::ui
         }
 
         // --- DX11 и шрифты --------------------------------------------------------------
-        ImFont* LoadFont(const std::vector<const char*>& paths, float px, bool withSymbols)
+        /// Шрифт из ресурса клиента. ImGui не копирует байты, если
+        /// FontDataOwnedByAtlas = false, а ресурс живёт столько же, сколько
+        /// сам модуль, поэтому лишней копии в памяти нет.
+        bool ResourceBytes(int id, void*& bytes, DWORD& size)
+        {
+            HMODULE self = nullptr;
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCWSTR>(&ResourceBytes), &self);
+            if (!self) return false;
+            HRSRC found = FindResourceW(self, MAKEINTRESOURCEW(id), RT_RCDATA);
+            if (!found) return false;
+            size = SizeofResource(self, found);
+            HGLOBAL handle = ::LoadResource(self, found);
+            bytes = handle ? LockResource(handle) : nullptr;
+            return bytes != nullptr && size > 0;
+        }
+
+        ImFont* LoadFont(const std::vector<const char*>& paths, float px, bool withSymbols, int latinId = 0, int cyrillicId = 0)
         {
             auto& io = ImGui::GetIO();
             static const ImWchar ranges[] = { 0x0020, 0x00FF, 0x0400, 0x052F, 0x2000, 0x206F, 0x20A0, 0x20CF, 0x2100, 0x218F, 0 };
@@ -1681,11 +1697,30 @@ namespace flov::ui
             cfg.OversampleV = 1;
             cfg.PixelSnapH = true;
             ImFont* font = nullptr;
+            // Сначала свой шрифт из ресурсов, и только потом системный:
+            // интерфейс должен выглядеть одинаково у всех игроков.
+            if (latinId)
+            {
+                void* bytes = nullptr; DWORD size = 0;
+                if (ResourceBytes(latinId, bytes, size))
+                {
+                    cfg.FontDataOwnedByAtlas = false;
+                    font = io.Fonts->AddFontFromMemoryTTF(bytes, (int)size, px, &cfg, ranges);
+                }
+                if (font && cyrillicId && ResourceBytes(cyrillicId, bytes, size))
+                {
+                    ImFontConfig add = cfg;
+                    add.MergeMode = true;
+                    add.FontDataOwnedByAtlas = false;
+                    static const ImWchar cyrillic[] = { 0x0400, 0x052F, 0 };
+                    io.Fonts->AddFontFromMemoryTTF(bytes, (int)size, px, &add, cyrillic);
+                }
+            }
             for (const char* path : paths)
             {
+                if (font) break;
                 if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) continue;
                 font = io.Fonts->AddFontFromFileTTF(path, px, &cfg, ranges);
-                if (font) break;
             }
             if (!font)
             {
@@ -1738,13 +1773,13 @@ namespace flov::ui
             const std::vector<const char*> semibold = { "C:\\Windows\\Fonts\\seguisb.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf", "C:\\Windows\\Fonts\\arialbd.ttf" };
             const std::vector<const char*> bold = { "C:\\Windows\\Fonts\\segoeuib.ttf", "C:\\Windows\\Fonts\\arialbd.ttf", "C:\\Windows\\Fonts\\tahomabd.ttf" };
             const std::vector<const char*> mono = { "C:\\Windows\\Fonts\\consola.ttf", "C:\\Windows\\Fonts\\cour.ttf" };
-            g_text = LoadFont(regular, std::round(14.5f * s), true);
-            g_textSm = LoadFont(regular, std::round(12.5f * s), true);
-            g_bold = LoadFont(semibold, std::round(14.5f * s), true);
-            g_name = LoadFont(bold, std::round(16.f * s), false);
-            g_title24 = LoadFont(semibold, std::round(24.f * s), true);
-            g_mono = LoadFont(mono, std::round(12.5f * s), true);
-            g_monoSm = LoadFont(mono, std::round(11.f * s), true);
+            g_text = LoadFont(regular, std::round(14.5f * s), true, 110, 111);
+            g_textSm = LoadFont(regular, std::round(12.5f * s), true, 110, 111);
+            g_bold = LoadFont(semibold, std::round(14.5f * s), true, 112, 113);
+            g_name = LoadFont(bold, std::round(16.f * s), false, 112, 113);
+            g_title24 = LoadFont(semibold, std::round(24.f * s), true, 112, 113);
+            g_mono = LoadFont(mono, std::round(12.5f * s), true, 114, 115);
+            g_monoSm = LoadFont(mono, std::round(11.f * s), true, 114, 115);
 
             ImGui_ImplDX11_Init(g_device, g_context);
             QueryPerformanceFrequency(&g_freq);

@@ -9,6 +9,17 @@
 // места на месте знака не будет никогда.
 102 RCDATA "flovmp-logo.png"
 
+// Фирменные шрифты (Manrope и JetBrains Mono, лицензия OFL) вместо
+// системного Segoe UI: интерфейс выглядит одинаково на любой Виндове
+// и совпадает с сайтом и лаунчером. Латиница и кириллица лежат
+// отдельными подмножествами и склеиваются в атласе ImGui.
+110 RCDATA "fonts/manrope-400-latin.ttf"
+111 RCDATA "fonts/manrope-400-cyrillic.ttf"
+112 RCDATA "fonts/manrope-700-latin.ttf"
+113 RCDATA "fonts/manrope-700-cyrillic.ttf"
+114 RCDATA "fonts/jbmono-latin.ttf"
+115 RCDATA "fonts/jbmono-cyrillic.ttf"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 1,0,0,0
  PRODUCTVERSION 1,0,0,0

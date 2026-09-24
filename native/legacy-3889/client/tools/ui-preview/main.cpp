@@ -165,7 +165,7 @@ namespace
         stats.ping = 28 + (int)(8.f * std::sin(time));
         stats.streamed = 3;
         stats.online = 17;
-        stats.server = "Держава Онлайн";
+        stats.server = "Тестовый сервер";
         stats.endpoint = "188.127.229.224:7798";
         stats.connected = true;
         stats.bytesIn = 14 * 1024;
@@ -261,10 +261,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         { "/dv", "Убрать машину" },
         { "/me", "Действие от третьего лица" },
     });
-    flov::ui::SetLoadingStyle({
-        "{ff3d8a}Совет.{ffffff} Голос включается клавишей N.",
-        "{ff3d8a}Совет.{ffffff} Консоль сервера — F8.",
-    }, 0xFF3D8A);
+    flov::ui::SetLoadingStyle({}, 0xFF3D8A);
     FillChat();
     flov::ui::Notify("Средство предпросмотра: F1 HUD, F2 загрузка, F3 меню, F4 уведомление", 6000);
 
@@ -276,7 +273,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
 
     if (headless)
     {
-        if (scene == L"loading") { flov::ui::ShowLoading("Держава Онлайн"); flov::ui::LoadingStep("Загружаем окрестности…", 62.f); }
+        if (scene == L"loading") { flov::ui::ShowLoading(""); flov::ui::LoadingStep("Загружаем окрестности…", 62.f); }
         else if (scene == L"menu") ShowMenu();
         else if (scene == L"connect") flov::ui::OpenConnectDialog("188.127.229.224:7798", "Дмитрий_Соколов");
     }
@@ -309,7 +306,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         if (f1 && !prevF1) { flov::ui::HideLoading(); flov::ui::CloseMenu(); }
         if (f2 && !prevF2)
         {
-            flov::ui::ShowLoading("Держава Онлайн");
+            flov::ui::ShowLoading("");
             flov::ui::LoadingStep("Загружаем окрестности…", 62.f);
         }
         if (f3 && !prevF3) ShowMenu();
