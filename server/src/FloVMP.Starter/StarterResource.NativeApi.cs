@@ -77,6 +77,16 @@ public partial class StarterResource
         // позицию, здоровье, броню, оружие и транспорт игрока 3889.
         Alt.OnServer<int>("flovmp:native:query", id => EmitNativeState(id));
 
+        // --- бой ------------------------------------------------------------------------
+        // Ответ на событие flovmp:damage. Звать надо прямо внутри обработчика
+        // того события: позже попадание уже засчитано, и ответ просто
+        // отбрасывается — чужому выстрелу он не достанется.
+        Alt.OnServer<int, bool, int>("flovmp:damage:set", (request, allow, damage) =>
+        {
+            if (!_damage.Answer(request, allow, damage))
+                Alt.LogWarning($"[FloV:MP] flovmp:damage:set: ответ на чужой или закрытый вопрос {request}");
+        });
+
         Alt.OnServer("flovmp:native:queryAll", () =>
         {
             foreach (var id in _nativePlayers.Keys.ToList()) EmitNativeState((int)id);

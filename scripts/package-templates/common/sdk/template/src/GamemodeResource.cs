@@ -31,6 +31,11 @@ public sealed class GamemodeResource : Resource
         Alt.OnServer<int, string>("flovmp:native:key", (id, key) =>
             SendChat(id, $"Вы нажали {key}. Клавиши регистрируются событием flovmp:keys:bind."));
 
+        // Каждое попадание проходит через вас до того, как сервер снимет здоровье.
+        // Отвечать надо сразу, внутри обработчика: позже выстрел уже засчитан.
+        // Не ответили — урон применится такой, как считала платформа.
+        Alt.OnServer<int, int, int, string, int, float>("flovmp:damage", OnDamage);
+
         // Команды регистрируются в платформе. Если платформа стартует позже —
         // она сообщит об этом событием flovmp:platform:ready.
         Alt.OnServer("flovmp:platform:ready", ConfigurePlatform);
@@ -145,4 +150,36 @@ public sealed class GamemodeResource : Resource
 
     /// <summary>Сообщение в чат всем игрокам.</summary>
     public static void SendChatAll(string text) => Alt.Emit("flovmp:chat:all", text);
+    /// <summary>
+    /// Попадание до того, как сервер снимет здоровье.
+    ///
+    /// На этом событии держатся броня фракций, режимы без оружия,
+    /// дуэли и безопасные зоны. Ответ отправляется сразу же, с тем же
+    /// номером вопроса: позже он уже ни на что не влияет.
+    /// </summary>
+    /// <param name="request">Номер вопроса — вернуть его в ответе.</param>
+    /// <param name="attackerId">Кто стрелял.</param>
+    /// <param name="victimId">По кому попали.</param>
+    /// <param name="weapon">Хэш оружия строкой; 0 или WEAPON_UNARMED — рукопашная.</param>
+    /// <param name="damage">Сколько собирается снять платформа.</param>
+    /// <param name="distance">Расстояние между ними в метрах.</param>
+    private void OnDamage(int request, int attackerId, int victimId, string weapon, int damage, float distance)
+    {
+        // Пример первый: рукопашная не работает вовсе.
+        // if (weapon == "0" || weapon == "2725352035")
+        // {
+        //     Alt.Emit("flovmp:damage:set", request, false, 0);
+        //     return;
+        // }
+
+        // Пример второй: вдвое меньше урона на дистанции больше ста метров.
+        // if (distance > 100f)
+        // {
+        //     Alt.Emit("flovmp:damage:set", request, true, damage / 2);
+        //     return;
+        // }
+
+        // Ничего не отвечаем — платформа снимет столько, сколько собиралась.
+    }
+
 }

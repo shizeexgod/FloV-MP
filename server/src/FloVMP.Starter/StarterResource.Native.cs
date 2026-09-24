@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Globalization;
 using AltV.Net;
+using FloVMP.Core.Combat;
 using AltV.Net.Elements.Entities;
 using FloVMP.Core.Native;
 
@@ -63,6 +65,9 @@ public partial class StarterResource
     // Миниган и автоматы дают десятки попаданий в секунду по одной цели;
     // предел держим выше их темпа, а злоупотребление ограничивает урон в секунду.
     private const int MaxHitsPerSecond = 60;
+
+    /// <summary>Решение геймода по каждому попаданию: отмена или свой урон.</summary>
+    private readonly DamageArbiter _damage = new();
     private const int MaxDamagePerSecond = 1000;      // суммарно по всем жертвам
     private const int MaxDamagePerVictimPerSecond = 300;
     /// <summary>Запас к дальности видимости: попадание дальше, чем игрок
@@ -492,6 +497,12 @@ public partial class StarterResource
             ReportSuspicion(session.Id, FloVMP.Core.AntiCheat.SuspicionKind.Hit, why);
             return;
         }
+        // Слово геймоду. До этого места попадание проверено античитом и
+        // признано настоящим; теперь игровая логика решает, засчитывать ли его
+        // и с каким уроном. Если геймода нет или он молчит — всё как раньше.
+        damage = AskGamemodeAboutDamage(session.Id, victimId, weapon, damage, dist);
+        if (damage <= 0) return;
+
         if (weapon != WeaponUnarmed) _ledgerAc?.OnHit(session.Id, weapon, now);
         _lastHitAt[(session.Id, victimId)] = now;
         // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
@@ -512,6 +523,30 @@ public partial class StarterResource
             Alt.Log($"[FloV:MP] {victim.Session.Name} убит игроком [{session.Id}] {session.Name}.");
             OnPlayerDead(victimPlayer, null!, weapon);
         }
+    }
+
+    /// <summary>
+    /// Спросить геймод про попадание и вернуть итоговый урон.
+    ///
+    /// Рассылка событий внутри процесса синхронная, поэтому ответ геймода
+    /// успевает прийти до возврата из Alt.Emit. Если геймод не ответил,
+    /// урон остаётся тем, что считала платформа.
+    /// </summary>
+    private int AskGamemodeAboutDamage(uint attackerId, uint victimId, uint weapon, int damage, float distance)
+    {
+        var request = _damage.Ask();
+        try
+        {
+            Alt.Emit("flovmp:damage", request, (int)attackerId, (int)victimId,
+                     weapon.ToString(CultureInfo.InvariantCulture), damage, distance);
+        }
+        catch (Exception ex)
+        {
+            // Ошибка в чужом обработчике не должна отменять попадание: иначе
+            // одна опечатка в геймоде сделала бы всех игроков бессмертными.
+            Alt.LogError($"[FloV:MP] обработчик flovmp:damage упал: {ex.Message}");
+        }
+        return _damage.Resolve(request, damage);
     }
 
     /// <summary>

@@ -176,6 +176,35 @@ Alt.OnServer<int, string, float, float, float, float, int, int, string, int, boo
 Alt.OnServer<int, string, string>("flovmp:native:left", (id, nick, reason) => { });
 ```
 
+## Перехват урона
+
+После проверки попадания античитом, но до списания здоровья и брони платформа
+синхронно вызывает `flovmp:damage`. Ресурс может отменить попадание или заменить
+урон. Ответ отправляйте прямо внутри обработчика: номер запроса одноразовый,
+запоздавший ответ намеренно игнорируется. Если не отвечать, платформа применит
+исходный проверенный урон.
+
+```csharp
+Alt.OnServer<int, int, int, string, int, float>(
+    "flovmp:damage",
+    (request, attackerId, victimId, weapon, damage, distance) =>
+    {
+        if (IsSafeZone(victimId))
+        {
+            Alt.Emit("flovmp:damage:set", request, false, 0); // отменить
+            return;
+        }
+
+        if (HasFactionArmor(victimId))
+            Alt.Emit("flovmp:damage:set", request, true, damage / 2);
+    });
+```
+
+Событие одинаково работает для огнестрельного, транспортного и рукопашного
+попадания. `weapon` передаётся десятичной строкой хэша GTA; `0` и
+`2725352035` обозначают рукопашную/невооружённый удар. Отдельный перехват
+пожаров и взрывов пока не входит в этот контракт.
+
 ## Транспорт (клиент 1.0.6+)
 
 Машины — сущности сервера: у каждой свой ID, машина остаётся стоять, когда из
