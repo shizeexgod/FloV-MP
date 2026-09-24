@@ -1454,10 +1454,9 @@ namespace flov::ui
             }
 
             const float margin = std::min(72 * s, w * 0.07f);
-            const float barH = 3 * s;
+            const float barH = 6 * s;
             const float logoBottom = h - margin;
-            // Полоса приподнята над нижним краём сильнее, чем логотип.
-            const float barBottom = logoBottom - 26 * s;
+            const float barBottom = logoBottom;
             const float barTop = barBottom - barH;
             const float radius = barH / 2;
 
@@ -1731,6 +1730,13 @@ namespace flov::ui
             return bytes != nullptr && size > 0;
         }
 
+        /// Файл по пути в UTF-8. Широкое API, а не ANSI: имя пользователя
+        /// в Windows часто кириллицей, и GetFileAttributesA такой путь не находит.
+        bool FileExists(const std::string& utf8Path)
+        {
+            return GetFileAttributesW(FromUtf8(utf8Path).c_str()) != INVALID_FILE_ATTRIBUTES;
+        }
+
         ImFont* LoadFont(const std::vector<const char*>& paths, float px, bool withSymbols, int latinId = 0, int cyrillicId = 0)
         {
             auto& io = ImGui::GetIO();
@@ -1762,7 +1768,7 @@ namespace flov::ui
             for (const char* path : paths)
             {
                 if (font) break;
-                if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) continue;
+                if (!FileExists(path)) continue;
                 font = io.Fonts->AddFontFromFileTTF(path, px, &cfg, ranges);
             }
             if (!font)
@@ -1826,7 +1832,13 @@ namespace flov::ui
             // Отдельный шрифт загрузочного экрана: геометрический гротеск
             // читается спокойнее в одной короткой строке на весь экран. В чате
             // и консоли остаётся Manrope — он лучше держит плотный текст.
-            g_load = LoadFont(regular, std::round(18.f * s), false, 116, 0);
+            // Владелец сервера может положить свой шрифт загрузочного экрана
+            // рядом с фоном и логотипом: ui\\loading-font.ttf.
+            const std::string ownFont = ToUtf8(DataDir() + L"\\ui\\loading-font.ttf");
+            // Свой файл имеет приоритет над зашитым шрифтом: номер ресурса
+            // передаётся только тогда, когда своего файла нет.
+            const bool hasOwnFont = FileExists(ownFont);
+            g_load = LoadFont({ ownFont.c_str() }, std::round(18.f * s), false, hasOwnFont ? 0 : 116, 0);
 
             ImGui_ImplDX11_Init(g_device, g_context);
             QueryPerformanceFrequency(&g_freq);
