@@ -5,7 +5,8 @@ param(
     [switch]$NoStart,
     [string]$LicenseKey = '',
     [string]$LicenseUrl = '', # адрес сервера лицензий FloV:MP (по умолчанию — вшитый в сервер)
-    [string]$PortalUrl = ''   # устарел, оставлен для совместимости со старыми командами
+    [string]$PortalUrl = '',  # устарел, оставлен для совместимости со старыми командами
+    [switch]$SkipRuntime      # не ставить .NET 10 (машина без интернета: поставьте его вручную)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,6 +71,50 @@ function Set-FlovmpEnvValue([string]$Path, [string]$Key, [string]$Value) {
     [IO.File]::WriteAllLines($Path, $lines, [Text.UTF8Encoding]::new($false))
 }
 
+# Сервер с 1.0.7 собран под .NET 10: без него не запустится ни FloVMP-Server.exe,
+# ни ресурс платформы. У клиентов, ставивших 1.0.6 и раньше, стоит .NET 8, и
+# обновление без этой проверки оставляло их с сервером, который не стартует.
+$DotnetMajor = 10
+function Test-DotnetRuntime {
+    $roots = @($env:DOTNET_ROOT, (Join-Path $env:ProgramFiles 'dotnet')) | Where-Object { $_ }
+    foreach ($root in $roots) {
+        $dir = Join-Path $root 'shared\Microsoft.NETCore.App'
+        if (Test-Path -LiteralPath $dir) {
+            $found = Get-ChildItem -LiteralPath $dir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^(\d+)\.' -and [int]$Matches[1] -eq $DotnetMajor } | Select-Object -First 1
+            if ($found) { return (Join-Path $dir $found.Name) }
+        }
+    }
+    return $null
+}
+
+function Install-DotnetRuntime {
+    $have = Test-DotnetRuntime
+    if ($have) { Write-Host "  .NET $DotnetMajor на месте: $have" -ForegroundColor Green; return }
+    if ($SkipRuntime) {
+        throw (".NET $DotnetMajor Runtime x64 не найден, а установка отключена (-SkipRuntime). " +
+               "Ничего не изменено. Поставьте его: https://dotnet.microsoft.com/download/dotnet/$DotnetMajor.0")
+    }
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $admin) {
+        throw (".NET $DotnetMajor Runtime x64 не найден, а для его установки нужны права администратора. " +
+               'Ничего не изменено — запустите установку от имени администратора.')
+    }
+    Write-Host "  Ставлю .NET $DotnetMajor Runtime (официальный скрипт Microsoft)..." -ForegroundColor Yellow
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $script = Join-Path ([IO.Path]::GetTempPath()) ('dotnet-install-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri 'https://dot.net/v1/dotnet-install.ps1' -OutFile $script
+        & $script -Channel "$DotnetMajor.0" -Runtime dotnet -InstallDir (Join-Path $env:ProgramFiles 'dotnet') | Out-Null
+    }
+    catch { throw "Не удалось поставить .NET $DotnetMajor ($($_.Exception.Message)). Ничего не изменено." }
+    finally { Remove-Item -LiteralPath $script -Force -ErrorAction SilentlyContinue }
+    $have = Test-DotnetRuntime
+    if (-not $have) { throw ".NET $DotnetMajor поставлен, но не найден в $env:ProgramFiles\dotnet. Ничего не изменено." }
+    Write-Host "  .NET $DotnetMajor поставлен: $have" -ForegroundColor Green
+}
+
 $entries = @(Read-Manifest $manifestPath)
 
 Write-Host "[1/4] Проверка исходного пакета ($($entries.Count) файлов)..." -ForegroundColor Cyan
@@ -80,6 +125,11 @@ foreach ($entry in $entries) {
     if ($actual -ne $entry.Hash) { throw "SHA-256 не совпал: $($entry.Path)" }
 }
 Write-Host '  OK: пакет целый.' -ForegroundColor Green
+
+# До любых изменений в папке сервера: если рантайм не встал, у клиента
+# остаётся рабочая прежняя версия, а не наполовину обновлённый сервер.
+Write-Host "Проверка .NET $DotnetMajor..." -ForegroundColor Cyan
+Install-DotnetRuntime
 
 $target = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
 $targetIsOurs = Test-Path -LiteralPath (Join-Path $target 'manifest.txt') -PathType Leaf

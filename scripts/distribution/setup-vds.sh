@@ -26,13 +26,13 @@ DBUSER=flovmp_license
 
 echo "==> .NET 10"
 DOTNET="$(command -v dotnet || true)"
-if [ -z "$DOTNET" ] || ! "$DOTNET" --list-runtimes 2>/dev/null | grep -q "Microsoft.NETCore.App 8\."; then
+if [ -z "$DOTNET" ] || ! "$DOTNET" --list-runtimes 2>/dev/null | grep -q "Microsoft.NETCore.App 10\."; then
   curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
   bash /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet
   ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet
   DOTNET=/usr/bin/dotnet
 fi
-"$DOTNET" --list-runtimes | grep "NETCore.App 8" | head -1
+"$DOTNET" --list-runtimes | grep "NETCore.App 10" | head -1
 
 echo "==> пользователь и папки"
 id flovmp-license >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin flovmp-license

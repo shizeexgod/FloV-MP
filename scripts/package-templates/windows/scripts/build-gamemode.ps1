@@ -16,12 +16,12 @@ $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
 $sdkOk = $false
 if ($dotnet) {
     foreach ($line in (& dotnet --list-sdks 2>$null)) {
-        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 8) { $sdkOk = $true }
+        if ($line -match '^(\d+)\.' -and [int]$Matches[1] -ge 10) { $sdkOk = $true }
     }
 }
 if (-not $sdkOk) {
-    Write-Host "[FloV:MP] Для сборки нужен .NET SDK 8 (или новее), а не только Runtime:" -ForegroundColor Red
-    Write-Host "          https://dotnet.microsoft.com/download/dotnet/8.0 — раздел SDK, x64." -ForegroundColor Red
+    Write-Host "[FloV:MP] Для сборки нужен .NET SDK 10 (или новее), а не только Runtime:" -ForegroundColor Red
+    Write-Host "          https://dotnet.microsoft.com/download/dotnet/10.0 — раздел SDK, x64." -ForegroundColor Red
     exit 1
 }
 

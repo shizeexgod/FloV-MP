@@ -23,7 +23,7 @@ fi
 DOTNET_FOUND=""
 for d in "${DOTNET_ROOT:-}" /usr/share/dotnet /usr/lib/dotnet /opt/dotnet /usr/local/share/dotnet; do
   [ -n "$d" ] || continue
-  if ls -d "$d"/shared/Microsoft.NETCore.App/8.* >/dev/null 2>&1; then
+  if ls -d "$d"/shared/Microsoft.NETCore.App/10.* >/dev/null 2>&1; then
     DOTNET_FOUND="$d"
     break
   fi
@@ -33,7 +33,7 @@ if [ -z "$DOTNET_FOUND" ]; then
   exit 1
 fi
 export DOTNET_ROOT="$DOTNET_FOUND"
-DOTNET_SHARED="$(ls -d "$DOTNET_FOUND"/shared/Microsoft.NETCore.App/8.* | sort -V | tail -1)"
+DOTNET_SHARED="$(ls -d "$DOTNET_FOUND"/shared/Microsoft.NETCore.App/10.* | sort -V | tail -1)"
 
 cd "$ROOT/server"
 chmod +x flovmp-server flovmp-crash-handler 2>/dev/null || true

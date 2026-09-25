@@ -525,7 +525,7 @@ find_dotnet() {
   local d
   for d in "${DOTNET_ROOT:-}" /usr/share/dotnet /usr/lib/dotnet /opt/dotnet /usr/local/share/dotnet; do
     [ -n "$d" ] || continue
-    ls -d "$d"/shared/Microsoft.NETCore.App/8.* >/dev/null 2>&1 && { echo "$d"; return 0; }
+    ls -d "$d"/shared/Microsoft.NETCore.App/10.* >/dev/null 2>&1 && { echo "$d"; return 0; }
   done
   return 1
 }
