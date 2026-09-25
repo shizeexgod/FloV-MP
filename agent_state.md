@@ -17,6 +17,10 @@ Updated: 2026-09-24 (после 1.0.6-beta: 10 находок ревью, пун
 - Пункт 23: `FloVMP.Core/Async/MainThreadQueue`, новая сборка
   `server/src/FloVMP.Sdk` (`FloVAsync`), в пакете `sdk/ref/FloVMP.Sdk.dll`,
   шаблон gamemode подключён. VERSION = 1.0.10-beta.
+- Пункт 24 (экспорты): `FloVMP.Sdk/FloVExports` + `FloVMP.Core/Resources/
+  ExportSignature`. Живой стенд — `server/tools/live-bench/bench.sh
+  <установка> <сек> [задержка команда]` (пробы A/B/C, v6shim для облака).
+  Остаток пункта 24 — метаданные и маркеры/3D-надписи — нужен клиент 3889.
 
 ### 2026-09-24 — после 1.0.6-beta: ревью и пункт 12 (линия 1.0.7-beta)
 

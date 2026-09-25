@@ -47,6 +47,8 @@ public sealed class MainThreadQueue : SynchronizationContext
     public int Pending => _queue.Count;
     /// <summary>Сколько асинхронных обработчиков ещё не закончилось.</summary>
     public int InFlight => Volatile.Read(ref _inFlight);
+    /// <summary>Главный поток известен (Attach или первый Pump) — очередь кто-то разбирает.</summary>
+    public bool Bound => _mainThreadId != 0;
     /// <summary>Сейчас главный поток ресурса (тот, что зовёт Pump).</summary>
     public bool IsMainThread => _mainThreadId != 0 && Environment.CurrentManagedThreadId == _mainThreadId;
 

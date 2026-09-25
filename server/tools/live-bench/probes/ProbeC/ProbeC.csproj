@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Тестовый ресурс живого стенда (не входит в пакеты). -->
+  <PropertyGroup>
+    <AssemblyName>ProbeC</AssemblyName>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../../src/FloVMP.Sdk/FloVMP.Sdk.csproj" />
+  </ItemGroup>
+</Project>
