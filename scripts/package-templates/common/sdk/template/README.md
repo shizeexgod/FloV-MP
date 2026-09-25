@@ -596,17 +596,18 @@ mp.trigger('panel:submit', input.value);
 | Что | Как |
 |---|---|
 | создать | `mp.browsers.new(url)` — `package://папка/файл.html` (файлы client_packages) или `https://…` |
-| управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.reload(ignoreCache)`, `browser.destroy()` |
+| управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.reload(ignoreCache)`, `browser.destroy()` |
 | в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
 | из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
-| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed` (аргумент — браузер) |
+| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)` |
 | список | `mp.browsers.at(id)`, `exists(b)`, `forEach(fn)`, `toArray()`, `length` |
 | чат на HTML | `browser.markAsChat()` — встроенный чат скрывается, строки чата (и `mp.gui.chat.push`) идут в `chatAPI.push(текст)` страницы |
 | мышь и клавиатура | `mp.gui.cursor.show(freeze, show)`: курсор, клики, колесо и ввод текста уходят страницам; `freeze` — персонаж стоит |
 
-Несколько страниц накладываются по порядку создания. Клик уходит верхней,
+Несколько страниц по умолчанию накладываются по порядку создания; порядок можно
+менять через `orderId`. Клик уходит верхней с `inputEnabled !== false`,
 у которой под курсором не прозрачно, — прозрачные места пропускают клик
-ниже. Страницы — над миром и никами игроков, но под чатом, меню и консолью
+ниже или обратно в игру. Страницы — над миром и никами игроков, но под чатом, меню и консолью
 платформы. `console.log` страницы виден в консоли F8.
 
 Правила безопасности: `package://` отдаёт только файлы пакета (выход за папку

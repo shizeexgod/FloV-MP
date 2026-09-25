@@ -305,6 +305,22 @@ int wmain()
         Check(find("hi") == "[\"привет, сервер\"]", "browserDomReady → browser.call → страница → обратно (" + find("hi") + ")");
         Check(find("after") == "[0]", "browser.destroy");
         flov::script::Reset();
+
+        std::ofstream(dir + L"\\index.js") <<
+            "const bad = mp.browsers.new('http://127.0.0.1:1/flovmp-load-failure');\n"
+            "mp.events.add('browserLoadingFailed', (br, code, url) => { if (br === bad) { mp.events.callRemote('loadfail', Number.isFinite(code), url); bad.destroy(); } });\n";
+        Check(flov::script::RunFolder(dir), "browserLoadingFailed test запустился");
+        std::string loadFail = "—";
+        const ULONGLONG failEnd = GetTickCount64() + 10000;
+        while (GetTickCount64() < failEnd && loadFail == "—")
+        {
+            flov::script::Tick(false);
+            for (auto& [name, json] : flov::script::TakeOutgoing()) if (name == "loadfail") loadFail = json;
+            Sleep(16);
+        }
+        Check(loadFail.find("[true,\"http://127.0.0.1:1/flovmp-load-failure\"]") == 0,
+              "browserLoadingFailed передаёт код и URL (" + loadFail + ")");
+        flov::script::Reset();
     }
 #endif
     {

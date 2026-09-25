@@ -282,15 +282,18 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       Кадры — разделяемая память с подтверждением и копированием только
       изменившейся области в текстуру DX11, смешивание с умноженной альфой;
       команды и события — две трубы. API как в RAGE:MP: `mp.browsers.new`,
-      `call/execute/url/active/reload/destroy/markAsChat`, события
-      `browserCreated/DomReady/LoadingFailed`, в странице `mp.trigger` и
+      `call/execute/url/active/reload/destroy/markAsChat`, рабочие
+      `orderId/inputEnabled`, события `browserCreated/DomReady` и
+      `browserLoadingFailed(browser, code, url)`, в странице `mp.trigger` и
       `mp.events`; `package://` из client_packages (UTF-8, без выхода за
       папку), `file://` запрещён. Курсор `mp.gui.cursor.show(freeze, show)`
-      наконец реально работает: мышь по прозрачности пикселя к нужной
+      наконец реально работает: мышь по прозрачности стабильного кадра к нужной
       странице, клавиатура с кириллицей, заморозка персонажа. Слои: мир и
       ники → страницы → чат/меню/консоль платформы. Поставка: `FloVMP\cef`
       в комплекте игрока (255 МБ, лишнее вырезано), установщик и удаление.
-      Тесты без GTA на настоящем Chromium: браузеры 16, движок JS 35.
+      Bridge доступен только главному frame, не iframe; shared-memory кадр
+      сначала копируется и проверяется, поэтому CEF не может отдать в GPU смесь
+      двух кадров. Тесты без GTA на настоящем Chromium: браузеры 22, движок JS 37.
     - **26c — серверный JS как в RAGE:MP** (`mp.*` на js-module alt:V) и
       скрипт переноса сервера с RAGE:MP (объединяется с пунктом 17).
 27. **Кость и часть тела в `flovmp:damage`** — чтобы геймод мог считать

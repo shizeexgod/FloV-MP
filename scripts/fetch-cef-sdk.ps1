@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     CEF SDK для хоста браузеров клиента (flovmp-cef.exe, пункт 26b).
 

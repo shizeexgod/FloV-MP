@@ -63,6 +63,19 @@ namespace flov::browser_ipc
         uint32_t reserved[4];
     };
 
+    /// Межпроцессные счётчики нельзя читать/писать обычным volatile: volatile
+    /// не задаёт порядок памяти между ядрами. Interlocked даёт необходимый
+    /// acquire/release барьер и на стороне CEF, и внутри GTA-клиента.
+    inline LONG64 LoadCounter(volatile LONG64* value)
+    {
+        return InterlockedCompareExchange64(value, 0, 0);
+    }
+
+    inline void StoreCounter(volatile LONG64* value, LONG64 next)
+    {
+        InterlockedExchange64(value, next);
+    }
+
     inline size_t FrameBytes(int w, int h) { return sizeof(FrameHeader) + (size_t)w * (size_t)h * 4; }
 
     // --- строки: табуляция между полями, \t \n \r \\ экранируются -------------------

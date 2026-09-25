@@ -51,6 +51,13 @@ namespace
         return nullptr;
     }
 
+    size_t SeenCount(flov::browser::Event::Kind k, const std::string& a)
+    {
+        size_t n = 0;
+        for (const auto& e : g_seen) if (e.kind == k && e.a == a) ++n;
+        return n;
+    }
+
     /// Пиксель BGRA из текстуры браузера.
     bool Pixel(int id, int x, int y, uint8_t out[4])
     {
@@ -111,6 +118,7 @@ int wmain(int argc, wchar_t** argv)
 <body>
 <div id="panel"><button id="btn" style="position:absolute;left:100px;top:100px;width:200px;height:80px">Жми</button>
 <input id="name" style="position:absolute;left:100px;top:250px;width:300px;height:40px"></div>
+<iframe src="package://ui/frame.html" style="display:none"></iframe>
 <script src="app.js"></script>
 </body></html>)";
     std::ofstream(root + L"\\ui\\style.css") <<
@@ -118,12 +126,23 @@ int wmain(int argc, wchar_t** argv)
         "#panel{position:absolute;left:0;top:0;width:50%;height:100%;background:rgb(255,61,138)}\n";
     std::ofstream(root + L"\\ui\\app.js") << R"(
 mp.events.add('ping', (n) => mp.trigger('pong', n + 1));
+window.addEventListener('message', (e) => mp.trigger('iframeBridge', e.data));
 document.getElementById('btn').addEventListener('click', () => mp.trigger('clicked', 'btn'));
 document.getElementById('name').addEventListener('input', (e) => mp.trigger('typed', e.target.value));
 fetch('package://../secret.txt').then(r => mp.trigger('escape', r.ok ? 'open' : 'closed'), () => mp.trigger('escape', 'closed'));
 fetch('package://ui/style.css').then(r => r.text()).then(t => mp.trigger('fetched', t.includes('255,61,138')));
 mp.trigger('loaded', document.title, typeof window.__flovTrigger);
 )";
+    std::ofstream(root + L"\\ui\\frame.html") << R"(<!doctype html><meta charset="utf-8"><script>
+if (typeof window.mp === 'undefined') parent.postMessage('absent', '*');
+else mp.trigger('iframeBridge', 'present');
+</script>)";
+    std::ofstream(root + L"\\ui\\top.html") << R"(<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:transparent}button{position:absolute;left:100px;top:100px;width:200px;height:80px}</style>
+<button id="top">Верхний</button><script>
+top.addEventListener('click', () => mp.trigger('topClicked'));
+document.addEventListener('mousemove', () => mp.trigger('topMoved'));
+</script>)";
     std::ofstream(std::wstring(tmp) + L"secret.txt") << "secret";
     flov::browser::SetPackageRoot(root);
 
@@ -135,6 +154,9 @@ mp.trigger('loaded', document.title, typeof window.__flovTrigger);
     Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "loaded") != nullptr; }, 5000), "mp.trigger из страницы дошёл");
     if (auto* e = Seen(flov::browser::Event::Kind::Trigger, "loaded"))
         Check(e->b == "[\"FloV\",\"undefined\"]", "аргументы mp.trigger JSON; служебная функция из страницы убрана (" + e->b + ")");
+    Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "iframeBridge") != nullptr; }, 5000) &&
+          Seen(flov::browser::Event::Kind::Trigger, "iframeBridge")->b == "[\"absent\"]",
+          "iframe не получает игровой window.mp bridge");
     Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "fetched") != nullptr; }, 5000) &&
           Seen(flov::browser::Event::Kind::Trigger, "fetched")->b == "[true]", "fetch файла пакета из страницы");
     Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "escape") != nullptr; }, 5000) &&
@@ -164,6 +186,36 @@ mp.trigger('loaded', document.title, typeof window.__flovTrigger);
     for (wchar_t c : std::wstring(L"Привет")) flov::browser::Key(WM_CHAR, c, 0);
     Check(Until([] { for (auto& e : g_seen) if (e.a == "typed" && e.b == "[\"Привет\"]") return true; return false; }, 5000),
           "ввод текста с клавиатуры, кириллица");
+
+    printf("Слои и пропуск ввода:\n");
+    const int top = flov::browser::Create("package://ui/top.html");
+    Check(Until([&] { return Size(top) == g_w; }, 10000), "второй прозрачный слой получил кадр");
+    const size_t lowerBefore = SeenCount(flov::browser::Event::Kind::Trigger, "clicked");
+    flov::browser::SetOrder(top, 100);
+    flov::browser::SetInputEnabled(top, false);
+    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "clicked") > lowerBefore; }, 5000),
+          "inputEnabled=false пропускает клик слою ниже");
+
+    flov::browser::SetInputEnabled(top, true);
+    const size_t topBefore = SeenCount(flov::browser::Event::Kind::Trigger, "topClicked");
+    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "topClicked") > topBefore; }, 5000),
+          "больший orderId получает клик первым");
+
+    flov::browser::SetOrder(top, -100);
+    const size_t lowerAfterOrder = SeenCount(flov::browser::Event::Kind::Trigger, "clicked");
+    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "clicked") > lowerAfterOrder; }, 5000),
+          "смена orderId меняет hit-test слоёв");
+
+    flov::browser::SetOrder(top, 100);
+    const size_t movedBefore = SeenCount(flov::browser::Event::Kind::Trigger, "topMoved");
+    flov::browser::Mouse(700.f / g_w, 300.f / g_h, 0, 0);
+    for (int i = 0; i < 20; ++i) { Pump(); Sleep(16); }
+    Check(SeenCount(flov::browser::Event::Kind::Trigger, "topMoved") == movedBefore,
+          "полностью прозрачная точка не перехватывает мышь");
+    flov::browser::Destroy(top);
 
     printf("Размер и жизнь:\n");
     g_w = 1024; g_h = 768;

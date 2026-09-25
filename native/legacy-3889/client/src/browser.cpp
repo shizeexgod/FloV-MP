@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include "imgui.h"
 
@@ -26,6 +27,8 @@ namespace flov::browser
         {
             std::string url;
             bool visible = true;
+            bool inputEnabled = true;
+            int order = 0;
             // Кадры
             std::string shmName;
             HANDLE map = nullptr;
@@ -38,6 +41,10 @@ namespace flov::browser
             ID3D11ShaderResourceView* srv = nullptr;
             int texW = 0, texH = 0;
             bool texFresh = false;
+            // Последний полностью подтверждённый кадр нужен и для безопасной
+            // загрузки в GPU, и для alpha hit-test без гонки с CEF writer.
+            std::vector<uint8_t> stableFrame;
+            std::vector<uint8_t> scratch;
         };
 
         std::mutex g_mutex;
@@ -83,6 +90,35 @@ namespace flov::browser
         ID3D11BlendState* g_premul = nullptr;
 
         std::string N(long long v) { return std::to_string(v); }
+        void SendLocked(const std::vector<std::string>& fields);
+
+        std::vector<int> OrderedIdsLocked()
+        {
+            std::vector<int> ids;
+            ids.reserve(g_items.size());
+            for (const auto& [id, item] : g_items) ids.push_back(id);
+            std::stable_sort(ids.begin(), ids.end(), [](int a, int b) {
+                const int ao = g_items.at(a).order, bo = g_items.at(b).order;
+                return ao == bo ? a < b : ao < bo;
+            });
+            return ids;
+        }
+
+        void ReleaseInputLocked(int id)
+        {
+            if (g_mouseTarget == id)
+            {
+                SendLocked({ "LEAVE", N(id) });
+                g_mouseTarget = 0;
+            }
+            if (g_focus == id)
+            {
+                SendLocked({ "FOCUS", N(id), "0" });
+                g_focus = 0;
+            }
+            g_lastX = g_lastY = -1;
+            g_lastButtons = 0;
+        }
 
         std::string Utf8(const std::wstring& w)
         {
@@ -121,6 +157,9 @@ namespace flov::browser
             it.map = nullptr;
             it.viewBytes = 0;
             it.lastSeq = -1;
+            it.texFresh = true;
+            it.stableFrame.clear();
+            it.scratch.clear();
         }
 
         std::wstring DefaultHostExe()
@@ -317,9 +356,9 @@ namespace flov::browser
         /// клик уходит браузеру ниже.
         bool OpaqueAt(Item& it, int x, int y)
         {
-            if (!OpenFrame(it) || x < 0 || y < 0 || x >= it.w || y >= it.h) return false;
-            const uint8_t* px = it.view + sizeof(ipc::FrameHeader) + ((size_t)y * it.w + x) * 4;
-            return px[3] > 8;
+            if (x < 0 || y < 0 || x >= it.w || y >= it.h ||
+                it.stableFrame.size() != (size_t)it.w * it.h * 4) return false;
+            return it.stableFrame[((size_t)y * it.w + x) * 4 + 3] > 8;
         }
 
         void PremultipliedBlend(const ImDrawList*, const ImDrawCmd*)
@@ -348,6 +387,7 @@ namespace flov::browser
         if (!StartHostLocked()) return 0;
         const int id = ++g_nextId;
         g_items[id].url = url;
+        g_items[id].order = id;
         if (!g_root.empty()) SendLocked({ "ROOT", Utf8(g_root) });
         if (g_sentW) SendLocked({ "SIZE", N(g_sentW), N(g_sentH) });
         SendLocked({ "NEW", N(id), url });
@@ -426,7 +466,27 @@ namespace flov::browser
         auto it = g_items.find(id);
         if (it == g_items.end() || it->second.visible == visible) return;
         it->second.visible = visible;
+        if (!visible) ReleaseInputLocked(id);
         SendLocked({ "SHOW", N(id), visible ? "1" : "0" });
+    }
+
+    void SetInputEnabled(int id, bool enabled)
+    {
+        std::lock_guard lock(g_mutex);
+        auto it = g_items.find(id);
+        if (it == g_items.end() || it->second.inputEnabled == enabled) return;
+        it->second.inputEnabled = enabled;
+        if (!enabled) ReleaseInputLocked(id);
+        else g_lastX = g_lastY = -1;
+    }
+
+    void SetOrder(int id, int order)
+    {
+        std::lock_guard lock(g_mutex);
+        auto it = g_items.find(id);
+        if (it == g_items.end()) return;
+        it->second.order = std::clamp(order, -1000000, 1000000);
+        g_lastX = g_lastY = -1;
     }
 
     void Reload(int id, bool ignoreCache)
@@ -497,11 +557,21 @@ namespace flov::browser
         if (!(g_lastButtons && target && g_items.count(target)))
         {
             target = 0;
-            for (auto it = g_items.rbegin(); it != g_items.rend(); ++it)
-                if (it->second.visible && OpaqueAt(it->second, x, y)) { target = it->first; break; }
+            const auto ordered = OrderedIdsLocked();
+            for (auto it = ordered.rbegin(); it != ordered.rend(); ++it)
+            {
+                auto& item = g_items.at(*it);
+                if (item.visible && item.inputEnabled && OpaqueAt(item, x, y)) { target = *it; break; }
+            }
+            // До первого кадра alpha ещё неизвестна. Разрешаем ранний ввод
+            // только такому браузеру; стабильный полностью прозрачный кадр
+            // больше не перехватывает мышь у игры.
             if (!target)
-                for (auto it = g_items.rbegin(); it != g_items.rend(); ++it)
-                    if (it->second.visible) { target = it->first; break; }
+                for (auto it = ordered.rbegin(); it != ordered.rend(); ++it)
+                {
+                    auto& item = g_items.at(*it);
+                    if (item.visible && item.inputEnabled && item.lastSeq < 0) { target = *it; break; }
+                }
         }
         if (target != g_mouseTarget && g_mouseTarget && g_items.count(g_mouseTarget))
             SendLocked({ "LEAVE", N(g_mouseTarget) });
@@ -529,10 +599,16 @@ namespace flov::browser
             msg != WM_SYSCHAR)
             return false;
         std::lock_guard lock(g_mutex);
-        int target = g_focus && g_items.count(g_focus) && g_items[g_focus].visible ? g_focus : 0;
+        int target = g_focus && g_items.count(g_focus) && g_items[g_focus].visible && g_items[g_focus].inputEnabled ? g_focus : 0;
         if (!target)
-            for (auto it = g_items.rbegin(); it != g_items.rend(); ++it)
-                if (it->second.visible) { target = it->first; break; }
+        {
+            const auto ordered = OrderedIdsLocked();
+            for (auto it = ordered.rbegin(); it != ordered.rend(); ++it)
+            {
+                const auto& item = g_items.at(*it);
+                if (item.visible && item.inputEnabled) { target = *it; break; }
+            }
+        }
         if (!target) return false;
         if (g_focus != target) { g_focus = target; SendLocked({ "FOCUS", N(target), "1" }); }
         int mods = 0;
@@ -579,8 +655,9 @@ namespace flov::browser
         }
 
         bool any = false;
-        for (auto& [id, it] : g_items)
+        for (int id : OrderedIdsLocked())
         {
+            auto& it = g_items.at(id);
             if (!OpenFrame(it)) continue;
             auto* hd = reinterpret_cast<ipc::FrameHeader*>(it.view);
             if (!it.tex || it.texW != it.w || it.texH != it.h)
@@ -604,8 +681,10 @@ namespace flov::browser
                 it.texH = it.h;
                 it.texFresh = true;
                 it.lastSeq = -1;
+                it.stableFrame.clear();
+                it.scratch.clear();
             }
-            const LONG64 seq = hd->seq;
+            const LONG64 seq = ipc::LoadCounter(&hd->seq);
             if (!(seq & 1) && seq != it.lastSeq && seq > 0)
             {
                 // Новая текстура — целиком, дальше — только изменившееся.
@@ -619,16 +698,29 @@ namespace flov::browser
                 }
                 if (rw > 0 && rh > 0)
                 {
-                    const D3D11_BOX box{ (UINT)x, (UINT)y, 0, (UINT)(x + rw), (UINT)(y + rh), 1 };
-                    const uint8_t* src = it.view + sizeof(ipc::FrameHeader) + ((size_t)y * it.w + x) * 4;
-                    ctx->UpdateSubresource(it.tex, 0, &box, src, (UINT)it.w * 4, 0);
-                }
-                // Хост мог писать во время копирования — тогда повторим в следующем кадре.
-                if (hd->seq == seq)
-                {
-                    it.lastSeq = seq;
-                    it.texFresh = false;
-                    hd->ack = seq;
+                    const size_t rowBytes = (size_t)rw * 4;
+                    it.scratch.resize(rowBytes * rh);
+                    const uint8_t* shared = it.view + sizeof(ipc::FrameHeader);
+                    for (int row = 0; row < rh; ++row)
+                        memcpy(it.scratch.data() + (size_t)row * rowBytes,
+                               shared + ((size_t)(y + row) * it.w + x) * 4, rowBytes);
+
+                    // Пока копировали, CEF мог начать следующий кадр. Такой
+                    // снимок нельзя ни показывать, ни использовать для hit-test.
+                    if (ipc::LoadCounter(&hd->seq) == seq)
+                    {
+                        const size_t fullBytes = (size_t)it.w * it.h * 4;
+                        if (it.stableFrame.size() != fullBytes) it.stableFrame.assign(fullBytes, 0);
+                        for (int row = 0; row < rh; ++row)
+                            memcpy(it.stableFrame.data() + ((size_t)(y + row) * it.w + x) * 4,
+                                   it.scratch.data() + (size_t)row * rowBytes, rowBytes);
+
+                        const D3D11_BOX box{ (UINT)x, (UINT)y, 0, (UINT)(x + rw), (UINT)(y + rh), 1 };
+                        ctx->UpdateSubresource(it.tex, 0, &box, it.scratch.data(), (UINT)rowBytes, 0);
+                        it.lastSeq = seq;
+                        it.texFresh = false;
+                        ipc::StoreCounter(&hd->ack, seq);
+                    }
                 }
             }
             if (!it.visible || it.lastSeq < 0 || !dl) continue;

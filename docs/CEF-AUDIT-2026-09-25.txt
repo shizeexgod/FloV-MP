@@ -1,0 +1,228 @@
+FloV:MP — АУДИТ CEF / mp.browsers ДЛЯ ПЕРЕДАЧИ CLAUDE CODE
+Дата: 25.09.2026
+Снимок кода: локальный commit 262635b
+
+СТАТУС ПОСЛЕ АУДИТА (РАБОЧЕЕ ДЕРЕВО, 25.09)
+================================================
+
+Исправлены и покрыты тестами P0-1, P0-2, P0-3, P0-4 и P1-1:
+  - window.mp теперь получает только main frame;
+  - кадр копируется в локальный staging buffer и попадает в GPU только после
+    повторной атомарной проверки seq; alpha hit-test читает стабильный кадр;
+  - browser.orderId и browser.inputEnabled реально управляют render/hit-test;
+  - прозрачная точка больше не перехватывает ввод fallback-логикой;
+  - browserLoadingFailed возвращает browser, числовой errorCode и URL.
+
+Полная Release-сборка проходит. Актуальные тесты:
+  - browser integration: 22/22;
+  - native client script: 37/37.
+
+Открыты P0-5, P1-2, P1-3, P1-4 и обязательный живой GTA Legacy b3889 E2E.
+Разделы ниже сохранены как исходная фиксация причин и критериев исправления.
+
+ЦЕЛЬ
+====
+
+Довести браузерный UI FloV:MP до безопасной и предсказуемой основы для HUD,
+меню, авторизации, инвентаря и любого серверного CEF-интерфейса. Сервер должен
+иметь свободу дизайна, но страница не должна получать лишние привилегии, рвать
+кадры, перехватывать чужой ввод или бесконтрольно расходовать память.
+
+
+ЧТО УЖЕ РЕАЛЬНО РАБОТАЕТ
+========================
+
+1. CEF 131 собран отдельным процессом flovmp-cef.exe; Chromium не загружен
+   внутрь GTA-процесса.
+2. Есть package:// для файлов client_packages, прозрачный off-screen render,
+   shared memory, D3D11-композитинг, мышь/клавиатура/Unicode, resize.
+3. Работают window.mp.trigger, mp.events страницы, browser.call, execute,
+   reload, destroy, active и markAsChat.
+4. file:// блокируется, named pipes принимают только локального клиента,
+   CEF-хост завершается вместе с GTA и имеет ограниченный автоперезапуск.
+5. Сборка подтверждена локально точным CMake из Visual Studio Build Tools:
+   flovmp-client, flovmp-cef, flovmp-browser-test и flovmp-script-test собраны.
+6. Автотесты зелёные:
+   - browser integration: 16/16;
+   - native client script: 35/35.
+
+ВАЖНО: это подтверждает CEF-контракт вне GTA. Живого теста наложения CEF на
+GTA Legacy b3889 после commit 262635b ещё нет, поэтому пункт 26b нельзя считать
+закрытым на 100%.
+
+
+ЧТО НАДО ЧИНИТЬ СЕЙЧАС
+======================
+
+[P0-1] Мост window.mp внедряется во все iframe, включая чужие домены
+-------------------------------------------------------------------
+Файл: native/legacy-3889/client/cef-host/main.cpp:599-605
+
+OnContextCreated не проверяет frame->IsMain(). Если серверная страница вставит
+iframe с внешнего сайта, этот iframe тоже получает window.mp.trigger. Чужой
+контент сможет вызвать игровые события так, будто это доверенный UI сервера.
+
+Исправление:
+  - внедрять bridge только в main frame;
+  - дополнительно привязать сообщения к browser/frame/origin;
+  - добавить regression-тест: main frame имеет window.mp, cross-origin iframe
+    не имеет window.mp и не может отправить событие.
+
+[P0-2] Возможен один визуально «рваный» CEF-кадр
+------------------------------------------------
+Файл: native/legacy-3889/client/src/browser.cpp:608-632
+
+Клиент сначала передаёт UpdateSubresource прямой указатель на shared memory и
+только ПОСЛЕ загрузки проверяет, не начал ли CEF писать следующий кадр. При
+смене seq повреждённый кадр уже мог попасть в GPU; повтор на следующем тике его
+исправит, но один кадр может мерцать/содержать смесь двух состояний.
+
+Исправление:
+  - копировать dirty rectangle в локальный staging buffer;
+  - проверить стабильность seq до GPU upload;
+  - только стабильный снимок передавать UpdateSubresource и подтверждать ack;
+  - читать seq/ack через Interlocked/атомарную acquire-release схему;
+  - hit-test альфы делать по последнему стабильному staging frame.
+
+[P0-3] inputEnabled и orderId сейчас декоративные, не рабочие API
+----------------------------------------------------------------
+Файл: native/legacy-3889/client/src/script.cpp:693-701
+Файл: native/legacy-3889/client/src/browser.cpp:494-505
+
+Browser создаёт публичные свойства inputEnabled=true и orderId=id, но их смена
+не отправляется в native-клиент. Рендер и hit-test всегда идут по id. Серверный
+скрипт логично ожидает отключение ввода и управление слоями, но ничего не
+происходит.
+
+Исправление:
+  - сделать настоящие getters/setters;
+  - передавать INPUT и ZORDER/ORDER в browser.cpp и CEF host при необходимости;
+  - сортировать render и hit-test одинаково по z-index, с устойчивым tie-break;
+  - тесты на смену порядка, click-through и inputEnabled=false.
+
+[P0-4] Полностью прозрачная страница всё равно может перехватить ввод
+-------------------------------------------------------------------
+Файл: native/legacy-3889/client/src/browser.cpp:499-505
+
+Сначала выбирается верхний непрозрачный пиксель, но если таких нет, код берёт
+просто верхний видимый browser. Поэтому прозрачный overlay может получить
+мышь/фокус вместо пропуска события в нижний browser либо игру.
+
+Исправление:
+  - fallback применять только пока у browser ещё нет первого валидного кадра;
+  - после появления кадров полностью прозрачная точка не должна быть целью;
+  - учитывать inputEnabled=false;
+  - regression-тест с двумя слоями и прозрачной дыркой верхнего слоя.
+
+[P0-5] CEF работает без sandbox, с общей постоянной cookie-папкой
+---------------------------------------------------------------
+Файл: native/legacy-3889/client/cef-host/main.cpp:761-770
+
+settings.no_sandbox=true, cache_path общий для всех серверов, а session cookies
+сохраняются. Одновременно браузер разрешает произвольные http/https адреса.
+Компрометация одной удалённой страницы опаснее обычного HUD и может оставить
+cookie/данные, доступные следующему серверу.
+
+Минимум перед релизом:
+  - не сохранять session cookies между запусками;
+  - разделить profile/cache хотя бы по серверу/package identity;
+  - bridge только в main frame и только для доверенных package/origin;
+  - определить URL policy: package:// по умолчанию, remote HTTPS — только по
+    явному allowlist проекта; HTTP оставить лишь как осознанный dev-режим;
+  - отдельно исследовать включение штатного CEF sandbox. Пока он выключен,
+    remote content нельзя считать доверенным.
+
+[P1-1] browserLoadingFailed теряет код ошибки и URL
+--------------------------------------------------
+Файл: native/legacy-3889/client/src/script.cpp:729-734
+
+CEF host уже отправляет code и url, но JS dispatch выдаёт только Browser.
+Скрипт сервера не может отличить DNS/TLS/404/отмену и показать нормальную
+ошибку или fallback.
+
+Исправление: dispatch('browserLoadingFailed', [br, Number(a), b]) и тест API.
+
+[P1-2] До 32 полноэкранных браузеров — большой неконтролируемый расход
+-------------------------------------------------------------------
+Файл: native/legacy-3889/client/src/browser.cpp:344-353
+
+Каждый browser получает полный viewport, shared BGRA frame и D3D11 texture.
+Один 1920x1080 BGRA буфер ≈ 7.9 MiB; с общей памятью, staging/GPU и Chromium
+реальная цена выше. 32 активных browser могут занять сотни MiB и загрузить CPU.
+
+Исправление:
+  - лимит сделать конфигурируемым, но с безопасным default 8–12;
+  - скрытые browser переводить в WasHidden и не композитить;
+  - добавить bounds/viewport и optional frameRate (HUD 60, статичные меню 30);
+  - вести метрики browser count, frame time, dropped frames, memory estimate;
+  - лимит должен проверяться и клиентом, и CEF host.
+
+[P1-3] Нет полноценного контроля origin/subresource policy
+---------------------------------------------------------
+Файл: native/legacy-3889/client/cef-host/main.cpp:272-280
+
+OnBeforeBrowse фильтрует навигацию верхнего уровня по строковому префиксу, но
+нет явного проектного allowlist для remote origin и отдельной политики сетевых
+запросов страницы. package UI может обращаться к локальным/private сервисам,
+если те разрешат CORS. Это не обязательно эксплойт само по себе, но платформа
+должна иметь предсказуемую policy, а не неограниченный браузер.
+
+Исправление:
+  - нормальный parser URL вместо проверки префикса;
+  - allowlist origins из подписанного manifest client package;
+  - RequestHandler для main navigation, popup и resource requests;
+  - запрет file/javascript/custom schemes, popup/new-window и downloads;
+  - тесты localhost/private IP, redirect и iframe navigation.
+
+[P1-4] API свободы UI пока неполный, несмотря на рабочий fullscreen CEF
+--------------------------------------------------------------------
+
+Для одного fullscreen HUD уже можно рисовать почти всё HTML/CSS/Canvas/WebGL.
+Но платформенный API пока не даёт честного управления несколькими слоями.
+Нужны:
+  - рабочие zIndex/orderId и inputEnabled;
+  - bounds/position/size либо явно зафиксированный fullscreen-only контракт;
+  - cursor ownership/focus API и предсказуемый возврат управления GTA;
+  - DPI/deviceScaleFactor и resize без размытия;
+  - lifecycle events: created, domReady, loadFailed(code,url), crashed,
+    restarted, destroyed;
+  - ограничения execute/call/trigger и диагностические ошибки;
+  - пример SDK HUD + menu + modal + transparent click-through.
+
+
+ПОРЯДОК РАБОТЫ ДЛЯ CLAUDE
+=========================
+
+1. P0-1 main-frame bridge + regression test.
+2. P0-2 staging frame/seqlock + тест на конкурентную запись.
+3. P0-3/P0-4: реальные z-order/inputEnabled и прозрачный click-through.
+4. P0-5: session isolation и доверенные origins; не ухудшить package://.
+5. P1-1: вернуть code/url в browserLoadingFailed.
+6. Resource controls и lifecycle diagnostics.
+7. Повторить Release build и оба набора тестов.
+8. Живой GTA b3889 E2E: прозрачность, ввод, кириллица, resize, alt-tab,
+   два browser, restart CEF host, reconnect сервера, FPS/frametime/память.
+
+
+КРИТЕРИЙ ГОТОВНОСТИ CEF / HUD
+=============================
+
+Нельзя считать готовым только по 16/16 и 35/35. Готово, когда:
+  - iframe не имеет игрового bridge;
+  - кадры не рвутся при анимациях;
+  - порядок и input passthrough реально работают;
+  - browser crash/restart не зависает и не оставляет ввод захваченным;
+  - серверы изолированы по cookies/cache/origin policy;
+  - один сложный HUD и меню держат целевой FPS в GTA b3889;
+  - два разных client package могут реализовать полностью разный дизайн без
+    изменения FloVMP.asi;
+  - живой тест в GTA сохранён логом/видео и воспроизводимым сценарием.
+
+
+ПАРАЛЛЕЛЬНАЯ РАБОТА
+===================
+
+Во время аудита процессы Claude Code были активны. Этот отчёт не меняет CEF-
+исходники и не откатывает незакоммиченные web/docs-файлы. Перед исправлением
+сверить git status и текущий HEAD: Claude мог уже изменить часть строк после
+снимка 262635b.

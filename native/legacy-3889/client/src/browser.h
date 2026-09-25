@@ -25,6 +25,11 @@ namespace flov::browser
     void Execute(int id, const std::string& code);
     void Call(int id, const std::string& name, const std::string& argsJson);
     void Show(int id, bool visible);
+    /// Разрешить странице получать мышь/клавиатуру. Отключённая страница
+    /// остаётся видимой, но ввод проходит к слою ниже либо обратно в игру.
+    void SetInputEnabled(int id, bool enabled);
+    /// Порядок наложения: больше — выше. При равенстве выше созданный позже.
+    void SetOrder(int id, int order);
     void Reload(int id, bool ignoreCache);
 
     /// Папка скачанных client_packages — для адресов package://.

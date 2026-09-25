@@ -539,6 +539,16 @@ namespace flov::script
             if (argc > 1) browser::Show(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
             return JS_UNDEFINED;
         }
+        JSValue F_brInput(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::SetInputEnabled(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
+            return JS_UNDEFINED;
+        }
+        JSValue F_brOrder(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::SetOrder(Int(ctx, argv[0]), Int(ctx, argv[1]));
+            return JS_UNDEFINED;
+        }
         JSValue F_brReload(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
         {
             if (argc > 1) browser::Reload(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
@@ -691,12 +701,16 @@ mp.gui.cursor = {
 const browsers = new Map();
 let chatBrowser = null;
 class Browser {
-    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this.orderId = id; this.inputEnabled = true; }
+    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this._orderId = id; this._inputEnabled = true; }
     get type() { return 'browser'; }
     get url() { return this._url; }
     set url(u) { this._url = String(u); F.brUrl(this.id, this._url); }
     get active() { return this._active; }
     set active(v) { this._active = !!v; F.brShow(this.id, this._active); }
+    get orderId() { return this._orderId; }
+    set orderId(v) { this._orderId = Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0; F.brOrder(this.id, this._orderId); }
+    get inputEnabled() { return this._inputEnabled; }
+    set inputEnabled(v) { this._inputEnabled = !!v; F.brInput(this.id, this._inputEnabled); }
     execute(code) { F.brExec(this.id, String(code)); }
     call(name, ...args) { F.brCall(this.id, String(name), JSON.stringify(args)); }
     reload(ignoreCache) { F.brReload(this.id, !!ignoreCache); }
@@ -730,7 +744,7 @@ globalThis.__flovBrowserEvent = (kind, id, a, b) => {
     const br = browsers.get(id);
     if (!br) return;
     if (kind === 'dom') dispatch('browserDomReady', [br]);
-    else if (kind === 'fail') dispatch('browserLoadingFailed', [br]);
+    else if (kind === 'fail') dispatch('browserLoadingFailed', [br, Number(a), String(b)]);
     else if (kind === 'trigger') {
         let args = [];
         try { args = JSON.parse(b); } catch (e) {}
@@ -913,6 +927,8 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "brExec", F_brExec, 2);
             AddFn(g_ctx, F, "brCall", F_brCall, 3);
             AddFn(g_ctx, F, "brShow", F_brShow, 2);
+            AddFn(g_ctx, F, "brInput", F_brInput, 2);
+            AddFn(g_ctx, F, "brOrder", F_brOrder, 2);
             AddFn(g_ctx, F, "brReload", F_brReload, 2);
             AddFn(g_ctx, F, "brAvailable", F_brAvailable, 0);
             JS_SetPropertyStr(g_ctx, global, "__flov", F);

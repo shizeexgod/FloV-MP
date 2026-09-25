@@ -115,10 +115,10 @@ namespace
             if (!_view || rects.empty()) return;
             auto* hd = Header();
             uint8_t* px = _view + sizeof(ipc::FrameHeader);
-            InterlockedIncrement64(&hd->seq);   // нечётный — пишем
+            const LONG64 writingSeq = InterlockedIncrement64(&hd->seq);   // нечётный — пишем
             // Объединение с тем, что клиент ещё не забрал.
             int x0, y0, x1, y1;
-            if (hd->ack == hd->seq - 1 || hd->dirtyW == 0) { x0 = INT_MAX; y0 = INT_MAX; x1 = 0; y1 = 0; }
+            if (ipc::LoadCounter(&hd->ack) == writingSeq - 1 || hd->dirtyW == 0) { x0 = INT_MAX; y0 = INT_MAX; x1 = 0; y1 = 0; }
             else { x0 = hd->dirtyX; y0 = hd->dirtyY; x1 = hd->dirtyX + hd->dirtyW; y1 = hd->dirtyY + hd->dirtyH; }
             for (const auto& r : rects)
             {
@@ -596,8 +596,13 @@ namespace
             Send({ "READY" });
         }
 
-        void OnContextCreated(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefV8Context> context) override
+        void OnContextCreated(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override
         {
+            // Игровой bridge принадлежит только верхней странице. В противном
+            // случае любой подключённый iframe (в том числе с чужого origin)
+            // получает mp.trigger и может выдавать себя за доверенный UI
+            // серверного пакета.
+            if (!frame || !frame->IsMain()) return;
             context->GetGlobal()->SetValue("__flovTrigger", CefV8Value::CreateFunction("__flovTrigger", new TriggerHandler()),
                                            V8_PROPERTY_ATTRIBUTE_NONE);
             CefRefPtr<CefV8Value> ret;
