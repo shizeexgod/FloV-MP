@@ -68,6 +68,8 @@ public partial class StarterResource
 
     /// <summary>Решение геймода по каждому попаданию: отмена или свой урон.</summary>
     private readonly DamageArbiter _damage = new();
+    /// <summary>Номер тика для посредника по урону: решение забирается в следующем.</summary>
+    private long _damageTick;
     private const int MaxDamagePerSecond = 1000;      // суммарно по всем жертвам
     private const int MaxDamagePerVictimPerSecond = 300;
     /// <summary>Запас к дальности видимости: попадание дальше, чем игрок
@@ -240,6 +242,9 @@ public partial class StarterResource
         if (_native is null) return;
         using var _perf = FloVMP.Core.Diagnostics.TickProfiler.Measure(PerfNative);
 
+        // Решения геймода по попаданиям прошлого тика — до новых сообщений.
+        SettleNativeHits();
+
         // Не больше 2000 событий за тик: поток сообщений не должен вешать сервер.
         for (var i = 0; i < 2000 && _native.Events.TryDequeue(out var ev); i++)
         {
@@ -333,6 +338,7 @@ public partial class StarterResource
         _nativeReady.Remove(session.Id);
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
+        _damage.ForgetPlayer(session.Id);
         _hitWarnedAt.Remove(session.Id);
         _weaponHistory.Remove(session.Id);
         _nativeVehicleOwners.Remove(session.Id);
@@ -500,17 +506,68 @@ public partial class StarterResource
         // Слово геймоду. До этого места попадание проверено античитом и
         // признано настоящим; теперь игровая логика решает, засчитывать ли его
         // и с каким уроном. Если геймода нет или он молчит — всё как раньше.
-        damage = AskGamemodeAboutDamage(session.Id, victimId, weapon, damage, dist);
-        if (damage <= 0) return;
+        // Слово геймоду. До этого места попадание проверено античитом и
+        // признано настоящим; теперь игровая логика решает, засчитывать ли его
+        // и с каким уроном. Рассылка событий между ресурсами асинхронная,
+        // поэтому попадание ждёт решения до следующего тика (см. DamageArbiter).
+        var request = _damage.Ask(session.Id, victimId, weapon, damage, _damageTick);
+        if (request == 0)
+        {
+            // Очередь переполнена — применяем как посчитала платформа.
+            ApplyNativeHit(session.Id, victimId, weapon, damage);
+            return;
+        }
+        try
+        {
+            Alt.Emit("flovmp:damage", request, (int)session.Id, (int)victimId,
+                     weapon.ToString(CultureInfo.InvariantCulture), damage, dist);
+        }
+        catch (Exception ex)
+        {
+            // Ошибка в чужом обработчике не отменяет попадание: одна опечатка в
+            // геймоде не должна делать всех игроков бессмертными.
+            Alt.LogError($"[FloV:MP] рассылка flovmp:damage не удалась: {ex.Message}");
+        }
+    }
 
-        if (weapon != WeaponUnarmed) _ledgerAc?.OnHit(session.Id, weapon, now);
-        _lastHitAt[(session.Id, victimId)] = now;
+    /// <summary>
+    /// Применить решения геймода по попаданиям прошлых тиков. Вызывается в
+    /// начале каждого тика, до обработки новых сообщений.
+    /// </summary>
+    private void SettleNativeHits()
+    {
+        _damageTick++;
+        if (_damage.PendingCount == 0) return;
+        foreach (var hit in _damage.Settle(_damageTick))
+            if (hit.Damage > 0)
+                ApplyNativeHit(hit.Hit.AttackerId, hit.Hit.VictimId, hit.Hit.Weapon, hit.Damage);
+    }
+
+    /// <summary>
+    /// Списать урон. Между вопросом и решением прошёл тик, поэтому жертва
+    /// проверяется заново: она могла выйти, умереть от другого попадания,
+    /// сменить измерение или получить бессмертие.
+    /// </summary>
+    private void ApplyNativeHit(uint attackerId, uint victimId, uint weapon, int damage)
+    {
+        if (damage <= 0) return;
+        if (!_nativePlayers.TryGetValue(victimId, out var victimPlayer)) return;
+        var victim = (NativePlayerProxy)(object)victimPlayer;
+        if (victim.DeadReported) return;
+        if (_godModes.TryGetValue(victimId, out var god) && god) return;
+        _nativePlayers.TryGetValue(attackerId, out var attackerPlayer);
+        var attacker = attackerPlayer is null ? null : (NativePlayerProxy)(object)attackerPlayer;
+        if (attacker is not null && attacker.DimensionValue != victim.DimensionValue) return;
+
+        var now = _clock.ElapsedMilliseconds;
+        if (weapon != WeaponUnarmed) _ledgerAc?.OnHit(attackerId, weapon, now);
+        _lastHitAt[(attackerId, victimId)] = now;
         // Здоровье считает сервер. Клиенту уходит и сам урон (для звука, крови
         // и тряски экрана), и итоговые значения: изменённый клиент не может
         // «не заметить» попадание и остаться с полным здоровьем.
         var armorBefore = victim.ServerArmor;
         var (health, armorLeft) = victim.ApplyServerDamage(damage);
-        victim.Session.Send("DAMAGE", damage, session.Id, NativeProtocol.UIntOr(p, 2, 0));
+        victim.Session.Send("DAMAGE", damage, attackerId, weapon);
         victim.Session.Send("HEALTH", (int)health);
         // Броню шлём, только когда она изменилась: в перестрелке из автомата
         // это десятки лишних строк в секунду на каждого, кого задели.
@@ -520,33 +577,10 @@ public partial class StarterResource
             // Смерть объявляет сервер, не дожидаясь сообщения клиента: иначе
             // тот же изменённый клиент просто не сообщал бы о ней.
             victim.DeadReported = true;
-            Alt.Log($"[FloV:MP] {victim.Session.Name} убит игроком [{session.Id}] {session.Name}.");
+            var killer = attacker?.Session.Name ?? "вышедшим игроком";
+            Alt.Log($"[FloV:MP] {victim.Session.Name} убит игроком [{attackerId}] {killer}.");
             OnPlayerDead(victimPlayer, null!, weapon);
         }
-    }
-
-    /// <summary>
-    /// Спросить геймод про попадание и вернуть итоговый урон.
-    ///
-    /// Рассылка событий внутри процесса синхронная, поэтому ответ геймода
-    /// успевает прийти до возврата из Alt.Emit. Если геймод не ответил,
-    /// урон остаётся тем, что считала платформа.
-    /// </summary>
-    private int AskGamemodeAboutDamage(uint attackerId, uint victimId, uint weapon, int damage, float distance)
-    {
-        var request = _damage.Ask();
-        try
-        {
-            Alt.Emit("flovmp:damage", request, (int)attackerId, (int)victimId,
-                     weapon.ToString(CultureInfo.InvariantCulture), damage, distance);
-        }
-        catch (Exception ex)
-        {
-            // Ошибка в чужом обработчике не должна отменять попадание: иначе
-            // одна опечатка в геймоде сделала бы всех игроков бессмертными.
-            Alt.LogError($"[FloV:MP] обработчик flovmp:damage упал: {ex.Message}");
-        }
-        return _damage.Resolve(request, damage);
     }
 
     /// <summary>

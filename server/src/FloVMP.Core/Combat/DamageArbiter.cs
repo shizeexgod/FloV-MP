@@ -5,84 +5,136 @@ namespace FloVMP.Core.Combat;
 /// <param name="Damage">Урон, если попадание разрешено.</param>
 public readonly record struct DamageVerdict(bool Allow, int Damage);
 
+/// <summary>Попадание, по которому платформа ждёт решения геймода.</summary>
+/// <param name="Request">Номер вопроса, он уходит геймоду и возвращается в ответе.</param>
+/// <param name="AttackerId">Кто стрелял.</param>
+/// <param name="VictimId">По кому попали.</param>
+/// <param name="Weapon">Хэш оружия.</param>
+/// <param name="Proposed">Урон, который посчитала платформа.</param>
+/// <param name="AskedTick">Номер тика, в котором задан вопрос.</param>
+public readonly record struct PendingDamage(int Request, uint AttackerId, uint VictimId, uint Weapon,
+                                            int Proposed, long AskedTick);
+
+/// <summary>Попадание с окончательным уроном. Damage 0 — попадание отменено.</summary>
+public readonly record struct SettledDamage(PendingDamage Hit, int Damage, bool Answered);
+
 /// <summary>
 /// Посредник между платформой и геймодом по каждому попаданию.
 ///
-/// Зачем он нужен. Здоровье и броню считает сервер платформы, и до сих пор
-/// геймод никак не мог вмешаться: ни отменить выстрел, ни уменьшить урон.
-/// Без этого не сделать ни брони фракций, ни режимов «без оружия», ни дуэлей
-/// на половинном уроне — то есть почти всего, ради чего платформу покупают.
+/// Зачем он нужен. Здоровье и броню считает сервер платформы, и геймод должен
+/// иметь право вмешаться: отменить выстрел или изменить урон. Без этого не
+/// сделать ни брони фракций, ни режимов «без оружия», ни дуэлей на
+/// половинном уроне.
 ///
-/// Как это работает. Платформа открывает вопрос (<see cref="Ask"/>), шлёт
-/// геймоду событие с этим номером и тут же закрывает вопрос
-/// (<see cref="Resolve"/>). Рассылка событий внутри процесса синхронная,
-/// поэтому геймод успевает ответить <see cref="Answer"/> до закрытия.
+/// Почему решение приходит в следующем тике. Рассылка событий между
+/// ресурсами в alt:V асинхронная: Alt.Emit ставит событие в очередь, и
+/// обработчик геймода выполняется уже после того, как платформа вернулась из
+/// своего тика. Проверено живым запуском 25.09.2026: вопрос, закрытый в том
+/// же вызове, всегда закрывался без ответа, а ответ геймода приходил следом и
+/// отбрасывался. Поэтому попадание сначала становится «ожидающим»
+/// (<see cref="Ask"/>), геймод отвечает (<see cref="Answer"/>), а платформа
+/// забирает решения в начале следующего тика (<see cref="Settle"/>).
+/// Задержка — один тик сервера, для урона она незаметна.
 ///
-/// Почему с номером, а не просто «последний ответ». Ответ с чужим или
-/// устаревшим номером игнорируется. Иначе геймод, ответивший с опозданием на
-/// один выстрел, молча изменил бы урон следующего — и искали бы это долго.
+/// Молчание геймода ничего не меняет: попадание применяется с уроном
+/// платформы. Ответ с чужим или уже закрытым номером игнорируется — иначе
+/// опоздавший ответ достался бы другому выстрелу.
 ///
-/// Класс рассчитан на один поток: и попадания, и события платформы приходят
-/// в главном потоке сервера.
+/// Класс рассчитан на один поток: и попадания, и события приходят в главном
+/// потоке сервера.
 /// </summary>
 public sealed class DamageArbiter
 {
     /// <summary>Потолок урона: столько же, сколько максимум здоровья в GTA.</summary>
     public const int MaxDamage = 200;
 
+    /// <summary>
+    /// Сколько попаданий может ждать решения одновременно. Защита памяти на
+    /// случай, если <see cref="Settle"/> по ошибке перестанут вызывать: лишние
+    /// попадания применяются сразу, без вопроса.
+    /// </summary>
+    public const int MaxPending = 4096;
+
+    private readonly Dictionary<int, PendingDamage> _pending = new();
+    private readonly Dictionary<int, DamageVerdict> _answers = new();
+    private readonly List<int> _order = new();
     private int _lastRequest;
-    private int _openRequest;
-    private bool _answered;
-    private DamageVerdict _answer;
 
     /// <summary>Сколько вопросов задано с запуска сервера. Для диагностики.</summary>
-    public int AskedTotal => _lastRequest;
+    public int AskedTotal { get; private set; }
+
+    /// <summary>Сколько попаданий сейчас ждут решения.</summary>
+    public int PendingCount => _pending.Count;
 
     /// <summary>
-    /// Открыть вопрос по очередному попаданию. Номер уходит геймоду и должен
-    /// вернуться в <see cref="Answer"/>.
-    ///
-    /// Если предыдущий вопрос остался незакрытым (геймод в своём обработчике
-    /// нанёс урон кому-то ещё), прежний вопрос считается брошенным: ответить
-    /// на него уже нельзя, и урон по нему применится как предложено.
+    /// Поставить попадание в ожидание. Возвращает номер вопроса или 0, если
+    /// очередь переполнена — тогда попадание нужно применить сразу.
     /// </summary>
-    public int Ask()
+    public int Ask(uint attackerId, uint victimId, uint weapon, int proposed, long tick)
     {
+        if (_pending.Count >= MaxPending) return 0;
         // Номер никогда не равен нулю: ноль означает «вопроса нет».
         _lastRequest = _lastRequest == int.MaxValue ? 1 : _lastRequest + 1;
-        _openRequest = _lastRequest;
-        _answered = false;
-        _answer = default;
-        return _openRequest;
+        var request = _lastRequest;
+        _pending[request] = new PendingDamage(request, attackerId, victimId, weapon,
+                                              Math.Clamp(proposed, 0, MaxDamage), tick);
+        _order.Add(request);
+        AskedTotal++;
+        return request;
     }
 
     /// <summary>
-    /// Ответ геймода. Возвращает false, если ответ пришёл не на тот вопрос —
-    /// такой ответ не влияет ни на что.
+    /// Ответ геймода. Возвращает false, если такого открытого вопроса нет —
+    /// такой ответ ни на что не влияет. Повторный ответ на тот же вопрос
+    /// заменяет предыдущий.
     /// </summary>
     public bool Answer(int request, bool allow, int damage)
     {
-        if (request == 0 || request != _openRequest) return false;
-        _answered = true;
-        _answer = new DamageVerdict(allow, Math.Clamp(damage, 0, MaxDamage));
+        if (request == 0 || !_pending.ContainsKey(request)) return false;
+        _answers[request] = new DamageVerdict(allow, Math.Clamp(damage, 0, MaxDamage));
         return true;
     }
 
     /// <summary>
-    /// Закрыть вопрос и получить итоговый урон.
-    ///
-    /// Геймод не ответил — урон остаётся тем, что предложила платформа: по
-    /// умолчанию сервер ведёт себя ровно как раньше.
+    /// Забрать решения по всем попаданиям, заданным раньше тика
+    /// <paramref name="currentTick"/>. Попадания текущего тика остаются ждать:
+    /// геймод их ещё не видел.
     /// </summary>
-    public int Resolve(int request, int proposed)
+    public List<SettledDamage> Settle(long currentTick)
     {
-        var answered = _answered && request != 0 && request == _openRequest;
-        var verdict = _answer;
-        _openRequest = 0;
-        _answered = false;
-        _answer = default;
+        var settled = new List<SettledDamage>();
+        var keep = 0;
+        for (var i = 0; i < _order.Count; i++)
+        {
+            var request = _order[i];
+            if (!_pending.TryGetValue(request, out var hit)) continue;
+            if (hit.AskedTick >= currentTick)
+            {
+                _order[keep++] = request;
+                continue;
+            }
+            _pending.Remove(request);
+            if (_answers.Remove(request, out var verdict))
+                settled.Add(new SettledDamage(hit, verdict.Allow ? verdict.Damage : 0, true));
+            else
+                settled.Add(new SettledDamage(hit, hit.Proposed, false));
+        }
+        _order.RemoveRange(keep, _order.Count - keep);
+        return settled;
+    }
 
-        if (!answered) return Math.Clamp(proposed, 0, MaxDamage);
-        return verdict.Allow ? verdict.Damage : 0;
+    /// <summary>
+    /// Забыть все ожидающие попадания игрока — он вышел. Попадания по нему и
+    /// от него больше не применяются.
+    /// </summary>
+    public void ForgetPlayer(uint playerId)
+    {
+        foreach (var request in _pending.Where(p => p.Value.AttackerId == playerId || p.Value.VictimId == playerId)
+                                        .Select(p => p.Key).ToList())
+        {
+            _pending.Remove(request);
+            _answers.Remove(request);
+        }
+        _order.RemoveAll(r => !_pending.ContainsKey(r));
     }
 }
