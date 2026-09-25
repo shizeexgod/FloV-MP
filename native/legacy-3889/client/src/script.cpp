@@ -549,6 +549,11 @@ namespace flov::script
             if (argc > 1) browser::SetOrder(Int(ctx, argv[0]), Int(ctx, argv[1]));
             return JS_UNDEFINED;
         }
+        JSValue F_brRate(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::SetFrameRate(Int(ctx, argv[0]), Int(ctx, argv[1]));
+            return JS_UNDEFINED;
+        }
         JSValue F_brReload(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
         {
             if (argc > 1) browser::Reload(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
@@ -701,7 +706,7 @@ mp.gui.cursor = {
 const browsers = new Map();
 let chatBrowser = null;
 class Browser {
-    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this._orderId = id; this._inputEnabled = true; }
+    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this._orderId = id; this._inputEnabled = true; this._frameRate = 60; }
     get type() { return 'browser'; }
     get url() { return this._url; }
     set url(u) { this._url = String(u); F.brUrl(this.id, this._url); }
@@ -711,6 +716,8 @@ class Browser {
     set orderId(v) { this._orderId = Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0; F.brOrder(this.id, this._orderId); }
     get inputEnabled() { return this._inputEnabled; }
     set inputEnabled(v) { this._inputEnabled = !!v; F.brInput(this.id, this._inputEnabled); }
+    get frameRate() { return this._frameRate; }
+    set frameRate(v) { this._frameRate = Math.max(1, Math.min(60, Math.trunc(Number(v) || 1))); F.brRate(this.id, this._frameRate); }
     execute(code) { F.brExec(this.id, String(code)); }
     call(name, ...args) { F.brCall(this.id, String(name), JSON.stringify(args)); }
     reload(ignoreCache) { F.brReload(this.id, !!ignoreCache); }
@@ -929,6 +936,7 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "brShow", F_brShow, 2);
             AddFn(g_ctx, F, "brInput", F_brInput, 2);
             AddFn(g_ctx, F, "brOrder", F_brOrder, 2);
+            AddFn(g_ctx, F, "brRate", F_brRate, 2);
             AddFn(g_ctx, F, "brReload", F_brReload, 2);
             AddFn(g_ctx, F, "brAvailable", F_brAvailable, 0);
             JS_SetPropertyStr(g_ctx, global, "__flov", F);

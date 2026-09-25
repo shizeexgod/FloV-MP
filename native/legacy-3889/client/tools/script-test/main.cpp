@@ -286,8 +286,9 @@ int wmain()
             "mp.trigger('page:loaded', location.href);</script>";
         std::ofstream(dir + L"\\index.js") <<
             "const b = mp.browsers.new('package://ui/index.html');\n"
+            "b.orderId = 7; b.inputEnabled = false; b.frameRate = 30;\n"
             "mp.events.add('browserDomReady', (br) => { if (br === b) b.call('hello', 'сервер'); });\n"
-            "mp.events.add('page:loaded', (href) => mp.events.callRemote('loaded', href, mp.browsers.length, mp.browsers.exists(b)));\n"
+            "mp.events.add('page:loaded', (href) => mp.events.callRemote('loaded', href, mp.browsers.length, mp.browsers.exists(b), b.orderId, b.inputEnabled, b.frameRate));\n"
             "mp.events.add('page:hi', (text) => { mp.events.callRemote('hi', text); b.destroy(); mp.events.callRemote('after', mp.browsers.length); });\n";
         flov::browser::SetHostExe(FLOVMP_CEF_HOST);
         flov::script::Reset();
@@ -301,7 +302,7 @@ int wmain()
             Sleep(16);
         }
         auto find = [&](const char* n) -> std::string { for (auto& [k, v] : got) if (k == n) return v; return "—"; };
-        Check(find("loaded") == "[\"package://ui/index.html\",1,true]", "страница загрузилась, mp.trigger → mp.events скрипта (" + find("loaded") + ")");
+        Check(find("loaded") == "[\"package://ui/index.html\",1,true,7,false,30]", "страница загрузилась, свойства browser применились (" + find("loaded") + ")");
         Check(find("hi") == "[\"привет, сервер\"]", "browserDomReady → browser.call → страница → обратно (" + find("hi") + ")");
         Check(find("after") == "[0]", "browser.destroy");
         flov::script::Reset();

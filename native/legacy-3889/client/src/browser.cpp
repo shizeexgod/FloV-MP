@@ -29,6 +29,7 @@ namespace flov::browser
             bool visible = true;
             bool inputEnabled = true;
             int order = 0;
+            int frameRate = 60;
             // Кадры
             std::string shmName;
             HANDLE map = nullptr;
@@ -489,6 +490,17 @@ namespace flov::browser
         g_lastX = g_lastY = -1;
     }
 
+    void SetFrameRate(int id, int frameRate)
+    {
+        std::lock_guard lock(g_mutex);
+        auto it = g_items.find(id);
+        if (it == g_items.end()) return;
+        const int rate = std::clamp(frameRate, 1, 60);
+        if (it->second.frameRate == rate) return;
+        it->second.frameRate = rate;
+        SendLocked({ "RATE", N(id), N(rate) });
+    }
+
     void Reload(int id, bool ignoreCache)
     {
         std::lock_guard lock(g_mutex);
@@ -516,6 +528,7 @@ namespace flov::browser
             {
                 SendLocked({ "NEW", N(id), it.url });
                 if (!it.visible) SendLocked({ "SHOW", N(id), "0" });
+                if (it.frameRate != 60) SendLocked({ "RATE", N(id), N(it.frameRate) });
             }
         }
         return out;
@@ -658,6 +671,7 @@ namespace flov::browser
         for (int id : OrderedIdsLocked())
         {
             auto& it = g_items.at(id);
+            if (!it.visible) continue;
             if (!OpenFrame(it)) continue;
             auto* hd = reinterpret_cast<ipc::FrameHeader*>(it.view);
             if (!it.tex || it.texW != it.w || it.texH != it.h)

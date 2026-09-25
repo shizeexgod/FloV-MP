@@ -596,7 +596,7 @@ mp.trigger('panel:submit', input.value);
 | Что | Как |
 |---|---|
 | создать | `mp.browsers.new(url)` — `package://папка/файл.html` (файлы client_packages) или `https://…` |
-| управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.reload(ignoreCache)`, `browser.destroy()` |
+| управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.frameRate = 30` (1–60 FPS), `browser.reload(ignoreCache)`, `browser.destroy()` |
 | в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
 | из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
 | события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)` |
@@ -609,6 +609,11 @@ mp.trigger('panel:submit', input.value);
 у которой под курсором не прозрачно, — прозрачные места пропускают клик
 ниже или обратно в игру. Страницы — над миром и никами игроков, но под чатом, меню и консолью
 платформы. `console.log` страницы виден в консоли F8.
+
+Для постоянно анимированного HUD оставляйте `frameRate = 60`; статичным меню
+обычно достаточно 30. Скрытый через `active = false` browser перестаёт рисовать
+кадры. Свойства и смена URL безопасно применяются даже сразу после `new()`, до
+завершения асинхронного запуска Chromium.
 
 Правила безопасности: `package://` отдаёт только файлы пакета (выход за папку
 закрыт), переходы на `file://` и служебные страницы Chromium запрещены,

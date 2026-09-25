@@ -283,7 +283,7 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       изменившейся области в текстуру DX11, смешивание с умноженной альфой;
       команды и события — две трубы. API как в RAGE:MP: `mp.browsers.new`,
       `call/execute/url/active/reload/destroy/markAsChat`, рабочие
-      `orderId/inputEnabled`, события `browserCreated/DomReady` и
+      `orderId/inputEnabled/frameRate (1–60)`, события `browserCreated/DomReady` и
       `browserLoadingFailed(browser, code, url)`, в странице `mp.trigger` и
       `mp.events`; `package://` из client_packages (UTF-8, без выхода за
       папку), `file://` запрещён. Курсор `mp.gui.cursor.show(freeze, show)`
@@ -294,7 +294,8 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       Bridge доступен только главному frame, не iframe; shared-memory кадр
       сначала копируется и проверяется, поэтому CEF не может отдать в GPU смесь
       двух кадров. Cookies/localStorage живут только в памяти и изолируются при
-      смене server package. Тесты без GTA на настоящем Chromium: браузеры 23,
+      смене server package. Команды `url/active/frameRate/destroy` не теряются,
+      даже если пришли до асинхронного создания Chromium. Тесты без GTA на настоящем Chromium: браузеры 24,
       движок JS 37.
     - **26c — серверный JS как в RAGE:MP** (`mp.*` на js-module alt:V) и
       скрипт переноса сервера с RAGE:MP (объединяется с пунктом 17).

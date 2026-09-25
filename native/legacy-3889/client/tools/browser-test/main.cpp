@@ -144,6 +144,9 @@ else mp.trigger('iframeBridge', 'present');
 top.addEventListener('click', () => mp.trigger('topClicked'));
 document.addEventListener('mousemove', () => mp.trigger('topMoved'));
 </script>)";
+    std::ofstream(root + L"\\ui\\switch.html") << R"(<!doctype html><meta charset="utf-8"><script>
+mp.trigger('switched', location.href);
+</script>)";
     std::ofstream(std::wstring(tmp) + L"secret.txt") << "secret";
     flov::browser::SetPackageRoot(root);
 
@@ -217,6 +220,15 @@ document.addEventListener('mousemove', () => mp.trigger('topMoved'));
     Check(SeenCount(flov::browser::Event::Kind::Trigger, "topMoved") == movedBefore,
           "полностью прозрачная точка не перехватывает мышь");
     flov::browser::Destroy(top);
+
+    const int switching = flov::browser::Create("package://ui/index.html");
+    flov::browser::SetUrl(switching, "package://ui/switch.html");
+    Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "switched") != nullptr; }, 10000) &&
+          Seen(flov::browser::Event::Kind::Trigger, "switched")->b == "[\"package://ui/switch.html\"]",
+          "смена URL сразу после new не теряется до OnAfterCreated");
+    flov::browser::Show(switching, false);
+    flov::browser::SetFrameRate(switching, 15);
+    flov::browser::Destroy(switching);
 
     printf("Размер и жизнь:\n");
     g_w = 1024; g_h = 768;

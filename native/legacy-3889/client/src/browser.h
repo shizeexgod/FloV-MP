@@ -30,6 +30,8 @@ namespace flov::browser
     void SetInputEnabled(int id, bool enabled);
     /// Порядок наложения: больше — выше. При равенстве выше созданный позже.
     void SetOrder(int id, int order);
+    /// Частота перерисовки CEF; 60 для HUD, ниже для статичных меню.
+    void SetFrameRate(int id, int frameRate);
     void Reload(int id, bool ignoreCache);
 
     /// Папка скачанных client_packages — для адресов package://.

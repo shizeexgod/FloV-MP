@@ -171,6 +171,30 @@ namespace
         CefRefPtr<CefBrowser> Get() const { return _browser; }
         int Id() const { return _id; }
 
+        void Close()
+        {
+            _closing = true;
+            if (_browser) _browser->GetHost()->CloseBrowser(true);
+        }
+
+        void SetVisible(bool visible)
+        {
+            _visible = visible;
+            if (_browser) _browser->GetHost()->WasHidden(!visible);
+        }
+
+        void SetFrameRate(int rate)
+        {
+            _frameRate = std::clamp(rate, 1, 60);
+            if (_browser) _browser->GetHost()->SetWindowlessFrameRate(_frameRate);
+        }
+
+        void Navigate(const std::string& url)
+        {
+            if (_browser) _browser->GetMainFrame()->LoadURL(url);
+            else _pendingUrl = url;
+        }
+
         // --- рисование ---
         void GetViewRect(CefRefPtr<CefBrowser>, CefRect& rect) override { rect = CefRect(0, 0, g_width, g_height); }
 
@@ -233,7 +257,19 @@ namespace
         }
 
         // --- жизнь ---
-        void OnAfterCreated(CefRefPtr<CefBrowser> browser) override { _browser = browser; }
+        void OnAfterCreated(CefRefPtr<CefBrowser> browser) override
+        {
+            _browser = browser;
+            auto host = browser->GetHost();
+            host->SetWindowlessFrameRate(_frameRate);
+            host->WasHidden(!_visible);
+            if (_closing) { host->CloseBrowser(true); return; }
+            if (!_pendingUrl.empty())
+            {
+                browser->GetMainFrame()->LoadURL(_pendingUrl);
+                _pendingUrl.clear();
+            }
+        }
 
         void OnBeforeClose(CefRefPtr<CefBrowser>) override
         {
@@ -397,6 +433,9 @@ namespace
 
         int _id;
         CefRefPtr<CefBrowser> _browser;
+        std::string _pendingUrl;
+        bool _visible = true, _closing = false;
+        int _frameRate = 60;
         Frame _frame;
         std::vector<uint8_t> _view, _popup;
         int _viewW = 0, _viewH = 0, _popupW = 0, _popupH = 0;
@@ -636,7 +675,7 @@ namespace
     {
         if (g_quitting.exchange(true)) return;
         for (auto& [id, b] : g_browsers)
-            if (b->Get()) b->Get()->GetHost()->CloseBrowser(true);
+            b->Close();
         PostUiDelayed([] { CefQuitMessageLoop(); }, 400);
     }
 
@@ -655,7 +694,11 @@ namespace
             CefBrowserSettings bs;
             bs.windowless_frame_rate = 60;
             bs.background_color = CefColorSetARGB(0, 0, 0, 0);   // прозрачный: под страницей — игра
-            CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, nullptr, g_requestContext);
+            if (!CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, nullptr, g_requestContext))
+            {
+                g_browsers.erase(id);
+                Send({ "FAIL", N(id), "-2", at(2) });
+            }
         }
         else if (t == "SIZE")
         {
@@ -683,14 +726,15 @@ namespace
             auto b = Find(at(1));
             if (!b) return;
             auto br = b->Get();
-            if (t == "DEL") { if (br) br->GetHost()->CloseBrowser(true); else g_browsers.erase(b->Id()); return; }
-            if (!br) return;   // ещё создаётся — такие команды клиент не шлёт до DOM
-            if (t == "URL") br->GetMainFrame()->LoadURL(at(2));
-            else if (t == "EXEC") br->GetMainFrame()->ExecuteJavaScript(at(2), "", 0);
+            if (t == "DEL") { b->Close(); return; }
+            if (t == "URL") { b->Navigate(at(2)); return; }
+            if (t == "SHOW") { b->SetVisible(at(2) == "1"); return; }
+            if (t == "RATE") { b->SetFrameRate(I(at(2))); return; }
+            if (!br) return;   // ввод/JS требуют уже созданный Chromium browser
+            if (t == "EXEC") br->GetMainFrame()->ExecuteJavaScript(at(2), "", 0);
             else if (t == "CALL")
                 br->GetMainFrame()->ExecuteJavaScript("window.__flovRecv&&window.__flovRecv(" + ipc::JsString(at(2)) + "," +
                                                       ipc::JsString(at(3)) + ")", "", 0);
-            else if (t == "SHOW") br->GetHost()->WasHidden(at(2) != "1");
             else if (t == "RELOAD") { if (at(2) == "1") br->ReloadIgnoreCache(); else br->Reload(); }
             else if (t == "MOUSE") b->Mouse(I(at(2)), I(at(3)), I(at(4)), I(at(5)));
             else if (t == "LEAVE") b->Leave();
