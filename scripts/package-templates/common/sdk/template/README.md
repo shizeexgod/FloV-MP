@@ -599,7 +599,7 @@ mp.trigger('panel:submit', input.value);
 | управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.frameRate = 30` (1–60 FPS), `browser.reload(ignoreCache)`, `browser.destroy()` |
 | в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
 | из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
-| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)` |
+| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)`, `browserHostLost`, `browserHostRestored` |
 | список | `mp.browsers.at(id)`, `exists(b)`, `forEach(fn)`, `toArray()`, `length` |
 | чат на HTML | `browser.markAsChat()` — встроенный чат скрывается, строки чата (и `mp.gui.chat.push`) идут в `chatAPI.push(текст)` страницы |
 | мышь и клавиатура | `mp.gui.cursor.show(freeze, show)`: курсор, клики, колесо и ввод текста уходят страницам; `freeze` — персонаж стоит |

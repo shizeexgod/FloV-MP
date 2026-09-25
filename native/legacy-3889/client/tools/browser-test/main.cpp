@@ -58,6 +58,13 @@ namespace
         return n;
     }
 
+    size_t SeenFor(int id, flov::browser::Event::Kind k)
+    {
+        size_t n = 0;
+        for (const auto& e : g_seen) if (e.id == id && e.kind == k) ++n;
+        return n;
+    }
+
     /// Пиксель BGRA из текстуры браузера.
     bool Pixel(int id, int x, int y, uint8_t out[4])
     {
@@ -238,6 +245,18 @@ mp.trigger('switched', location.href);
     flov::browser::Show(switching, false);
     flov::browser::SetFrameRate(switching, 15);
     flov::browser::Destroy(switching);
+
+    printf("Восстановление после падения:\n");
+    const size_t domBeforeCrash = SeenFor(id, flov::browser::Event::Kind::DomReady);
+    Check(flov::browser::CrashHostForTest(), "CEF host принудительно остановлен для fault-injection");
+    Check(Until([] { return Seen(flov::browser::Event::Kind::HostLost) != nullptr; }, 5000),
+          "клиент заметил падение CEF host");
+    Check(Until([] { return Seen(flov::browser::Event::Kind::HostRestored) != nullptr; }, 10000),
+          "клиент сообщил о восстановлении CEF host");
+    Check(Until([&] { return SeenFor(id, flov::browser::Event::Kind::DomReady) > domBeforeCrash; }, 20000),
+          "CEF host поднялся заново и восстановил страницу");
+    Check(Until([&] { return Pixel(id, 50, 50, px) && px[2] == 255 && px[1] == 61 && px[0] == 138; }, 5000),
+          "после перезапуска восстановилась текстура страницы");
 
     printf("Размер и жизнь:\n");
     g_w = 1024; g_h = 768;

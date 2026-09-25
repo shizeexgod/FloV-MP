@@ -996,7 +996,17 @@ globalThis.__flovTick = function (blocked) {
                     Say(level, "[страница " + std::to_string(e.id) + "] " + e.b);
                     continue;
                 }
-                if (e.kind == K::HostLost) { Say(1, "браузеры: хост закрылся, поднимаю заново"); continue; }
+                if (e.kind == K::HostLost || e.kind == K::HostRestored)
+                {
+                    const bool restored = e.kind == K::HostRestored;
+                    Say(restored ? 0 : 1, restored ? "браузеры: хост восстановлен" : "браузеры: хост закрылся, поднимаю заново");
+                    JSValue args = JS_NewArray(g_ctx);
+                    JSValue argv[2] = { JS_NewString(g_ctx, restored ? "browserHostRestored" : "browserHostLost"), args };
+                    CallGlobal("__flovDispatch", 2, argv, kCallBudgetMs);
+                    JS_FreeValue(g_ctx, argv[0]);
+                    JS_FreeValue(g_ctx, argv[1]);
+                    continue;
+                }
                 const char* kind = e.kind == K::DomReady ? "dom" : e.kind == K::LoadFailed ? "fail" : "trigger";
                 JSValue argv[4] = { JS_NewString(g_ctx, kind), JS_NewInt32(g_ctx, e.id),
                                     JS_NewString(g_ctx, e.a.c_str()), JS_NewString(g_ctx, e.b.c_str()) };

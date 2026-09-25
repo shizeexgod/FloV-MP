@@ -39,7 +39,7 @@ namespace flov::browser
 
     struct Event
     {
-        enum class Kind { DomReady, LoadFailed, Trigger, Console, HostLost } kind;
+        enum class Kind { DomReady, LoadFailed, Trigger, Console, HostLost, HostRestored } kind;
         int id = 0;
         std::string a, b;   // DomReady: url; LoadFailed: код, url; Trigger: имя, JSON; Console: уровень, текст
     };
@@ -59,4 +59,9 @@ namespace flov::browser
 
     /// Для проверки без GTA: текстура браузера (ID3D11Texture2D*), nullptr — кадра ещё нет.
     void* TextureOf(int id);
+
+#ifdef FLOVMP_BROWSER_TEST
+    /// Только для fault-injection интеграционного теста: имитирует падение CEF.
+    bool CrashHostForTest();
+#endif
 }

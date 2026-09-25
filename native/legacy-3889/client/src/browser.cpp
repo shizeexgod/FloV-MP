@@ -328,6 +328,7 @@ namespace flov::browser
             if (t == "READY")
             {
                 g_hostReady = true;
+                if (g_restarts > 1) Push(Event::Kind::HostRestored, 0);
                 std::lock_guard out(conn->m);
                 for (auto& l : g_backlog) conn->out.push_back(std::move(l));
                 g_backlog.clear();
@@ -789,4 +790,12 @@ namespace flov::browser
         auto it = g_items.find(id);
         return it == g_items.end() || it->second.lastSeq < 0 ? nullptr : it->second.tex;
     }
+
+#ifdef FLOVMP_BROWSER_TEST
+    bool CrashHostForTest()
+    {
+        std::lock_guard lock(g_mutex);
+        return g_process && TerminateProcess(g_process, 91) != FALSE;
+    }
+#endif
 }

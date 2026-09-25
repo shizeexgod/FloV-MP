@@ -161,7 +161,7 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     )
     target_compile_features(flovmp-browser-test PRIVATE cxx_std_20)
     target_include_directories(flovmp-browser-test PRIVATE src ${IMGUI_DIR})
-    target_compile_definitions(flovmp-browser-test PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
+    target_compile_definitions(flovmp-browser-test PRIVATE FLOVMP_BROWSER_TEST FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
         WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
     if (MSVC)
         target_compile_options(flovmp-browser-test PRIVATE /utf-8 /W3 /EHsc)

@@ -284,7 +284,8 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       команды и события — две трубы. API как в RAGE:MP: `mp.browsers.new`,
       `call/execute/url/active/reload/destroy/markAsChat`, рабочие
       `orderId/inputEnabled/frameRate (1–60)`, события `browserCreated/DomReady` и
-      `browserLoadingFailed(browser, code, url)`, в странице `mp.trigger` и
+      `browserLoadingFailed(browser, code, url)`, `browserHostLost/Restored`,
+      в странице `mp.trigger` и
       `mp.events`; `package://` из client_packages (UTF-8, без выхода за
       папку), `file://` запрещён. Курсор `mp.gui.cursor.show(freeze, show)`
       наконец реально работает: мышь по прозрачности стабильного кадра к нужной
@@ -297,7 +298,8 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       смене server package. Команды `url/active/frameRate/destroy` не теряются,
       даже если пришли до асинхронного создания Chromium. CEF→client ограничен
       240 событиями/с на browser и 1000 суммарно; pipe-запись обрабатывает
-      частичные WriteFile. Тесты без GTA на настоящем Chromium: браузеры 26,
+      частичные WriteFile. Fault-injection убивает CEF и подтверждает restart,
+      повторное создание страницы и текстуры. Тесты без GTA на настоящем Chromium: браузеры 31,
       движок JS 37.
     - **26c — серверный JS как в RAGE:MP** (`mp.*` на js-module alt:V) и
       скрипт переноса сервера с RAGE:MP (объединяется с пунктом 17).
