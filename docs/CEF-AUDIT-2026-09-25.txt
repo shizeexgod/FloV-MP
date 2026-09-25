@@ -17,10 +17,14 @@ FloV:MP — АУДИТ CEF / mp.browsers ДЛЯ ПЕРЕДАЧИ CLAUDE CODE
   - browser integration: 22/22;
   - native client script: 37/37.
 
-P0-5 закрыт частично: общий постоянный cache/profile удалён, cookies и
-localStorage теперь in-memory и request context пересоздаётся при смене server
-package. Штатный Chromium sandbox всё ещё выключен, поэтому остаётся открытой
-задачей вместе с P1-2, P1-3, P1-4 и обязательным живым GTA Legacy b3889 E2E.
+P0-5 закрыт: общий постоянный cache/profile удалён, cookies и localStorage
+теперь in-memory и request context пересоздаётся при смене server package.
+Штатный Chromium sandbox включён: cef_sandbox.lib связан статически, sandbox
+info передаётся browser и всем subprocess, no_sandbox=false. У каждой жизни
+host отдельный root_cache_path, поэтому два клиента и быстрый restart не
+конфликтуют singleton-lock CEF 120+. Параллельный запуск двух integration-
+наборов проходит 31/31 и 37/37. Открыты P1-2, P1-3, P1-4 и обязательный живой
+GTA Legacy b3889 E2E.
 Дополнительно исправлена гонка lifecycle: URL/visibility/frame-rate/destroy,
 отправленные сразу после new(), больше не теряются до OnAfterCreated; ранний
 destroy не оставляет осиротевший Chromium browser. Добавлен browser.frameRate

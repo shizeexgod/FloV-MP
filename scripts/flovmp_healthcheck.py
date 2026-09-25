@@ -150,6 +150,28 @@ def check_security_regressions(rep):
                     hits.append("{}:{}".format(p.relative_to(ROOT), i))
         rep.add(FAIL if hits else PASS, why, "; ".join(hits[:3]) if hits else "чисто")
 
+    # CEF отображает недоверенный HTML/JS из пакета сервера. Однажды хост был
+    # собран с no_sandbox=true; обычные browser-тесты при этом всё равно
+    # проходили, поэтому конфигурацию границы проверяем отдельно.
+    cef_main = ROOT / "native/legacy-3889/client/cef-host/main.cpp"
+    cef_cmake = ROOT / "native/legacy-3889/client/CMakeLists.txt"
+    if cef_main.exists() and cef_cmake.exists():
+        cef_src = cef_main.read_text(encoding="utf-8", errors="ignore")
+        cef_build = cef_cmake.read_text(encoding="utf-8", errors="ignore")
+        sandboxed = (
+            'include/cef_sandbox_win.h' in cef_src
+            and "CefScopedSandboxInfo" in cef_src
+            and cef_src.count("sandbox.sandbox_info()") >= 2
+            and "settings.no_sandbox = false" in cef_src
+            and "settings.no_sandbox = true" not in cef_src
+            and "cef_sandbox.lib" in cef_build
+            and "CEF_USE_SANDBOX" in cef_build
+        )
+        rep.add(PASS if sandboxed else FAIL,
+                "Chromium CEF запускается со штатным sandbox",
+                "sandbox info передаётся browser и subprocess" if sandboxed else
+                "нужны CefScopedSandboxInfo, no_sandbox=false и cef_sandbox.lib")
+
     # События от клиента — то, что может прислать поддельный клиент. Каждый
     # обработчик обязан либо проверять права на сервере, либо быть в списке
     # заведомо общедоступных. Проверка появилась после реального случая:

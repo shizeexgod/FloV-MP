@@ -26,6 +26,7 @@
 #include "include/cef_client.h"
 #include "include/cef_parser.h"
 #include "include/cef_request_context.h"
+#include "include/cef_sandbox_win.h"
 #include "include/cef_scheme.h"
 #include "include/cef_task.h"
 #include "include/cef_v8.h"
@@ -281,6 +282,7 @@ namespace
         {
             _browser = nullptr;
             g_browsers.erase(_id);
+            if (g_quitting && g_browsers.empty()) CefQuitMessageLoop();
         }
 
         bool OnBeforePopup(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, int, const CefString&, const CefString&,
@@ -680,9 +682,12 @@ namespace
     void QuitAll()
     {
         if (g_quitting.exchange(true)) return;
+        if (g_browsers.empty()) { CefQuitMessageLoop(); return; }
         for (auto& [id, b] : g_browsers)
             b->Close();
-        PostUiDelayed([] { CefQuitMessageLoop(); }, 400);
+        // OnBeforeClose завершит цикл сразу после последней страницы. Это
+        // только страховка от зависшего renderer.
+        PostUiDelayed([] { CefQuitMessageLoop(); }, 3000);
     }
 
     void Handle(const std::vector<std::string>& p)
@@ -790,6 +795,35 @@ namespace
         return n ? std::wstring(buf, n) : L".";
     }
 
+    /// Удалить incognito-root процессов, которых уже нет. Активные параллельные
+    /// клиенты не трогаем; при отказе OpenProcess также выбираем безопасный
+    /// вариант и оставляем каталог.
+    void CleanupDeadCacheRoots(const fs::path& base)
+    {
+        std::error_code ec;
+        for (const auto& entry : fs::directory_iterator(base, ec))
+        {
+            if (ec || !entry.is_directory(ec)) continue;
+            const std::wstring name = entry.path().filename().wstring();
+            const size_t dash = name.find(L'-');
+            if (dash == std::wstring::npos) continue;
+            const std::wstring pidText = name.substr(0, dash);
+            wchar_t* end = nullptr;
+            const unsigned long pid = wcstoul(pidText.c_str(), &end, 10);
+            if (!pid || !end || *end) continue;
+            HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)pid);
+            bool dead = false;
+            if (process)
+            {
+                dead = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
+                CloseHandle(process);
+            }
+            else if (GetLastError() == ERROR_INVALID_PARAMETER) dead = true;
+            if (dead) fs::remove_all(entry.path(), ec);
+            ec.clear();
+        }
+    }
+
     /// Журнал запуска хоста: почему он не поднялся, видно без отладчика.
     int Fail(int code, const std::string& why)
     {
@@ -815,8 +849,13 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
 {
     CefMainArgs args(instance);
     CefRefPtr<App> app = new App();
+    // Sandbox info обязан создаваться именно внутри exe и жить до завершения
+    // CefInitialize/CefExecuteProcess. Тот же flovmp-cef.exe обслуживает все
+    // Chromium subprocess, поэтому отдельный subprocess binary не нужен.
+    CefScopedSandboxInfo sandbox;
+    if (!sandbox.sandbox_info()) return Fail(1, "не создан Chromium sandbox");
     // Подпроцессы Chromium (--type=…) уходят в свой цикл здесь.
-    const int code = CefExecuteProcess(args, app.get(), nullptr);
+    const int code = CefExecuteProcess(args, app.get(), sandbox.sandbox_info());
     if (code >= 0) return code;
 
     const std::wstring cmd = GetCommandLineW();
@@ -836,17 +875,31 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
     HANDLE parent = OpenProcess(SYNCHRONIZE, FALSE, parentPid);
     if (!parent) return Fail(4, "процесс игры не найден");
 
+    const std::wstring cacheBase = data + L"\\cef-cache";
+    if (!CreateDirectoryW(cacheBase.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return Fail(5, "не создан корневой каталог Chromium");
+    CleanupDeadCacheRoots(cacheBase);
+    // CEF 120+ ставит singleton-lock на root_cache_path. Один общий каталог
+    // не позволяет одновременно запустить два клиента и мешает быстрому
+    // recovery, пока старый host ещё завершается. Профиль у нас incognito,
+    // поэтому каждой жизни host нужен отдельный installation root.
+    const std::wstring cacheRoot = cacheBase + L"\\" + std::to_wstring(GetCurrentProcessId()) + L"-" +
+                                   std::to_wstring(GetTickCount64());
+    if (!CreateDirectoryW(cacheRoot.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return Fail(5, "не создан изолированный каталог Chromium");
+
     CefSettings settings;
-    settings.no_sandbox = true;
+    settings.no_sandbox = false;
     settings.windowless_rendering_enabled = true;
     settings.multi_threaded_message_loop = false;
     settings.log_severity = LOGSEVERITY_WARNING;
     CefString(&settings.log_file) = data + L"\\logs\\cef.log";
-    CefString(&settings.root_cache_path) = data + L"\\cef-cache";
+    CefString(&settings.root_cache_path) = cacheRoot;
     CefString(&settings.accept_language_list) = "ru-RU,ru,en-US,en";
     settings.persist_session_cookies = false;
 
-    if (!CefInitialize(args, settings, app.get(), nullptr)) return Fail(5, "Chromium не запустился — см. cef.log");
+    if (!CefInitialize(args, settings, app.get(), sandbox.sandbox_info()))
+        return Fail(6, "Chromium sandbox не запустился — см. cef.log");
 
     std::thread([parent] {
         WaitForSingleObject(parent, INFINITE);   // игра закрылась — хост за ней
@@ -857,6 +910,11 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
     std::thread(ReadPipe).detach();
 
     CefRunMessageLoop();
-    if (g_browsers.empty()) CefShutdown();
+    if (g_browsers.empty())
+    {
+        CefShutdown();
+        std::error_code ignored;
+        fs::remove_all(cacheRoot, ignored);
+    }
     ExitProcess(0);
 }

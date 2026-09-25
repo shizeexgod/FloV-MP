@@ -227,7 +227,9 @@ namespace flov::browser
                 {
                     std::unique_lock lock(conn->m);
                     conn->cv.wait(lock, [&] { return conn->stop || !conn->out.empty(); });
-                    if (conn->stop) return;
+                    // При штатном Shutdown очередь содержит последний QUIT.
+                    // Сначала дописываем его, и только затем закрываем pipe.
+                    if (conn->stop && conn->out.empty()) return;
                     line = std::move(conn->out.front());
                     conn->out.pop_front();
                 }
@@ -465,19 +467,36 @@ namespace flov::browser
     void Shutdown()
     {
         DestroyAll();
-        std::lock_guard lock(g_mutex);
-        if (auto conn = g_conn)
+        HANDLE process = nullptr;
+        std::shared_ptr<Conn> conn;
         {
-            std::lock_guard l(conn->m);
-            conn->stop = true;
-            conn->cv.notify_all();
+            std::lock_guard lock(g_mutex);
+            conn = g_conn;
+            if (conn)
+            {
+                std::lock_guard l(conn->m);
+                // DEL для отдельных страниц уже не нужен: host закроет всё.
+                conn->out.clear();
+                conn->out.push_back(ipc::Format({ "QUIT" }));
+                conn->stop = true;
+                conn->cv.notify_all();
+            }
+            g_conn.reset();
+            process = g_process;
+            g_process = nullptr;
+            g_hostUp = false;
+            g_hostReady = false;
+            g_backlog.clear();
+            g_restarts = 0;
         }
-        g_conn.reset();
-        if (g_process) { TerminateProcess(g_process, 0); CloseHandle(g_process); g_process = nullptr; }
-        g_hostUp = false;
-        g_hostReady = false;
-        g_backlog.clear();
-        g_restarts = 0;
+        if (process)
+        {
+            // Даём CEF закрыть renderer и удалить временный профиль. Если
+            // Chromium завис, игра всё равно не ждёт его бесконечно.
+            if (WaitForSingleObject(process, 2000) == WAIT_TIMEOUT)
+                TerminateProcess(process, 0);
+            CloseHandle(process);
+        }
     }
 
     void SetUrl(int id, const std::string& url)

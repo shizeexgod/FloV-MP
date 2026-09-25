@@ -295,7 +295,10 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       Bridge доступен только главному frame, не iframe; shared-memory кадр
       сначала копируется и проверяется, поэтому CEF не может отдать в GPU смесь
       двух кадров. Cookies/localStorage живут только в памяти и изолируются при
-      смене server package. Команды `url/active/frameRate/destroy` не теряются,
+      смене server package. Chromium работает со штатным Windows sandbox;
+      отдельный incognito root каждой жизни host исключает конфликт двух
+      клиентов и быстрого восстановления через singleton-lock CEF. Команды
+      `url/active/frameRate/destroy` не теряются,
       даже если пришли до асинхронного создания Chromium. CEF→client ограничен
       240 событиями/с на browser и 1000 суммарно; pipe-запись обрабатывает
       частичные WriteFile. Fault-injection убивает CEF и подтверждает restart,

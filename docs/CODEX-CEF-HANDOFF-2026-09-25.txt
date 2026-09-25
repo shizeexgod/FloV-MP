@@ -1,12 +1,13 @@
 FloV:MP — АКТУАЛЬНЫЙ ОТЧЁТ CODEX ДЛЯ CLAUDE CODE
 Дата: 25.09.2026
 Область аудита: клиент GTA Legacy b3889, CEF/mp.browsers, HUD и браузерный ввод
-Снимок: local HEAD cc22b7e, origin/master ebe88c4
+Снимок до текущей правки: local HEAD ea8e3d4, origin/master ebe88c4
 
 ВАЖНО ПЕРЕД НАЧАЛОМ
 ===================
 
-Шесть последних CEF-коммитов находятся ЛОКАЛЬНО и ещё не отправлены в GitHub:
+Цепочка CEF-коммитов от 262635b до текущего HEAD находится ЛОКАЛЬНО и ещё не
+отправлена в GitHub. Базовые шесть коммитов:
 
   cc22b7e test(cef): восстановление HUD после падения host
   a769b33 fix(cef): защита игрового тика от перегрузки UI
@@ -84,7 +85,7 @@ origin/master недостаточно.
   Native client script:     37/37
   Server tests:             643/643
   Launcher tests:           96/96
-  Общий healthcheck --build: 69/69
+  Общий healthcheck --build: 70/70
 
 Release-сборки flovmp-client, flovmp-cef, flovmp-browser-test и
 flovmp-script-test проходят. Это доказывает native/Chromium-контракт вне GTA,
@@ -94,29 +95,20 @@ flovmp-script-test проходят. Это доказывает native/Chromium
 ЧТО НАДО ЧИНИТЬ СЕЙЧАС — В ПРАВИЛЬНОМ ПОРЯДКЕ
 =============================================
 
-[P0-1] Включить штатный Chromium sandbox
+[ЗАКРЫТО 26.09] Штатный Chromium sandbox
 -----------------------------------------
 
-Фактическая проблема:
-  native/legacy-3889/client/cef-host/main.cpp всё ещё содержит
-  settings.no_sandbox = true, а CefExecuteProcess/CefInitialize получают
-  nullptr вместо sandbox_info. CMake не линкует Release/cef_sandbox.lib.
-
-Что сделать:
-  - подключить include/cef_sandbox_win.h;
-  - создать CefScopedSandboxInfo в wWinMain;
-  - передать sandbox.sandbox_info() в CefExecuteProcess и CefInitialize;
-  - убрать no_sandbox=true;
-  - добавить cef_sandbox.lib и требуемые Windows system libs в CMake;
-  - не добавлять cef_sandbox.lib в runtime-пакет: это статическая библиотека;
-  - прогнать 31 Chromium-тест и реальный запуск flovmp-cef.
-
-Критерий:
-  flovmp-cef и subprocess запускаются без --no-sandbox, все 31/31 проходят,
-  crash recovery также остаётся зелёным. Нельзя молча вернуть no_sandbox.
+Включён cef_sandbox.lib, CefScopedSandboxInfo передаётся CefExecuteProcess и
+CefInitialize, no_sandbox=false. Healthcheck теперь отдельно запрещает возврат
+несандбоксированной сборки. Параллельный прогон выявил второй дефект: общий
+root_cache_path блокировал второй host singleton-lock CEF 120+. Теперь у каждой
+жизни host отдельный incognito root; два тестовых клиента одновременно проходят
+31/31 и 37/37, включая crash recovery. Штатный Shutdown сначала просит CEF
+закрыться корректно и только при зависании завершает его принудительно; следующий
+старт удаляет incognito-root уже умершего процесса.
 
 
-[P0-2] Закрыть origin и network policy
+[P0-1] Закрыть origin и network policy
 --------------------------------------
 
 Фактическая проблема:
@@ -143,7 +135,7 @@ flovmp-script-test проходят. Это доказывает native/Chromium
   ни fetch/img/script/iframe.
 
 
-[P0-3] Провести живой GTA b3889 E2E
+[P0-2] Провести живой GTA b3889 E2E
 -----------------------------------
 
 Это обязательный release gate, который автотестами закрыть нельзя:
@@ -162,7 +154,7 @@ flovmp-script-test проходят. Это доказывает native/Chromium
   чёрного экрана, мерцания, потери ввода и заметной деградации frametime.
 
 
-[P0-4] Выпустить CEF-правки в пакет, а не оставить только в source tree
+[P0-3] Выпустить CEF-правки в пакет, а не оставить только в source tree
 ------------------------------------------------------------------------
 
 Текущие шесть коммитов не находятся в origin/master и не доказано, что именно
@@ -249,13 +241,12 @@ origin policy, упаковки и GTA E2E — примерно 80–85%. В roa
 ПОРЯДОК ДЛЯ CLAUDE CODE
 =======================
 
-1. Сверить HEAD cc22b7e и не потерять шесть локальных CEF-коммитов.
-2. Включить sandbox и добиться прежних 31/31, без fallback на no_sandbox.
-3. Реализовать подписанный origin/network allowlist и security-тесты.
-4. Добавить caps/метрики; bounds — после фиксации API-контракта.
-5. Повторить Release build, browser tests, script tests и общий healthcheck.
-6. Собрать чистый installer/release из точного commit.
-7. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.
+1. Сверить HEAD и не потерять локальные CEF-коммиты вместе с sandbox-правкой.
+2. Реализовать подписанный origin/network allowlist и security-тесты.
+3. Добавить caps/метрики; bounds — после фиксации API-контракта.
+4. Повторить Release build, browser tests, script tests и общий healthcheck.
+5. Собрать чистый installer/release из точного commit.
+6. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.
 
 
 ЧЕГО НЕ НАДО ДЕЛАТЬ
@@ -268,4 +259,3 @@ origin policy, упаковки и GTA E2E — примерно 80–85%. В roa
   - не откатывать staging/seqlock, rate limits и crash recovery;
   - не трогать параллельные web/docs-файлы Claude;
   - не push без отдельной команды владельца.
-

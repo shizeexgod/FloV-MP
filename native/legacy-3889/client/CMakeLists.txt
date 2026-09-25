@@ -88,12 +88,21 @@ if (WIN32 AND EXISTS "${FLOVMP_CEF_ROOT}/include/cef_app.h" AND EXISTS "${FLOVMP
     add_executable(flovmp-cef WIN32 cef-host/main.cpp cef-host/flovmp-cef.manifest res/client.rc)
     target_compile_features(flovmp-cef PRIVATE cxx_std_20)
     target_include_directories(flovmp-cef PRIVATE "${FLOVMP_CEF_ROOT}" src)
-    target_compile_definitions(flovmp-cef PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+    target_compile_definitions(flovmp-cef PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
+        CEF_USE_SANDBOX PSAPI_VERSION=1)
     if (MSVC)
         target_compile_options(flovmp-cef PRIVATE /utf-8 /W3 /EHsc)
         set_property(TARGET flovmp-cef PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
-    target_link_libraries(flovmp-cef PRIVATE "${FLOVMP_CEF_WRAPPER}" "${FLOVMP_CEF_ROOT}/Release/libcef.lib")
+    target_link_libraries(flovmp-cef PRIVATE
+        "${FLOVMP_CEF_WRAPPER}"
+        "${FLOVMP_CEF_ROOT}/Release/libcef.lib"
+        "${FLOVMP_CEF_ROOT}/Release/cef_sandbox.lib"
+        # CEF 131: зависимости статической Windows sandbox library.
+        advapi32 dbghelp delayimp ntdll oleaut32 powrprof propsys psapi
+        setupapi shell32 shcore userenv version wbemuuid windowsapp winmm
+        # Базовые Windows-зависимости CEF.
+        comctl32 gdi32 rpcrt4 shlwapi ws2_32)
     set(FLOVMP_CEF_OUT "${CMAKE_BINARY_DIR}/bin/Release/cef")
     set_target_properties(flovmp-cef PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${FLOVMP_CEF_OUT}")
     # Рядом с хостом — всё, что нужно Chromium: библиотеки и ресурсы.
