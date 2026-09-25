@@ -131,6 +131,7 @@ document.getElementById('btn').addEventListener('click', () => mp.trigger('click
 document.getElementById('name').addEventListener('input', (e) => mp.trigger('typed', e.target.value));
 fetch('package://../secret.txt').then(r => mp.trigger('escape', r.ok ? 'open' : 'closed'), () => mp.trigger('escape', 'closed'));
 fetch('package://ui/style.css').then(r => r.text()).then(t => mp.trigger('fetched', t.includes('255,61,138')));
+localStorage.setItem('serverSecret', 'first-server');
 mp.trigger('loaded', document.title, typeof window.__flovTrigger);
 )";
     std::ofstream(root + L"\\ui\\frame.html") << R"(<!doctype html><meta charset="utf-8"><script>
@@ -230,6 +231,20 @@ document.addEventListener('mousemove', () => mp.trigger('topMoved'));
           "второй браузер работает рядом с первым");
     flov::browser::DestroyAll();
     Check(!flov::browser::AnyVisible(), "все браузеры закрыты");
+
+    printf("Изоляция серверов:\n");
+    const std::wstring root2 = std::wstring(tmp) + L"flovmp-browser-test-second";
+    CreateDirectoryW(root2.c_str(), nullptr);
+    CreateDirectoryW((root2 + L"\\ui").c_str(), nullptr);
+    std::ofstream(root2 + L"\\ui\\index.html") << R"(<!doctype html><meta charset="utf-8"><script>
+mp.trigger('storage', localStorage.getItem('serverSecret'));
+</script>)";
+    flov::browser::SetPackageRoot(root2);
+    const int isolated = flov::browser::Create("package://ui/index.html");
+    Check(isolated > 0 && Until([] { return Seen(flov::browser::Event::Kind::Trigger, "storage") != nullptr; }, 10000) &&
+          Seen(flov::browser::Event::Kind::Trigger, "storage")->b == "[null]",
+          "новый server package не наследует localStorage предыдущего сервера");
+    flov::browser::DestroyAll();
 
     printf("\nИтог: пройдено %d, ошибок %d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

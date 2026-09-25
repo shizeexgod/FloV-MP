@@ -17,7 +17,11 @@ FloV:MP — АУДИТ CEF / mp.browsers ДЛЯ ПЕРЕДАЧИ CLAUDE CODE
   - browser integration: 22/22;
   - native client script: 37/37.
 
-Открыты P0-5, P1-2, P1-3, P1-4 и обязательный живой GTA Legacy b3889 E2E.
+P0-5 закрыт частично: общий постоянный cache/profile удалён, cookies и
+localStorage теперь in-memory и request context пересоздаётся при смене server
+package. Штатный Chromium sandbox всё ещё выключен, поэтому остаётся открытой
+задачей вместе с P1-2, P1-3, P1-4 и обязательным живым GTA Legacy b3889 E2E.
+Browser integration после изоляции: 23/23; native client script: 37/37.
 Разделы ниже сохранены как исходная фиксация причин и критериев исправления.
 
 ЦЕЛЬ

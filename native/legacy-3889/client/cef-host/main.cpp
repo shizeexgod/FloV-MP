@@ -25,6 +25,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_parser.h"
+#include "include/cef_request_context.h"
 #include "include/cef_scheme.h"
 #include "include/cef_task.h"
 #include "include/cef_v8.h"
@@ -498,6 +499,21 @@ namespace
         IMPLEMENT_REFCOUNTING(PackageScheme);
     };
 
+    CefRefPtr<CefRequestContext> g_requestContext;
+
+    CefRefPtr<CefRequestContext> NewRequestContext()
+    {
+        // Пустой cache_path = incognito: cookies/localStorage одного сервера
+        // доступны его браузерам, но не остаются на диске. При смене ROOT
+        // создаётся новый контекст, поэтому соседний сервер не наследует их.
+        CefRequestContextSettings settings;
+        CefString(&settings.accept_language_list) = "ru-RU,ru,en-US,en";
+        settings.persist_session_cookies = false;
+        auto context = CefRequestContext::CreateContext(settings, nullptr);
+        if (context) context->RegisterSchemeHandlerFactory("package", "", new PackageScheme());
+        return context;
+    }
+
     // --- мост страницы в рендерере ------------------------------------------------------
 
     // window.mp в странице — как в RAGE:MP: mp.trigger(имя, …) — событие в
@@ -593,6 +609,7 @@ namespace
         void OnContextInitialized() override
         {
             CefRegisterSchemeHandlerFactory("package", "", new PackageScheme());
+            g_requestContext = NewRequestContext();
             Send({ "READY" });
         }
 
@@ -638,7 +655,7 @@ namespace
             CefBrowserSettings bs;
             bs.windowless_frame_rate = 60;
             bs.background_color = CefColorSetARGB(0, 0, 0, 0);   // прозрачный: под страницей — игра
-            CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, nullptr, nullptr);
+            CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, nullptr, g_requestContext);
         }
         else if (t == "SIZE")
         {
@@ -650,9 +667,15 @@ namespace
         }
         else if (t == "ROOT")
         {
-            std::lock_guard lock(g_rootMutex);
-            g_root = CefString(at(1)).ToWString();
-            while (!g_root.empty() && (g_root.back() == L'\\' || g_root.back() == L'/')) g_root.pop_back();
+            std::wstring next = CefString(at(1)).ToWString();
+            while (!next.empty() && (next.back() == L'\\' || next.back() == L'/')) next.pop_back();
+            bool changed = false;
+            {
+                std::lock_guard lock(g_rootMutex);
+                changed = next != g_root;
+                g_root = std::move(next);
+            }
+            if (changed) g_requestContext = NewRequestContext();
         }
         else if (t == "QUIT") QuitAll();
         else
@@ -770,9 +793,8 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
     settings.log_severity = LOGSEVERITY_WARNING;
     CefString(&settings.log_file) = data + L"\\logs\\cef.log";
     CefString(&settings.root_cache_path) = data + L"\\cef-cache";
-    CefString(&settings.cache_path) = data + L"\\cef-cache\\profile";
     CefString(&settings.accept_language_list) = "ru-RU,ru,en-US,en";
-    settings.persist_session_cookies = true;
+    settings.persist_session_cookies = false;
 
     if (!CefInitialize(args, settings, app.get(), nullptr)) return Fail(5, "Chromium не запустился — см. cef.log");
 
