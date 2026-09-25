@@ -2324,7 +2324,14 @@ namespace flov::game
             const std::string url = !source.empty() && source[0] == ':'
                 ? "http://" + g_host + source + "/mods"
                 : source;
-            if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0)
+            // Адрес присылает сервер, а протокол разэкранирует перевод строки. Без
+            // этой проверки сервер мог бы дописать в mods-sources.txt строку для
+            // чужого адреса и подсунуть свои моды игроку, зашедшему на другой
+            // сервер. Пробелы и управляющие символы в адресе не нужны; «=» в
+            // параметрах ссылки (?v=2) безопасен — строка файла делится по первому.
+            const bool cleanUrl = url.size() <= 512 &&
+                std::none_of(url.begin(), url.end(), [](unsigned char c) { return c <= 0x20 || c == 0x7f; });
+            if (cleanUrl && (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0))
             {
                 // Ключ — адрес игры (порт шлюза − 10), как его передаёт play.cmd.
                 const std::string key = g_host + ":" + std::to_string(g_port - 10);

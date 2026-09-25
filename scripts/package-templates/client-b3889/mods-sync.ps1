@@ -181,10 +181,12 @@ if ($drive.AvailableFreeSpace -lt ($need * 1.05 + 200MB)) {
 }
 
 # --- загрузка с докачкой ----------------------------------------------------------
-function Get-File([string]$url, [string]$out, [string]$etag) {
+function Get-File([string]$url, [string]$out, [string]$etag, [long]$size) {
     $part = "$out.part"
     for ($try = 1; $try -le 8; $try++) {
         $haveBytes = if (Test-Path -LiteralPath $part) { (Get-Item -LiteralPath $part).Length } else { 0 }
+        # Кусок больше заявленного — мусор от прошлой попытки: начинаем заново.
+        if ($haveBytes -gt $size) { Remove-Item -LiteralPath $part -Force; $haveBytes = 0 }
         $resp = $null
         try {
             $req = [Net.HttpWebRequest]::Create($url)
@@ -200,8 +202,21 @@ function Get-File([string]$url, [string]$out, [string]$etag) {
             $mode = if ($append) { [IO.FileMode]::Append } else { [IO.FileMode]::Create }
             $before = if ($append) { $haveBytes } else { 0 }
             $expected = $resp.ContentLength
+            # Место на диске проверено по размеру из списка, поэтому больше него
+            # не принимаем: сервер, который шлёт бесконечный поток, иначе
+            # заполнил бы диск игрока до того, как сработает сверка SHA-256.
+            $limit = $size - $before
             $fs = New-Object IO.FileStream($part, $mode, [IO.FileAccess]::Write)
-            try { $resp.GetResponseStream().CopyTo($fs) } finally { $fs.Dispose(); $resp.Close() }
+            try {
+                $in = $resp.GetResponseStream()
+                $buf = New-Object byte[] 262144
+                $written = [long]0
+                while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+                    $written += $n
+                    if ($written -gt $limit) { throw 'сервер ответил больше заявленного размера' }
+                    $fs.Write($buf, 0, $n)
+                }
+            } finally { $fs.Dispose(); $resp.Close() }
             if ($expected -ge 0 -and ((Get-Item -LiteralPath $part).Length - $before) -lt $expected) { throw 'поток закрылся раньше конца файла' }
             return
         }
@@ -222,7 +237,7 @@ foreach ($f in $todo) {
     New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
     $url = $Source + '/files/' + (($f.path.Split('/') | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/')
     Say ("[{0}/{1}] {2} ({3:0.#} МБ)" -f $done, $todo.Count, $f.path, ($f.size / 1MB))
-    try { Get-File $url $path $f.sha256.ToLowerInvariant() }
+    try { Get-File $url $path $f.sha256.ToLowerInvariant() ([long]$f.size) }
     catch { Say "Не скачан $($f.path): $_" Red; Finish 9 }
     $got = Get-FileSha "$path.part"
     if ($got -ne $f.sha256.ToLowerInvariant()) {
@@ -240,6 +255,9 @@ foreach ($f in $todo) {
 # Файлы прошлого набора, которых в новом нет, — убрать (только наши, по отметке).
 $wanted = @{}; foreach ($f in $files) { $wanted[$f.path] = $true }
 foreach ($old in $known.Keys) {
+    # Отметка лежит в папке mods, писать туда может кто угодно: путь из неё
+    # проверяем теми же правилами, иначе «..\..\» увело бы удаление за mods.
+    if (-not (Test-ModPath $old)) { Say "  пропущен подозрительный путь в отметке: $old" Yellow; continue }
     if (-not $wanted[$old]) {
         $p = Join-Path $ModsDir ($old.Replace('/', [IO.Path]::DirectorySeparatorChar))
         if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force; Say "  убран устаревший $old" }
