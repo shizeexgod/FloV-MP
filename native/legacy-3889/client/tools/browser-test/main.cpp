@@ -166,6 +166,15 @@ mp.trigger('switched', location.href);
     Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "escape") != nullptr; }, 5000) &&
           Seen(flov::browser::Event::Kind::Trigger, "escape")->b == "[\"closed\"]", "package:// не выходит за папку пакета");
 
+    const size_t spamBefore = SeenCount(flov::browser::Event::Kind::Trigger, "spam");
+    flov::browser::Execute(id, "for(let i=0;i<300;i++)mp.trigger('spam',i)");
+    Check(Until([] { for (const auto& e : g_seen) if (e.kind == flov::browser::Event::Kind::Console && e.b.find("лимит 240") != std::string::npos) return true; return false; }, 5000),
+          "зацикленная страница получает предупреждение о лимите mp.trigger");
+    const size_t spamAccepted = SeenCount(flov::browser::Event::Kind::Trigger, "spam") - spamBefore;
+    Check(spamAccepted > 0 && spamAccepted <= 240,
+          "mp.trigger ограничен без зависания игрового тика (принято " + std::to_string(spamAccepted) + ")");
+    Sleep(1100); Pump();   // новое окно лимита для следующих проверок страницы
+
     printf("Кадр:\n");
     uint8_t px[4] = {};
     const bool color = Until([&] { return Pixel(id, 50, 50, px) && px[2] == 255 && px[1] == 61 && px[0] == 138; }, 5000);

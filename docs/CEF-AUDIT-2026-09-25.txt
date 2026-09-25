@@ -26,6 +26,11 @@ package. Штатный Chromium sandbox всё ещё выключен, поэ�
 destroy не оставляет осиротевший Chromium browser. Добавлен browser.frameRate
 (1–60), скрытые browser не копируют кадры в GTA. Browser integration: 24/24;
 native client script: 37/37.
+
+CEF→client bridge защищён от runaway-страницы: 240 mp.trigger/с на browser,
+1000/с суммарно, с предупреждением вместо заморозки игрового тика. Обе стороны
+named pipe теперь дописывают весь буфер при частичном WriteFile. Browser
+integration после этих регрессий: 26/26.
 Разделы ниже сохранены как исходная фиксация причин и критериев исправления.
 
 ЦЕЛЬ

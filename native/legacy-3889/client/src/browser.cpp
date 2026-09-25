@@ -30,6 +30,9 @@ namespace flov::browser
             bool inputEnabled = true;
             int order = 0;
             int frameRate = 60;
+            ULONGLONG triggerWindow = 0;
+            int triggerCount = 0;
+            bool triggerWarned = false;
             // Кадры
             std::string shmName;
             HANDLE map = nullptr;
@@ -51,6 +54,8 @@ namespace flov::browser
         std::mutex g_mutex;
         std::map<int, Item> g_items;          // порядок id — порядок наложения
         int g_nextId = 0;
+        ULONGLONG g_triggerWindow = 0;
+        int g_triggerCount = 0;
         std::wstring g_hostExe;
         std::wstring g_root;
         std::deque<Event> g_events;
@@ -132,7 +137,7 @@ namespace flov::browser
 
         void Push(Event::Kind kind, int id, std::string a = {}, std::string b = {})
         {
-            if (g_events.size() > 512) g_events.pop_front();
+            if (g_events.size() >= 512) g_events.pop_front();
             g_events.push_back({ kind, id, std::move(a), std::move(b) });
         }
 
@@ -227,8 +232,14 @@ namespace flov::browser
                     conn->out.pop_front();
                 }
                 line += '\n';
-                DWORD written = 0;
-                if (!WriteFile(out, line.data(), (DWORD)line.size(), &written, nullptr)) return;
+                size_t offset = 0;
+                while (offset < line.size())
+                {
+                    DWORD written = 0;
+                    const DWORD left = (DWORD)std::min<size_t>(line.size() - offset, MAXDWORD);
+                    if (!WriteFile(out, line.data() + offset, left, &written, nullptr) || written == 0) return;
+                    offset += written;
+                }
             }
         }
 
@@ -334,7 +345,35 @@ namespace flov::browser
             }
             else if (t == "DOM") Push(Event::Kind::DomReady, id, at(2));
             else if (t == "FAIL") Push(Event::Kind::LoadFailed, id, at(2), at(3));
-            else if (t == "TRIG") Push(Event::Kind::Trigger, id, at(2), at(3));
+            else if (t == "TRIG")
+            {
+                // Ошибочный requestAnimationFrame/цикл в странице не должен
+                // забить игровой тик тысячами CEF → JS callbacks.
+                const ULONGLONG now = GetTickCount64();
+                if (!it->second.triggerWindow || now - it->second.triggerWindow >= 1000)
+                {
+                    it->second.triggerWindow = now;
+                    it->second.triggerCount = 0;
+                    it->second.triggerWarned = false;
+                }
+                if (!g_triggerWindow || now - g_triggerWindow >= 1000)
+                {
+                    g_triggerWindow = now;
+                    g_triggerCount = 0;
+                }
+                if (it->second.triggerCount >= 240 || g_triggerCount >= 1000)
+                {
+                    if (!it->second.triggerWarned)
+                    {
+                        it->second.triggerWarned = true;
+                        Push(Event::Kind::Console, id, "1", "mp.trigger: лимит 240 событий/с на browser; лишние отброшены");
+                    }
+                    return;
+                }
+                ++it->second.triggerCount;
+                ++g_triggerCount;
+                Push(Event::Kind::Trigger, id, at(2), at(3));
+            }
             else if (t == "LOG") Push(Event::Kind::Console, id, at(2), at(3));
         }
 

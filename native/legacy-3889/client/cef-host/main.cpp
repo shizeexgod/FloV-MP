@@ -50,8 +50,14 @@ namespace
         if (g_pipe == INVALID_HANDLE_VALUE) return;
         const std::string line = ipc::Format(fields) + "\n";
         std::lock_guard lock(g_sendMutex);
-        DWORD written = 0;
-        WriteFile(g_pipe, line.data(), (DWORD)line.size(), &written, nullptr);
+        size_t offset = 0;
+        while (offset < line.size())
+        {
+            DWORD written = 0;
+            const DWORD left = (DWORD)std::min<size_t>(line.size() - offset, MAXDWORD);
+            if (!WriteFile(g_pipe, line.data() + offset, left, &written, nullptr) || written == 0) return;
+            offset += written;
+        }
     }
 
     std::string N(long long v) { return std::to_string(v); }
