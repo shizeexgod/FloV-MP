@@ -5,6 +5,7 @@
 #include "settings.h"
 #include "ui.h"
 #include "http.h"
+#include "script.h"
 #include "crash.h"
 
 #include <mutex>
@@ -1549,6 +1550,7 @@ namespace flov::game
 
         void ResetSession()
         {
+            script::Reset();   // клиентский код сервера — только пока мы на нём
             world::Clear();
             world::ResetInteriors();   // карта — как до сервера
             ui::CloseMenu();
@@ -1753,6 +1755,7 @@ namespace flov::game
             {
                 g_myId = ToInt(at(1));
                 g_myName = at(2);
+                script::SetLocalPlayer(g_myId, g_myName);
                 g_serverName = at(4);
                 g_welcomed = true;
                 g_welcomeAt = GetTickCount64();
@@ -1796,6 +1799,7 @@ namespace flov::game
                 if (n::GET_ENTITY_MODEL(n::PLAYER_PED_ID()) != model) ApplyModel(model);
                 Resurrect(x, y, z, h);
                 g_spawnedOnce = true;
+                script::Emit("playerSpawn");
                 if (g_loadingActive && !g_spawnAt)
                 {
                     g_spawnAt = GetTickCount64();
@@ -2019,6 +2023,9 @@ namespace flov::game
                 }
             }
             else if (type == "MODS") CheckServerMods(at(1), at(2), ToInt(at(3)), at(4), at(5) == "1");
+            // Клиентский код сервера (пункт 26): что скачать и события от геймода.
+            else if (type == "CPKG") script::OnPackagesAnnounced(g_host, at(1), at(2), ToInt(at(3)), _atoi64(at(4).c_str()));
+            else if (type == "CEV") script::OnServerEvent(at(1), at(2));
             else if (type == "CFG")
             {
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
@@ -2647,7 +2654,17 @@ namespace flov::game
         void LoadingTick(ULONGLONG now)
         {
             if (!g_loadingActive) return;
-            const bool timeout = now - g_loadStart > 30000;
+            // Пока качаются клиентские пакеты сервера, в мир не пускаем: иначе
+            // игрок увидел бы мир без интерфейса сервера, а через секунду — с ним.
+            // Прогресс — настоящие байты, не таймер.
+            const auto pkg = script::DownloadProgress();
+            if (pkg.active && pkg.total > 0)
+            {
+                const float part = (float)pkg.done / (float)pkg.total;
+                ui::LoadingStep("Downloading server resources", 62.f + 18.f * std::clamp(part, 0.f, 1.f));
+            }
+            const bool packages = script::Pending();
+            const bool timeout = now - g_loadStart > (packages ? 180000u : 30000u);
             bool done = false;
             if (g_spawnAt)
             {
@@ -2655,6 +2672,7 @@ namespace flov::game
                 done = (ground && now - g_spawnAt > 700) || now - g_spawnAt > 6000;
             }
             else if (g_welcomed && g_readySent && now - g_welcomeAt > 5000) done = true; // сервер не прислал спавн
+            if (packages) done = false;
             if (!done && !timeout) return;
             if (timeout && !done) Log("загрузка не завершилась за 30 с — показываю игру как есть");
             ui::LoadingStep("Launching the game", 100);
@@ -2736,6 +2754,11 @@ namespace flov::game
             const Ped me = n::PLAYER_PED_ID();
             WorldEveryFrame();
 
+            // Клиентский код сервера: таймеры, клавиши, render. Пока открыт чат
+            // или консоль, клавиши скриптам не отдаём — игрок печатает текст.
+            script::Tick(ui::InputActive());
+            for (auto& [name, json] : script::TakeOutgoing()) g_net.Send({ "CEVS", name, json });
+
             // READY после первого спавна (или через 3 с, если сервер спавн не прислал).
             if (!g_readySent && (g_spawnedOnce || now - g_welcomeAt > 3000))
             {
@@ -2791,6 +2814,7 @@ namespace flov::game
         Log("скрипт запущен, GTA5.exe " + GameVersion());
         crash::Install();   // поверх обработчика, который игра ставит при старте
         ApplySettings(); // значения по умолчанию до первого CFG от сервера
+        script::SetNativeBackend({ shv::nativeInit, shv::nativePush64, shv::nativeCall });
         ui::SetWindowTitle("FloV Multiplayer");
         while (n::GET_IS_LOADING_SCREEN_ACTIVE() || !n::DOES_ENTITY_EXIST(n::PLAYER_PED_ID())) WAIT(250);
 

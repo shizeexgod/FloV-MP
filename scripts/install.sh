@@ -314,7 +314,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     # их одной командой слишком дорого.
     SAVE_DIR="$(mktemp -d)"
     SAVE_ARCHIVE="$(dirname "$INSTALL_DIR")/flovmp-removed-$SERVICE-$(date +%Y%m%d-%H%M%S).tar.gz"
-    for keep in gamemode config license.flv license.lease server/server.toml voice/voice.toml server/config server/flovmp-data server/resources/gamemode; do
+    for keep in gamemode config license.flv license.lease server/server.toml voice/voice.toml server/config server/flovmp-data server/resources/gamemode server/client_packages; do
       [ -e "$INSTALL_DIR/$keep" ] && mkdir -p "$SAVE_DIR/$(dirname "$keep")" && cp -a "$INSTALL_DIR/$keep" "$SAVE_DIR/$keep"
     done
     find "$INSTALL_DIR/sql/migrations" -maxdepth 1 -name '[1-9][0-9][0-9]_*.sql' -exec sh -c 'mkdir -p "$1/sql/migrations" && cp -a "$2" "$1/sql/migrations/"' _ "$SAVE_DIR" {} \; 2>/dev/null || true

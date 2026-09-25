@@ -509,3 +509,70 @@ Alt.OnServer<int, string>("flovmp:native:key", (id, key) => { /* игрок на
 Свои HTML-интерфейсы кладите в `client/html/` и открывайте через
 `new alt.WebView('http://resource/client/html/имя/index.html')`.
 Клавиши F1, F3, F4, F5, F8, F11, T, L, K, 2 заняты платформой; N — голосовой чат (настраивается в alt:V).
+
+Это относится к клиентам alt:V. Для игроков на GTA V Legacy 1.0.3889.0 —
+раздел ниже.
+
+## Клиентский код для игроков 3889: `server/client_packages`
+
+Как `client_packages` в RAGE:MP. Всё, что лежит в `server/client_packages`,
+игрок скачивает при входе (на экране загрузки видно настоящий прогресс),
+каждый файл сверяется по SHA-256, затем запускается `index.js`. Файлы
+кэшируются: при следующем входе качается только изменённое.
+
+Готовый пример — `sdk/client_packages` (деньги, спидометр, клавиша F5):
+
+```
+cp -r sdk/client_packages server/client_packages      # Linux
+xcopy /E /I sdk\client_packages server\client_packages  # Windows
+```
+
+После правок — команда `reloadclient` в консоли сервера: пакет пересобирается,
+новые игроки получают новую версию. Обновление платформы эту папку не трогает.
+
+Что можно положить: `.js .mjs .json .html .css`, картинки, шрифты, звуки,
+видео. Исполняемые файлы Windows (`.dll`, `.asi`, `.exe`) не раздаются.
+
+### API (совместим с RAGE:MP)
+
+| Что | Как |
+|---|---|
+| все нативы GTA (5176 штук) | `mp.game.<пространство>.<функция>(…)`, например `mp.game.ped.isPedInAnyVehicle(h, false)`; выходные параметры возвращаются объектом: `mp.game.gameplay.getGroundZFor3dCoord(x, y, z, false)` → `{ result, groundZ }` |
+| натив по хэшу | `mp.game.invoke('0x…', …)`, `invokeFloat`, `invokeString`, `invokeVector3`, `invokeBool`; `{ float: 1 }` — явное дробное |
+| текст на экране | `mp.game.graphics.drawText(текст, [x, y], { font, color, scale, outline, centre })` |
+| события | `mp.events.add/remove/call/callRemote`, `add({ имя: fn, … })`; встроенные: `render` (каждый кадр), `playerSpawn` |
+| таймеры | `setTimeout`, `setInterval`, `setImmediate`, `clear*` |
+| клавиши | `mp.keys.bind(vk, down, fn)`, `unbind`, `isDown`; пока открыт чат или консоль, клавиши скриптам не приходят |
+| чат, курсор | `mp.gui.chat.push/show`, `mp.gui.cursor.show(freeze, show)` |
+| свой игрок | `mp.players.local.handle / id / name / position / heading` |
+| модули | `require('./hud')`, `require('./config.json')` — только файлы пакета |
+| журнал | `console.log/warn/error`, `mp.console.log*` — в консоль F8 и журнал клиента |
+
+### События между клиентом и сервером
+
+```csharp
+// сервер → клиент: mp.events.add('hud:money', (value) => …)
+Alt.Emit("flovmp:client:call", playerId, "hud:money", "[5000]");
+Alt.Emit("flovmp:client:callAll", "weather:storm", "[]");
+
+// клиент → сервер: mp.events.callRemote('hud:f5', …)
+Alt.OnServer<int, string, string>("flovmp:client:event", (playerId, name, json) => { … });
+```
+
+Аргументы идут JSON-массивом (до 3800 символов). Имя события — латиница,
+цифры и `_ : . -`, до 64 символов. Клиент отправляет не больше 100 событий в
+секунду, сервер принимает не больше 120 от одного игрока — лишние
+отбрасываются. Всё, что пришло от клиента, прислал игрок: проверяйте.
+
+### Изоляция
+
+У скрипта нет доступа к файлам, процессам и сети игрока: `require` читает только
+скачанный пакет, модулей `std`/`os` нет, код принимается только с того же
+сервера, к которому подключён игрок. Зависший обработчик прерывается через
+100 мс, бесконечная рекурсия даёт `RangeError` — игра не зависает. Память
+скрипта ограничена 256 МБ.
+
+### Чего пока нет
+
+Браузеров (`mp.browsers.new` — HTML/Vue/React-интерфейсы) — в работе, следующий
+шаг. До этого интерфейс рисуется нативами, как в примере.

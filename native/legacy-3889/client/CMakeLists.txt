@@ -1,11 +1,28 @@
 cmake_minimum_required(VERSION 3.20)
-project(flovmp_client_3889 LANGUAGES CXX RC)
+project(flovmp_client_3889 LANGUAGES C CXX RC)
 
 # Клиент FloV:MP для GTA V Legacy 1.0.3889.0 — ASI на ScriptHookV.
 # ScriptHookV SDK для сборки не нужен: экспорты берутся во время работы,
 # обёртки нативных функций — src/natives.h (tools/gen_natives.py).
 
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui)
+
+# Движок JS для клиентского кода сервера (пункт 26): quickjs-ng, MIT. Только
+# ядро — без модулей std/os, то есть без доступа к файлам и процессам игрока.
+set(QJS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/quickjs)
+add_library(flovmp-quickjs STATIC
+    ${QJS_DIR}/quickjs.c
+    ${QJS_DIR}/libregexp.c
+    ${QJS_DIR}/libunicode.c
+    ${QJS_DIR}/dtoa.c
+)
+set_target_properties(flovmp-quickjs PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+target_include_directories(flovmp-quickjs PUBLIC ${QJS_DIR})
+target_compile_definitions(flovmp-quickjs PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0601 _GNU_SOURCE)
+if (MSVC)
+    target_compile_options(flovmp-quickjs PRIVATE /experimental:c11atomics /utf-8 /W0)
+    set_property(TARGET flovmp-quickjs PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 add_library(flovmp-client SHARED
     src/main.cpp
@@ -16,6 +33,7 @@ add_library(flovmp-client SHARED
     src/ui.cpp
     src/image.cpp
     src/http.cpp
+    src/script.cpp
     src/crash.cpp
     src/voice.cpp
     src/world.cpp
@@ -48,7 +66,7 @@ if (MSVC)
     # Статический CRT: у игрока может не быть нужного VC++ Redistributable.
     set_property(TARGET flovmp-client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
-target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm windowscodecs winhttp)
+target_link_libraries(flovmp-client PRIVATE ws2_32 bcrypt crypt32 iphlpapi version d3d11 d3dcompiler shell32 ole32 winmm windowscodecs winhttp flovmp-quickjs)
 
 set_target_properties(flovmp-client PROPERTIES
     OUTPUT_NAME "FloVMP"
@@ -91,4 +109,36 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
         RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
     )
+endif()
+
+# --- проверка клиентского движка JS без GTA V (пункт 26) -------------------------
+if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
+    add_executable(flovmp-script-test
+        tools/script-test/main.cpp
+        src/script.cpp
+        src/common.cpp
+        src/ui.cpp
+        src/image.cpp
+        src/http.cpp
+        res/client.rc
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
+    )
+    target_compile_features(flovmp-script-test PRIVATE cxx_std_20)
+    target_include_directories(flovmp-script-test PRIVATE src ${IMGUI_DIR})
+    # Пример client_packages из SDK — тест запускает его, чтобы пример не устарел.
+    get_filename_component(FLOVMP_SDK_PACKAGES "${CMAKE_CURRENT_SOURCE_DIR}/../../../scripts/package-templates/common/sdk/client_packages" ABSOLUTE)
+    target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_SDK_PACKAGES=L"${FLOVMP_SDK_PACKAGES}")
+    target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
+        WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
+    if (MSVC)
+        target_compile_options(flovmp-script-test PRIVATE /utf-8 /W3 /EHsc)
+        set_property(TARGET flovmp-script-test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+    target_link_libraries(flovmp-script-test PRIVATE flovmp-quickjs d3d11 dxgi shell32 ole32 version windowscodecs winhttp bcrypt)
+    set_target_properties(flovmp-script-test PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release")
 endif()

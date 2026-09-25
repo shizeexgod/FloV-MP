@@ -59,6 +59,7 @@ USER_OWNED = [
     "license.lease",
     "gamemode/",
     "server/resources/gamemode/",
+    "server/client_packages/",
     "backups/",
 ]
 

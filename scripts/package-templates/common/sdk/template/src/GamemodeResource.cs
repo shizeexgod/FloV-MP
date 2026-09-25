@@ -42,6 +42,10 @@ public sealed class GamemodeResource : Resource
         // Не ответили — урон применится такой, как считала платформа.
         Alt.OnServer<int, int, int, string, int, float>("flovmp:damage", OnDamage);
 
+        // События из клиентского кода игрока (server/client_packages, mp.events.callRemote).
+        // Аргументы приходят JSON-массивом: их прислал игрок — проверяйте.
+        Alt.OnServer<int, string, string>("flovmp:client:event", OnClientEvent);
+
         // Команды регистрируются в платформе. Если платформа стартует позже —
         // она сообщит об этом событием flovmp:platform:ready.
         Alt.OnServer("flovmp:platform:ready", ConfigurePlatform);
@@ -86,6 +90,7 @@ public sealed class GamemodeResource : Resource
         // то есть только у создателя сервера).
         Alt.Emit("flovmp:commands:register", "hello", "приветствие от сервера", 0);
         Alt.Emit("flovmp:commands:register", "menu", "пример меню (игроки 3889)", 0);
+        Alt.Emit("flovmp:commands:register", "money", "пример HUD из client_packages: /money <сумма>", 0);
         Alt.Emit("flovmp:commands:register", "sethp", "здоровье игроку: /sethp <id> <100-200>", 1);
     }
 
@@ -109,6 +114,13 @@ public sealed class GamemodeResource : Resource
                 Alt.Emit("flovmp:ui:menu", id, "demo", "Пример меню",
                     "[{\"label\":\"Выдать брони\",\"desc\":\"Пример действия сервера\"}," +
                     " {\"label\":\"Сказать в чат\"}, {\"label\":\"Закрыть\"}]");
+                break;
+
+            case "money":
+                // Событие в клиентский код игрока: mp.events.add('hud:money', ...)
+                // в client_packages. Аргументы — JSON-массив.
+                if (!long.TryParse(args.Trim(), out var money)) money = 5000;
+                Alt.Emit("flovmp:client:call", id, "hud:money", $"[{money}]");
                 break;
 
             case "sethp":
@@ -148,6 +160,17 @@ public sealed class GamemodeResource : Resource
                 break;
             default:
                 Alt.Emit("flovmp:ui:closeMenu", id);
+                break;
+        }
+    }
+
+    private static void OnClientEvent(int id, string name, string json)
+    {
+        switch (name)
+        {
+            case "hud:ready":
+                // Пример из sdk/client_packages: HUD загрузился у игрока.
+                Alt.Emit("flovmp:client:call", id, "hud:money", "[5000]");
                 break;
         }
     }
