@@ -171,6 +171,20 @@ def check_security_regressions(rep):
                 "Chromium CEF запускается со штатным sandbox",
                 "sandbox info передаётся browser и subprocess" if sandboxed else
                 "нужны CefScopedSandboxInfo, no_sandbox=false и cef_sandbox.lib")
+        browser_test = (ROOT / "native/legacy-3889/client/tools/browser-test/main.cpp").read_text(
+            encoding="utf-8", errors="ignore")
+        network_policy = (
+            "browser-origins.txt" in cef_src
+            and "GetResourceRequestHandler" in cef_src
+            and "OnResourceRedirect" in cef_src
+            and "BridgeUrlAllowed" in cef_src
+            and "remote origin получает window.mp bridge" in browser_test
+            and "redirect на запрещённый origin" in browser_test
+        )
+        rep.add(PASS if network_policy else FAIL,
+                "CEF network и bridge закрыты точным origin allowlist",
+                "navigation, subresource, redirect и bridge проверяются" if network_policy else
+                "нет fail-closed browser-origins.txt policy или её integration-тестов")
 
     # События от клиента — то, что может прислать поддельный клиент. Каждый
     # обработчик обязан либо проверять права на сервере, либо быть в списке

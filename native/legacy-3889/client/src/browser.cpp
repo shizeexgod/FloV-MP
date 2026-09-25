@@ -5,6 +5,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -58,6 +59,7 @@ namespace flov::browser
         int g_triggerCount = 0;
         std::wstring g_hostExe;
         std::wstring g_root;
+        std::vector<std::string> g_allowedOrigins;
         std::deque<Event> g_events;
 
         // Хост
@@ -97,6 +99,33 @@ namespace flov::browser
 
         std::string N(long long v) { return std::to_string(v); }
         void SendLocked(const std::vector<std::string>& fields);
+        std::string Utf8(const std::wstring& w);
+
+        std::vector<std::string> ReadOriginPolicy(const std::wstring& root)
+        {
+            std::vector<std::string> out;
+            std::ifstream in(root + L"\\browser-origins.txt", std::ios::binary);
+            std::string line;
+            while (out.size() < 32 && std::getline(in, line))
+            {
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                const size_t first = line.find_first_not_of(" \t");
+                if (first == std::string::npos || line[first] == '#') continue;
+                const size_t last = line.find_last_not_of(" \t");
+                line = line.substr(first, last - first + 1);
+                if (line.size() <= 2048 && line.find_first_of("\t\r\n") == std::string::npos)
+                    out.push_back(std::move(line));
+            }
+            return out;
+        }
+
+        void SendRootLocked()
+        {
+            if (g_root.empty()) return;
+            std::vector<std::string> fields{ "ROOT", Utf8(g_root) };
+            fields.insert(fields.end(), g_allowedOrigins.begin(), g_allowedOrigins.end());
+            SendLocked(fields);
+        }
 
         std::vector<int> OrderedIdsLocked()
         {
@@ -337,6 +366,11 @@ namespace flov::browser
                 conn->cv.notify_one();
                 return;
             }
+            if (t == "LOG" && id == 0)
+            {
+                Push(Event::Kind::Console, 0, at(2), at(3));
+                return;
+            }
             auto it = g_items.find(id);
             if (it == g_items.end()) return;
             if (t == "FRAME")
@@ -431,7 +465,7 @@ namespace flov::browser
         const int id = ++g_nextId;
         g_items[id].url = url;
         g_items[id].order = id;
-        if (!g_root.empty()) SendLocked({ "ROOT", Utf8(g_root) });
+        SendRootLocked();
         if (g_sentW) SendLocked({ "SIZE", N(g_sentW), N(g_sentH) });
         SendLocked({ "NEW", N(id), url });
         return id;
@@ -570,7 +604,8 @@ namespace flov::browser
     {
         std::lock_guard lock(g_mutex);
         g_root = dir;
-        if (g_hostUp) SendLocked({ "ROOT", Utf8(dir) });
+        g_allowedOrigins = ReadOriginPolicy(dir);
+        if (g_hostUp) SendRootLocked();
     }
 
     std::vector<Event> TakeEvents()
@@ -581,7 +616,7 @@ namespace flov::browser
         // Хост упал: поднять заново и вернуть страницы на место.
         if (!g_hostUp && !g_items.empty() && g_restarts < 3 && StartHostLocked())
         {
-            if (!g_root.empty()) SendLocked({ "ROOT", Utf8(g_root) });
+            SendRootLocked();
             if (g_sentW) SendLocked({ "SIZE", N(g_sentW), N(g_sentH) });
             for (auto& [id, it] : g_items)
             {

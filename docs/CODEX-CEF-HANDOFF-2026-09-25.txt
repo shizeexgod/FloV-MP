@@ -81,11 +81,11 @@ origin/master недостаточно.
 ЧТО ПОДТВЕРЖДЕНО АВТОТЕСТАМИ
 ============================
 
-  CEF browser integration: 31/31
+  CEF browser integration: 36/36
   Native client script:     37/37
   Server tests:             643/643
   Launcher tests:           96/96
-  Общий healthcheck --build: 70/70
+  Общий healthcheck --build: 71/71
 
 Release-сборки flovmp-client, flovmp-cef, flovmp-browser-test и
 flovmp-script-test проходят. Это доказывает native/Chromium-контракт вне GTA,
@@ -108,31 +108,21 @@ root_cache_path блокировал второй host singleton-lock CEF 120+. 
 старт удаляет incognito-root уже умершего процесса.
 
 
-[P0-1] Закрыть origin и network policy
---------------------------------------
+[ЗАКРЫТО 26.09] Origin и network policy
+----------------------------------------
 
-Фактическая проблема:
-  OnBeforeBrowse сейчас делает только строковую проверку начала URL и разрешает
-  любой http://, https://, data: и about:blank. Отдельной фильтрации resource
-  requests, redirect, popup/download, localhost/private IP нет. Значит package
-  UI фактически остаётся браузером с неограниченной сетью.
+Сеть CEF теперь закрыта по умолчанию. Точные `https/http/wss/ws` origins берутся
+из `client_packages/browser-origins.txt`, который входит в SHA-256 digest
+пакета; wildcard и URL с путём отбрасываются, http/ws дают предупреждение.
+CEF parser нормализует origin. Policy применяется к main navigation,
+subresource, download и redirect. Remote main page получает bridge только при
+точном совпадении; iframe — никогда. Browser process независимо проверяет
+PID_RENDERER, main frame и origin сообщения. Настоящий локальный HTTP regression
+доказывает allowed UI/subresource, deny до сети и blocked redirect: 36/36.
 
-Что сделать:
-  - package:// оставить доверенным источником по умолчанию;
-  - remote HTTPS разрешать только по allowlist из подписанного manifest;
-  - HTTP разрешать только явным dev-флагом, по умолчанию запрещать;
-  - использовать URL parser CEF, а не rfind по префиксу;
-  - фильтровать main navigation, iframe, popup, redirect и subresource requests;
-  - запретить file:, javascript:, произвольные custom schemes и downloads;
-  - решить политику localhost/private/link-local IP и DNS rebinding;
-  - bridge оставить только в trusted main frame;
-  - добавить тесты внешнего iframe, redirect, popup, localhost/private IP,
-    запрещённой схемы и разрешённого CDN.
-
-Критерий:
-  server package без allowlist не выходит в сеть; разрешённый HTTPS CDN
-  работает; запрещённый origin не грузится ни прямым переходом, ни redirect,
-  ни fetch/img/script/iframe.
+Оговорка: отдельной криптографической подписи владельца у client_packages пока
+нет; целостность — SHA-256 файлов + общий digest, объявленный игровым сервером.
+Нельзя называть это подписанным manifest до появления server identity/signature.
 
 
 [P0-2] Провести живой GTA b3889 E2E
@@ -241,12 +231,11 @@ origin policy, упаковки и GTA E2E — примерно 80–85%. В roa
 ПОРЯДОК ДЛЯ CLAUDE CODE
 =======================
 
-1. Сверить HEAD и не потерять локальные CEF-коммиты вместе с sandbox-правкой.
-2. Реализовать подписанный origin/network allowlist и security-тесты.
-3. Добавить caps/метрики; bounds — после фиксации API-контракта.
-4. Повторить Release build, browser tests, script tests и общий healthcheck.
-5. Собрать чистый installer/release из точного commit.
-6. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.
+1. Сверить HEAD и не потерять локальные CEF-коммиты.
+2. Добавить caps/метрики; bounds — после фиксации API-контракта.
+3. Повторить Release build, browser tests, script tests и общий healthcheck.
+4. Собрать чистый installer/release из точного commit.
+5. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.
 
 
 ЧЕГО НЕ НАДО ДЕЛАТЬ

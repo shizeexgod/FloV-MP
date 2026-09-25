@@ -176,7 +176,7 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
         target_compile_options(flovmp-browser-test PRIVATE /utf-8 /W3 /EHsc)
         set_property(TARGET flovmp-browser-test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     endif()
-    target_link_libraries(flovmp-browser-test PRIVATE d3d11 dxgi shell32 ole32 version bcrypt)
+    target_link_libraries(flovmp-browser-test PRIVATE d3d11 dxgi shell32 ole32 version bcrypt ws2_32)
     set_target_properties(flovmp-browser-test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release")
 endif()
 

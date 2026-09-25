@@ -1,0 +1,6 @@
+# По умолчанию CEF не выходит в сеть. Если HUD нужен внешний API/CDN/WebSocket,
+# укажите здесь точные origins без пути и wildcard, по одному в строке:
+# https://api.example.com
+# https://cdn.example.com:8443
+# wss://realtime.example.com
+# http:// и ws:// оставляйте только для локальной разработки.

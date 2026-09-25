@@ -12,11 +12,15 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <filesystem>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,6 +30,7 @@
 #include "include/cef_client.h"
 #include "include/cef_parser.h"
 #include "include/cef_request_context.h"
+#include "include/cef_resource_request_handler.h"
 #include "include/cef_sandbox_win.h"
 #include "include/cef_scheme.h"
 #include "include/cef_task.h"
@@ -82,6 +87,65 @@ namespace
     int g_width = 1920, g_height = 1080;
     std::mutex g_rootMutex;
     std::wstring g_root;   // папка client_packages у игрока — package://
+    std::set<std::string> g_allowedOrigins;   // exact origins из browser-origins.txt
+
+    std::string Lower(std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return (char)tolower(c); });
+        return value;
+    }
+
+    bool ParseOrigin(const std::string& url, std::string& origin, bool policyEntry = false)
+    {
+        CefURLParts parts{};
+        if (!CefParseURL(url, parts)) return false;
+        const std::string scheme = Lower(CefString(&parts.scheme).ToString());
+        std::string host = Lower(CefString(&parts.host).ToString());
+        std::string port = CefString(&parts.port).ToString();
+        const std::string path = CefString(&parts.path).ToString();
+        if (scheme != "https" && scheme != "http" && scheme != "wss" && scheme != "ws") return false;
+        if (host.empty() || !CefString(&parts.username).empty() || !CefString(&parts.password).empty()) return false;
+        if (policyEntry && ((!path.empty() && path != "/") || !CefString(&parts.query).empty() ||
+                            !CefString(&parts.fragment).empty())) return false;
+        if ((scheme == "https" && port == "443") || (scheme == "http" && port == "80") ||
+            (scheme == "wss" && port == "443") || (scheme == "ws" && port == "80")) port.clear();
+        if (host.find(':') != std::string::npos && host.front() != '[') host = "[" + host + "]";
+        origin = scheme + "://" + host + (port.empty() ? "" : ":" + port);
+        return true;
+    }
+
+    bool AllowedUrl(const std::string& url, bool allowInline)
+    {
+        CefURLParts parts{};
+        if (!CefParseURL(url, parts)) return false;
+        const std::string scheme = Lower(CefString(&parts.scheme).ToString());
+        if (scheme == "package") return true;
+        if (url == "about:blank") return true;
+        if (allowInline && (scheme == "data" || scheme == "blob")) return true;
+        std::string origin;
+        if (!ParseOrigin(url, origin)) return false;
+        std::lock_guard lock(g_rootMutex);
+        return g_allowedOrigins.count(origin) != 0;
+    }
+
+    bool BridgeUrlAllowed(const std::string& url)
+    {
+        CefURLParts parts{};
+        if (!CefParseURL(url, parts)) return false;
+        if (Lower(CefString(&parts.scheme).ToString()) == "package") return true;
+        std::string origin;
+        if (!ParseOrigin(url, origin)) return false;
+        std::lock_guard lock(g_rootMutex);
+        return g_allowedOrigins.count(origin) != 0;
+    }
+
+    std::string TrustedOriginsText()
+    {
+        std::lock_guard lock(g_rootMutex);
+        std::string text;
+        for (const auto& origin : g_allowedOrigins) text += origin + "\n";
+        return text;
+    }
 
     // --- кадр в разделяемой памяти ------------------------------------------------
 
@@ -164,7 +228,8 @@ namespace
     std::map<int, CefRefPtr<Browser>> g_browsers;
 
     class Browser : public CefClient, public CefRenderHandler, public CefLoadHandler,
-                    public CefLifeSpanHandler, public CefDisplayHandler, public CefRequestHandler
+                    public CefLifeSpanHandler, public CefDisplayHandler, public CefRequestHandler,
+                    public CefResourceRequestHandler
     {
     public:
         explicit Browser(int id) : _id(id) {}
@@ -317,19 +382,64 @@ namespace
         // --- куда можно ходить ---
         bool OnBeforeBrowse(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest> request, bool, bool) override
         {
-            // Файлы игрока и служебные страницы Chromium странице сервера не нужны.
             const std::string url = request->GetURL().ToString();
-            for (const char* p : { "http://", "https://", "package://", "data:", "about:blank" })
-                if (url.rfind(p, 0) == 0) return false;
+            if (AllowedUrl(url, false)) return false;
+            Send({ "LOG", N(_id), "1", "переход запрещён: " + url.substr(0, 200) });
+            Send({ "FAIL", N(_id), N((int)ERR_ACCESS_DENIED), url.substr(0, 2048) });
+            return true;
+        }
+
+        bool OnOpenURLFromTab(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString& target,
+                              CefRequestHandler::WindowOpenDisposition, bool) override
+        {
+            const std::string url = target.ToString();
+            if (AllowedUrl(url, false)) return false;
             Send({ "LOG", N(_id), "1", "переход запрещён: " + url.substr(0, 200) });
             return true;
         }
 
+        CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+            CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest> request,
+            bool, bool isDownload, const CefString&, bool& disableDefaultHandling) override
+        {
+            const std::string url = request->GetURL().ToString();
+            if (isDownload || !AllowedUrl(url, true))
+            {
+                disableDefaultHandling = true;
+                Send({ "LOG", N(_id), "1", std::string(isDownload ? "загрузка файла запрещена: " : "запрос запрещён: ") +
+                                             url.substr(0, 200) });
+                return nullptr;
+            }
+            return this;
+        }
+
+        ReturnValue OnBeforeResourceLoad(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+                                         CefRefPtr<CefRequest> request, CefRefPtr<CefCallback>) override
+        {
+            return AllowedUrl(request->GetURL().ToString(), true) ? RV_CONTINUE : RV_CANCEL;
+        }
+
+        void OnResourceRedirect(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefRefPtr<CefRequest>,
+                                CefRefPtr<CefResponse>, CefString& newUrl) override
+        {
+            const std::string next = newUrl.ToString();
+            if (!AllowedUrl(next, true))
+            {
+                Send({ "LOG", N(_id), "1", "redirect запрещён: " + next.substr(0, 200) });
+                newUrl = "about:blank";
+            }
+        }
+
         // --- мост страницы ---
-        bool OnProcessMessageReceived(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, CefProcessId,
+        bool OnProcessMessageReceived(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefProcessId source,
                                       CefRefPtr<CefProcessMessage> message) override
         {
             if (message->GetName() != "flov-trigger") return false;
+            if (source != PID_RENDERER || !frame || !frame->IsMain() || !BridgeUrlAllowed(frame->GetURL().ToString()))
+            {
+                Send({ "LOG", N(_id), "1", "mp.trigger отброшен из недоверенного frame/origin" });
+                return true;
+            }
             auto args = message->GetArgumentList();
             const std::string name = args->GetString(0).ToString();
             const std::string json = args->GetString(1).ToString();
@@ -660,18 +770,55 @@ namespace
             Send({ "READY" });
         }
 
-        void OnContextCreated(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context) override
+        void OnBrowserCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefDictionaryValue> extraInfo) override
+        {
+            auto& policy = _renderPolicies[browser->GetIdentifier()];
+            ++policy.refs;
+            if (!extraInfo || !extraInfo->HasKey("flovmp-trusted-origins")) return;
+            std::istringstream input(extraInfo->GetString("flovmp-trusted-origins").ToString());
+            std::string line;
+            policy.origins.clear();
+            while (std::getline(input, line))
+            {
+                std::string origin;
+                if (ParseOrigin(line, origin, true)) policy.origins.insert(std::move(origin));
+            }
+        }
+
+        void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override
+        {
+            auto it = _renderPolicies.find(browser->GetIdentifier());
+            if (it != _renderPolicies.end() && --it->second.refs <= 0) _renderPolicies.erase(it);
+        }
+
+        void OnContextCreated(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame,
+                              CefRefPtr<CefV8Context> context) override
         {
             // Игровой bridge принадлежит только верхней странице. В противном
             // случае любой подключённый iframe (в том числе с чужого origin)
             // получает mp.trigger и может выдавать себя за доверенный UI
             // серверного пакета.
-            if (!frame || !frame->IsMain()) return;
+            if (!frame || !frame->IsMain() || !BridgeTrusted(browser, frame->GetURL().ToString())) return;
             context->GetGlobal()->SetValue("__flovTrigger", CefV8Value::CreateFunction("__flovTrigger", new TriggerHandler()),
                                            V8_PROPERTY_ATTRIBUTE_NONE);
             CefRefPtr<CefV8Value> ret;
             CefRefPtr<CefV8Exception> ex;
             context->Eval(kPageBridge, "flovmp://bridge.js", 0, ret, ex);
+        }
+
+    private:
+        struct RenderPolicy { int refs = 0; std::set<std::string> origins; };
+        std::map<int, RenderPolicy> _renderPolicies;
+
+        bool BridgeTrusted(CefRefPtr<CefBrowser> browser, const std::string& url) const
+        {
+            CefURLParts parts{};
+            if (!CefParseURL(url, parts)) return false;
+            if (Lower(CefString(&parts.scheme).ToString()) == "package") return true;
+            std::string origin;
+            if (!ParseOrigin(url, origin)) return false;
+            const auto it = _renderPolicies.find(browser->GetIdentifier());
+            return it != _renderPolicies.end() && it->second.origins.count(origin) != 0;
         }
 
         IMPLEMENT_REFCOUNTING(App);
@@ -705,7 +852,9 @@ namespace
             CefBrowserSettings bs;
             bs.windowless_frame_rate = 60;
             bs.background_color = CefColorSetARGB(0, 0, 0, 0);   // прозрачный: под страницей — игра
-            if (!CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, nullptr, g_requestContext))
+            auto extra = CefDictionaryValue::Create();
+            extra->SetString("flovmp-trusted-origins", TrustedOriginsText());
+            if (!CefBrowserHost::CreateBrowser(wi, b.get(), at(2), bs, extra, g_requestContext))
             {
                 g_browsers.erase(id);
                 Send({ "FAIL", N(id), "-2", at(2) });
@@ -723,11 +872,25 @@ namespace
         {
             std::wstring next = CefString(at(1)).ToWString();
             while (!next.empty() && (next.back() == L'\\' || next.back() == L'/')) next.pop_back();
+            std::set<std::string> origins;
+            for (size_t i = 2; i < p.size() && origins.size() < 32; ++i)
+            {
+                std::string origin;
+                if (ParseOrigin(p[i], origin, true))
+                {
+                    const bool insecure = origin.rfind("http://", 0) == 0 || origin.rfind("ws://", 0) == 0;
+                    origins.insert(std::move(origin));
+                    if (insecure)
+                        Send({ "LOG", "0", "1", "browser-origins.txt разрешает небезопасный dev-origin: " + p[i] });
+                }
+                else Send({ "LOG", "0", "1", "browser-origins.txt: origin отброшен: " + p[i].substr(0, 200) });
+            }
             bool changed = false;
             {
                 std::lock_guard lock(g_rootMutex);
                 changed = next != g_root;
                 g_root = std::move(next);
+                g_allowedOrigins = std::move(origins);
             }
             if (changed) g_requestContext = NewRequestContext();
         }

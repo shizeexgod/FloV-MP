@@ -120,6 +120,11 @@ world.traffic = on
 её при входе, обновление — командой `reloadclient`. Интерфейсы на HTML/CSS/JS
 (Vue, React) — `mp.browsers.new('package://ui/index.html')`, как в RAGE:MP. Пример — `sdk/client_packages`,
 справка — раздел «Клиентский код для игроков 3889» в `gamemode/README.md`.
+По умолчанию CEF-страницы не ходят во внешнюю сеть. Если интерфейсу нужен API,
+CDN или WebSocket, владелец добавляет точные origins в
+`server/client_packages/browser-origins.txt`, по одному `https://…` или
+`wss://…` в строке. `http://`/`ws://` предназначены только для разработки и
+помечаются предупреждением. Wildcard и URL с путём не принимаются.
 
 ## 8. Чего менять нельзя
 

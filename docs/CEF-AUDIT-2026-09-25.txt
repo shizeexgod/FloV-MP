@@ -23,8 +23,14 @@ P0-5 закрыт: общий постоянный cache/profile удалён, c
 info передаётся browser и всем subprocess, no_sandbox=false. У каждой жизни
 host отдельный root_cache_path, поэтому два клиента и быстрый restart не
 конфликтуют singleton-lock CEF 120+. Параллельный запуск двух integration-
-наборов проходит 31/31 и 37/37. Открыты P1-2, P1-3, P1-4 и обязательный живой
+наборов проходит 31/31 и 37/37. Открыты P1-2, P1-4 и обязательный живой
 GTA Legacy b3889 E2E.
+P1-3 закрыт 26.09: сеть CEF теперь fail-closed. Точные origins читаются из
+хэшируемого `client_packages/browser-origins.txt`; policy применяется к main
+navigation, subresources, downloads и redirect. `window.mp` получают только
+package:// и явно разрешённая главная remote-страница, а browser process
+повторно проверяет PID_RENDERER/frame/origin. Integration-тест с локальным HTTP
+сервером проверяет allow, deny-before-network и redirect: browser 36/36.
 Дополнительно исправлена гонка lifecycle: URL/visibility/frame-rate/destroy,
 отправленные сразу после new(), больше не теряются до OnAfterCreated; ранний
 destroy не оставляет осиротевший Chromium browser. Добавлен browser.frameRate
@@ -65,7 +71,7 @@ Browser integration: 31/31.
 5. Сборка подтверждена локально точным CMake из Visual Studio Build Tools:
    flovmp-client, flovmp-cef, flovmp-browser-test и flovmp-script-test собраны.
 6. Автотесты зелёные:
-   - browser integration: 16/16;
+   - browser integration: 36/36;
    - native client script: 35/35.
 
 ВАЖНО: это подтверждает CEF-контракт вне GTA. Живого теста наложения CEF на

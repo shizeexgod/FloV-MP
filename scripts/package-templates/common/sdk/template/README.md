@@ -595,7 +595,7 @@ mp.trigger('panel:submit', input.value);
 
 | Что | Как |
 |---|---|
-| создать | `mp.browsers.new(url)` — `package://папка/файл.html` (файлы client_packages) или `https://…` |
+| создать | `mp.browsers.new(url)` — `package://папка/файл.html`; внешний URL работает только после явного разрешения origin |
 | управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.frameRate = 30` (1–60 FPS), `browser.reload(ignoreCache)`, `browser.destroy()` |
 | в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
 | из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
@@ -620,9 +620,25 @@ mp.trigger('panel:submit', input.value);
 бесконечного цикла в странице. При превышении в F8 появляется предупреждение.
 
 Правила безопасности: `package://` отдаёт только файлы пакета (выход за папку
-закрыт), переходы на `file://` и служебные страницы Chromium запрещены,
-всплывающие окна не открываются. `window.mp` есть только у главной страницы,
-но не у вложенных iframe. Cookies и `localStorage` не сохраняются на диск и
-изолированы при смене server package. Пример — `sdk/client_packages/ui` (деньги и
+закрыт), Chromium работает в штатном Windows sandbox, переходы на `file://`,
+downloads, popup и служебные страницы запрещены. По умолчанию страница вообще
+не выходит в сеть. Если HUD нужны API/CDN/WebSocket, добавьте в корень
+`client_packages/browser-origins.txt` точные origins, по одному в строке:
+
+```text
+# Только scheme + host + необязательный port; путь и wildcard запрещены.
+https://api.example.com
+https://cdn.example.com:8443
+wss://realtime.example.com
+```
+
+`http://` и `ws://` также требуют явной строки и дают предупреждение в F8 —
+используйте их только для локальной разработки. Файл входит в общий SHA-256
+digest `client_packages`: клиент применяет ту policy, которую получил вместе с
+остальным кодом сервера. Allowlist проверяется для основной навигации,
+subresources/fetch/WebSocket и redirect. Внешняя главная страница получает
+`window.mp` только если её точный origin разрешён; iframe не получает bridge
+никогда. Cookies и `localStorage` не сохраняются на диск и изолированы при
+смене server package. Пример — `sdk/client_packages/ui` (деньги и
 панель по F2 с формой, ответ сервера — в шаблоне gamemode, событие
 `hud:report`).

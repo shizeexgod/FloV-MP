@@ -4,13 +4,17 @@
 //
 //   flovmp-browser-test.exe <путь к flovmp-cef.exe>   — код возврата 0, если всё прошло
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <d3d11.h>
 
+#include <atomic>
 #include <cstdio>
 #include <fstream>
 #include <functional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "browser.h"
@@ -29,6 +33,127 @@ namespace
     ID3D11DeviceContext* g_ctx = nullptr;
     int g_w = 800, g_h = 600;
     std::vector<flov::browser::Event> g_seen;
+
+    class TestHttp
+    {
+    public:
+        bool Start()
+        {
+            WSADATA data{};
+            if (WSAStartup(MAKEWORD(2, 2), &data) != 0) return false;
+            _socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (_socket == INVALID_SOCKET) return false;
+            sockaddr_in address{};
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (bind(_socket, reinterpret_cast<sockaddr*>(&address), sizeof address) != 0 || listen(_socket, 16) != 0)
+                return false;
+            int size = sizeof address;
+            if (getsockname(_socket, reinterpret_cast<sockaddr*>(&address), &size) != 0) return false;
+            _port = ntohs(address.sin_port);
+            _thread = std::thread([this] { Loop(); });
+            return true;
+        }
+
+        ~TestHttp()
+        {
+            _stop = true;
+            if (_socket != INVALID_SOCKET && _port)
+            {
+                // Разбудить blocking accept; один closesocket из другого
+                // потока на Windows не гарантирует немедленного возврата.
+                SOCKET wake = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                sockaddr_in address{};
+                address.sin_family = AF_INET;
+                address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                address.sin_port = htons((u_short)_port);
+                connect(wake, reinterpret_cast<sockaddr*>(&address), sizeof address);
+                closesocket(wake);
+            }
+            if (_thread.joinable()) _thread.join();
+            if (_socket != INVALID_SOCKET) closesocket(_socket);
+            WSACleanup();
+        }
+
+        int Port() const { return _port; }
+        int BlockedHits() const { return _blockedHits.load(); }
+        int Requests() const { return _requests.load(); }
+        std::string Origin(const char* host = "127.0.0.1") const
+        {
+            return "http://" + std::string(host) + ":" + std::to_string(_port);
+        }
+
+    private:
+        static void WriteAll(SOCKET socket, const std::string& value)
+        {
+            size_t offset = 0;
+            while (offset < value.size())
+            {
+                const int sent = send(socket, value.data() + offset, (int)(value.size() - offset), 0);
+                if (sent <= 0) return;
+                offset += sent;
+            }
+        }
+
+        void Loop()
+        {
+            while (!_stop)
+            {
+                SOCKET client = accept(_socket, nullptr, nullptr);
+                if (client == INVALID_SOCKET) break;
+                if (_stop) { closesocket(client); break; }
+                DWORD timeout = 1000;
+                setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof timeout);
+                char buffer[4096]{};
+                const int count = recv(client, buffer, sizeof buffer - 1, 0);
+                if (_stop) { closesocket(client); break; }
+                std::string path = "/";
+                if (count > 0)
+                {
+                    ++_requests;
+                    const std::string request(buffer, count);
+                    const size_t first = request.find(' '), second = first == std::string::npos ? first : request.find(' ', first + 1);
+                    if (second != std::string::npos) path = request.substr(first + 1, second - first - 1);
+                }
+                std::string status = "200 OK", type = "text/plain", body = "ok", extra;
+                if (path == "/remote.html")
+                {
+                    type = "text/html; charset=utf-8";
+                    body = "<!doctype html><meta charset=utf-8><script>mp.trigger('remoteBridge','allowed')</script>";
+                }
+                else if (path == "/remote.js")
+                {
+                    type = "text/javascript";
+                    body = "mp.trigger('remoteScript','allowed')";
+                }
+                else if (path == "/redirect")
+                {
+                    status = "302 Found";
+                    extra = "Location: " + Origin("localhost") + "/blocked.js\r\n";
+                    body.clear();
+                }
+                else if (path.rfind("/blocked", 0) == 0)
+                {
+                    ++_blockedHits;
+                    type = "text/javascript";
+                    body = "mp.trigger('policyBypass')";
+                }
+                const std::string response = "HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\n" + extra +
+                                             "Content-Length: " + std::to_string(body.size()) +
+                                             "\r\nConnection: close\r\n\r\n" + body;
+                WriteAll(client, response);
+                shutdown(client, SD_BOTH);
+                closesocket(client);
+            }
+        }
+
+        SOCKET _socket = INVALID_SOCKET;
+        int _port = 0;
+        std::atomic<bool> _stop{ false };
+        std::atomic<int> _blockedHits{ 0 };
+        std::atomic<int> _requests{ 0 };
+        std::thread _thread;
+    };
 
     void Pump() { flov::browser::Render(g_dev, g_ctx, nullptr, (float)g_w, (float)g_h); for (auto& e : flov::browser::TakeEvents()) g_seen.push_back(e); }
 
@@ -107,6 +232,9 @@ int wmain(int argc, wchar_t** argv)
     if (argc < 2) { printf("нужен путь к flovmp-cef.exe\n"); return 2; }
     flov::browser::SetHostExe(argv[1]);
 
+    TestHttp http;
+    if (!http.Start()) { printf("не запущен локальный HTTP-сервер теста\n"); return 2; }
+
     D3D_FEATURE_LEVEL fl;
     if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION, &g_dev, &fl, &g_ctx)))
     {
@@ -155,6 +283,7 @@ document.addEventListener('mousemove', () => mp.trigger('topMoved'));
 mp.trigger('switched', location.href);
 </script>)";
     std::ofstream(std::wstring(tmp) + L"secret.txt") << "secret";
+    std::ofstream(root + L"\\browser-origins.txt") << http.Origin() << "\n";
     flov::browser::SetPackageRoot(root);
 
     printf("Хост и страница:\n");
@@ -172,6 +301,28 @@ mp.trigger('switched', location.href);
           Seen(flov::browser::Event::Kind::Trigger, "fetched")->b == "[true]", "fetch файла пакета из страницы");
     Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "escape") != nullptr; }, 5000) &&
           Seen(flov::browser::Event::Kind::Trigger, "escape")->b == "[\"closed\"]", "package:// не выходит за папку пакета");
+
+    printf("Сетевая политика:\n");
+    const int remote = flov::browser::Create(http.Origin() + "/remote.html");
+    Check(remote > 0 && Until([] { return Seen(flov::browser::Event::Kind::Trigger, "remoteBridge") != nullptr; }, 5000),
+          "разрешённый remote origin получает window.mp bridge");
+    flov::browser::Destroy(remote);
+    flov::browser::Execute(id, "let s=document.createElement('script');s.src='" + http.Origin() + "/remote.js';document.head.appendChild(s)");
+    Check(Until([] { return Seen(flov::browser::Event::Kind::Trigger, "remoteScript") != nullptr; }, 5000),
+          "разрешённый remote subresource загружается");
+    const int blockedBefore = http.BlockedHits();
+    flov::browser::Execute(id, "let b=document.createElement('script');b.src='" + http.Origin("localhost") +
+                                "/blocked.js';document.head.appendChild(b)");
+    Sleep(500);
+    Pump();
+    Check(http.BlockedHits() == blockedBefore && !Seen(flov::browser::Event::Kind::Trigger, "policyBypass"),
+          "другой origin блокируется до сетевого запроса");
+    flov::browser::Execute(id, "let r=document.createElement('script');r.src='" + http.Origin() +
+                                "/redirect';document.head.appendChild(r)");
+    Sleep(500);
+    Pump();
+    Check(http.BlockedHits() == blockedBefore && !Seen(flov::browser::Event::Kind::Trigger, "policyBypass"),
+          "redirect на запрещённый origin не уходит в сеть");
 
     const size_t spamBefore = SeenCount(flov::browser::Event::Kind::Trigger, "spam");
     flov::browser::Execute(id, "for(let i=0;i<300;i++)mp.trigger('spam',i)");
@@ -280,6 +431,12 @@ mp.trigger('switched', location.href);
 mp.trigger('storage', localStorage.getItem('serverSecret'));
 </script>)";
     flov::browser::SetPackageRoot(root2);
+    const int requestsBeforeDeny = http.Requests();
+    const int denied = flov::browser::Create(http.Origin() + "/remote.html");
+    Check(denied > 0 && Until([&] { return SeenFor(denied, flov::browser::Event::Kind::LoadFailed) > 0; }, 5000) &&
+          http.Requests() == requestsBeforeDeny,
+          "без browser-origins.txt remote navigation запрещена до сети");
+    flov::browser::Destroy(denied);
     const int isolated = flov::browser::Create("package://ui/index.html");
     Check(isolated > 0 && Until([] { return Seen(flov::browser::Event::Kind::Trigger, "storage") != nullptr; }, 10000) &&
           Seen(flov::browser::Event::Kind::Trigger, "storage")->b == "[null]",
