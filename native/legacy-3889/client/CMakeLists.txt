@@ -34,6 +34,7 @@ add_library(flovmp-client SHARED
     src/image.cpp
     src/http.cpp
     src/script.cpp
+    src/browser.cpp
     src/crash.cpp
     src/voice.cpp
     src/world.cpp
@@ -76,6 +77,40 @@ set_target_properties(flovmp-client PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
 )
 
+# --- хост браузеров flovmp-cef.exe (пункт 26b) --------------------------------
+# Chromium (CEF) в отдельном процессе рядом с игрой. Нужен CEF SDK:
+# scripts/fetch-cef-sdk.ps1 кладёт его в .work/cef/cef131 и собирает
+# libcef_dll_wrapper. Без SDK клиент собирается как раньше, браузеров нет.
+set(FLOVMP_CEF_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.work/cef/cef131" CACHE PATH "CEF SDK")
+set(FLOVMP_CEF_WRAPPER "${CMAKE_CURRENT_SOURCE_DIR}/../../../.work/cef/build/libcef_dll_wrapper/Release/libcef_dll_wrapper.lib" CACHE FILEPATH "libcef_dll_wrapper.lib")
+if (WIN32 AND EXISTS "${FLOVMP_CEF_ROOT}/include/cef_app.h" AND EXISTS "${FLOVMP_CEF_WRAPPER}")
+    message(STATUS "FloV:MP: хост браузеров — CEF из ${FLOVMP_CEF_ROOT}")
+    add_executable(flovmp-cef WIN32 cef-host/main.cpp cef-host/flovmp-cef.manifest res/client.rc)
+    target_compile_features(flovmp-cef PRIVATE cxx_std_20)
+    target_include_directories(flovmp-cef PRIVATE "${FLOVMP_CEF_ROOT}" src)
+    target_compile_definitions(flovmp-cef PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+    if (MSVC)
+        target_compile_options(flovmp-cef PRIVATE /utf-8 /W3 /EHsc)
+        set_property(TARGET flovmp-cef PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+    target_link_libraries(flovmp-cef PRIVATE "${FLOVMP_CEF_WRAPPER}" "${FLOVMP_CEF_ROOT}/Release/libcef.lib")
+    set(FLOVMP_CEF_OUT "${CMAKE_BINARY_DIR}/bin/Release/cef")
+    set_target_properties(flovmp-cef PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${FLOVMP_CEF_OUT}")
+    # Рядом с хостом — всё, что нужно Chromium: библиотеки и ресурсы.
+    add_custom_command(TARGET flovmp-cef POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${FLOVMP_CEF_ROOT}/Release" "${FLOVMP_CEF_OUT}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${FLOVMP_CEF_ROOT}/Resources" "${FLOVMP_CEF_OUT}"
+        COMMAND ${CMAKE_COMMAND} -E remove -f "${FLOVMP_CEF_OUT}/libcef.lib" "${FLOVMP_CEF_OUT}/cef_sandbox.lib"
+        # Страницы рисует процессор (--disable-gpu): Vulkan, SwiftShader и
+        # DirectX-компилятор WebGPU игроку не нужны — минус ~34 МБ.
+        COMMAND ${CMAKE_COMMAND} -E remove -f "${FLOVMP_CEF_OUT}/dxcompiler.dll" "${FLOVMP_CEF_OUT}/dxil.dll"
+            "${FLOVMP_CEF_OUT}/vk_swiftshader.dll" "${FLOVMP_CEF_OUT}/vk_swiftshader_icd.json" "${FLOVMP_CEF_OUT}/vulkan-1.dll"
+        # Из 55 языков интерфейса Chromium — русский и английский.
+        COMMAND ${CMAKE_COMMAND} -DDIR=${FLOVMP_CEF_OUT}/locales -P "${CMAKE_CURRENT_SOURCE_DIR}/cef-host/prune-locales.cmake")
+else()
+    message(STATUS "FloV:MP: CEF SDK не найден — хост браузеров не собирается")
+endif()
+
 # --- средство разработки: предпросмотр интерфейса без GTA V --------------------
 # Отдельное окно DirectX 11, в которое ui.cpp рисует настоящий интерфейс
 # клиента. В поставку не входит, собирается только локально.
@@ -83,6 +118,7 @@ option(FLOVMP_BUILD_UI_PREVIEW "Собрать средство предпрос
 if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     add_executable(flovmp-ui-preview WIN32
         tools/ui-preview/main.cpp
+        src/browser.cpp
         res/client.rc
         src/common.cpp
         src/ui.cpp
@@ -111,11 +147,36 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     )
 endif()
 
+# --- проверка браузеров без GTA V (пункт 26b) ------------------------------------
+if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
+    add_executable(flovmp-browser-test
+        tools/browser-test/main.cpp
+        src/browser.cpp
+        src/common.cpp
+        res/client.rc
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+    )
+    target_compile_features(flovmp-browser-test PRIVATE cxx_std_20)
+    target_include_directories(flovmp-browser-test PRIVATE src ${IMGUI_DIR})
+    target_compile_definitions(flovmp-browser-test PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
+        WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
+    if (MSVC)
+        target_compile_options(flovmp-browser-test PRIVATE /utf-8 /W3 /EHsc)
+        set_property(TARGET flovmp-browser-test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+    target_link_libraries(flovmp-browser-test PRIVATE d3d11 dxgi shell32 ole32 version bcrypt)
+    set_target_properties(flovmp-browser-test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release")
+endif()
+
 # --- проверка клиентского движка JS без GTA V (пункт 26) -------------------------
 if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     add_executable(flovmp-script-test
         tools/script-test/main.cpp
         src/script.cpp
+        src/browser.cpp
         src/common.cpp
         src/ui.cpp
         src/image.cpp
@@ -132,6 +193,9 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     # Пример client_packages из SDK — тест запускает его, чтобы пример не устарел.
     get_filename_component(FLOVMP_SDK_PACKAGES "${CMAKE_CURRENT_SOURCE_DIR}/../../../scripts/package-templates/common/sdk/client_packages" ABSOLUTE)
     target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_SDK_PACKAGES=L"${FLOVMP_SDK_PACKAGES}")
+    if (TARGET flovmp-cef)
+        target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_CEF_HOST=L"${CMAKE_BINARY_DIR}/bin/Release/cef/flovmp-cef.exe")
+    endif()
     target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_CLIENT_VERSION="${FLOVMP_VERSION}"
         WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE IMGUI_DISABLE_DEMO_WINDOWS IMGUI_DISABLE_DEBUG_TOOLS)
     if (MSVC)

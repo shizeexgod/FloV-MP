@@ -143,5 +143,15 @@ namespace flov::ui
     /// Клавиши чата и консоли (настройки сервера keys.chat / keys.console).
     void SetInputKeys(int chatVk, int consoleVk);
 
+    // --- клиентский код сервера (браузеры, пункт 26b) -----------------------------
+    /// Слой под интерфейсом платформы: браузеры сервера. Зовётся из Present.
+    using Underlay = void (*)(void* device, void* context, void* drawList, float width, float height);
+    void SetUnderlay(Underlay fn);
+    /// Клавиатура для браузеров: true — клавиша забрана, игре и чату не идёт.
+    using KeySink = bool (*)(unsigned msg, uintptr_t wp, intptr_t lp);
+    void SetKeySink(KeySink fn);
+    /// Курсор, который показал скрипт (mp.gui.cursor.show).
+    void SetScriptCursor(bool visible);
+
     enum Hotkey : int { KeyConnect = VK_F9 };
 }

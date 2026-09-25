@@ -208,6 +208,11 @@ if ($Uninstall) {
     if (-not (Test-Writable $dir)) { Restart-Elevated }
     if (Get-Process GTA5 -ErrorAction SilentlyContinue) { Fail 'Закройте GTA V и повторите.' 6 }
     Remove-Item (Join-Path $dir 'FloVMP.asi') -Force -ErrorAction SilentlyContinue
+    Get-Process flovmp-cef -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $dir 'FloVMP\cef') -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path (Join-Path $dir 'FloVMP')) {
+        if (-not (Get-ChildItem (Join-Path $dir 'FloVMP') -Force -ErrorAction SilentlyContinue)) { Remove-Item (Join-Path $dir 'FloVMP') -Force -ErrorAction SilentlyContinue }
+    }
     if ($state -and $state.InstalledScriptHook) {
         foreach ($f in 'ScriptHookV.dll', 'dinput8.dll') {
             $target = Join-Path $dir $f
@@ -340,6 +345,19 @@ $asi = Join-Path $here 'FloVMP.asi'
 if (-not (Test-Path $asi)) { Fail 'Рядом с установщиком нет FloVMP.asi — распакуйте архив клиента полностью.' 5 }
 Copy-Item $asi (Join-Path $dir 'FloVMP.asi') -Force
 Say 'Клиент FloV:MP установлен.' Green
+
+# Браузеры для интерфейсов серверов (HTML/CSS/JS, как в RAGE:MP): Chromium в папке FloVMP\cef.
+$cefSrc = Join-Path $here 'FloVMP\cef'
+if (Test-Path (Join-Path $cefSrc 'flovmp-cef.exe')) {
+    $cefDst = Join-Path $dir 'FloVMP\cef'
+    Get-Process flovmp-cef -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    if (Test-Path $cefDst) { Remove-Item $cefDst -Recurse -Force -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Force $cefDst | Out-Null
+    Copy-Item (Join-Path $cefSrc '*') $cefDst -Recurse -Force
+    Say 'Браузеры для интерфейсов серверов установлены.' Green
+} else {
+    Say 'В архиве нет FloVMP\cef — интерфейсы серверов на HTML работать не будут.' Yellow
+}
 
 # Ярлык на сервер
 $server = Get-ServerInfo

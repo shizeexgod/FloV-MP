@@ -4,34 +4,42 @@
 // сервер (или командой reloadclient в консоли сервера). Игроки скачают её при
 // входе и запустят index.js.
 //
-// Здесь: свой HUD (деньги, спидометр) и клавиша, которая отправляет событие
-// на сервер. Всё рисуется нативами GTA — mp.game.<пространство>.<функция>.
+// Здесь оба способа сделать интерфейс:
+//   - страница HTML/CSS/JS (ui/index.html) — деньги и панель по F2;
+//   - нативы GTA (hud/speedometer.js) — спидометр, mp.game.<пространство>.<функция>.
 
 const speedometer = require('./hud/speedometer');
 const config = require('./config.json');
 
-let money = 0;
+// Страница из этой же папки: package://ui/index.html. Можно и https://…
+const ui = mp.browsers.new('package://ui/index.html');
+let panelOpen = false;
+
+mp.events.add('browserDomReady', (browser) => {
+    if (browser === ui) ui.call('hud:player', mp.players.local.name);
+});
 
 // Сервер присылает деньги: Alt.Emit("flovmp:client:call", id, "hud:money", "[5000]").
-mp.events.add('hud:money', (value) => {
-    money = Number(value) || 0;
+mp.events.add('hud:money', (value) => ui.call('hud:money', Number(value) || 0));
+
+// Панель: курсор для страницы, управление персонажем на это время выключено.
+function togglePanel(open) {
+    panelOpen = open;
+    ui.call('panel:toggle', open);
+    mp.gui.cursor.show(open, open);
+}
+mp.keys.bind(0x71, true, () => togglePanel(!panelOpen));        // F2
+mp.events.add('panel:close', () => togglePanel(false));          // из страницы: mp.trigger
+mp.events.add('panel:submit', (text) => {
+    mp.events.callRemote('hud:report', String(text).slice(0, 200));
+    togglePanel(false);
 });
 
 mp.events.add('playerSpawn', () => {
-    mp.gui.chat.push(`Привет, ${mp.players.local.name}! HUD из client_packages загружен.`);
+    mp.gui.chat.push(`Привет, ${mp.players.local.name}! F2 — панель на HTML из client_packages.`);
 });
 
-mp.events.add('render', () => {
-    // Деньги в правом верхнем углу, цвет — из config.json.
-    const digits = String(Math.trunc(money)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    mp.game.graphics.drawText(`$${digits}`, [0.93, 0.04], {
-        font: 7,
-        color: config.accent,
-        scale: [0.6, 0.6],
-        outline: true,
-    });
-    speedometer.draw(config);
-});
+mp.events.add('render', () => speedometer.draw(config));
 
 // F5 — событие на сервер: Alt.OnServer("flovmp:client:event", (id, name, json) => ...).
 mp.keys.bind(0x74, true, () => {

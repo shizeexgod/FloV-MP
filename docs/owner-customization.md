@@ -117,7 +117,8 @@ world.traffic = on
 
 Свой клиентский код — папка `server/client_packages`, как в RAGE:MP: `index.js`
 и модули, API `mp.*`, все нативы GTA, события клиент↔сервер. Игроки скачивают
-её при входе, обновление — командой `reloadclient`. Пример — `sdk/client_packages`,
+её при входе, обновление — командой `reloadclient`. Интерфейсы на HTML/CSS/JS
+(Vue, React) — `mp.browsers.new('package://ui/index.html')`, как в RAGE:MP. Пример — `sdk/client_packages`,
 справка — раздел «Клиентский код для игроков 3889» в `gamemode/README.md`.
 
 ## 8. Чего менять нельзя

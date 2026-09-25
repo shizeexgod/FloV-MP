@@ -1,4 +1,5 @@
 #include "script.h"
+#include "browser.h"
 #include "common.h"
 #include "http.h"
 #include "ui.h"
@@ -70,6 +71,7 @@ namespace flov::script
         int g_localId = -1;
         std::string g_localName;
         bool g_cursor = false;
+        bool g_cursorFreeze = false;        // mp.gui.cursor.show(freeze, …): управление персонажем выключено
 
         // Скачивание — в своём потоке, результат забирает игровой поток.
         std::mutex g_dl;
@@ -483,10 +485,66 @@ namespace flov::script
         JSValue F_cursor(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
         {
             g_cursor = argc > 0 && JS_ToBool(ctx, argv[0]) == 1;
+            g_cursorFreeze = g_cursor && argc > 1 && JS_ToBool(ctx, argv[1]) == 1;
             return JS_UNDEFINED;
         }
 
         JSValue F_cursorVisible(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewBool(ctx, g_cursor); }
+
+        // --- браузеры (пункт 26b) ---
+        std::string Str(JSContext* ctx, JSValueConst v, size_t limit)
+        {
+            const char* s = JS_ToCString(ctx, v);
+            if (!s) return {};
+            std::string out(s);
+            JS_FreeCString(ctx, s);
+            if (out.size() > limit) out.resize(limit);
+            return out;
+        }
+
+        int Int(JSContext* ctx, JSValueConst v)
+        {
+            int32_t i = 0;
+            JS_ToInt32(ctx, &i, v);
+            return i;
+        }
+
+        JSValue F_brNew(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc < 1) return JS_NewInt32(ctx, 0);
+            return JS_NewInt32(ctx, browser::Create(Str(ctx, argv[0], 4096)));
+        }
+        JSValue F_brDel(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 0) browser::Destroy(Int(ctx, argv[0]));
+            return JS_UNDEFINED;
+        }
+        JSValue F_brUrl(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::SetUrl(Int(ctx, argv[0]), Str(ctx, argv[1], 4096));
+            return JS_UNDEFINED;
+        }
+        JSValue F_brExec(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::Execute(Int(ctx, argv[0]), Str(ctx, argv[1], 512 * 1024));
+            return JS_UNDEFINED;
+        }
+        JSValue F_brCall(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 2) browser::Call(Int(ctx, argv[0]), Str(ctx, argv[1], 128), Str(ctx, argv[2], 512 * 1024));
+            return JS_UNDEFINED;
+        }
+        JSValue F_brShow(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::Show(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
+            return JS_UNDEFINED;
+        }
+        JSValue F_brReload(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::Reload(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
+            return JS_UNDEFINED;
+        }
+        JSValue F_brAvailable(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewBool(ctx, browser::Available()); }
 
         JSValue F_localHandle(JSContext* ctx, JSValueConst, int, JSValueConst*)
         {
@@ -626,6 +684,70 @@ mp.gui.cursor = {
     set visible(v) { F.cursor(!!v, !!v); },
 };
 
+// ---- браузеры: mp.browsers как в RAGE:MP ----
+// Страница — любой адрес http(s):// или файл пакета: package://ui/index.html
+// (папка ui в client_packages). В странице есть window.mp: mp.trigger(имя, …)
+// приходит сюда в mp.events, browser.call(имя, …) — в mp.events.add страницы.
+const browsers = new Map();
+let chatBrowser = null;
+class Browser {
+    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this.orderId = id; this.inputEnabled = true; }
+    get type() { return 'browser'; }
+    get url() { return this._url; }
+    set url(u) { this._url = String(u); F.brUrl(this.id, this._url); }
+    get active() { return this._active; }
+    set active(v) { this._active = !!v; F.brShow(this.id, this._active); }
+    execute(code) { F.brExec(this.id, String(code)); }
+    call(name, ...args) { F.brCall(this.id, String(name), JSON.stringify(args)); }
+    reload(ignoreCache) { F.brReload(this.id, !!ignoreCache); }
+    destroy() {
+        if (browsers.get(this.id) !== this) return;
+        browsers.delete(this.id);
+        if (chatBrowser === this) { chatBrowser = null; F.chatShow(true); }
+        F.brDel(this.id);
+    }
+    // Страница заменяет встроенный чат: сообщения уходят в chatAPI.push(текст) страницы.
+    markAsChat() { chatBrowser = this; F.chatShow(false); }
+}
+mp.browsers = {
+    new(url) {
+        const id = F.brNew(String(url));
+        if (!id) throw new Error(F.brAvailable() ? 'mp.browsers.new: не удалось создать браузер'
+                                                  : 'mp.browsers.new: браузеры не установлены у игрока (FloVMP\\cef)');
+        const b = new Browser(id, String(url));
+        browsers.set(id, b);
+        dispatch('browserCreated', [b]);
+        return b;
+    },
+    at(id) { return browsers.get(id) || null; },
+    atRemoteId(id) { return browsers.get(id) || null; },
+    exists(b) { return !!b && browsers.get(b.id) === b; },
+    forEach(fn) { for (const b of [...browsers.values()]) fn(b, b.id); },
+    toArray() { return [...browsers.values()]; },
+    get length() { return browsers.size; },
+};
+globalThis.__flovBrowserEvent = (kind, id, a, b) => {
+    const br = browsers.get(id);
+    if (!br) return;
+    if (kind === 'dom') dispatch('browserDomReady', [br]);
+    else if (kind === 'fail') dispatch('browserLoadingFailed', [br]);
+    else if (kind === 'trigger') {
+        let args = [];
+        try { args = JSON.parse(b); } catch (e) {}
+        dispatch(a, Array.isArray(args) ? args : [args]);
+    }
+};
+const chatPush = mp.gui.chat.push;
+mp.gui.chat.push = t => {
+    if (chatBrowser) chatBrowser.execute('window.chatAPI&&chatAPI.push(' + JSON.stringify(String(t)) + ')');
+    else chatPush(t);
+};
+globalThis.__flovChatToBrowser = t => {
+    if (!chatBrowser) return false;
+    chatBrowser.execute('window.chatAPI&&chatAPI.push(' + JSON.stringify(String(t)) + ')');
+    return true;
+};
+
 // ---- то, что в RAGE:MP есть поверх нативов ----
 // Старый заголовок нативов знает эту функцию как addTextComponentString (тот же
 // хэш); скрипты с RAGE:MP зовут её новым именем.
@@ -752,6 +874,8 @@ globalThis.__flovTick = function (blocked) {
             if (g_rt) { JS_FreeRuntime(g_rt); g_rt = nullptr; }
             g_runningDigest.clear();
             g_cursor = false;
+            g_cursorFreeze = false;
+            browser::DestroyAll();   // страницы сервера живут, пока жив его код
         }
 
         bool CreateRuntime()
@@ -783,6 +907,14 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "localHeading", F_localHeading, 0);
             AddFn(g_ctx, F, "localId", F_localId, 0);
             AddFn(g_ctx, F, "localName", F_localName, 0);
+            AddFn(g_ctx, F, "brNew", F_brNew, 1);
+            AddFn(g_ctx, F, "brDel", F_brDel, 1);
+            AddFn(g_ctx, F, "brUrl", F_brUrl, 2);
+            AddFn(g_ctx, F, "brExec", F_brExec, 2);
+            AddFn(g_ctx, F, "brCall", F_brCall, 3);
+            AddFn(g_ctx, F, "brShow", F_brShow, 2);
+            AddFn(g_ctx, F, "brReload", F_brReload, 2);
+            AddFn(g_ctx, F, "brAvailable", F_brAvailable, 0);
             JS_SetPropertyStr(g_ctx, global, "__flov", F);
 
             // mp.game: все нативы по пространствам + invoke.
@@ -827,9 +959,32 @@ globalThis.__flovTick = function (blocked) {
             }
         }
 
+        /// События браузеров → mp.events скрипта.
+        void FlushBrowserEvents()
+        {
+            for (auto& e : browser::TakeEvents())
+            {
+                if (!g_ctx) return;
+                using K = browser::Event::Kind;
+                if (e.kind == K::Console)
+                {
+                    const int level = std::clamp(atoi(e.a.c_str()), 0, 2);
+                    Say(level, "[страница " + std::to_string(e.id) + "] " + e.b);
+                    continue;
+                }
+                if (e.kind == K::HostLost) { Say(1, "браузеры: хост закрылся, поднимаю заново"); continue; }
+                const char* kind = e.kind == K::DomReady ? "dom" : e.kind == K::LoadFailed ? "fail" : "trigger";
+                JSValue argv[4] = { JS_NewString(g_ctx, kind), JS_NewInt32(g_ctx, e.id),
+                                    JS_NewString(g_ctx, e.a.c_str()), JS_NewString(g_ctx, e.b.c_str()) };
+                CallGlobal("__flovBrowserEvent", 4, argv, kCallBudgetMs);
+                for (auto& v : argv) JS_FreeValue(g_ctx, v);
+            }
+        }
+
         bool StartFrom(const std::wstring& dir, const std::string& digest)
         {
             g_packageDir = dir;
+            browser::SetPackageRoot(dir);
             if (!CreateRuntime()) { Say(2, "не удалось создать движок JS"); return false; }
             g_runningDigest = digest;
             if (!CallGlobal("__flovMain", 0, nullptr, kStartBudgetMs))
@@ -1013,6 +1168,7 @@ globalThis.__flovTick = function (blocked) {
         if (!startDir.empty()) StartFrom(startDir, startDigest);
         if (!g_ctx) return;
         FlushInbox();
+        FlushBrowserEvents();
         JSValue blocked = JS_NewBool(g_ctx, inputBlocked);
         CallGlobal("__flovTick", 1, &blocked, kCallBudgetMs);
     }
@@ -1048,6 +1204,27 @@ globalThis.__flovTick = function (blocked) {
         g_outCount = 0;
         g_outWindow = 0;
     }
+
+    bool ChatToBrowser(const std::string& text)
+    {
+        if (!g_ctx) return false;
+        JSValue global = JS_GetGlobalObject(g_ctx);
+        JSValue f = JS_GetPropertyStr(g_ctx, global, "__flovChatToBrowser");
+        JSValue arg = JS_NewString(g_ctx, text.c_str());
+        g_deadline = GetTickCount64() + kCallBudgetMs;
+        JSValue r = JS_Call(g_ctx, f, global, 1, &arg);
+        g_deadline = 0;
+        const bool taken = !JS_IsException(r) && JS_ToBool(g_ctx, r) == 1;
+        if (JS_IsException(r)) Say(2, "чат в страницу: " + DescribeException(g_ctx));
+        JS_FreeValue(g_ctx, r);
+        JS_FreeValue(g_ctx, arg);
+        JS_FreeValue(g_ctx, f);
+        JS_FreeValue(g_ctx, global);
+        return taken;
+    }
+
+    bool CursorWanted() { return g_ctx && g_cursor; }
+    bool CursorFreeze() { return g_ctx && g_cursor && g_cursorFreeze; }
 
     bool RunSource(const std::string& fileName, const std::string& source)
     {

@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "http.h"
 #include "script.h"
+#include "browser.h"
 #include "crash.h"
 
 #include <mutex>
@@ -214,18 +215,19 @@ namespace flov::game
             e = 0;
         }
 
-        void Chat(const std::string& text) { ui::AddChat(text); }
+        // Чат сервера заменён страницей (browser.markAsChat) — строки идут в неё.
+        void Chat(const std::string& text) { if (!script::ChatToBrowser(text)) ui::AddChat(text); }
 
         void SendChatLine(const std::string& kind, const std::string& author, const std::string& text)
         {
             // Обычная реплика — как в прежнем чате: жирный автор и текст.
-            if (kind == "player") ui::AddChat(text, author);
+            if (kind == "player") { if (!script::ChatToBrowser(author + ": " + text)) ui::AddChat(text, author); }
             else if (kind == "me") Chat("{c084fc}* " + author + " " + text);
             else if (kind == "do") Chat("{c084fc}* " + text + " (" + author + ")");
             else if (kind == "ooc") Chat("{a1a1aa}(( " + author + ": " + text + " ))");
             else if (kind == "shout") Chat("{fbbf24}" + author + " кричит: " + text);
             else if (kind == "whisper") Chat("{f9a8d4}" + author + " шепчет: " + text);
-            else if (kind == "admin") ui::AddChat(text, "[A] " + author, 0x34D399);
+            else if (kind == "admin") { if (!script::ChatToBrowser("{34d399}[A] " + author + ": {ffffff}" + text)) ui::AddChat(text, "[A] " + author, 0x34D399); }
             else if (!author.empty()) Chat("{ff3d8a}[" + author + "]{ffffff} " + text);
             else Chat("{ffffff}" + text);
         }
@@ -1301,6 +1303,25 @@ namespace flov::game
             {
                 n::DISABLE_ALL_CONTROL_ACTIONS(0);
                 for (int g : { 0, 2 }) { n::DISABLE_CONTROL_ACTION(g, 199, TRUE); n::DISABLE_CONTROL_ACTION(g, 200, TRUE); }
+            }
+            // Курсор клиентского кода сервера (mp.gui.cursor.show): мышь — браузерам,
+            // камера и стрельба выключены, с freeze — и всё управление персонажем.
+            const bool scriptCursor = script::CursorWanted() && !ui::ConsoleOpen() && !ui::LoadingVisible();
+            ui::SetScriptCursor(scriptCursor);
+            browser::SetInput(scriptCursor && !ui::InputActive());
+            if (scriptCursor)
+            {
+                if (script::CursorFreeze()) n::DISABLE_ALL_CONTROL_ACTIONS(0);
+                for (int c : { 1, 2, 24, 25, 68, 69, 70, 91, 92, 106, 114, 140, 141, 142, 257, 263, 264, 331 })
+                    n::DISABLE_CONTROL_ACTION(0, c, TRUE);
+                int wheel = 0;
+                if (n::IS_DISABLED_CONTROL_JUST_PRESSED(0, 241)) wheel += 1;
+                if (n::IS_DISABLED_CONTROL_JUST_PRESSED(0, 242)) wheel -= 1;
+                const float mx = n::GET_DISABLED_CONTROL_NORMAL(0, 239), my = n::GET_DISABLED_CONTROL_NORMAL(0, 240);
+                const bool left = n::IS_DISABLED_CONTROL_PRESSED(0, 237) != 0;
+                const bool right = n::IS_DISABLED_CONTROL_PRESSED(0, 238) != 0;
+                ui::SetCursor(mx, my, left, wheel);
+                browser::Mouse(mx, my, (left ? 1 : 0) | (right ? 2 : 0), wheel);
             }
             if (ui::ConsoleOpen())
             {
@@ -2815,6 +2836,8 @@ namespace flov::game
         crash::Install();   // поверх обработчика, который игра ставит при старте
         ApplySettings(); // значения по умолчанию до первого CFG от сервера
         script::SetNativeBackend({ shv::nativeInit, shv::nativePush64, shv::nativeCall });
+        ui::SetUnderlay(browser::Render);   // браузеры сервера под интерфейсом платформы
+        ui::SetKeySink(browser::Key);
         ui::SetWindowTitle("FloV Multiplayer");
         while (n::GET_IS_LOADING_SCREEN_ACTIVE() || !n::DOES_ENTITY_EXIST(n::PLAYER_PED_ID())) WAIT(250);
 
@@ -2839,6 +2862,7 @@ namespace flov::game
 
     void Shutdown()
     {
+        browser::Shutdown();
         g_net.Disconnect("выгрузка клиента");
     }
 }

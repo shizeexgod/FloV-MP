@@ -17,6 +17,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <deque>
 #include <mutex>
@@ -548,6 +549,10 @@ namespace flov::ui
         /// мало — его клавиши просто не приходят в WndProc. Низкоуровневый хук
         /// забирает их раньше игры. Работает только когда окно игры активно,
         /// чтобы не мешать остальной системе.
+        std::atomic<KeySink> g_keySink{ nullptr };
+        std::atomic<Underlay> g_underlay{ nullptr };
+        bool g_scriptCursor = false;
+
         LRESULT CALLBACK LowLevelKeyboard(int code, WPARAM wp, LPARAM lp)
         {
             if (code == HC_ACTION && lp)
@@ -579,6 +584,12 @@ namespace flov::ui
 
         LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
+            // Курсор скрипта открыт — клавиатура браузерам сервера (кроме
+            // случая, когда игрок печатает в нашем чате или консоли).
+            if (const auto sink = g_keySink.load())
+                if ((msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_CHAR || msg == WM_SYSKEYDOWN ||
+                     msg == WM_SYSKEYUP || msg == WM_SYSCHAR) && wp != VK_F12 && !InputActive() && sink(msg, wp, lp))
+                    return 0;
             switch (msg)
             {
             case WM_KEYDOWN:
@@ -1780,12 +1791,18 @@ namespace flov::ui
                 g_wheel = 0;
                 return;
             }
-            if (g_loading || g_loadingHiddenAt)
+            if (g_loading)
             {
                 DrawLoading(dl, w, h);
-                if (g_loading) { g_clickPending = false; g_wheel = 0; return; }
+                g_clickPending = false;
+                g_wheel = 0;
+                return;
             }
+            // Слои снизу вверх: ники в мире, страницы сервера (браузеры),
+            // гаснущий экран загрузки, затем чат, меню и HUD платформы.
             DrawLabels(dl, w, h);
+            if (const auto underlay = g_underlay.load()) underlay(g_device, g_context, dl, w, h);
+            if (g_loadingHiddenAt) DrawLoading(dl, w, h);
             DrawChat(dl, w, h);
             DrawMenu(dl, w, h);
             DrawHud(dl, w, h);
@@ -1794,7 +1811,12 @@ namespace flov::ui
                 DrawConsole(dl, w, h);
                 DrawCursor(dl, MousePos(w, h));
             }
-            else { g_clickPending = false; g_wheel = 0; }
+            else
+            {
+                g_clickPending = false;
+                g_wheel = 0;
+                if (g_scriptCursor) DrawCursor(dl, MousePos(w, h));
+            }
         }
 
         // --- DX11 и шрифты --------------------------------------------------------------
@@ -2356,6 +2378,15 @@ namespace flov::ui
         host = ToUtf8(g_connectHost);
         name = ToUtf8(g_connectName);
         return true;
+    }
+
+    void SetUnderlay(Underlay fn) { g_underlay = fn; }
+    void SetKeySink(KeySink fn) { g_keySink = fn; }
+
+    void SetScriptCursor(bool visible)
+    {
+        std::lock_guard lock(g_mutex);
+        g_scriptCursor = visible;
     }
 
     bool InputActive()

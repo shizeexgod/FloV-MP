@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "script.h"
+#include "browser.h"
 
 namespace
 {
@@ -243,6 +244,9 @@ int wmain()
     {
         // Пример из SDK (sdk/client_packages): загружается, сообщает серверу о
         // готовности, принимает деньги и рисует HUD без ошибок.
+#ifdef FLOVMP_CEF_HOST
+        flov::browser::SetHostExe(FLOVMP_CEF_HOST);   // пример создаёт страницу HTML
+#endif
         flov::script::Reset();
         g_result[0] = 1;   // «в машине» — чтобы отработал и спидометр
         const bool ok = flov::script::RunFolder(FLOVMP_SDK_PACKAGES);
@@ -261,11 +265,54 @@ int wmain()
         g_result[0] = 0;
     }
 #endif
+    printf("Браузеры:\n");
+    {
+        flov::script::Reset();
+        flov::browser::Shutdown();
+        flov::browser::SetHostExe(L"C:\\нет\\flovmp-cef.exe");
+        Run("try { mp.browsers.new('package://ui/index.html'); } catch (e) { mp.events.callRemote('nobrowser', e.message.includes('не установлены')); }");
+        auto out = flov::script::TakeOutgoing();
+        Check(out.size() == 1 && out[0].second == "[true]", "без хоста — понятная ошибка, а не падение");
+    }
+#ifdef FLOVMP_CEF_HOST
+    {
+        wchar_t tmp[MAX_PATH];
+        GetTempPathW(MAX_PATH, tmp);
+        const std::wstring dir = std::wstring(tmp) + L"flovmp-script-browser";
+        CreateDirectoryW(dir.c_str(), nullptr);
+        CreateDirectoryW((dir + L"\\ui").c_str(), nullptr);
+        std::ofstream(dir + L"\\ui\\index.html") <<
+            "<!doctype html><script>mp.events.add('hello', (who) => mp.trigger('page:hi', 'привет, ' + who));"
+            "mp.trigger('page:loaded', location.href);</script>";
+        std::ofstream(dir + L"\\index.js") <<
+            "const b = mp.browsers.new('package://ui/index.html');\n"
+            "mp.events.add('browserDomReady', (br) => { if (br === b) b.call('hello', 'сервер'); });\n"
+            "mp.events.add('page:loaded', (href) => mp.events.callRemote('loaded', href, mp.browsers.length, mp.browsers.exists(b)));\n"
+            "mp.events.add('page:hi', (text) => { mp.events.callRemote('hi', text); b.destroy(); mp.events.callRemote('after', mp.browsers.length); });\n";
+        flov::browser::SetHostExe(FLOVMP_CEF_HOST);
+        flov::script::Reset();
+        Check(flov::script::RunFolder(dir), "index.js с mp.browsers.new запустился");
+        std::vector<std::pair<std::string, std::string>> got;
+        const ULONGLONG end = GetTickCount64() + 30000;
+        while (GetTickCount64() < end && got.size() < 3)
+        {
+            flov::script::Tick(false);
+            for (auto& e : flov::script::TakeOutgoing()) got.push_back(e);
+            Sleep(16);
+        }
+        auto find = [&](const char* n) -> std::string { for (auto& [k, v] : got) if (k == n) return v; return "—"; };
+        Check(find("loaded") == "[\"package://ui/index.html\",1,true]", "страница загрузилась, mp.trigger → mp.events скрипта (" + find("loaded") + ")");
+        Check(find("hi") == "[\"привет, сервер\"]", "browserDomReady → browser.call → страница → обратно (" + find("hi") + ")");
+        Check(find("after") == "[0]", "browser.destroy");
+        flov::script::Reset();
+    }
+#endif
     {
         Run("syntax error here(");
         Check(!flov::script::Running() || true, "ошибка синтаксиса не роняет клиент");
     }
 
+    flov::browser::Shutdown();
     printf("\nИтог: пройдено %d, ошибок %d\n", g_passed, g_failed);
     flov::script::Reset();
     return g_failed == 0 ? 0 : 1;

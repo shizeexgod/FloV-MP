@@ -172,6 +172,14 @@ public sealed class GamemodeResource : Resource
                 // Пример из sdk/client_packages: HUD загрузился у игрока.
                 Alt.Emit("flovmp:client:call", id, "hud:money", "[5000]");
                 break;
+
+            case "hud:report":
+                // Панель F2 из примера (страница HTML): текст прислал игрок — длину и
+                // содержимое проверяем здесь, а не верим клиенту.
+                var text = System.Text.Json.JsonSerializer.Deserialize<string[]>(json)?.FirstOrDefault() ?? "";
+                if (text.Length is 0 or > 200) return;
+                SendChat(id, "{34d399}[Сервер]{ffffff} Обращение принято: " + text);
+                break;
         }
     }
 

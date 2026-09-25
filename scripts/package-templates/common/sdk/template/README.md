@@ -572,7 +572,45 @@ Alt.OnServer<int, string, string>("flovmp:client:event", (playerId, name, json) 
 100 мс, бесконечная рекурсия даёт `RangeError` — игра не зависает. Память
 скрипта ограничена 256 МБ.
 
-### Чего пока нет
+### Интерфейсы на HTML: `mp.browsers`
 
-Браузеров (`mp.browsers.new` — HTML/Vue/React-интерфейсы) — в работе, следующий
-шаг. До этого интерфейс рисуется нативами, как в примере.
+Как в RAGE:MP: страница HTML/CSS/JS (Vue, React, Svelte — что угодно, что
+собирается в файлы) поверх игры. Под капотом — Chromium 131 в отдельном
+процессе `flovmp-cef.exe` рядом с игрой: он ставится вместе с клиентом, и если
+упадёт, игра продолжит работать, а страницы поднимутся заново.
+
+```js
+// client_packages/index.js
+const ui = mp.browsers.new('package://ui/index.html');   // файл ui/index.html пакета
+ui.call('hud:money', 5000);                               // → mp.events.add в странице
+mp.events.add('panel:submit', (text) => { /* ← mp.trigger из страницы */ });
+mp.gui.cursor.show(true, true);                           // мышь и клавиатура — странице
+```
+
+```js
+// client_packages/ui/app.js — в самой странице
+mp.events.add('hud:money', (value) => { money.textContent = value; });
+mp.trigger('panel:submit', input.value);
+```
+
+| Что | Как |
+|---|---|
+| создать | `mp.browsers.new(url)` — `package://папка/файл.html` (файлы client_packages) или `https://…` |
+| управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.reload(ignoreCache)`, `browser.destroy()` |
+| в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
+| из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
+| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed` (аргумент — браузер) |
+| список | `mp.browsers.at(id)`, `exists(b)`, `forEach(fn)`, `toArray()`, `length` |
+| чат на HTML | `browser.markAsChat()` — встроенный чат скрывается, строки чата (и `mp.gui.chat.push`) идут в `chatAPI.push(текст)` страницы |
+| мышь и клавиатура | `mp.gui.cursor.show(freeze, show)`: курсор, клики, колесо и ввод текста уходят страницам; `freeze` — персонаж стоит |
+
+Несколько страниц накладываются по порядку создания. Клик уходит верхней,
+у которой под курсором не прозрачно, — прозрачные места пропускают клик
+ниже. Страницы — над миром и никами игроков, но под чатом, меню и консолью
+платформы. `console.log` страницы виден в консоли F8.
+
+Правила безопасности: `package://` отдаёт только файлы пакета (выход за папку
+закрыт), переходы на `file://` и служебные страницы Chromium запрещены,
+всплывающие окна не открываются. Пример — `sdk/client_packages/ui` (деньги и
+панель по F2 с формой, ответ сервера — в шаблоне gamemode, событие
+`hud:report`).

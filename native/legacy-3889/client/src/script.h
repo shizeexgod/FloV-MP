@@ -67,4 +67,12 @@ namespace flov::script
 
     /// Скрипт сейчас работает.
     bool Running();
+
+    /// Скрипт показал курсор (mp.gui.cursor.show) и хочет ли заморозить персонажа.
+    bool CursorWanted();
+    bool CursorFreeze();
+
+    /// Строка чата — в страницу, которую скрипт сделал чатом (markAsChat).
+    /// false — такой страницы нет, строка идёт во встроенный чат.
+    bool ChatToBrowser(const std::string& text);
 }

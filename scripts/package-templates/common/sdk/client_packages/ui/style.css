@@ -1,0 +1,133 @@
+﻿/* Пример интерфейса сервера. Цвета — переменные: поменяйте под свой проект. */
+:root {
+  color-scheme: dark;
+  --accent: #ff3d8a;
+  --bg: rgba(12, 12, 16, 0.82);
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --radius: 6px;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent; /* под страницей — игра */
+  color: var(--text);
+  overflow: hidden;
+  user-select: none;
+}
+
+.hud {
+  position: fixed;
+  top: 72px;
+  right: 40px;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.hud__player {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud__money {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  overscroll-behavior: contain;
+}
+
+.panel[hidden] { display: none; }
+
+.panel__card {
+  width: min(440px, calc(100vw - 48px));
+  padding: 28px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  animation: rise 180ms ease-out;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 20px;
+  text-wrap: balance;
+}
+
+.panel__hint {
+  margin: 6px 0 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field { display: grid; gap: 8px; }
+.field__label { font-size: 13px; color: var(--muted); }
+
+.field__input {
+  height: 40px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  user-select: text;
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.button {
+  height: 38px;
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.button:hover { opacity: 0.9; }
+.button:active { transform: translateY(1px); }
+.button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.button--ghost { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel__card { animation: none; }
+  .button { transition: none; }
+}

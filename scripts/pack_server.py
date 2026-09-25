@@ -385,6 +385,14 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
     if client_asi:
         copy_tree(os.path.join(TEMPLATES, "client-b3889"), S("client-b3889"))
         copy(client_asi, S("client-b3889", "FloVMP.asi"))
+        # Браузеры клиентского кода (mp.browsers, пункт 26b): хост и Chromium
+        # рядом с FloVMP.asi, в папке игры — FloVMP\cef.
+        cef = os.path.join(os.path.dirname(client_asi), "cef")
+        if os.path.isfile(os.path.join(cef, "flovmp-cef.exe")) and os.path.isfile(os.path.join(cef, "libcef.dll")):
+            copy_tree(cef, S("client-b3889", "FloVMP", "cef"))
+        else:
+            log("ВНИМАНИЕ: нет сборки браузеров (" + cef + ") — mp.browsers у игроков работать не будет. "
+                "Нужен CEF SDK в .work/cef (см. native/legacy-3889/client/CMakeLists.txt).")
 
     with open(S("VERSION"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write(version + "\n")

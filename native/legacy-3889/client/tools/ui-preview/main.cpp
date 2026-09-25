@@ -27,6 +27,7 @@
 #include "common.h"
 #include "http.h"
 #include "ui.h"
+#include "browser.h"
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -200,6 +201,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
     // у пользователя не отбирается.
     std::wstring shotPath, scene = L"hud";
     std::wstring fetchUrl;
+    std::wstring browserUrl, cefExe, packageRoot, callName, callArgs;   // --call имя JSON — событие в страницу
     {
         int count = 0;
         LPWSTR* argv = CommandLineToArgvW(commandLine, &count);
@@ -211,6 +213,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
             // --fetch <ссылка>: проверить скачивание фона с сервера тем же кодом,
             // что работает в игре.
             else if (arg == L"--fetch" && i + 1 < count) fetchUrl = argv[++i];
+            // --browser <адрес> [--cef <flovmp-cef.exe>] [--root <папка client_packages>]:
+            // страница сервера под интерфейсом, как в игре (пункт 26b).
+            else if (arg == L"--browser" && i + 1 < count) browserUrl = argv[++i];
+            else if (arg == L"--cef" && i + 1 < count) cefExe = argv[++i];
+            else if (arg == L"--root" && i + 1 < count) packageRoot = argv[++i];
+            else if (arg == L"--call" && i + 2 < count) { callName = argv[++i]; callArgs = argv[++i]; }
         }
         if (argv) LocalFree(argv);
     }
@@ -280,6 +288,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
     });
     flov::ui::SetLoadingStyle({}, 0xFF3D8A);
     FillChat();
+    int browserId = 0;
+    if (!browserUrl.empty())
+    {
+        if (!cefExe.empty()) flov::browser::SetHostExe(cefExe);
+        if (!packageRoot.empty()) flov::browser::SetPackageRoot(packageRoot);
+        flov::ui::SetUnderlay(flov::browser::Render);
+        flov::ui::SetKeySink(flov::browser::Key);
+        flov::browser::SetInput(true);
+        browserId = flov::browser::Create(flov::ToUtf8(browserUrl));
+    }
     flov::ui::Notify("Средство предпросмотра: F1 HUD, F2 загрузка, F3 меню, F4 уведомление", 6000);
 
     LARGE_INTEGER freq{}, start{}, prev{};
@@ -358,6 +376,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         const float height = (float)std::max<LONG>(1, client.bottom - client.top);
         flov::ui::SetCursor((float)cursor.x / width, (float)cursor.y / height,
                             (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0, 0);
+        if (browserId)
+        {
+            if (!headless && GetForegroundWindow() == hwnd)
+                flov::browser::Mouse((float)cursor.x / width, (float)cursor.y / height,
+                                     ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) ? 1 : 0) | ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) ? 2 : 0), 0);
+            for (const auto& e : flov::browser::TakeEvents())
+            {
+                if (e.kind == flov::browser::Event::Kind::Console) flov::ui::ConsoleLog("CEF", e.b);
+                else if (e.kind == flov::browser::Event::Kind::Trigger) flov::ui::ConsoleLog("CEF", "mp.trigger " + e.a + " " + e.b);
+            }
+        }
 
         flov::ui::SetLabels(DemoLabels(time));
         PushStats(dt > 0.f ? 1.f / dt : 0.f, time);
@@ -382,7 +411,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int)
         // Ждём и кадры, и время: панели появляются с плавным проявлением, и
         // снимок, сделанный слишком рано, показывает их полупрозрачными.
         ++frame;
-        if (headless && frame >= 45 && time > 1.2f)
+        // Со страницей — ждём её первого кадра и ещё пару секунд на анимации.
+        static float browserSince = -1.f;
+        if (browserId && browserSince < 0.f && flov::browser::TextureOf(browserId))
+        {
+            browserSince = time;
+            if (!callName.empty()) flov::browser::Call(browserId, flov::ToUtf8(callName), flov::ToUtf8(callArgs));
+        }
+        const bool browserReady = !browserId || (browserSince >= 0.f && time - browserSince > 2.5f) || time > 30.f;
+        if (headless && frame >= 45 && time > 1.2f && browserReady)
         {
             SaveFrame(shotPath);
             g_running = false;

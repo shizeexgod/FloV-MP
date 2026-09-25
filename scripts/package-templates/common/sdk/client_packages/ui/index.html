@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>HUD</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Деньги: всегда на экране, поверх игры. -->
+  <section class="hud" aria-label="Состояние игрока">
+    <p class="hud__player" id="player" translate="no">Игрок</p>
+    <p class="hud__money" id="money" aria-live="polite">$0</p>
+  </section>
+
+  <!-- Панель по F2: курсор открывается, игра получает управление обратно по Esc. -->
+  <div class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panel-title" hidden>
+    <form class="panel__card" id="report">
+      <h1 class="panel__title" id="panel-title">Сообщить администрации</h1>
+      <p class="panel__hint">Страница на HTML из client_packages — как в RAGE:MP.</p>
+      <label class="field">
+        <span class="field__label">Что случилось</span>
+        <input class="field__input" id="report-text" name="report" autocomplete="off" maxlength="200"
+               placeholder="Например: застрял в текстуре…" required>
+      </label>
+      <div class="panel__actions">
+        <button class="button button--ghost" type="button" id="close">Закрыть</button>
+        <button class="button" type="submit" id="send">Отправить</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
