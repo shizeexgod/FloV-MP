@@ -170,7 +170,7 @@ CEF host уже отправляет code и url, но JS dispatch выдаёт 
 
 Исправление: dispatch('browserLoadingFailed', [br, Number(a), b]) и тест API.
 
-[P1-2] До 32 полноэкранных браузеров — большой неконтролируемый расход
+[P1-2] ЗАКРЫТО 26.09: лимиты и метрики browser-ресурсов
 -------------------------------------------------------------------
 Файл: native/legacy-3889/client/src/browser.cpp:344-353
 
@@ -178,12 +178,16 @@ CEF host уже отправляет code и url, но JS dispatch выдаёт 
 Один 1920x1080 BGRA буфер ≈ 7.9 MiB; с общей памятью, staging/GPU и Chromium
 реальная цена выше. 32 активных browser могут занять сотни MiB и загрузить CPU.
 
-Исправление:
-  - лимит сделать конфигурируемым, но с безопасным default 8–12;
-  - скрытые browser переводить в WasHidden и не композитить;
-  - добавить bounds/viewport и optional frameRate (HUD 60, статичные меню 30);
-  - вести метрики browser count, frame time, dropped frames, memory estimate;
-  - лимит должен проверяться и клиентом, и CEF host.
+Сделано: общий контракт ограничивает 12 browser и суммарную площадь эквивалентом
+12×1920×1080; клиент и CEF host проверяют его независимо. При 4K/множестве слоёв
+внутреннее CEF-разрешение пропорционально снижается без изменения экранной
+геометрии. `mp.browsers.stats` отдаёт count/visible, screen/render size, pixels,
+приблизительную память, upload/dropped frames и upload time. Hidden browser уже
+переводится в WasHidden, frameRate регулируется 1–60. Integration-тест создаёт
+предел слоёв, отклоняет лишний без падения, проверяет pixel-budget,
+`frameRate=1` и остановку композитинга hidden browser.
+
+Остаток вынесен в P1-4: per-browser bounds и явный focus/cursor ownership.
 
 [P1-3] Нет полноценного контроля origin/subresource policy
 ---------------------------------------------------------

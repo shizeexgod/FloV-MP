@@ -845,6 +845,18 @@ namespace
         {
             const int id = I(at(1));
             if (id <= 0 || g_browsers.count(id)) return;
+            if (g_browsers.size() >= ipc::kMaxBrowsers)
+            {
+                Send({ "LOG", "0", "2", "CEF host: достигнут лимит browser " + N(ipc::kMaxBrowsers) });
+                Send({ "FAIL", N(id), "-3", at(2) });
+                return;
+            }
+            if ((uint64_t)(g_browsers.size() + 1) * g_width * g_height > ipc::kMaxTotalPixels)
+            {
+                Send({ "LOG", "0", "2", "CEF host: превышен общий pixel-budget" });
+                Send({ "FAIL", N(id), "-4", at(2) });
+                return;
+            }
             CefRefPtr<Browser> b = new Browser(id);
             g_browsers[id] = b;
             CefWindowInfo wi;
@@ -864,6 +876,11 @@ namespace
         {
             const int w = I(at(1)), h = I(at(2));
             if (w < 64 || h < 64 || w > ipc::kMaxSide || h > ipc::kMaxSide) return;
+            if ((uint64_t)g_browsers.size() * w * h > ipc::kMaxTotalPixels)
+            {
+                Send({ "LOG", "0", "2", "CEF host: SIZE отклонён — превышен общий pixel-budget" });
+                return;
+            }
             g_width = w;
             g_height = h;
             for (auto& [id, b] : g_browsers) if (b->Get()) b->Get()->GetHost()->WasResized();

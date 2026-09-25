@@ -4,12 +4,14 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <deque>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "imgui.h"
@@ -41,6 +43,7 @@ namespace flov::browser
             size_t viewBytes = 0;
             int w = 0, h = 0;
             LONG64 lastSeq = -1;
+            LONG64 lastDroppedSeq = -1;
             // Текстура (только поток Present)
             ID3D11Texture2D* tex = nullptr;
             ID3D11ShaderResourceView* srv = nullptr;
@@ -94,12 +97,18 @@ namespace flov::browser
 
         // Рисование
         int g_sentW = 0, g_sentH = 0;
+        int g_screenW = 0, g_screenH = 0;
+        uint64_t g_uploadedFrames = 0;
+        uint64_t g_droppedFrames = 0;
+        uint64_t g_uploadMicros = 0;
+        LARGE_INTEGER g_perfFrequency{};
         ID3D11DeviceContext* g_ctx = nullptr;
         ID3D11BlendState* g_premul = nullptr;
 
         std::string N(long long v) { return std::to_string(v); }
         void SendLocked(const std::vector<std::string>& fields);
         std::string Utf8(const std::wstring& w);
+        void Push(Event::Kind kind, int id, std::string a = {}, std::string b = {});
 
         std::vector<std::string> ReadOriginPolicy(const std::wstring& root)
         {
@@ -125,6 +134,37 @@ namespace flov::browser
             std::vector<std::string> fields{ "ROOT", Utf8(g_root) };
             fields.insert(fields.end(), g_allowedOrigins.begin(), g_allowedOrigins.end());
             SendLocked(fields);
+        }
+
+        std::pair<int, int> RenderSizeLocked(size_t count)
+        {
+            if (!count) return { 0, 0 };
+            int w = g_screenW > 0 ? g_screenW : 1920;
+            int h = g_screenH > 0 ? g_screenH : 1080;
+            const uint64_t pixels = (uint64_t)w * h * count;
+            if (pixels <= ipc::kMaxTotalPixels) return { w, h };
+            const double scale = std::sqrt((double)ipc::kMaxTotalPixels / (double)pixels);
+            w = std::max(64, (int)std::floor(w * scale));
+            h = std::max(64, (int)std::floor(h * scale));
+            while ((uint64_t)w * h * count > ipc::kMaxTotalPixels)
+            {
+                if (w >= h) --w;
+                else --h;
+            }
+            return { w, h };
+        }
+
+        void UpdateRenderSizeLocked(size_t count, bool announceScale)
+        {
+            if (!count) { g_sentW = g_sentH = 0; return; }
+            const auto [w, h] = RenderSizeLocked(count);
+            if (w == g_sentW && h == g_sentH) return;
+            g_sentW = w;
+            g_sentH = h;
+            SendLocked({ "SIZE", N(w), N(h) });
+            if (announceScale && g_screenW > 0 && (w != g_screenW || h != g_screenH))
+                Push(Event::Kind::Console, 0, "1", "браузеры: внутреннее CEF-разрешение снижено до " +
+                     N(w) + "x" + N(h) + " из-за общего лимита памяти");
         }
 
         std::vector<int> OrderedIdsLocked()
@@ -164,7 +204,7 @@ namespace flov::browser
             return s;
         }
 
-        void Push(Event::Kind kind, int id, std::string a = {}, std::string b = {})
+        void Push(Event::Kind kind, int id, std::string a, std::string b)
         {
             if (g_events.size() >= 512) g_events.pop_front();
             g_events.push_back({ kind, id, std::move(a), std::move(b) });
@@ -460,13 +500,17 @@ namespace flov::browser
     int Create(const std::string& url)
     {
         std::lock_guard lock(g_mutex);
-        if (g_items.size() >= 32) { Log("браузеры: больше 32 одновременно не создаётся"); return 0; }
+        if (g_items.size() >= ipc::kMaxBrowsers)
+        {
+            Log("браузеры: достигнут безопасный лимит " + N(ipc::kMaxBrowsers));
+            return 0;
+        }
         if (!StartHostLocked()) return 0;
         const int id = ++g_nextId;
         g_items[id].url = url;
         g_items[id].order = id;
         SendRootLocked();
-        if (g_sentW) SendLocked({ "SIZE", N(g_sentW), N(g_sentH) });
+        UpdateRenderSizeLocked(g_items.size(), true);
         SendLocked({ "NEW", N(id), url });
         return id;
     }
@@ -483,19 +527,29 @@ namespace flov::browser
         if (it->second.srv) it->second.srv->Release();
         if (it->second.tex) it->second.tex->Release();
         g_items.erase(it);
+        UpdateRenderSizeLocked(g_items.size(), false);
         if (g_mouseTarget == id) g_mouseTarget = 0;
         if (g_focus == id) g_focus = 0;
     }
 
     void DestroyAll()
     {
-        std::vector<int> ids;
+        std::lock_guard lock(g_mutex);
+        // Не вызываем Destroy по одному: иначе каждый промежуточный count
+        // увеличивает CEF-разрешение оставшихся страниц прямо перед их закрытием.
+        for (auto& [id, it] : g_items)
         {
-            std::lock_guard lock(g_mutex);
-            for (auto& [id, it] : g_items) ids.push_back(id);
-            g_events.clear();
+            SendLocked({ "DEL", N(id) });
+            CloseFrame(it);
+            if (it.srv) it.srv->Release();
+            if (it.tex) it.tex->Release();
         }
-        for (int id : ids) Destroy(id);
+        g_items.clear();
+        g_events.clear();
+        g_mouseTarget = g_focus = 0;
+        g_lastX = g_lastY = -1;
+        g_lastButtons = 0;
+        g_sentW = g_sentH = 0;
     }
 
     void Shutdown()
@@ -522,6 +576,8 @@ namespace flov::browser
             g_hostReady = false;
             g_backlog.clear();
             g_restarts = 0;
+            g_screenW = g_screenH = g_sentW = g_sentH = 0;
+            g_uploadedFrames = g_droppedFrames = g_uploadMicros = 0;
         }
         if (process)
         {
@@ -635,6 +691,31 @@ namespace flov::browser
         return false;
     }
 
+    Stats GetStats()
+    {
+        std::lock_guard lock(g_mutex);
+        Stats out;
+        out.count = (int)g_items.size();
+        out.maxBrowsers = (int)ipc::kMaxBrowsers;
+        out.screenWidth = g_screenW;
+        out.screenHeight = g_screenH;
+        out.renderWidth = g_sentW;
+        out.renderHeight = g_sentH;
+        out.uploadedFrames = g_uploadedFrames;
+        out.droppedFrames = g_droppedFrames;
+        out.uploadMicros = g_uploadMicros;
+        for (const auto& [id, it] : g_items)
+        {
+            if (it.visible) ++out.visible;
+            out.pixels += (uint64_t)std::max(0, it.w) * std::max(0, it.h);
+            out.estimatedBytes += it.viewBytes + it.stableFrame.capacity() + it.scratch.capacity() +
+                                  (uint64_t)std::max(0, it.texW) * std::max(0, it.texH) * 4;
+        }
+        return out;
+    }
+
+    int MaxCount() { return (int)ipc::kMaxBrowsers; }
+
     void SetInput(bool enabled)
     {
         const bool was = g_input.exchange(enabled);
@@ -738,11 +819,11 @@ namespace flov::browser
         auto* dl = static_cast<ImDrawList*>(drawList);
         std::lock_guard lock(g_mutex);
         const int w = (int)width, h = (int)height;
-        if (w > 0 && h > 0 && (w != g_sentW || h != g_sentH))
+        if (w > 0 && h > 0 && (w != g_screenW || h != g_screenH))
         {
-            g_sentW = w;
-            g_sentH = h;
-            SendLocked({ "SIZE", N(w), N(h) });
+            g_screenW = w;
+            g_screenH = h;
+            UpdateRenderSizeLocked(g_items.size(), true);
         }
         if (g_items.empty() || !device || !ctx) return;
         g_ctx = ctx;
@@ -824,10 +905,22 @@ namespace flov::browser
                                    it.scratch.data() + (size_t)row * rowBytes, rowBytes);
 
                         const D3D11_BOX box{ (UINT)x, (UINT)y, 0, (UINT)(x + rw), (UINT)(y + rh), 1 };
+                        LARGE_INTEGER before{}, after{};
+                        QueryPerformanceCounter(&before);
                         ctx->UpdateSubresource(it.tex, 0, &box, it.scratch.data(), (UINT)rowBytes, 0);
+                        QueryPerformanceCounter(&after);
+                        if (!g_perfFrequency.QuadPart) QueryPerformanceFrequency(&g_perfFrequency);
+                        ++g_uploadedFrames;
+                        if (g_perfFrequency.QuadPart > 0)
+                            g_uploadMicros += (uint64_t)((after.QuadPart - before.QuadPart) * 1000000 / g_perfFrequency.QuadPart);
                         it.lastSeq = seq;
                         it.texFresh = false;
                         ipc::StoreCounter(&hd->ack, seq);
+                    }
+                    else if (it.lastDroppedSeq != seq)
+                    {
+                        it.lastDroppedSeq = seq;
+                        ++g_droppedFrames;
                     }
                 }
             }

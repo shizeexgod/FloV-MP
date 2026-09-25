@@ -560,6 +560,24 @@ namespace flov::script
             return JS_UNDEFINED;
         }
         JSValue F_brAvailable(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewBool(ctx, browser::Available()); }
+        JSValue F_brMax(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewInt32(ctx, browser::MaxCount()); }
+        JSValue F_brStats(JSContext* ctx, JSValueConst, int, JSValueConst*)
+        {
+            const auto s = browser::GetStats();
+            const std::string json = "{\"count\":" + std::to_string(s.count) +
+                ",\"visible\":" + std::to_string(s.visible) +
+                ",\"maxBrowsers\":" + std::to_string(s.maxBrowsers) +
+                ",\"screenWidth\":" + std::to_string(s.screenWidth) +
+                ",\"screenHeight\":" + std::to_string(s.screenHeight) +
+                ",\"renderWidth\":" + std::to_string(s.renderWidth) +
+                ",\"renderHeight\":" + std::to_string(s.renderHeight) +
+                ",\"pixels\":" + std::to_string(s.pixels) +
+                ",\"estimatedBytes\":" + std::to_string(s.estimatedBytes) +
+                ",\"uploadedFrames\":" + std::to_string(s.uploadedFrames) +
+                ",\"droppedFrames\":" + std::to_string(s.droppedFrames) +
+                ",\"uploadMicros\":" + std::to_string(s.uploadMicros) + "}";
+            return JS_NewStringLen(ctx, json.data(), json.size());
+        }
 
         JSValue F_localHandle(JSContext* ctx, JSValueConst, int, JSValueConst*)
         {
@@ -733,7 +751,7 @@ class Browser {
 mp.browsers = {
     new(url) {
         const id = F.brNew(String(url));
-        if (!id) throw new Error(F.brAvailable() ? 'mp.browsers.new: не удалось создать браузер'
+        if (!id) throw new Error(F.brAvailable() ? 'mp.browsers.new: не удалось создать браузер (проверьте лимит ресурсов)'
                                                   : 'mp.browsers.new: браузеры не установлены у игрока (FloVMP\\cef)');
         const b = new Browser(id, String(url));
         browsers.set(id, b);
@@ -746,6 +764,11 @@ mp.browsers = {
     forEach(fn) { for (const b of [...browsers.values()]) fn(b, b.id); },
     toArray() { return [...browsers.values()]; },
     get length() { return browsers.size; },
+    get max() { return F.brMax(); },
+    get stats() {
+        try { return JSON.parse(F.brStats()); }
+        catch (e) { return { count: browsers.size, visible: 0, maxBrowsers: F.brMax() }; }
+    },
 };
 globalThis.__flovBrowserEvent = (kind, id, a, b) => {
     const br = browsers.get(id);
@@ -939,6 +962,8 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "brRate", F_brRate, 2);
             AddFn(g_ctx, F, "brReload", F_brReload, 2);
             AddFn(g_ctx, F, "brAvailable", F_brAvailable, 0);
+            AddFn(g_ctx, F, "brMax", F_brMax, 0);
+            AddFn(g_ctx, F, "brStats", F_brStats, 0);
             JS_SetPropertyStr(g_ctx, global, "__flov", F);
 
             // mp.game: все нативы по пространствам + invoke.

@@ -34,6 +34,24 @@ namespace flov::browser
     void SetFrameRate(int id, int frameRate);
     void Reload(int id, bool ignoreCache);
 
+    struct Stats
+    {
+        int count = 0;
+        int visible = 0;
+        int maxBrowsers = 0;
+        int screenWidth = 0, screenHeight = 0;
+        int renderWidth = 0, renderHeight = 0;
+        uint64_t pixels = 0;
+        uint64_t estimatedBytes = 0;
+        uint64_t uploadedFrames = 0;
+        uint64_t droppedFrames = 0;
+        uint64_t uploadMicros = 0;
+    };
+    /// Снимок нагрузки CEF. estimatedBytes — приблизительная цена клиентской
+    /// части pipeline, а не точный working set всех Chromium subprocesses.
+    Stats GetStats();
+    int MaxCount();
+
     /// Папка скачанных client_packages — для адресов package://.
     void SetPackageRoot(const std::wstring& dir);
 

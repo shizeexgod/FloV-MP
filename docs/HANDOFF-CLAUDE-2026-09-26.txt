@@ -1,0 +1,216 @@
+FloV:MP — ОТЧЁТ ДЛЯ ПРОДОЛЖЕНИЯ В CLAUDE CODE
+Дата: 26.09.2026
+Область: GTA Legacy b3889, native-клиент, CEF/HUD/mp.browsers, выпуск клиента
+
+
+КРАТКИЙ СТАТУС
+===============
+
+CEF/HUD уже не является пустым прототипом: есть отдельный sandboxed Chromium
+process, mp.browsers API, несколько слоёв, прозрачность, ввод, восстановление
+после падения host и изоляция данных разных серверов. Основные native и
+Chromium-тесты зелёные. Но продукт ещё нельзя честно назвать полностью
+проверенным: не пройден живой GTA Legacy 1.0.3889.0 E2E и не доказано, что
+новые бинарники попали в установщик/CDN/VDS.
+
+Текущий local HEAD на момент отчёта: 799c9ab
+Текущий origin/master: ebe88c4
+
+ВАЖНО: CEF-цепочка находится только локально. Если Claude работает не в
+C:\FloV-MP на этом ПК, сначала нужен push/cherry-pick. Не собирать релиз из
+origin/master: там этих исправлений пока нет.
+
+
+УЖЕ ИСПРАВЛЕНО И ЗАКОММИЧЕНО ЛОКАЛЬНО
+======================================
+
+  262635b  mp.browsers/CEF — базовая реализация
+  1a6cfa8  безопасные кадры, настоящий z-order и управление слоями HUD
+  b42f41c  cookies/localStorage изолированы между серверами
+  97d06f1  lifecycle, ранние команды, frameRate 1–60, hidden browser
+  a769b33  лимит событий UI и защита игрового тика от перегрузки
+  cc22b7e  автоматическое восстановление HUD после падения CEF host
+  ea8e3d4  первый CEF-аудит/handoff
+  0845af0  Chromium sandbox, уникальный cache-root и graceful shutdown
+  799c9ab  fail-closed сеть и точный origin allowlist для CEF/bridge
+
+Закрытые дефекты:
+
+1. window.mp больше не внедряется во внешние iframe.
+2. Убран разрыв кадра между shared memory и GPU: staging + seqlock.
+3. browser.orderId/inputEnabled теперь реально влияют на render/hit-test.
+4. Прозрачные пиксели после первого кадра не крадут мышь.
+5. Сессии/cookies/localStorage не переносятся на другой сервер.
+6. Команды сразу после new Browser() не теряются; ранний destroy безопасен.
+7. Runaway UI не может бесконечно забивать игровой тик событиями.
+8. После принудительного завершения flovmp-cef.exe HUD создаётся заново.
+9. browserLoadingFailed отдаёт errorCode и URL.
+10. CEF включён со штатным Windows sandbox; no_sandbox=false.
+11. Параллельные клиенты не конфликтуют за Chromium singleton/cache lock.
+
+
+ПОСЛЕДНЯЯ ЗАКОММИЧЕННАЯ ПРАВКА
+==============================
+
+Fail-closed origin/network policy для CEF:
+
+- без client_packages/browser-origins.txt браузер не ходит в сеть;
+- разрешаются только точные http/https/ws/wss origins, без wildcard/пути;
+- policy применяется к main navigation, subresource, redirect и download;
+- remote main page получает window.mp только при точном allowlist match;
+- iframe никогда не получает bridge;
+- browser process повторно проверяет renderer PID, main frame и origin;
+- browser-origins.txt входит в обычный SHA-256 digest client package;
+- настоящий локальный HTTP regression проверяет allow/deny/redirect.
+
+Изменённые файлы этой правки:
+
+  native/legacy-3889/client/cef-host/main.cpp
+  native/legacy-3889/client/src/browser.cpp
+  native/legacy-3889/client/tools/browser-test/main.cpp
+  native/legacy-3889/client/CMakeLists.txt
+  scripts/flovmp_healthcheck.py
+  scripts/package-templates/common/sdk/client_packages/browser-origins.txt
+  scripts/package-templates/common/sdk/template/README.md
+  docs/owner-customization.md
+  docs/roadmap.md
+  docs/CEF-AUDIT-2026-09-25.txt
+  docs/CODEX-CEF-HANDOFF-2026-09-25.txt
+
+Оговорка: это контроль целостности пакета, а не криптографически подписанная
+идентичность игрового сервера. Нельзя писать покупателю «подписанный manifest»,
+пока не появится server identity/signature и доверенный корень в клиенте.
+
+
+ПОСЛЕДНИЕ ПОДТВЕРЖДЁННЫЕ ПРОВЕРКИ
+=================================
+
+  CEF browser integration: 43/43
+  Native client script:     37/37
+  Server tests:             643/643
+  Launcher tests:           96/96
+  Общий healthcheck --build: 72/72
+
+Эти проверки доказывают контракты native/Chromium вне GTA. Они НЕ доказывают
+реальный вход и стабильность внутри GTA Legacy b3889.
+
+
+ЧТО ЧИНИТЬ/ПРОВЕРЯТЬ СЕЙЧАС — ПО ПРИОРИТЕТУ
+============================================
+
+[P0] 1. Сохранить текущую работу
+--------------------------------
+
+- Не потерять восемь локальных CEF-коммитов.
+- Отделить origin-policy от параллельных web-изменений.
+- Повторить Release build/tests и закоммитить origin-policy отдельным коммитом.
+- Не трогать параллельные web/REDESIGN_* и другие чужие untracked docs.
+
+[P0] 2. Живой GTA b3889 E2E
+---------------------------
+
+Обязательный сценарий на настоящей GTA Legacy 1.0.3889.0:
+
+- чистая установка клиента, connect.cmd/play.cmd и фактический вход;
+- два клиента видят друг друга, движение/урон/смерть/транспорт синхронны;
+- HUD + меню + прозрачный modal, правильный z-order/click-through;
+- мышь и клавиатура полностью возвращаются игре после закрытия UI;
+- Esc открывает нужное меню без остановки сетевого мира;
+- F12 не открывает Rockstar overlay;
+- кириллица, clipboard, DPI, resize, alt-tab, fullscreen/windowed;
+- завершить flovmp-cef.exe во время игры: HUD должен вернуться сам;
+- reconnect/смена сервера: состояние браузера прошлого сервера не видно;
+- снять FPS, p95/p99 frametime, CPU, RAM и VRAM до/после HUD.
+
+До этого теста поддержку b3889 нельзя объявлять финально доказанной.
+
+[P0] 3. Собрать и проверить реальный пакет
+-----------------------------------------
+
+- Чистая сборка из конкретного commit hash.
+- В пакете должны быть новый FloVMP.asi, flovmp-cef.exe, libcef.dll,
+  resources/locales и browser-origins.txt template.
+- Проверить manifest/SHA-256, чистую установку и update поверх старой версии.
+- Проверить uninstall: не удаляет GTA и пользовательские файлы.
+- Только затем обновлять VDS/CDN/release tag.
+
+[ЗАКРЫТО 26.09] 4. Ограничить ресурсы браузеров
+------------------------------------
+
+Сейчас допускается до 32 полноэкранных browser. Это опасно: один BGRA-кадр
+1920x1080 — около 7.9 MiB, а фактически есть shared memory, staging, GPU texture
+и сам Chromium.
+
+Сделано после первоначального отчёта: hard cap 12 проверяется клиентом и CEF
+host, общий pixel-budget — 12×1920×1080. На 4K/при множестве слоёв внутреннее
+разрешение пропорционально снижается. `mp.browsers.stats` показывает count,
+visible, screen/render size, pixels, приблизительную память, uploaded/dropped
+frames и upload time. Лишний browser штатно отклоняется. Новые проверки:
+CEF browser integration 43/43, JS 37/37. Отдельно доказано, что `frameRate=1`
+ограничивает поток кадров, а `active=false` останавливает композитинг.
+
+Живой профилинг hidden/1 FPS внутри GTA всё ещё входит в P0 E2E.
+
+[P1] 5. Закончить API серверного кастома HUD
+--------------------------------------------
+
+Уже можно полностью задавать HTML/CSS/JS/Canvas/WebGL, ники, HP/armor, HUD,
+меню, modal, z-order, ввод и FPS без изменения ASI.
+
+Не хватает законченного контракта:
+
+- bounds/position/size для browser вместо fullscreen-only;
+- явный focus/cursor ownership для нескольких UI-слоёв;
+- документированное DPI/deviceScaleFactor поведение;
+- per-browser crashed/restarted/destroyed lifecycle;
+- эталонный SDK sample: HUD + menu + modal + transparent click-through.
+
+[P1] 6. Полноценная подпись server package
+------------------------------------------
+
+Текущий aggregate digest приходит от игрового сервера и защищает от случайной
+порчи/подмены в канале только в рамках доверия самому соединению. Для сильной
+модели нужен подписанный manifest, доверенный public key/identity в клиенте,
+версия/expiry/anti-rollback и ротация ключей. Это отдельная работа; не смешивать
+её с уже готовым exact-origin allowlist.
+
+
+ЧЕГО НЕ ДЕЛАТЬ
+==============
+
+- Не утверждать, что b3889 полностью готова, только по unit/integration tests.
+- Не возвращать no_sandbox=true и общий постоянный Chromium profile.
+- Не разрешать произвольные remote URL или wildcard origins.
+- Не внедрять window.mp в iframe/непроверенный remote origin.
+- Не откатывать staging/seqlock, rate limits и crash recovery.
+- Не выпускать origin/master как текущую версию: он отстаёт от local HEAD.
+- Не включать в CEF-коммит параллельные web/REDESIGN-файлы.
+- Не делать push без отдельной команды владельца.
+
+
+ПАРАЛЛЕЛЬНЫЕ ФАЙЛЫ CLAUDE — НЕ ПЕРЕЗАТИРАТЬ
+===========================================
+
+  M  web/REDESIGN_AUDIT.md
+  M  web/REDESIGN_PLAN.md
+  ?? docs/FULL_AUDIT_2026-09-24.txt
+  ?? docs/HANDOFF-CODEX-2026-09-25.txt
+  ?? web/HERO_ART_BRIEF.md
+  ?? web/REDESIGN_DESIGN_SYSTEM.md
+  ?? web/REDESIGN_INFORMATION_ARCHITECTURE.md
+
+
+РЕКОМЕНДУЕМЫЙ ПОРЯДОК ДЛЯ CLAUDE CODE
+======================================
+
+1. Сверить git status/log и сохранить локальную CEF-цепочку.
+2. Проверить/закоммитить незакоммиченную exact-origin policy отдельно.
+3. Доделать bounds/focus API; caps и метрики уже реализованы.
+4. Повторить все Release tests.
+5. Собрать installer/release из точного commit.
+6. Выполнить живой GTA b3889 E2E двумя клиентами.
+7. Только после успешного E2E публиковать VDS/CDN и менять статус roadmap.
+
+Расширенный технический аудит:
+  C:\FloV-MP\docs\CODEX-CEF-HANDOFF-2026-09-25.txt
+  C:\FloV-MP\docs\CEF-AUDIT-2026-09-25.txt

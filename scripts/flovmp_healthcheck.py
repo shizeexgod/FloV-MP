@@ -185,6 +185,23 @@ def check_security_regressions(rep):
                 "CEF network и bridge закрыты точным origin allowlist",
                 "navigation, subresource, redirect и bridge проверяются" if network_policy else
                 "нет fail-closed browser-origins.txt policy или её integration-тестов")
+        browser_client = (ROOT / "native/legacy-3889/client/src/browser.cpp").read_text(
+            encoding="utf-8", errors="ignore")
+        browser_ipc = (ROOT / "native/legacy-3889/client/src/browser_ipc.h").read_text(
+            encoding="utf-8", errors="ignore")
+        resource_caps = (
+            "kMaxBrowsers = 12" in browser_ipc
+            and "kMaxTotalPixels" in browser_ipc
+            and "g_browsers.size() >= ipc::kMaxBrowsers" in cef_src
+            and "g_items.size() >= ipc::kMaxBrowsers" in browser_client
+            and "GetStats()" in browser_client
+            and "жёсткий лимит browser" in browser_test
+            and "общий pixel-budget" in browser_test
+        )
+        rep.add(PASS if resource_caps else FAIL,
+                "CEF ограничен по числу слоёв и общей площади",
+                "клиент и host проверяют общий контракт; метрики доступны серверному UI" if resource_caps else
+                "нужны двусторонние caps, pixel-budget, метрики и integration-тест")
 
     # События от клиента — то, что может прислать поддельный клиент. Каждый
     # обработчик обязан либо проверять права на сервере, либо быть в списке

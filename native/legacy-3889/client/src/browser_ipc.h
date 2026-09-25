@@ -46,6 +46,11 @@ namespace flov::browser_ipc
 {
     constexpr uint32_t kMagic = 0x52424C46;   // «FLBR»
     constexpr int kMaxSide = 7680;           // 8K — с запасом, больше не бывает
+    // Один browser — отдельная Chromium page + CPU BGRA + shared memory +
+    // stable/staging buffers + GPU texture. Оба конца протокола обязаны
+    // проверять эти лимиты: повреждённый/старый клиент не должен раздувать host.
+    constexpr size_t kMaxBrowsers = 12;
+    constexpr uint64_t kMaxTotalPixels = 12ull * 1920ull * 1080ull;
 
     /// Заголовок кадра в начале разделяемой памяти, за ним — пиксели.
     /// seq — счётчик записи: нечётный, пока хост пишет. Клиент читает кадр,

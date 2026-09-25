@@ -10,6 +10,7 @@
 #include <d3d11.h>
 
 #include <atomic>
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <functional>
@@ -18,6 +19,7 @@
 #include <vector>
 
 #include "browser.h"
+#include "browser_ipc.h"
 #include "common.h"
 
 namespace
@@ -170,6 +172,12 @@ namespace
         return false;
     }
 
+    void PumpFor(int ms)
+    {
+        const ULONGLONG end = GetTickCount64() + ms;
+        while (GetTickCount64() < end) { Pump(); Sleep(16); }
+    }
+
     const flov::browser::Event* Seen(flov::browser::Event::Kind k, const std::string& a = "")
     {
         for (auto& e : g_seen) if (e.kind == k && (a.empty() || e.a == a)) return &e;
@@ -282,6 +290,10 @@ document.addEventListener('mousemove', () => mp.trigger('topMoved'));
     std::ofstream(root + L"\\ui\\switch.html") << R"(<!doctype html><meta charset="utf-8"><script>
 mp.trigger('switched', location.href);
 </script>)";
+    std::ofstream(root + L"\\ui\\animation.html") << R"(<!doctype html><style>html,body{margin:0;width:100%;height:100%}</style><script>
+let frame=0; function draw(){ document.body.style.backgroundColor=`rgb(${frame++%255},30,60)`; requestAnimationFrame(draw); }
+requestAnimationFrame(draw);
+</script>)";
     std::ofstream(std::wstring(tmp) + L"secret.txt") << "secret";
     std::ofstream(root + L"\\browser-origins.txt") << http.Origin() << "\n";
     flov::browser::SetPackageRoot(root);
@@ -339,6 +351,12 @@ mp.trigger('switched', location.href);
     Check(color, "цвет страницы в текстуре (BGRA " + std::to_string(px[0]) + "," + std::to_string(px[1]) + "," +
                  std::to_string(px[2]) + "," + std::to_string(px[3]) + ")");
     Check(Pixel(id, 700, 300, px) && px[3] == 0, "прозрачная часть страницы прозрачна — под ней игра");
+    {
+        const auto stats = flov::browser::GetStats();
+        Check(stats.count == 1 && stats.visible == 1 && stats.maxBrowsers == flov::browser::MaxCount() &&
+              stats.uploadedFrames > 0 && stats.estimatedBytes > 0,
+              "метрики browser показывают слои, кадры и память");
+    }
 
     printf("События и ввод:\n");
     flov::browser::Call(id, "ping", "[41]");
@@ -420,6 +438,28 @@ mp.trigger('switched', location.href);
     const int second = flov::browser::Create("package://ui/missing.html");
     Check(Until([&] { for (auto& e : g_seen) if (e.id == second && (e.kind == flov::browser::Event::Kind::DomReady || e.kind == flov::browser::Event::Kind::LoadFailed)) return true; return false; }, 10000),
           "второй браузер работает рядом с первым");
+
+    printf("Частота и скрытие:\n");
+    const int animated = flov::browser::Create("package://ui/animation.html");
+    const uint64_t fastStart = flov::browser::GetStats().uploadedFrames;
+    Check(animated > 0 && Until([&] { return flov::browser::GetStats().uploadedFrames >= fastStart + 5; }, 5000),
+          "анимированная страница отдаёт кадры");
+    flov::browser::SetFrameRate(animated, 1);
+    const uint64_t slowStart = flov::browser::GetStats().uploadedFrames;
+    PumpFor(1200);
+    const uint64_t slowFrames = flov::browser::GetStats().uploadedFrames - slowStart;
+    Check(slowFrames <= 3, "frameRate=1 ограничивает поток кадров (" + std::to_string(slowFrames) + ")");
+    flov::browser::Show(animated, false);
+    const uint64_t hiddenStart = flov::browser::GetStats().uploadedFrames;
+    PumpFor(700);
+    const uint64_t hiddenFrames = flov::browser::GetStats().uploadedFrames - hiddenStart;
+    Check(hiddenFrames <= 1, "active=false останавливает композитинг (" + std::to_string(hiddenFrames) + ")");
+    flov::browser::Show(animated, true);
+    flov::browser::SetFrameRate(animated, 60);
+    const uint64_t resumeStart = flov::browser::GetStats().uploadedFrames;
+    Check(Until([&] { return flov::browser::GetStats().uploadedFrames >= resumeStart + 3; }, 5000),
+          "видимый browser возобновляет кадры");
+    flov::browser::Destroy(animated);
     flov::browser::DestroyAll();
     Check(!flov::browser::AnyVisible(), "все браузеры закрыты");
 
@@ -441,6 +481,21 @@ mp.trigger('storage', localStorage.getItem('serverSecret'));
     Check(isolated > 0 && Until([] { return Seen(flov::browser::Event::Kind::Trigger, "storage") != nullptr; }, 10000) &&
           Seen(flov::browser::Event::Kind::Trigger, "storage")->b == "[null]",
           "новый server package не наследует localStorage предыдущего сервера");
+    flov::browser::DestroyAll();
+
+    printf("Лимиты ресурсов:\n");
+    std::vector<int> capped;
+    for (int i = 0; i < flov::browser::MaxCount(); ++i)
+        capped.push_back(flov::browser::Create("package://ui/index.html"));
+    const int overLimit = flov::browser::Create("package://ui/index.html");
+    const auto cappedStats = flov::browser::GetStats();
+    Check(std::all_of(capped.begin(), capped.end(), [](int value) { return value > 0; }) && overLimit == 0 &&
+          cappedStats.count == flov::browser::MaxCount(),
+          "жёсткий лимит browser отклоняет лишний слой без падения");
+    Check(cappedStats.renderWidth > 0 && cappedStats.renderHeight > 0 &&
+          (uint64_t)cappedStats.renderWidth * cappedStats.renderHeight * cappedStats.count <=
+              flov::browser_ipc::kMaxTotalPixels,
+          "общий pixel-budget соблюдается");
     flov::browser::DestroyAll();
 
     printf("\nИтог: пройдено %d, ошибок %d\n", g_passed, g_failed);

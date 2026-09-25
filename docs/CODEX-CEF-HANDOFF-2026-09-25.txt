@@ -81,11 +81,11 @@ origin/master недостаточно.
 ЧТО ПОДТВЕРЖДЕНО АВТОТЕСТАМИ
 ============================
 
-  CEF browser integration: 36/36
+  CEF browser integration: 43/43
   Native client script:     37/37
   Server tests:             643/643
   Launcher tests:           96/96
-  Общий healthcheck --build: 71/71
+  Общий healthcheck --build: 72/72
 
 Release-сборки flovmp-client, flovmp-cef, flovmp-browser-test и
 flovmp-script-test проходят. Это доказывает native/Chromium-контракт вне GTA,
@@ -159,19 +159,17 @@ PID_RENDERER, main frame и origin сообщения. Настоящий лок
   - только после этого обновлять VDS/CDN.
 
 
-[P1-1] Уменьшить и контролировать расход browser-ресурсов
+[ЗАКРЫТО 26.09] Уменьшить и контролировать расход browser-ресурсов
 --------------------------------------------------------
 
-Сейчас клиент разрешает 32 полноэкранных browser. Один BGRA кадр 1920x1080 —
-около 7.9 MiB; shared memory + stable/staging + GPU texture + Chromium делают
-реальную цену существенно выше. 32 активных слоя — сотни MiB и лишний CPU.
+Клиент и CEF host независимо ограничивают 12 browser и суммарную площадь
+12×1920×1080. При 4K/множестве слоёв внутреннее разрешение пропорционально
+снижается. `mp.browsers.stats` отдаёт count/visible, screen/render size, pixels,
+приблизительную память, uploaded/dropped frames и upload time. Лишний слой
+штатно отклоняется; integration-тест проверяет cap, pixel-budget, `frameRate=1`
+и фактическую остановку композитинга для hidden browser.
 
-Нужно:
-  - безопасный default 8–12 и лимит также на стороне host;
-  - лимиты общей площади/памяти, не только количества;
-  - bounds/position/size либо честно документированный fullscreen-only API;
-  - метрики browser count, dropped frames, copy/upload time, memory estimate;
-  - проверить, что hidden/1 FPS browser действительно не грузит CPU/GPU.
+Bounds/position/size и живой профиль hidden/1 FPS остаются отдельными задачами.
 
 
 [P1-2] Доделать платформенный API кастома HUD
@@ -232,7 +230,7 @@ origin policy, упаковки и GTA E2E — примерно 80–85%. В roa
 =======================
 
 1. Сверить HEAD и не потерять локальные CEF-коммиты.
-2. Добавить caps/метрики; bounds — после фиксации API-контракта.
+2. Добавить bounds/focus API; caps/метрики уже закрыты.
 3. Повторить Release build, browser tests, script tests и общий healthcheck.
 4. Собрать чистый installer/release из точного commit.
 5. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.
