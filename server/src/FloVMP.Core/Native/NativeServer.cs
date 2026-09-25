@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -36,6 +36,13 @@ public sealed class NativeServer : IDisposable
         int.TryParse(Environment.GetEnvironmentVariable("FLOVMP_MAX_PER_IP"), out var v) && v is > 0 and <= 1000
             ? v : DefaultMaxConnectionsPerIp;
     public const int MaxMessagesPerSecond = 120;
+
+    // События клиентского кода сервера (CEVS, mp.events.callRemote) считаются
+    // отдельно: клиент сам пропускает до 100 в секунду, и вместе с STATE (20 в
+    // секунду) и остальным честный скрипт на пределе не должен выбивать игрока
+    // общим лимитом. Лишнее сверх 120 в секунду отбрасывает обработчик
+    // событий, а отключает только явный поток — вдвое больше этого.
+    public const int MaxScriptEventsPerSecond = 240;
     public static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(15);
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(30);
 
@@ -181,6 +188,7 @@ public sealed class NativeServer : IDisposable
 
             var window = DateTime.UtcNow;
             var inWindow = 0;
+            var scriptInWindow = 0;
             while (!_stop.IsCancellationRequested && !session.Closing)
             {
                 using var idle = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token, session.CloseToken);
@@ -196,8 +204,9 @@ public sealed class NativeServer : IDisposable
                 FloVMP.Core.Diagnostics.NetCounters.AddIn(line.Length + 1);
 
                 var now = DateTime.UtcNow;
-                if (now - window > TimeSpan.FromSeconds(1)) { window = now; inWindow = 0; }
-                if (++inWindow > MaxMessagesPerSecond)
+                if (now - window > TimeSpan.FromSeconds(1)) { window = now; inWindow = 0; scriptInWindow = 0; }
+                var scriptEvent = line.StartsWith("CEVS\t", StringComparison.Ordinal);
+                if (scriptEvent ? ++scriptInWindow > MaxScriptEventsPerSecond : ++inWindow > MaxMessagesPerSecond)
                 {
                     leaveReason = "превышен лимит сообщений";
                     break;

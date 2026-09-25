@@ -8,6 +8,7 @@
   python tools/bot.py --host 127.0.0.1 --port 7798 --name Bot1 [--say "привет"] [--seconds 30]
   python tools/bot.py --check   # короткая самопроверка: вход, спавн, чат, /help — код выхода 0/1
   python tools/bot.py --vehicle-test   # реестр транспорта (клиент 1.0.6+): VREQ/VENTER/VLEAVE/VSYNC
+  python tools/bot.py --client-packages-test   # клиентский код сервера: CPKG, файлы, CEV/CEVS
 """
 import argparse
 import base64
@@ -524,6 +525,65 @@ def vehicle_test(host, port):
     return ok
 
 
+def client_packages_test(host, port):
+    """Клиентский код сервера (пункт 26a) так, как его видит клиент 1.0.3889:
+    CPKG после входа, список и файлы по HTTP с проверкой SHA-256, события
+    клиент → сервер (CEVS) и сервер → клиент (CEV) через шаблон gamemode."""
+    import hashlib
+    import urllib.request
+    ok = True
+
+    def check(name, cond):
+        nonlocal ok
+        ok &= bool(cond)
+        print(("OK   " if cond else "FAIL ") + name)
+
+    bot = Bot(host, port, "PkgBot", log=lambda s: None)
+    bot.connect()
+    bot.send("READY")
+    cpkg = wait_for(bot, lambda m: m[0] == "CPKG")
+    check("сервер сообщил о пакетах (CPKG)", cpkg)
+    if not cpkg:
+        bot.close()
+        return False
+    source, digest, count, total = cpkg[1], cpkg[2], int(cpkg[3]), int(cpkg[4])
+    check("источник — тот же сервер (:порт)", source.startswith(":") and source[1:].isdigit())
+    base = "http://%s%s/client/" % (host, source)
+    lines = urllib.request.urlopen(base + "manifest.txt", timeout=5).read().decode("utf-8").strip().split("\n")
+    check("отпечаток списка совпадает с CPKG", lines[0] == "digest\t" + digest)
+    files = [l.split("\t") for l in lines[1:]]
+    check("файлов столько, сколько объявлено (%d)" % count, len(files) == count)
+    good, size = 0, 0
+    for path, length, sha in files:
+        data = urllib.request.urlopen(base + "files/" + urllib.request.quote(path), timeout=5).read()
+        size += len(data)
+        good += len(data) == int(length) and hashlib.sha256(data).hexdigest() == sha
+    check("все файлы скачаны и сходятся по SHA-256", good == count)
+    check("объём сходится с CPKG (%d байт)" % total, size == total)
+    try:
+        urllib.request.urlopen(base + "files/..%2Fserver.toml", timeout=5)
+        check("выход за папку по HTTP закрыт", False)
+    except Exception:
+        check("выход за папку по HTTP закрыт", True)
+
+    bot.send("CEVS", "hud:ready", "[]")
+    money = wait_for(bot, lambda m: m[0] == "CEV" and m[1] == "hud:money")
+    check("клиент → сервер → клиент: hud:ready → hud:money", money and money[2] == "[5000]")
+    bot.send("CHAT", "/money 777")
+    money = wait_for(bot, lambda m: m[0] == "CEV" and m[1] == "hud:money" and m[2] == "[777]")
+    check("команда геймода шлёт событие в клиентский код (/money 777)", money)
+
+    before = len(bot.messages)
+    for _ in range(200):
+        bot.send("CEVS", "hud:ready", "[]")
+    time.sleep(1.5)
+    answers = sum(1 for m in bot.messages[before:] if m[0] == "CEV" and m[1] == "hud:money")
+    check("поток событий от игрока режется лимитом (%d из 200 дошли)" % answers, 0 < answers <= 120)
+    check("соединение живо после потока", bot.alive)
+    bot.close()
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -536,6 +596,7 @@ def main():
     ap.add_argument("--vehicle-test", action="store_true", help="сценарий реестра транспорта (клиенты 1.0.6 и 1.0.5)")
     ap.add_argument("--client-version", default="bot-1.0", help="версия клиента в HELLO (1.0.6+ — реестр транспорта)")
     ap.add_argument("--moderation-test", metavar="ADMIN_KEY", help="сценарий модерации; ключ бота-владельца")
+    ap.add_argument("--client-packages-test", action="store_true", help="клиентский код сервера: CPKG, файлы, события CEV/CEVS")
     ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
     ap.add_argument("--hit", type=int, default=0, help="ID игрока: нанести урон (проверка PvP)")
@@ -545,6 +606,8 @@ def main():
     a = ap.parse_args()
     if a.check:
         sys.exit(0 if check(a.host, a.port) else 1)
+    if a.client_packages_test:
+        sys.exit(0 if client_packages_test(a.host, a.port) else 1)
     if a.identity:
         print(identity_of(a.identity))
         return

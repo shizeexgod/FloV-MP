@@ -146,6 +146,45 @@ public sealed class NativeServerTests
         Assert.StartsWith("REJECT", reply);
     }
 
+    /// <summary>
+    /// Клиентский скрипт на пределе (100 событий в секунду) вместе с движением
+    /// (20 STATE в секунду) — это честный игрок, отключать его нельзя.
+    /// </summary>
+    [Fact]
+    public async Task ScriptEventsAtClientLimitDoNotKick()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < 100; i++) sb.Append(NativeProtocol.Format("CEVS", "hud:tick", "[]")).Append('\n');
+        for (var i = 0; i < 40; i++) sb.Append(NativeProtocol.Format("PING", "1")).Append('\n');
+        await client.Tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()));
+        await Task.Delay(300);
+
+        while (server.Events.TryDequeue(out var ev)) Assert.IsNotType<NativeLeft>(ev);
+        Assert.Equal(1, server.Count);
+    }
+
+    [Fact]
+    public async Task ScriptEventFloodIsDisconnected()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < NativeServer.MaxScriptEventsPerSecond + 20; i++)
+            sb.Append(NativeProtocol.Format("CEVS", "spam", "[]")).Append('\n');
+        await client.Tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()));
+
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Equal("превышен лимит сообщений", left.Reason);
+    }
+
     [Fact]
     public async Task StateIsStoredAndChatIsQueued()
     {

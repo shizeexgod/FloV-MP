@@ -65,16 +65,16 @@ public partial class StarterResource
                 cache.Save();
                 var changed = m.Digest != _clientPkgs.Digest;
                 _clientPkgs = m;
-                foreach (var skipped in m.Skipped.Take(20)) Console.WriteLine("[FloV:MP] [Клиент] пропущен " + skipped);
+                foreach (var skipped in m.Skipped.Take(20)) BackgroundLog("[FloV:MP] [Клиент] пропущен " + skipped);
                 if (m.Files.Count > 0 && !m.TryGet("index.js", out _))
-                    Console.WriteLine("[FloV:MP] [Клиент] в client_packages нет index.js — клиентский код не запустится.");
+                    BackgroundLog("[FloV:MP] [Клиент] в client_packages нет index.js — клиентский код не запустится.");
                 if (m.Files.Count > 0 || !startup)
-                    Console.WriteLine($"[FloV:MP] [Клиент] Клиентские пакеты: {m.Files.Count} файлов, " +
+                    BackgroundLog($"[FloV:MP] [Клиент] Клиентские пакеты: {m.Files.Count} файлов, " +
                                       $"{m.TotalSize / 1024.0:0.#} КБ (отпечаток {m.Digest[..12]}).");
                 if (changed) _clientChanged = true;
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { Console.WriteLine("[FloV:MP] [Клиент] список не собран: " + ex.Message); }
+            catch (Exception ex) { BackgroundLog("[FloV:MP] [Клиент] список не собран: " + ex.Message); }
             finally { Interlocked.Exchange(ref _clientBuilding, 0); }
         }, stop);
     }

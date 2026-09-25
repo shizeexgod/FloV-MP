@@ -64,22 +64,33 @@ public partial class StarterResource
                 }
                 var changed = m.Digest != _mods.Digest;
                 _mods = m;
-                foreach (var skipped in m.Skipped.Take(20)) Console.WriteLine("[FloV:MP] [Моды] пропущен " + skipped);
-                if (m.Skipped.Count > 20) Console.WriteLine($"[FloV:MP] [Моды] … и ещё {m.Skipped.Count - 20} пропущенных");
+                foreach (var skipped in m.Skipped.Take(20)) BackgroundLog("[FloV:MP] [Моды] пропущен " + skipped);
+                if (m.Skipped.Count > 20) BackgroundLog($"[FloV:MP] [Моды] … и ещё {m.Skipped.Count - 20} пропущенных");
                 if (m.Files.Count > 0 || !startup)
-                    Console.WriteLine($"[FloV:MP] [Моды] Моды готовы: {m.Files.Count} файлов, {m.TotalSize / 1048576.0:0.#} МБ " +
+                    BackgroundLog($"[FloV:MP] [Моды] Моды готовы: {m.Files.Count} файлов, {m.TotalSize / 1048576.0:0.#} МБ " +
                                       $"(отпечаток {m.Digest[..12]}, {(DateTime.UtcNow - started).TotalSeconds:0.#} с).");
                 if (changed) _modsChanged = true;   // разошлём из игрового потока
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { Console.WriteLine("[FloV:MP] [Моды] список не собран: " + ex.Message); }
+            catch (Exception ex) { BackgroundLog("[FloV:MP] [Моды] список не собран: " + ex.Message); }
             finally { Interlocked.Exchange(ref _modsBuilding, 0); }
         }, stop);
     }
 
+    /// <summary>
+    /// Сообщения из фоновой сборки списков модов и клиентских пакетов. Раньше
+    /// они шли в Console.WriteLine из фонового потока и в server.log не
+    /// попадали — владелец не видел «Моды готовы», «пропущен …» или «нет
+    /// index.js». Печатаются в тике через Alt.Log.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> _backgroundLog = new();
+
+    private void BackgroundLog(string line) => _backgroundLog.Enqueue(line);
+
     /// <summary>Из тика: после пересчёта — запустить раздачу и сообщить игрокам.</summary>
     private void PumpMods()
     {
+        while (_backgroundLog.TryDequeue(out var line)) Alt.Log(line);
         if (!_modsChanged) return;
         _modsChanged = false;
         EnsureModServer();
