@@ -603,6 +603,7 @@ public partial class StarterResource : Resource
         StartPlayerPersistence(dbReachable ? starterDbConn : null, starterDataDir);
         StartMetrics(starterDataDir);
         StartMods(starterDataDir);
+        StartClientPackages(starterDataDir);
 
         CheckLicense(logAlways: true);
         StartRemoteLicenseCheck();
@@ -662,6 +663,7 @@ public partial class StarterResource : Resource
         // Мир и интерфейс для клиентов b3889: события ресурсов и файлы карт.
         RegisterWorldApi();
         RegisterNativeApi();
+        RegisterClientEventApi();
         RegisterVehicleApi();
         RegisterAntiCheatApi();
         RegisterPlayerApi();
@@ -1336,6 +1338,13 @@ public partial class StarterResource : Resource
                 RebuildMods(startup: false);
                 break;
 
+            case "reloadclient":
+                // Игроки на сервере получат новый список и перезапустят свой
+                // клиентский код без переподключения.
+                Alt.Log("[Console] Пересчитываю клиентские пакеты (server/client_packages)…");
+                RebuildClientPackages(startup: false);
+                break;
+
             case "say":
                 if (args.Length == 0)
                 {
@@ -1713,6 +1722,7 @@ public partial class StarterResource : Resource
             TickStoreSync();
 
         PumpMods();
+        PumpClientPackages();
         var nowMs = _clock.ElapsedMilliseconds;
         if (nowMs >= _nextLicenseCheckMs)
         {

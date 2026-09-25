@@ -96,11 +96,18 @@ public partial class StarterResource
 
     private void EnsureModServer()
     {
-        if (_modServer is not null || _mods.Files.Count == 0 || !_settings.Bool("mods.serve")) return;
+        // Один HTTP-сервер на два набора: моды игры и клиентские пакеты. Нужен,
+        // если есть хоть что-то раздавать; моды — только при mods.serve.
+        var serveMods = _settings.Bool("mods.serve") && _mods.Files.Count > 0;
+        if (_modServer is not null || (!serveMods && _clientPkgs.Files.Count == 0)) return;
         var port = ModsHttpPort();
         try
         {
-            _modServer = new ModFileServer(IPAddress.Any, port, _modsRoot, () => _mods, Alt.Log);
+            _modServer = new ModFileServer(IPAddress.Any, port, new[]
+            {
+                new FileArea("mods", _modsRoot, () => _settings.Bool("mods.serve") ? _mods : ModManifest.Empty),
+                new FileArea("client", _clientRoot, () => _clientPkgs),
+            }, Alt.Log);
             _modServer.Start();
             Alt.Log($"[FloV:MP] [Моды] Раздача модов игрокам: TCP {port} (/mods/manifest.json). Для игроков из интернета откройте этот порт. " +
                     "Для большой карты и сотен игроков лучше CDN — mods.public_url.");

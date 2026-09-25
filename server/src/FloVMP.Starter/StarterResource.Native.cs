@@ -304,6 +304,7 @@ public partial class StarterResource
         // Настройки владельца (client.cfg) — до спавна: HUD, мир, ники, клавиши.
         SendClientSettings(session);
         SendModsInfo(session);
+        SendClientPackagesInfo(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
         // Версия клиента приходит из его сборки. Не совпала с версией
@@ -339,6 +340,7 @@ public partial class StarterResource
         _nativeVisible.Remove(session.Id);
         _hitRate.Remove(session.Id);
         _damage.ForgetPlayer(session.Id);
+        ForgetClientEventState(session.Id);
         _hitWarnedAt.Remove(session.Id);
         _weaponHistory.Remove(session.Id);
         _nativeVehicleOwners.Remove(session.Id);
@@ -411,6 +413,9 @@ public partial class StarterResource
                 if (killer is not null)
                     Alt.Log($"[FloV:MP] {session.Name} убит игроком [{killer.Id}] {killer.Name}.");
                 OnPlayerDead(player, null!, NativeProtocol.UIntOr(p, 2, 0));
+                break;
+            case "CEVS":
+                OnClientScriptEvent(session, p);
                 break;
             case "HIT":
                 OnNativeHit(session, np, p);

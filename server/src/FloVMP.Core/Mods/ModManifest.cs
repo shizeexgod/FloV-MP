@@ -30,6 +30,21 @@ public sealed class ModManifest
         ".dat4", ".dat22", ".dat10", ".nametable", ".txt", ".json", ".ide", ".ipl", ".cut", ".png", ".jpg",
     };
 
+    /// <summary>
+    /// Клиентские пакеты (server/client_packages, как в RAGE:MP): скрипты и
+    /// интерфейсы игрока. Код здесь — это и есть назначение пакета, но он
+    /// исполняется только внутри клиента FloV:MP: JS — в изолированном движке
+    /// без доступа к файлам и процессам игрока, HTML — в браузере интерфейса.
+    /// Исполняемых файлов Windows (.exe, .dll, .asi) здесь нет и быть не может.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ClientPackageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".js", ".mjs", ".json", ".map", ".html", ".htm", ".css", ".txt", ".md",
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+        ".woff", ".woff2", ".ttf", ".otf",
+        ".mp3", ".ogg", ".wav", ".webm", ".mp4",
+    };
+
     /// <summary>Служебные файлы проводника и систем контроля версий — пропускаем молча.</summary>
     private static readonly HashSet<string> Junk = new(StringComparer.OrdinalIgnoreCase) { "thumbs.db", "desktop.ini", ".ds_store" };
 
@@ -69,18 +84,26 @@ public sealed class ModManifest
     /// управляющих символов и двоеточий (диск, NTFS-потоки), не длиннее 240.
     /// Проверяет и сервер при сборке, и клиент при приёме списка.
     /// </summary>
-    public static bool ValidPath(string path)
+    public static bool ValidPath(string path) => ValidPath(path, AllowedExtensions);
+
+    /// <summary>То же для другого набора расширений (клиентские пакеты).</summary>
+    public static bool ValidPath(string path, IReadOnlySet<string> allowed)
     {
         if (string.IsNullOrEmpty(path) || path.Length > 240 || path[0] == '/' || path.EndsWith('/')) return false;
         foreach (var ch in path)
             if (ch < 0x20 || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|') return false;
         foreach (var part in path.Split('/'))
             if (part.Length == 0 || part == "." || part == ".." || part.EndsWith('.') || part.EndsWith(' ')) return false;
-        return AllowedExtensions.Contains(System.IO.Path.GetExtension(path));
+        return allowed.Contains(System.IO.Path.GetExtension(path));
     }
 
     /// <summary>Собрать список по папке. Кэш хэшей (может быть null) обновляется.</summary>
-    public static ModManifest Build(string root, ModHashCache? cache = null, CancellationToken stop = default)
+    public static ModManifest Build(string root, ModHashCache? cache = null, CancellationToken stop = default) =>
+        Build(root, AllowedExtensions, cache, stop);
+
+    /// <summary>Собрать список по папке с заданным набором расширений.</summary>
+    public static ModManifest Build(string root, IReadOnlySet<string> allowed, ModHashCache? cache = null,
+                                    CancellationToken stop = default)
     {
         var files = new List<ModFile>();
         var skipped = new List<string>();
@@ -92,11 +115,11 @@ public sealed class ModManifest
             stop.ThrowIfCancellationRequested();
             var rel = System.IO.Path.GetRelativePath(full, file).Replace('\\', '/');
             if (Junk.Contains(System.IO.Path.GetFileName(rel)) || rel.Split('/').Any(p => p.StartsWith('.'))) continue;
-            if (!ValidPath(rel))
+            if (!ValidPath(rel, allowed))
             {
-                skipped.Add(AllowedExtensions.Contains(System.IO.Path.GetExtension(rel))
+                skipped.Add(allowed.Contains(System.IO.Path.GetExtension(rel))
                     ? $"{rel}: недопустимое имя (двоеточие, «..», пробел или точка в конце, длиннее 240)"
-                    : $"{rel}: такой тип файла не раздаётся (только данные игры — .rpf, .ytd, .ymap, .meta и т. п.)");
+                    : $"{rel}: такой тип файла здесь не раздаётся");
                 continue;
             }
             var info = new FileInfo(file);
@@ -121,6 +144,18 @@ public sealed class ModManifest
         }
         sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Список строками «путь TAB размер TAB sha256» — для клиента FloV:MP, у
+    /// которого нет разборщика JSON. Первая строка — отпечаток набора.
+    /// </summary>
+    public string ToTsv()
+    {
+        var sb = new StringBuilder();
+        sb.Append("digest\t").Append(Digest).Append('\n');
+        foreach (var f in Files) sb.Append(f.Path).Append('\t').Append(f.Size).Append('\t').Append(f.Sha256).Append('\n');
+        return sb.ToString();
     }
 
     public string ToJson() => JsonSerializer.Serialize(new

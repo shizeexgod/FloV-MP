@@ -6,6 +6,12 @@ using System.Text;
 namespace FloVMP.Core.Mods;
 
 /// <summary>
+/// Раздаваемая папка: моды игры (/mods/…) или клиентские пакеты (/client/…).
+/// У каждой свой список файлов и свои допустимые расширения.
+/// </summary>
+public sealed record FileArea(string Name, string Root, Func<ModManifest> Manifest);
+
+/// <summary>
 /// Раздача модов игрокам с самого игрового сервера (mods.http_port).
 ///
 ///   GET /mods/manifest.json        — список (<see cref="ModManifest"/>)
@@ -28,8 +34,7 @@ public sealed class ModFileServer : IDisposable
     private const int MaxRequestsPerConnection = 1000;
 
     private readonly TcpListener _listener;
-    private readonly Func<ModManifest> _manifest;
-    private readonly string _root;
+    private readonly IReadOnlyList<FileArea> _areas;
     private readonly Action<string> _log;
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentDictionary<IPAddress, int> _perIp = new();
@@ -40,10 +45,12 @@ public sealed class ModFileServer : IDisposable
     private long _bytesServed;
 
     public ModFileServer(IPAddress address, int port, string root, Func<ModManifest> manifest, Action<string> log)
+        : this(address, port, new[] { new FileArea("mods", root, manifest) }, log) { }
+
+    public ModFileServer(IPAddress address, int port, IEnumerable<FileArea> areas, Action<string> log)
     {
         _listener = new TcpListener(address, port);
-        _root = Path.GetFullPath(root);
-        _manifest = manifest;
+        _areas = areas.Select(a => a with { Root = Path.GetFullPath(a.Root) }).ToList();
         _log = log;
     }
 
@@ -158,17 +165,26 @@ public sealed class ModFileServer : IDisposable
     {
         if (!r.Valid) return ResponsePlan.Text("400 Bad Request", "неверный запрос\n", keepAlive: false);
         if (r.Method != "GET" && r.Method != "HEAD") return ResponsePlan.Text("405 Method Not Allowed", "только GET и HEAD\n", keepAlive: false);
-        var m = _manifest();
-        if (r.Path == "/mods/manifest.json")
+        FileArea? area = null;
+        foreach (var a in _areas)
+            if (r.Path.StartsWith("/" + a.Name + "/", StringComparison.Ordinal)) { area = a; break; }
+        if (area is null)
+            return ResponsePlan.Text("404 Not Found",
+                "есть: " + string.Join(", ", _areas.Select(a => $"/{a.Name}/manifest.json, /{a.Name}/files/<путь>")) + "\n");
+        var m = area.Manifest();
+        var root = area.Root;
+        if (r.Path == $"/{area.Name}/manifest.json")
             return ResponsePlan.Bytes("200 OK", "application/json; charset=utf-8", Encoding.UTF8.GetBytes(m.ToJson()), "no-cache");
-        const string prefix = "/mods/files/";
+        if (r.Path == $"/{area.Name}/manifest.txt")
+            return ResponsePlan.Bytes("200 OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(m.ToTsv()), "no-cache");
+        var prefix = $"/{area.Name}/files/";
         if (!r.Path.StartsWith(prefix, StringComparison.Ordinal))
-            return ResponsePlan.Text("404 Not Found", "есть: /mods/manifest.json, /mods/files/<путь>\n");
+            return ResponsePlan.Text("404 Not Found", $"есть: /{area.Name}/manifest.json, /{area.Name}/files/<путь>\n");
         string rel;
         try { rel = Uri.UnescapeDataString(r.Path[prefix.Length..]); }
         catch { return ResponsePlan.Text("400 Bad Request", "неверный путь\n"); }
-        if (!m.TryGet(rel, out var file)) return ResponsePlan.Text("404 Not Found", "такого файла в модах сервера нет\n");
-        var full = Path.Combine(_root, rel.Replace('/', Path.DirectorySeparatorChar));
+        if (!m.TryGet(rel, out var file)) return ResponsePlan.Text("404 Not Found", "такого файла на сервере нет\n");
+        var full = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
         long size;
         try { size = new FileInfo(full).Length; }
         catch { return ResponsePlan.Text("404 Not Found", "файл пропал — владелец обновляет моды\n"); }
