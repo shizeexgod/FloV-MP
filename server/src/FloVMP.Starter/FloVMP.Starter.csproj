@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FloVMP.Core\FloVMP.Core.csproj" />
+    <!-- Не для самой платформы: так FloVMP.Sdk.dll попадает в пакет (sdk/ref) той же сборкой. -->
+    <ProjectReference Include="..\FloVMP.Sdk\FloVMP.Sdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>

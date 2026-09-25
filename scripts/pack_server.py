@@ -350,7 +350,7 @@ def stage_package(target_os, stage, args, version, starter_dir, connector_dir, h
 
     # SDK для своего сервера (папка gamemode): сборки для компиляции — ровно те,
     # что загружает сервер, иначе мод соберётся против другой версии API.
-    for dll in ("AltV.Net.dll", "AltV.Net.Shared.dll", "AltV.Net.CApi.dll", "FloVMP.Core.dll",
+    for dll in ("AltV.Net.dll", "AltV.Net.Shared.dll", "AltV.Net.CApi.dll", "FloVMP.Core.dll", "FloVMP.Sdk.dll",
                 "MySqlConnector.dll", "Microsoft.Extensions.Logging.Abstractions.dll"):
         copy(os.path.join(starter_dir, dll), S("sdk", "ref", dll))
 
@@ -499,7 +499,7 @@ def verify_stage(stage, target_os, entries):
                 "server/resources/flovmp-starter/FloVMP.Starter.dll",
                 "server/resources/flovmp-starter/resource.toml",
                 "server/resources/flovmp-client/resource.toml", "delivery.json",
-                "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/template/Gamemode.csproj",
+                "sdk/ref/AltV.Net.dll", "sdk/ref/FloVMP.Core.dll", "sdk/ref/FloVMP.Sdk.dll", "sdk/template/Gamemode.csproj",
                 "sdk/template/src/GamemodeResource.cs", "sdk/template/README.md",
                 "client-b3889/FloVMP.asi", "client-b3889/install-client.cmd", "client-b3889/play.cmd",
                 "client-b3889/uninstall-client.cmd", "client-b3889/server.txt.example", "client-b3889/mods-sync.ps1",

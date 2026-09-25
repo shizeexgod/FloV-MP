@@ -75,6 +75,46 @@ player.GetLocalMetaData("adminLevel", out int level);
 Обычные события alt:V тоже работают: `Alt.OnPlayerConnect`, `Alt.OnPlayerDead`,
 `Alt.OnClient<...>` для событий из `client/index.js` и т.д.
 
+## Асинхронный код (база, сеть, файлы)
+
+Запрос к базе в обычном обработчике держит тик **всего сервера**: у всех игроков
+рывок. Асинхронный обработчик уходит в базу в фоне, а код после `await`
+продолжается снова в главном потоке сервера — API движка можно звать как обычно.
+
+```csharp
+public override void OnStart()
+{
+    FloVAsync.Attach();                                   // первой строкой
+    FloVAsync.OnServerAsync<int, string, string, string>("flovmp:native:command",
+        async (id, name, cmd, args, ct) =>
+        {
+            if (cmd != "balance") return;
+            await using var db = new MySqlConnection(_conn);
+            await db.OpenAsync(ct);                        // в фоне — тик не стоит
+            var money = await ReadMoneyAsync(db, id, ct);
+            Alt.Emit("flovmp:native:chat", id, $"Баланс: {money}"); // главный поток
+        });
+}
+public override void OnTick() => FloVAsync.Pump();       // обязательно
+public override void OnStop() => FloVAsync.Stop();       // обязательно
+```
+
+- `OnServerAsync` — как `Alt.OnServer`, до 6 аргументов плюс токен `ct`; `ct`
+  отменяется при остановке ресурса — передавайте его в запросы.
+- Код после `await` выполняется в одном из следующих тиков, в главном потоке.
+  Не пишите `ConfigureAwait(false)` перед вызовами движка — продолжение уйдёт в
+  фоновый поток, а движок оттуда звать нельзя (`FloVAsync.IsMainThread`).
+- Из своего фонового потока в главный: `await FloVAsync.OnMainThread(() => ...)`;
+  подождать тик — `await FloVAsync.NextTick()`; запустить работу из `OnStart` —
+  `FloVAsync.Run(async ct => ...)`.
+- Ошибка в обработчике пишется в журнал и не роняет сервер. При остановке
+  ресурса незаконченные обработчики отменяются, их `finally` выполняется.
+- На тик — не больше 4 мс продолжений (`FloVAsync.Queue.BudgetMs`), остальное —
+  в следующих тиках: тяжёлые вычисления — в `Task.Run`.
+- **Исключение — `flovmp:damage`**: на него отвечайте синхронно, в самом
+  обработчике. Решение ждётся только до следующего тика, ответ после `await`
+  опоздает, и урон применится исходный.
+
 ## База данных
 
 Строка подключения — та же, что у платформы (`config/flovmp.env`):

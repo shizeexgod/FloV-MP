@@ -22,6 +22,8 @@
     <Reference Include="AltV.Net.CApi"><HintPath>$(FloVMPRef)AltV.Net.CApi.dll</HintPath></Reference>
     <!-- Хелперы платформы: база данных, миграции, логирование. -->
     <Reference Include="FloVMP.Core"><HintPath>$(FloVMPRef)FloVMP.Core.dll</HintPath></Reference>
+    <!-- SDK: асинхронные обработчики (FloVAsync) и межресурсный слой. -->
+    <Reference Include="FloVMP.Sdk"><HintPath>$(FloVMPRef)FloVMP.Sdk.dll</HintPath></Reference>
     <Reference Include="MySqlConnector"><HintPath>$(FloVMPRef)MySqlConnector.dll</HintPath></Reference>
     <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>$(FloVMPRef)Microsoft.Extensions.Logging.Abstractions.dll</HintPath></Reference>
   </ItemGroup>

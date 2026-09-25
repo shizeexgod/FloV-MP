@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SDK для ресурса владельца сервера (gamemode): то, что работает поверх
+    API движка, — асинхронные обработчики (пункт 23), межресурсный слой
+    (пункт 24). Движок-независимое ядро — FloVMP.Core (его проверяют тесты
+    без alt:V); здесь только тонкий слой над AltV.Net.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FloVMP.Sdk</AssemblyName>
+    <RootNamespace>FloVMP.Sdk</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FloVMP.Core\FloVMP.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AltV.Net" Version="16.4.21" />
+  </ItemGroup>
+
+</Project>

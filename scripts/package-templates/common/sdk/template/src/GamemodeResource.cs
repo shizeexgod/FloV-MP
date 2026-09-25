@@ -1,6 +1,7 @@
 using AltV.Net;
 using AltV.Net.Data;
 using AltV.Net.Elements.Entities;
+using FloVMP.Sdk;
 
 namespace Gamemode;
 
@@ -18,6 +19,10 @@ public sealed class GamemodeResource : Resource
 {
     public override void OnStart()
     {
+        // Асинхронные обработчики (база, сеть — без остановки тика сервера):
+        // FloVAsync.OnServerAsync(...) — см. README, раздел «Асинхронный код».
+        FloVAsync.Attach();
+
         // Игрок появился в мире: клиент alt:V и клиент 3889.
         Alt.OnServer<IPlayer>("flovmp:player:ready", p => OnPlayerReady((int)p.Id, p.Name));
         Alt.OnServer<int, string>("flovmp:native:ready", OnPlayerReady);
@@ -32,7 +37,8 @@ public sealed class GamemodeResource : Resource
             SendChat(id, $"Вы нажали {key}. Клавиши регистрируются событием flovmp:keys:bind."));
 
         // Каждое попадание проходит через вас до того, как сервер снимет здоровье.
-        // Отвечать надо сразу, внутри обработчика: позже выстрел уже засчитан.
+        // Отвечать надо сразу, внутри обработчика (не после await): решение
+        // ждётся до следующего тика, позже выстрел уже засчитан.
         // Не ответили — урон применится такой, как считала платформа.
         Alt.OnServer<int, int, int, string, int, float>("flovmp:damage", OnDamage);
 
@@ -48,8 +54,13 @@ public sealed class GamemodeResource : Resource
         Alt.Log("[Gamemode] ресурс запущен");
     }
 
+    // Продолжения асинхронных обработчиков выполняются здесь, в главном потоке.
+    public override void OnTick() => FloVAsync.Pump();
+
     public override void OnStop()
     {
+        // Отменить незаконченные запросы: их finally выполнится до выгрузки ресурса.
+        FloVAsync.Stop();
         Alt.Log("[Gamemode] ресурс остановлен");
     }
 
