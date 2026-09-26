@@ -553,16 +553,48 @@ namespace flov::ui
         std::atomic<Underlay> g_underlay{ nullptr };
         bool g_scriptCursor = false;
 
+        /// Активно окно нашего процесса (окно игры). Не по g_hwnd: он известен
+        /// только после первого кадра, а оверлей Rockstar открывается и раньше —
+        /// на экране загрузки.
+        bool OurProcessInForeground()
+        {
+            const HWND fg = GetForegroundWindow();
+            DWORD pid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &pid);
+            return pid == GetCurrentProcessId();
+        }
+
         LRESULT CALLBACK LowLevelKeyboard(int code, WPARAM wp, LPARAM lp)
         {
             if (code == HC_ACTION && lp)
             {
                 const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
-                const bool ourWindow = g_hwnd && GetForegroundWindow() == g_hwnd;
                 bool swallow = false;
-                if (ourWindow)
+                if (OurProcessInForeground())
                 {
-                    if (key->vkCode == VK_F12) swallow = true;
+                    // F12 и Home открывают оверлей Rockstar Games (подсказка про
+                    // Home видна на экране загрузки 1.0.3889). Мультиплееру он не
+                    // нужен: игрок попадает в меню одиночной игры посреди сервера.
+                    if (key->vkCode == VK_F12 || key->vkCode == VK_HOME)
+                    {
+                        swallow = true;
+                        // Home нужен в полях ввода страниц сервера: сами
+                        // передаём его браузеру, раз до окна он теперь не дойдёт.
+                        bool browserInput = false;
+                        {
+                            std::lock_guard lock(g_mutex);
+                            browserInput = key->vkCode == VK_HOME && g_scriptCursor && !g_chatOpen && !g_consoleOpen && !g_connectOpen;
+                        }
+                        if (browserInput)
+                            if (const auto sink = g_keySink.load())
+                            {
+                                const bool up = (key->flags & LLKHF_UP) != 0;
+                                LPARAM l = 1 | (LPARAM)(key->scanCode << 16);
+                                if (key->flags & LLKHF_EXTENDED) l |= 1 << 24;
+                                if (up) l |= (LPARAM)0xC0000000;
+                                sink(up ? WM_KEYUP : WM_KEYDOWN, VK_HOME, l);
+                            }
+                    }
                     // В меню GTA оверлей висит на CapsLock — там он тоже не нужен.
                     else if (key->vkCode == VK_CAPITAL)
                     {
@@ -1954,17 +1986,6 @@ namespace flov::ui
 
             LoadIcons();
             g_originalWndProc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc)));
-            if (!g_keyboardHook && !g_previewMode)
-            {
-                // Модуль хука — наш ASI, а не GTA5.exe: с чужим handle Windows
-                // хук ставить отказывается, и оверлей Rockstar снова вылезал бы.
-                HMODULE self = nullptr;
-                GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   reinterpret_cast<LPCWSTR>(&LowLevelKeyboard), &self);
-                g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboard, self, 0);
-                if (g_keyboardHook) Log("ui: перехват клавиш Rockstar включён");
-                else Log("ui: не удалось поставить перехват клавиш, ошибка " + std::to_string(GetLastError()));
-            }
             if (!g_previewMode) PostMessageW(g_hwnd, kMsgApplyTitle, 0, 0);
             g_imguiReady = true;
             Log("ui: оверлей готов (" + std::to_string(desc.BufferDesc.Width) + "x" + std::to_string(desc.BufferDesc.Height) + ")");
@@ -2030,9 +2051,40 @@ namespace flov::ui
         }
     }
 
+    namespace
+    {
+        DWORD g_hookThreadId = 0;
+
+        /// Низкоуровневый хук клавиатуры Windows вызывает в потоке, который его
+        /// поставил, и только через очередь сообщений этого потока. Раньше хук
+        /// ставился из потока отрисовки GTA — тот сообщения не разбирает, Windows
+        /// пропускала хук по таймауту, и F12 открывал оверлей Rockstar, хотя в
+        /// журнале было «перехват включён». Теперь — свой поток с циклом.
+        DWORD WINAPI KeyboardHookThread(LPVOID)
+        {
+            HMODULE self = nullptr;
+            // Модуль хука — наш ASI, а не GTA5.exe: с чужим handle Windows
+            // хук ставить отказывается.
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCWSTR>(&LowLevelKeyboard), &self);
+            g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboard, self, 0);
+            if (g_keyboardHook) Log("ui: перехват клавиш Rockstar включён (F12, Home)");
+            else { Log("ui: не удалось поставить перехват клавиш, ошибка " + std::to_string(GetLastError())); return 1; }
+            MSG msg;
+            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {}
+            UnhookWindowsHookEx(g_keyboardHook);
+            g_keyboardHook = nullptr;
+            return 0;
+        }
+    }
+
     void Init()
     {
         SetLogHook(&LogToConsole);
+        // С самого старта игры: оверлей Rockstar открывается и на её экране
+        // загрузки, задолго до первого кадра нашего интерфейса.
+        if (!g_previewMode && !g_hookThreadId)
+            if (HANDLE t = CreateThread(nullptr, 0, KeyboardHookThread, nullptr, 0, &g_hookThreadId)) CloseHandle(t);
         if (shv::presentCallbackRegister) shv::presentCallbackRegister(OnPresent);
         else Log("ui: ScriptHookV без presentCallbackRegister — оверлей недоступен");
     }
@@ -2050,7 +2102,8 @@ namespace flov::ui
     void Shutdown()
     {
         if (shv::presentCallbackUnregister) shv::presentCallbackUnregister(OnPresent);
-        if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
+        // Хук снимает его собственный поток (снимать чужой поток не может).
+        if (g_hookThreadId) { PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0); g_hookThreadId = 0; }
         if (g_hwnd && g_originalWndProc)
             SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_originalWndProc));
     }

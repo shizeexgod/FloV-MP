@@ -2839,10 +2839,14 @@ namespace flov::game
         ui::SetUnderlay(browser::Render);   // браузеры сервера под интерфейсом платформы
         ui::SetKeySink(browser::Key);
         ui::SetWindowTitle("FloV Multiplayer");
+        // Экран FloV:MP уже закрывает загрузку GTA (показан из DllMain); здесь
+        // только этап — пока игра поднимает мир одиночного режима.
+        ui::LoadingStep("Loading GTA V");
         while (n::GET_IS_LOADING_SCREEN_ACTIVE() || !n::DOES_ENTITY_EXIST(n::PLAYER_PED_ID())) WAIT(250);
 
         if (GameVersion() != kGameVersion)
         {
+            ui::HideLoading();
             ui::Notify("FloV:MP: нужна GTA V Legacy " + std::string(kGameVersion) + ", у вас " + GameVersion() + ". Мультиплеер отключён.", 15000);
             Log("неподдерживаемая версия игры — сетевой режим выключен");
             for (;;) WAIT(1000);
@@ -2851,7 +2855,11 @@ namespace flov::game
         std::string host, name;
         int port = 0;
         if (ReadConnectRequest(host, port, name)) StartConnect(host, port, name);
-        else ui::Notify("FloV:MP загружен. F9 — подключиться к серверу.", 6000);
+        else
+        {
+            ui::HideLoading();   // запуск без сервера — дальше одиночная игра
+            ui::Notify("FloV:MP загружен. F9 — подключиться к серверу.", 6000);
+        }
 
         for (;;)
         {

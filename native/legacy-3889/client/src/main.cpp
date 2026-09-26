@@ -38,6 +38,12 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
         g_bound = true;
         shv::scriptRegister(module, flov::game::ScriptMain);
         flov::ui::Init();
+        // Свой экран загрузки с первого кадра, который рисует оверлей (~10 с
+        // после запуска), вместо экранов загрузки GTA. Скрипт ScriptHookV
+        // стартует только после них, поэтому показываем отсюда.
+        flov::ui::ShowLoading("");
+        flov::ui::LoadingStep("Starting GTA V");
+        flov::ui::SetWindowTitle("FloV Multiplayer");
     }
     else if (reason == DLL_PROCESS_DETACH && g_bound)
     {
