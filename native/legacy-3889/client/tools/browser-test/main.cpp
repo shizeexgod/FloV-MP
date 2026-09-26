@@ -505,11 +505,61 @@ mp.trigger('storage', localStorage.getItem('serverSecret'));
     Check(std::all_of(capped.begin(), capped.end(), [](int value) { return value > 0; }) && overLimit == 0 &&
           cappedStats.count == flov::browser::MaxCount(),
           "жёсткий лимит browser отклоняет лишний слой без падения");
-    Check(cappedStats.renderWidth > 0 && cappedStats.renderHeight > 0 &&
-          (uint64_t)cappedStats.renderWidth * cappedStats.renderHeight * cappedStats.count <=
+    Check(cappedStats.maxRenderWidth > 0 && cappedStats.maxRenderHeight > 0 &&
+          (uint64_t)cappedStats.maxRenderWidth * cappedStats.maxRenderHeight * cappedStats.count <=
               flov::browser_ipc::kMaxTotalPixels,
           "общий pixel-budget соблюдается");
-    flov::browser::DestroyAll();
+    {
+        // Страницы закрываются, пока Chromium их ещё создаёт (скрипт сделал
+        // new и сразу destroy, или игрок отключился во время загрузки).
+        const size_t lostBefore = SeenCount(flov::browser::Event::Kind::HostLost, "");
+        flov::browser::DestroyAll();
+        PumpFor(4000);
+        Check(SeenCount(flov::browser::Event::Kind::HostLost, "") == lostBefore,
+              "закрытие 12 страниц во время их создания не роняет хост");
+        const int burst = flov::browser::Create("package://ui/index.html");
+        flov::browser::Destroy(burst);
+        const int after = flov::browser::Create("package://ui/index.html");
+        Check(Until([&] { return SeenFor(after, flov::browser::Event::Kind::DomReady) > 0; }, 20000) &&
+              SeenCount(flov::browser::Event::Kind::HostLost, "") == lostBefore,
+              "new + destroy в одном кадре, затем новая страница — хост жив");
+        flov::browser::Destroy(after);
+    }
+
+    // Прежняя версия поднимала хост не больше двух раз за сессию: третье
+    // падение оставляло игрока без интерфейса сервера до перезахода.
+    printf("Повторные падения хоста:\n");
+    {
+        using K = flov::browser::Event::Kind;
+        const int page = flov::browser::Create("package://ui/index.html");
+        Check(Until([&] { return SeenFor(page, K::DomReady) > 0; }, 20000), "страница для серии падений загрузилась");
+        // Одно падение уже было выше; ещё четыре — каждое должно восстановиться
+        // (паузы 2, 4, 8, 16 с).
+        bool allRestored = true;
+        for (int crash = 2; crash <= 5 && allRestored; ++crash)
+        {
+            const size_t restored = SeenCount(K::HostRestored, "");
+            const size_t dom = SeenFor(page, K::DomReady);
+            allRestored = flov::browser::CrashHostForTest() &&
+                          Until([&] { return SeenCount(K::HostRestored, "") > restored && SeenFor(page, K::DomReady) > dom; }, 40000);
+            if (!allRestored) printf("    не восстановился после падения %d\n", crash);
+        }
+        Check(allRestored, "хост поднимается и после 3-го, 4-го и 5-го падения");
+        Check(flov::browser::CrashHostForTest() &&
+              Until([] { return SeenCount(K::HostRecoveryFailed, "") > 0; }, 5000),
+              "6-е падение за 10 минут — browserHostRecoveryFailed, а не бесконечный перезапуск");
+        const size_t restoredAfterFail = SeenCount(K::HostRestored, "");
+        for (int i = 0; i < 120; ++i) { Pump(); Sleep(16); }
+        const auto st = flov::browser::GetStats();
+        Check(st.recoveryFailed && SeenCount(K::HostRestored, "") == restoredAfterFail && !flov::browser::TextureOf(page),
+              "после отказа хост не перезапускается, статус виден в mp.browsers.stats");
+        Check(flov::browser::Create("package://ui/index.html") == 0, "новые страницы в этой сессии не создаются");
+        flov::browser::Shutdown();   // переподключение к серверу — новая сессия
+        const int fresh = flov::browser::Create("package://ui/index.html");
+        Check(fresh > 0 && Until([&] { return SeenFor(fresh, K::DomReady) > 0; }, 20000),
+              "новая сессия снова может поднять браузеры");
+        flov::browser::Shutdown();
+    }
 
     printf("\nИтог: пройдено %d, ошибок %d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

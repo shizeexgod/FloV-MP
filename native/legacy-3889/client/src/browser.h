@@ -21,6 +21,9 @@ namespace flov::browser
     void DestroyAll();
     /// Закрыть всё и хост (выгрузка клиента).
     void Shutdown();
+    /// Новая сессия (переподключение к серверу): счёт падений хоста с нуля,
+    /// даже если в прошлой сессии восстановление было остановлено.
+    void NewSession();
     void SetUrl(int id, const std::string& url);
     void Execute(int id, const std::string& code);
     void Call(int id, const std::string& name, const std::string& argsJson);
@@ -45,7 +48,11 @@ namespace flov::browser
         int visible = 0;
         int maxBrowsers = 0;
         int screenWidth = 0, screenHeight = 0;
-        int renderWidth = 0, renderHeight = 0;
+        // Наибольшие ширина и высота среди страниц (каждая может быть своего
+        // размера — это не размер какой-то одной из них).
+        int maxRenderWidth = 0, maxRenderHeight = 0;
+        bool recoveryFailed = false;   // хост падал слишком часто, браузеры выключены до переподключения
+        int crashesInWindow = 0;
         uint64_t pixels = 0;
         uint64_t estimatedBytes = 0;
         uint64_t uploadedFrames = 0;
@@ -62,7 +69,7 @@ namespace flov::browser
 
     struct Event
     {
-        enum class Kind { DomReady, LoadFailed, Trigger, Console, HostLost, HostRestored } kind;
+        enum class Kind { DomReady, LoadFailed, Trigger, Console, HostLost, HostRestored, HostRecoveryFailed } kind;
         int id = 0;
         std::string a, b;   // DomReady: url; LoadFailed: код, url; Trigger: имя, JSON; Console: уровень, текст
     };

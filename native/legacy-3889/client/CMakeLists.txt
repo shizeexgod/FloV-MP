@@ -103,6 +103,13 @@ if (WIN32 AND EXISTS "${FLOVMP_CEF_ROOT}/include/cef_app.h" AND EXISTS "${FLOVMP
         setupapi shell32 shcore userenv version wbemuuid windowsapp winmm
         # Базовые Windows-зависимости CEF.
         comctl32 gdi32 rpcrt4 shlwapi ws2_32)
+    # Символы хоста — для стека в cef-host.log при падении. PDB лежит вне папки
+    # cef (в комплект игрока не попадает); путь к нему зашит в exe.
+    if (MSVC)
+        target_compile_options(flovmp-cef PRIVATE /Zi)
+        target_link_options(flovmp-cef PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+        set_target_properties(flovmp-cef PROPERTIES PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/pdb")
+    endif()
     set(FLOVMP_CEF_OUT "${CMAKE_BINARY_DIR}/bin/Release/cef")
     set_target_properties(flovmp-cef PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE "${FLOVMP_CEF_OUT}")
     # Рядом с хостом — всё, что нужно Chromium: библиотеки и ресурсы.
@@ -110,10 +117,12 @@ if (WIN32 AND EXISTS "${FLOVMP_CEF_ROOT}/include/cef_app.h" AND EXISTS "${FLOVMP
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${FLOVMP_CEF_ROOT}/Release" "${FLOVMP_CEF_OUT}"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${FLOVMP_CEF_ROOT}/Resources" "${FLOVMP_CEF_OUT}"
         COMMAND ${CMAKE_COMMAND} -E remove -f "${FLOVMP_CEF_OUT}/libcef.lib" "${FLOVMP_CEF_OUT}/cef_sandbox.lib"
-        # Страницы рисует процессор (--disable-gpu): Vulkan, SwiftShader и
-        # DirectX-компилятор WebGPU игроку не нужны — минус ~34 МБ.
+        # DirectX-компилятор WebGPU игроку не нужен — минус ~27 МБ.
+        # SwiftShader и vulkan-1.dll НЕ удалять: при --disable-gpu Chromium
+        # всё равно поднимает GPU-процесс на программном SwiftShader; без него
+        # тот падает при каждом запуске, и после нескольких падений Chromium
+        # закрывает весь хост («GPU process isn't usable»).
         COMMAND ${CMAKE_COMMAND} -E remove -f "${FLOVMP_CEF_OUT}/dxcompiler.dll" "${FLOVMP_CEF_OUT}/dxil.dll"
-            "${FLOVMP_CEF_OUT}/vk_swiftshader.dll" "${FLOVMP_CEF_OUT}/vk_swiftshader_icd.json" "${FLOVMP_CEF_OUT}/vulkan-1.dll"
         # Из 55 языков интерфейса Chromium — русский и английский.
         COMMAND ${CMAKE_COMMAND} -DDIR=${FLOVMP_CEF_OUT}/locales -P "${CMAKE_CURRENT_SOURCE_DIR}/cef-host/prune-locales.cmake")
 else()

@@ -11,6 +11,7 @@
 //   flovmp-cef.exe --flovmp-pipe=\\.\pipe\… --flovmp-parent=<pid GTA5.exe>
 
 #include <windows.h>
+#include <dbghelp.h>
 
 #include <algorithm>
 #include <atomic>
@@ -348,10 +349,19 @@ namespace
         {
             _browser = browser;
             auto host = browser->GetHost();
+            if (_closing)
+            {
+                // Страницу закрыли, пока Chromium её создавал (new + destroy в
+                // одном кадре, отключение во время загрузки). CloseBrowser прямо
+                // из OnAfterCreated роняет CEF 131 внутри цикла сообщений —
+                // закрываем следующей задачей, когда создание завершено.
+                CefRefPtr<Browser> self(this);
+                PostUi([self] { if (self->_browser) self->_browser->GetHost()->CloseBrowser(true); });
+                return;
+            }
             host->SetWindowlessFrameRate(_frameRate);
             host->WasHidden(!_visible);
             host->SetFocus(_focused);
-            if (_closing) { host->CloseBrowser(true); return; }
             if (!_pendingUrl.empty())
             {
                 browser->GetMainFrame()->LoadURL(_pendingUrl);
@@ -1062,6 +1072,64 @@ namespace
     }
 }
 
+namespace
+{
+    /// Падение процесса браузера — в cef-host.log стек с функциями и строками
+    /// (по flovmp-cef.pdb, если он рядом): без этого у игрока видно только код.
+    LONG WINAPI HostCrash(EXCEPTION_POINTERS* ep)
+    {
+        static std::atomic<bool> once{ false };
+        if (once.exchange(true)) return EXCEPTION_CONTINUE_SEARCH;
+        HANDLE proc = GetCurrentProcess();
+        SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+        SymInitialize(proc, nullptr, TRUE);
+        CONTEXT ctx = *ep->ContextRecord;
+        STACKFRAME64 f{};
+        f.AddrPC.Offset = ctx.Rip;
+        f.AddrPC.Mode = AddrModeFlat;
+        f.AddrFrame.Offset = ctx.Rbp;
+        f.AddrFrame.Mode = AddrModeFlat;
+        f.AddrStack.Offset = ctx.Rsp;
+        f.AddrStack.Mode = AddrModeFlat;
+        char head[64];
+        snprintf(head, sizeof head, "падение 0x%08lX, стек:", ep->ExceptionRecord->ExceptionCode);
+        std::string text = head;
+        for (int i = 0; i < 24; ++i)
+        {
+            if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, proc, GetCurrentThread(), &f, &ctx, nullptr,
+                             SymFunctionTableAccess64, SymGetModuleBase64, nullptr) || !f.AddrPC.Offset)
+                break;
+            const DWORD64 addr = f.AddrPC.Offset;
+            char module[MAX_PATH] = "?";
+            const DWORD64 base = SymGetModuleBase64(proc, addr);
+            if (base) GetModuleFileNameA((HMODULE)base, module, MAX_PATH);
+            const char* shortName = strrchr(module, '\\') ? strrchr(module, '\\') + 1 : module;
+            char line[512];
+            snprintf(line, sizeof line, " | %s+0x%llX", shortName, (unsigned long long)(addr - base));
+            text += line;
+            alignas(SYMBOL_INFO) char buf[sizeof(SYMBOL_INFO) + 256] = {};
+            auto* sym = reinterpret_cast<SYMBOL_INFO*>(buf);
+            sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+            sym->MaxNameLen = 255;
+            DWORD64 disp = 0;
+            if (SymFromAddr(proc, addr, &disp, sym))
+            {
+                text += std::string(" ") + sym->Name;
+                IMAGEHLP_LINE64 ln{ sizeof ln };
+                DWORD d = 0;
+                if (SymGetLineFromAddr64(proc, addr, &d, &ln))
+                {
+                    const char* file = strrchr(ln.FileName, '\\') ? strrchr(ln.FileName, '\\') + 1 : ln.FileName;
+                    snprintf(line, sizeof line, " (%s:%lu)", file, ln.LineNumber);
+                    text += line;
+                }
+            }
+        }
+        Fail((int)ep->ExceptionRecord->ExceptionCode, text);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+}
+
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
 {
     CefMainArgs args(instance);
@@ -1117,6 +1185,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int)
 
     if (!CefInitialize(args, settings, app.get(), sandbox.sandbox_info()))
         return Fail(6, "Chromium sandbox не запустился — см. cef.log");
+    SetUnhandledExceptionFilter(HostCrash);
 
     std::thread([parent] {
         WaitForSingleObject(parent, INFINITE);   // игра закрылась — хост за ней

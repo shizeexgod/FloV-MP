@@ -581,8 +581,10 @@ namespace flov::script
                 ",\"maxBrowsers\":" + std::to_string(s.maxBrowsers) +
                 ",\"screenWidth\":" + std::to_string(s.screenWidth) +
                 ",\"screenHeight\":" + std::to_string(s.screenHeight) +
-                ",\"renderWidth\":" + std::to_string(s.renderWidth) +
-                ",\"renderHeight\":" + std::to_string(s.renderHeight) +
+                ",\"maxRenderWidth\":" + std::to_string(s.maxRenderWidth) +
+                ",\"maxRenderHeight\":" + std::to_string(s.maxRenderHeight) +
+                ",\"recoveryFailed\":" + (s.recoveryFailed ? "true" : "false") +
+                ",\"crashesInWindow\":" + std::to_string(s.crashesInWindow) +
                 ",\"pixels\":" + std::to_string(s.pixels) +
                 ",\"estimatedBytes\":" + std::to_string(s.estimatedBytes) +
                 ",\"uploadedFrames\":" + std::to_string(s.uploadedFrames) +
@@ -1063,6 +1065,15 @@ globalThis.__flovTick = function (blocked) {
                     Say(level, "[страница " + std::to_string(e.id) + "] " + e.b);
                     continue;
                 }
+                if (e.kind == K::HostRecoveryFailed)
+                {
+                    Say(2, "браузеры: хост падает слишком часто — страницы сервера отключены до переподключения");
+                    JSValue argv[2] = { JS_NewString(g_ctx, "browserHostRecoveryFailed"), JS_NewArray(g_ctx) };
+                    CallGlobal("__flovDispatch", 2, argv, kCallBudgetMs);
+                    JS_FreeValue(g_ctx, argv[0]);
+                    JS_FreeValue(g_ctx, argv[1]);
+                    continue;
+                }
                 if (e.kind == K::HostLost || e.kind == K::HostRestored)
                 {
                     const bool restored = e.kind == K::HostRestored;
@@ -1301,6 +1312,7 @@ globalThis.__flovTick = function (blocked) {
             g_readyToStart = false;
         }
         Stop();
+        browser::NewSession();
         g_inbox.clear();
         g_outbox.clear();
         g_packageDir.clear();

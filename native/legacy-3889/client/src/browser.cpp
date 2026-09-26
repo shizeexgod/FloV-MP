@@ -91,7 +91,16 @@ namespace flov::browser
         std::shared_ptr<Conn> g_conn;
         std::atomic<bool> g_hostUp{ false };
         bool g_hostReady = false;
-        int g_restarts = 0;
+        // Восстановление после падения хоста: паузы растут (1, 2, 4… до 30 с),
+        // больше 5 падений за 10 минут — сдаёмся до следующей сессии и честно
+        // сообщаем скрипту (browserHostRecoveryFailed). Стабильная работа
+        // дольше окна обнуляет счёт: одно падение в час не копится.
+        constexpr size_t kMaxCrashesInWindow = 5;
+        constexpr ULONGLONG kCrashWindowMs = 10ull * 60 * 1000;
+        std::deque<ULONGLONG> g_crashes;
+        ULONGLONG g_nextRestartAt = 0;
+        bool g_recoveryFailed = false;
+        bool g_hadCrash = false;
         std::deque<std::string> g_backlog;    // до READY
 
         // Ввод
@@ -334,7 +343,18 @@ namespace flov::browser
             if (g_hostUp && g_conn == conn)
             {
                 g_conn.reset();
-                if (g_process) { CloseHandle(g_process); g_process = nullptr; }
+                if (g_process)
+                {
+                    // Код выхода в журнал: 91 — наш тест, 0xC0000005 и прочие
+                    // 0xC… — падение Chromium, остальное — хост вышел сам.
+                    DWORD code = STILL_ACTIVE;
+                    if (WaitForSingleObject(g_process, 2000) == WAIT_OBJECT_0) GetExitCodeProcess(g_process, &code);
+                    char hex[16];
+                    snprintf(hex, sizeof hex, "0x%08lX", code);
+                    Log(std::string("браузеры: хост завершился, код ") + hex);
+                    CloseHandle(g_process);
+                    g_process = nullptr;
+                }
                 g_hostUp = false;
                 g_hostReady = false;
                 // Новый Chromium process не наследует focus старого. Не
@@ -344,7 +364,24 @@ namespace flov::browser
                 g_mouseTarget = g_focus = 0;
                 g_lastX = g_lastY = -1;
                 g_lastButtons = 0;
+                const ULONGLONG now = GetTickCount64();
+                while (!g_crashes.empty() && now - g_crashes.front() > kCrashWindowMs) g_crashes.pop_front();
+                g_crashes.push_back(now);
+                g_hadCrash = true;
                 Push(Event::Kind::HostLost, 0);
+                if (g_crashes.size() > kMaxCrashesInWindow)
+                {
+                    g_recoveryFailed = true;
+                    Log("браузеры: хост падал " + N((long long)g_crashes.size()) +
+                        " раз за 10 минут — восстановление остановлено до переподключения");
+                    Push(Event::Kind::HostRecoveryFailed, 0);
+                }
+                else
+                {
+                    const ULONGLONG delay = std::min<ULONGLONG>(30000, 1000ull << (g_crashes.size() - 1));
+                    g_nextRestartAt = now + delay;
+                    Log("браузеры: хост закрылся, подниму заново через " + N((long long)delay / 1000) + " с");
+                }
                 for (auto& [id, it] : g_items) { it.shmName.clear(); CloseFrame(it); }
             }
         }
@@ -387,8 +424,7 @@ namespace flov::browser
                 Log("браузеры: нет " + Utf8(g_hostExe) + " — mp.browsers недоступен");
                 return false;
             }
-            if (g_restarts >= 3) return false;
-            ++g_restarts;
+            if (g_recoveryFailed) return false;
 
             const std::wstring base = L"\\\\.\\pipe\\flovmp-cef-" + std::to_wstring(GetCurrentProcessId()) + L"-" +
                                       std::to_wstring(GetTickCount64());
@@ -461,7 +497,7 @@ namespace flov::browser
             if (t == "READY")
             {
                 g_hostReady = true;
-                if (g_restarts > 1) Push(Event::Kind::HostRestored, 0);
+                if (g_hadCrash) { g_hadCrash = false; Push(Event::Kind::HostRestored, 0); }
                 std::lock_guard out(conn->m);
                 for (auto& l : g_backlog) conn->out.push_back(std::move(l));
                 g_backlog.clear();
@@ -567,7 +603,11 @@ namespace flov::browser
             Log("браузеры: достигнут безопасный лимит " + N(ipc::kMaxBrowsers));
             return 0;
         }
-        if (!StartHostLocked()) return 0;
+        // Хост упал и ждёт паузы перед подъёмом: страница встанет в очередь,
+        // TakeEvents создаст её вместе с остальными. Не дёргаем хост раньше
+        // срока — иначе скрипт в цикле обошёл бы паузы между падениями.
+        const bool waitingRestart = !g_hostUp && g_hadCrash && !g_recoveryFailed && GetTickCount64() < g_nextRestartAt;
+        if (!waitingRestart && !StartHostLocked()) return 0;
         const int id = ++g_nextId;
         g_items[id].url = url;
         g_items[id].order = id;
@@ -616,6 +656,15 @@ namespace flov::browser
         g_sentW = g_sentH = 0;
     }
 
+    void NewSession()
+    {
+        std::lock_guard lock(g_mutex);
+        g_crashes.clear();
+        g_nextRestartAt = 0;
+        g_recoveryFailed = false;
+        g_hadCrash = false;
+    }
+
     void Shutdown()
     {
         DestroyAll();
@@ -639,7 +688,10 @@ namespace flov::browser
             g_hostUp = false;
             g_hostReady = false;
             g_backlog.clear();
-            g_restarts = 0;
+            g_crashes.clear();
+            g_nextRestartAt = 0;
+            g_recoveryFailed = false;
+            g_hadCrash = false;
             g_screenW = g_screenH = g_sentW = g_sentH = 0;
             g_uploadedFrames = g_droppedFrames = g_uploadMicros = 0;
             g_layoutScale = 1.0;
@@ -770,7 +822,7 @@ namespace flov::browser
         std::vector<Event> out(g_events.begin(), g_events.end());
         g_events.clear();
         // Хост упал: поднять заново и вернуть страницы на место.
-        if (!g_hostUp && !g_items.empty() && g_restarts < 3 && StartHostLocked())
+        if (!g_hostUp && !g_items.empty() && !g_recoveryFailed && GetTickCount64() >= g_nextRestartAt && StartHostLocked())
         {
             SendRootLocked();
             if (g_screenW) SendLocked({ "SIZE", N(g_screenW), N(g_screenH) });
@@ -800,8 +852,10 @@ namespace flov::browser
         out.maxBrowsers = (int)ipc::kMaxBrowsers;
         out.screenWidth = g_screenW;
         out.screenHeight = g_screenH;
-        out.renderWidth = g_sentW;
-        out.renderHeight = g_sentH;
+        out.maxRenderWidth = g_sentW;
+        out.maxRenderHeight = g_sentH;
+        out.recoveryFailed = g_recoveryFailed;
+        out.crashesInWindow = (int)g_crashes.size();
         out.uploadedFrames = g_uploadedFrames;
         out.droppedFrames = g_droppedFrames;
         out.uploadMicros = g_uploadMicros;
