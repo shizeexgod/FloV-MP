@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using AltV.Net;
 using FloVMP.Core.Mods;
 using FloVMP.Core.Native;
@@ -29,14 +28,11 @@ public partial class StarterResource
     private int _clientBuilding;
     private volatile bool _clientChanged;
 
-    /// <summary>Имя события: как в JS-коде, без пробелов и управляющих символов.</summary>
-    private static readonly Regex ClientEventName = new(@"^[A-Za-z0-9_:.\-]{1,64}$", RegexOptions.Compiled);
-
     /// <summary>
     /// Предел аргументов события. Строка протокола не длиннее 4096 байт; на
     /// имя и служебные поля остаётся запас.
     /// </summary>
-    public const int MaxClientEventJson = 3800;
+    public const int MaxClientEventJson = NativeClientEventPolicy.MaxJsonChars;
 
     /// <summary>Сколько событий игрок может прислать в секунду.</summary>
     private const int MaxClientEventsPerSecond = 120;
@@ -119,14 +115,14 @@ public partial class StarterResource
 
     private static bool ValidClientEvent(string name, string? argsJson, string api)
     {
-        if (name is null || !ClientEventName.IsMatch(name))
+        if (!NativeClientEventPolicy.IsValidName(name))
         {
             Alt.LogWarning($"[FloV:MP] {api}: недопустимое имя события «{name}» (буквы, цифры, _:.- , до 64)");
             return false;
         }
-        if ((argsJson?.Length ?? 0) > MaxClientEventJson)
+        if (!NativeClientEventPolicy.IsValid(name, argsJson, fromClient: false))
         {
-            Alt.LogWarning($"[FloV:MP] {api} «{name}»: аргументы длиннее {MaxClientEventJson} символов");
+            Alt.LogWarning($"[FloV:MP] {api} «{name}»: нужен JSON-массив до {MaxClientEventJson} символов и {NativeProtocol.MaxLineBytes} байт на проводе");
             return false;
         }
         return true;
@@ -143,7 +139,7 @@ public partial class StarterResource
             ? (Count: r.Count + 1, r.WindowStart)
             : (Count: 1, WindowStart: now);
         _clientEventRate[session.Id] = rate;
-        if (rate.Count > MaxClientEventsPerSecond || !ClientEventName.IsMatch(name) || args.Length > MaxClientEventJson)
+        if (rate.Count > MaxClientEventsPerSecond || !NativeClientEventPolicy.IsValid(name, args, fromClient: true))
         {
             if (!_clientEventWarnedAt.TryGetValue(session.Id, out var warned) || now - warned > 10_000)
             {
