@@ -4,7 +4,10 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electr
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const { once } = require('node:events');
+const crypto = require('node:crypto');
 const { NativeBridge } = require('./native-bridge');
+const { checkServerStatus } = require('./server-status');
 
 let tray = null;
 let trayOnClose = false;   // из настроек: крестик → в трей вместо закрытия
@@ -203,7 +206,9 @@ ipcMain.handle('native:saveSettings', (_e, data) => native.call('saveSettings', 
 ipcMain.handle('native:detectGta', () => native.call('detectGta'));
 ipcMain.handle('native:validateGta', (_e, gtaPath) => native.call('validateGta', { path: gtaPath }));
 ipcMain.handle('native:browseFolder', () => native.call('browseFolder'));
-ipcMain.handle('native:serverStatus', (_e, host, port) => native.call('serverStatus', { host, port }));
+// Опрос сети не занимает однопоточную очередь нативного помощника: во время
+// запуска GTA или поиска файлов окно продолжает получать ответы без задержки.
+ipcMain.handle('native:serverStatus', (_e, host, port) => checkServerStatus(host, port));
 ipcMain.handle('native:play', (_e, gtaPath, host, port, nickname) => {
   const numericPort = parseInt(port, 10) || 7788;
   return native.call('play', { gtaPath, host, port: numericPort, nickname });
@@ -372,10 +377,11 @@ ipcMain.handle('native:downloadEngine', async (_e, cdnBase) => {
     if (!res.ok || !res.body) throw new Error(`архив ${res.status}`);
 
     const out = fs.createWriteStream(tmp);
-    const hash = require('node:crypto').createHash('sha256');
+    const hash = crypto.createHash('sha256');
     let got = 0; const started = Date.now(); let lastTick = started;
     for await (const chunk of res.body) {
-      out.write(chunk); hash.update(chunk); got += chunk.length;
+      if (!out.write(chunk)) await once(out, 'drain');
+      hash.update(chunk); got += chunk.length;
       const now = Date.now();
       if (now - lastTick > 250) {
         lastTick = now;
@@ -427,7 +433,6 @@ ipcMain.handle('native:downloadEngine', async (_e, cdnBase) => {
     // подмены содержимого при совпадающем размере архива.
     if (Array.isArray(man.files) && man.files.length) {
       send({ phase: 'Проверка файлов движка…', percent: 97 });
-      const crypto = require('node:crypto');
       let checked = 0;
       for (const f of man.files) {
         if (!f || !f.path || !f.sha256) continue;
@@ -436,7 +441,11 @@ ipcMain.handle('native:downloadEngine', async (_e, cdnBase) => {
         const abs = path.join(ENGINE_DIR, rel);
         if (!abs.startsWith(ENGINE_DIR)) throw new Error(`манифест: выход за пределы (${rel})`);
         let h;
-        try { h = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex'); }
+        try {
+          const fileHash = crypto.createHash('sha256');
+          for await (const chunk of fs.createReadStream(abs)) fileHash.update(chunk);
+          h = fileHash.digest('hex');
+        }
         catch { throw new Error(`после распаковки нет файла: ${rel}`); }
         if (h !== f.sha256) throw new Error(`файл движка не совпал с манифестом: ${rel}`);
         checked++;

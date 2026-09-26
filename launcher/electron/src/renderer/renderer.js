@@ -1491,7 +1491,16 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   // стороне читает settings.json (режим окна, доп. аргументы, приоритет,
   // FPS, пресет графики).
   clearTimeout(saveTimer);
-  await window.floridaV.saveSettings(settings);
+  try {
+    await window.floridaV.saveSettings(settings);
+  } catch (err) {
+    closeLaunchModal();
+    btn.disabled = false;
+    btn.textContent = 'ИГРАТЬ';
+    status.textContent = `Не удалось сохранить настройки: ${err?.message || err}`;
+    status.classList.add('error');
+    return;
+  }
 
   // Движок клиента FloV:MP — если не установлен локально и не обновлен, качаем с CDN один раз
   try {
@@ -1545,9 +1554,12 @@ document.getElementById('btn-play').addEventListener('click', async () => {
   }
 });
 
-// ─── Статус сервера (опрос раз в 10с) ──────────────────────────────────────
+// ─── Статус сервера (опрос только при активном окне) ───────────────────────
 async function pollServerStatus() {
-  const result = await window.floridaV.serverStatus(settings.serverHost, settings.serverPort).catch(() => null);
+  const host = settings.serverHost;
+  const port = settings.serverPort;
+  const result = await window.floridaV.serverStatus(host, port).catch(() => null);
+  if (host !== settings.serverHost || port !== settings.serverPort) return;
   const dot = document.getElementById('status-dot');
   const text = document.getElementById('status-text');
   const online = document.getElementById('status-online');
@@ -1767,12 +1779,27 @@ async function initGpuInfo() {
 
   window.floridaV.setTrayOnClose?.(settings.trayOnClose);
 
-  pollServerStatus();
-  setInterval(pollServerStatus, 10000);
-
-  pollSession();
-  setInterval(pollSession, 5000);
-  window.addEventListener('focus', pollSession);
+  let statusTimer = null;
+  let statusRunning = false;
+  const active = () => document.visibilityState === 'visible' && document.hasFocus();
+  const scheduleStatus = (delay) => {
+    clearTimeout(statusTimer);
+    if (active()) statusTimer = setTimeout(runStatus, delay);
+  };
+  async function runStatus() {
+    if (!active() || statusRunning) return;
+    statusRunning = true;
+    try { await pollServerStatus(); }
+    finally { statusRunning = false; scheduleStatus(10000); }
+  }
+  const resumePolling = () => {
+    if (!active()) { clearTimeout(statusTimer); return; }
+    scheduleStatus(0);
+    pollSession();
+  };
+  window.addEventListener('focus', resumePolling);
+  window.addEventListener('blur', () => clearTimeout(statusTimer));
+  document.addEventListener('visibilitychange', resumePolling);
+  resumePolling();
   console.log('[renderer.js] COMPLETED INITIALIZATION');
 })();
-
