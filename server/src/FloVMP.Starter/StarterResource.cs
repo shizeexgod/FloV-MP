@@ -353,6 +353,8 @@ public partial class StarterResource : Resource
                 var path = FloVMP.Core.Licensing.LicenseLeaseCache.PathFor(FloVMP.Core.Licensing.LicenseFile.Locate());
                 try { FloVMP.Core.Licensing.LicenseLeaseCache.Save(path, result.LeasePayloadB64, result.LeaseSignatureB64); }
                 catch (Exception ex) { Alt.LogWarning($"[FloV:MP] [License] не удалось сохранить lease: {ex.Message}"); }
+                if (result.AttestPayloadB64 is not null && result.AttestSignatureB64 is not null)
+                    SaveAttestation(path, result.AttestPayloadB64, result.AttestSignatureB64);
             }
         }
         catch (OperationCanceledException) when (_licenseRemoteCts.IsCancellationRequested)

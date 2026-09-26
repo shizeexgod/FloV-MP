@@ -306,6 +306,7 @@ public partial class StarterResource
         SendModsInfo(session);
         SendClientPackagesInfo(session);
         SendRosterOnJoin(session);
+        SendLicenseAttestation(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
         // Версия клиента приходит из его сборки. Не совпала с версией

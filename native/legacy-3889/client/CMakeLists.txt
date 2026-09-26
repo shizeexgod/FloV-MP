@@ -35,6 +35,7 @@ add_library(flovmp-client SHARED
     src/http.cpp
     src/script.cpp
     src/browser.cpp
+    src/license.cpp
     src/crash.cpp
     src/voice.cpp
     src/world.cpp
@@ -194,6 +195,7 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     add_executable(flovmp-script-test
         tools/script-test/main.cpp
         src/script.cpp
+        src/license.cpp
         src/browser.cpp
         src/common.cpp
         src/ui.cpp
@@ -210,7 +212,8 @@ if (FLOVMP_BUILD_UI_PREVIEW AND WIN32)
     target_include_directories(flovmp-script-test PRIVATE src ${IMGUI_DIR})
     # Пример client_packages из SDK — тест запускает его, чтобы пример не устарел.
     get_filename_component(FLOVMP_SDK_PACKAGES "${CMAKE_CURRENT_SOURCE_DIR}/../../../scripts/package-templates/common/sdk/client_packages" ABSOLUTE)
-    target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_SDK_PACKAGES=L"${FLOVMP_SDK_PACKAGES}")
+    target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_SDK_PACKAGES=L"${FLOVMP_SDK_PACKAGES}"
+        FLOVMP_ATTEST_SAMPLE=L"${CMAKE_CURRENT_SOURCE_DIR}/tools/script-test/attest-sample.json")
     if (TARGET flovmp-cef)
         target_compile_definitions(flovmp-script-test PRIVATE FLOVMP_CEF_HOST=L"${CMAKE_BINARY_DIR}/bin/Release/cef/flovmp-cef.exe")
     endif()

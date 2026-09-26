@@ -54,6 +54,15 @@ public sealed class HttpApi
     private void Handle(HttpListenerContext ctx)
     {
         var ip = ctx.Request.Headers["X-Real-IP"] ?? ctx.Request.RemoteEndPoint?.Address.ToString() ?? "0.0.0.0";
+        // Игровой сервер на той же машине, что и сервер лицензий, обращается к
+        // нему через 127.0.0.1 (к своему внешнему адресу контейнер-VDS
+        // обратиться не может). Такой запрос приходит только с этой машины,
+        // поэтому для него — её внешний адрес из FLOVMP_AUTHORITY_PUBLIC_IP:
+        // этот IP попадёт в аренду, и клиенты игроков сверят его.
+        if (ip is "127.0.0.1" or "::1" &&
+            Environment.GetEnvironmentVariable("FLOVMP_AUTHORITY_PUBLIC_IP") is { Length: > 0 } publicIp &&
+            System.Net.IPAddress.TryParse(publicIp, out _))
+            ip = publicIp;
         try
         {
             var reply = Route(ctx, ip);

@@ -533,7 +533,11 @@ if DOTNET_DIR="$(find_dotnet)"; then
   ok ".NET 10 Runtime: $DOTNET_DIR"
 else
   info "Установка .NET 10 Runtime (официальный скрипт Microsoft)..."
-  curl -fsSL --retry 3 https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh || die "не удалось скачать dotnet-install.sh"
+  # Прямой адрес и таймауты: dot.net отвечает перенаправлением, и без
+  # --max-time curl на части VDS висел бесконечно (проверено 26.09).
+  curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh -o /tmp/dotnet-install.sh ||
+    curl -fsSL --retry 3 --connect-timeout 15 --max-time 180 https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh ||
+    die "не удалось скачать dotnet-install.sh (builds.dotnet.microsoft.com недоступен?)"
   bash /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet >/dev/null || die "не удалось установить .NET 10"
   rm -f /tmp/dotnet-install.sh
   ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet 2>/dev/null || true

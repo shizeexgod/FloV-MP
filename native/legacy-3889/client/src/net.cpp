@@ -66,6 +66,12 @@ namespace flov
         return _status;
     }
 
+    std::string Net::PeerIp() const
+    {
+        std::lock_guard lock(_mutex);
+        return _peerIp;
+    }
+
     std::string Net::Endpoint() const
     {
         std::lock_guard lock(_mutex);
@@ -178,6 +184,20 @@ namespace flov
             return;
         }
         _socket = (unsigned long long)s;
+        {
+            sockaddr_storage peer{};
+            int len = sizeof peer;
+            char text[INET6_ADDRSTRLEN] = {};
+            if (getpeername(s, (sockaddr*)&peer, &len) == 0)
+            {
+                if (peer.ss_family == AF_INET) inet_ntop(AF_INET, &((sockaddr_in*)&peer)->sin_addr, text, sizeof text);
+                else if (peer.ss_family == AF_INET6) inet_ntop(AF_INET6, &((sockaddr_in6*)&peer)->sin6_addr, text, sizeof text);
+            }
+            std::lock_guard lock(_mutex);
+            _peerIp = text;
+            // IPv4 через IPv6-сокет: ::ffff:1.2.3.4 → 1.2.3.4
+            if (_peerIp.rfind("::ffff:", 0) == 0) _peerIp = _peerIp.substr(7);
+        }
         LineSocket reader(s);
 
         // Рукопожатие: HELLO → CHALLENGE → AUTH → WELCOME | REJECT.

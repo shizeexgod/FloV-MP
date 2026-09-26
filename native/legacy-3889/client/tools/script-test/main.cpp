@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <functional>
 #include <map>
 #include <string>
@@ -19,6 +20,7 @@
 
 #include "common.h"
 #include "script.h"
+#include "license.h"
 #include "browser.h"
 
 namespace
@@ -308,6 +310,39 @@ int wmain()
         g_result[0] = 0;
     }
 #endif
+    printf("Лицензия сервера (LIC):\n");
+    {
+        // Настоящее подтверждение, подписанное сервером лицензий на VDS 26.09.
+        std::ifstream f(FLOVMP_ATTEST_SAMPLE);
+        std::string json((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto field = [&](const char* name) {
+            const std::string key = std::string("\"") + name + "\":\"";
+            const size_t a = json.find(key);
+            if (a == std::string::npos) return std::string();
+            const size_t b = json.find('"', a + key.size());
+            std::string v = json.substr(a + key.size(), b - a - key.size());
+            // .NET экранирует + и / в строках JSON файла; серверу и клиенту
+            // строки приходят уже раскрытыми.
+            for (auto [from, to] : { std::pair{ "\\u002B", "+" }, std::pair{ "\\u002F", "/" }, std::pair{ "\\/", "/" } })
+                for (size_t p; (p = v.find(from)) != std::string::npos;) v.replace(p, strlen(from), to);
+            return v;
+        };
+        const std::string payload = field("payload_b64"), sig = field("signature");
+        const long long issued = 1790411861;   // 26.09.2026 08:37:41 UTC — в пределах срока
+        using flov::license::Verdict;
+        Check(!payload.empty() && flov::license::Verify(payload, sig, "188.127.229.224", issued).verdict == Verdict::Ok,
+              "подтверждение с VDS: подпись сервера лицензий, та же машина — вход разрешён");
+        Check(flov::license::Verify(payload, sig, "5.6.7.8", issued).verdict == Verdict::WrongMachine,
+              "та же лицензия на чужой машине — отказ");
+        Check(flov::license::Verify(payload, sig, "192.168.1.20", issued).verdict == Verdict::Ok,
+              "локальная сеть — проверка IP не мешает");
+        Check(flov::license::Verify(payload, sig, "188.127.229.224", issued + 3 * 86400).verdict == Verdict::Expired,
+              "устаревшее подтверждение — отказ");
+        std::string forged = payload;
+        forged[forged.size() / 2] = forged[forged.size() / 2] == 'A' ? 'B' : 'A';
+        Check(flov::license::Verify(forged, sig, "188.127.229.224", issued).verdict != Verdict::Ok,
+              "изменённое подтверждение — отказ (подпись)");
+    }
     printf("Мир: mp.players, переменные, события:\n");
     {
         flov::script::SetWorldBackend({ FakePlayers, FakePlayer, FakeVar, FakeVarKeys, FakeVehicles, FakeVehicle });

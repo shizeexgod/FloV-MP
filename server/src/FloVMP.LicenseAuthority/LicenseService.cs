@@ -73,6 +73,20 @@ public sealed class LicenseService
             validUntil = until,
             reason = "",
         });
+        // Подтверждение для клиентов игроков — БЕЗ ключа лицензии (сервер
+        // показывает его каждому игроку): отпечаток лицензии, IP машины, проект,
+        // срок. Клиент проверяет подпись и что подключился именно к этой машине.
+        // Копия сервера на чужой машине, сервер с краденым ключом без своей
+        // регистрации и сервер с вырезанной проверкой такого не получат.
+        var attest = Sign(new
+        {
+            kind = "attest",
+            license = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(license.Key)))[..16],
+            ip,
+            project = license.Project,
+            validUntil = until,
+        });
         return Json(200, new
         {
             valid = true,
@@ -85,6 +99,8 @@ public sealed class LicenseService
             verifiedAt = now,
             leasePayloadB64 = lease.PayloadB64,
             leaseSignature = lease.SignatureB64,
+            attestPayloadB64 = attest.PayloadB64,
+            attestSignature = attest.SignatureB64,
             // Свежий файл: после продления или смены тарифа сервер заменит свой.
             licenseFlv = LicenseFlv(license),
         });

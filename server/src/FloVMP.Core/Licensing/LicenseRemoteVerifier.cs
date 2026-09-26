@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -14,7 +14,9 @@ public sealed record LicenseRemoteResult(
     DateTime? LeaseUntilUtc,
     string? LeasePayloadB64 = null,
     string? LeaseSignatureB64 = null,
-    string? LicenseFlv = null);
+    string? LicenseFlv = null,
+    string? AttestPayloadB64 = null,
+    string? AttestSignatureB64 = null);
 
 /// <summary>
 /// Проверяет короткий RSA-подписанный lease сервера лицензий. Отзыв приходит отдельным
@@ -100,7 +102,18 @@ public sealed class LicenseRemoteVerifier
             // Свежий license.flv (продлили срок, сменили тариф) — сервер заменит свой,
             // если подпись и ключ сойдутся (проверяет StarterResource).
             var flv = root.TryGetProperty("licenseFlv", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null;
-            return new(true, true, false, "online lease действителен", checkedAt, until, payloadB64, signatureB64, flv);
+            // Подтверждение для клиентов игроков (без ключа). Проверяем подпись
+            // здесь же: сервер не должен раздавать игрокам то, что они отвергнут.
+            string? attestPayload = null, attestSignature = null;
+            if (root.TryGetProperty("attestPayloadB64", out var ap) && ap.ValueKind == JsonValueKind.String &&
+                root.TryGetProperty("attestSignature", out var asg) && asg.ValueKind == JsonValueKind.String &&
+                LicenseFile.VerifyAuthoritySignature(Convert.FromBase64String(ap.GetString()!), Convert.FromBase64String(asg.GetString()!), _publicKeyPem))
+            {
+                attestPayload = ap.GetString();
+                attestSignature = asg.GetString();
+            }
+            return new(true, true, false, "online lease действителен", checkedAt, until, payloadB64, signatureB64, flv,
+                attestPayload, attestSignature);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "http.h"
 #include "script.h"
+#include "license.h"
 #include "browser.h"
 #include "crash.h"
 
@@ -120,6 +121,10 @@ namespace flov::game
         int g_adminLevel = 0;
         std::set<std::string> g_allowed;
         std::map<int, int> g_roster;
+
+        /// Лицензия сервера для игрока (LIC): ждём подтверждение после WELCOME.
+        ULONGLONG g_licenseDeadline = 0;   // 0 — не ждём (подтверждено или локальная сеть)
+
         bool g_welcomed = false, g_readySent = false, g_spawnedOnce = false;
         ULONGLONG g_welcomeAt = 0, g_nextState = 0, g_nextPing = 0, g_nextClean = 0;
         int g_espMode = 0; // 0 — выкл, 1 — игроки, 2 — транспорт, 3 — всё
@@ -140,6 +145,16 @@ namespace flov::game
         // Отключились сами по решению клиента (моды сервера не те): это отказ,
         // а не сбой связи — автопереподключения быть не должно.
         bool g_leftByChoice = false;
+
+        void RefuseUnlicensed(const std::string& reason)
+        {
+            const std::string text = "Вход невозможен: " + reason + ". Сервер не подтвердил лицензию FloV:MP.";
+            Log("лицензия сервера: " + reason);
+            g_licenseDeadline = 0;
+            g_leftByChoice = true;          // не переподключаться: это не сбой связи
+            g_net.Disconnect(text);
+            ui::ShowRefusal(text);
+        }
         ULONGLONG g_reconnectAt = 0;
         constexpr int kReconnectTries = 5;
         int g_port = 0;
@@ -1823,6 +1838,9 @@ namespace flov::game
                 g_myId = ToInt(at(1));
                 g_myName = at(2);
                 script::SetLocalPlayer(g_myId, g_myName);
+                // Сервер в интернете обязан подтвердить лицензию (LIC) —
+                // локальная сеть и своя машина проверку не проходят вовсе.
+                g_licenseDeadline = license::IsPrivateAddress(g_net.PeerIp()) ? 0 : GetTickCount64() + 10000;
                 g_players[g_myId].name = g_myName;
                 g_serverName = at(4);
                 g_welcomed = true;
@@ -2094,6 +2112,16 @@ namespace flov::game
             // Клиентский код сервера (пункт 26): что скачать и события от геймода.
             else if (type == "CPKG") script::OnPackagesAnnounced(g_host, at(1), at(2), ToInt(at(3)), _atoi64(at(4).c_str()));
             else if (type == "CEV") script::OnServerEvent(at(1), at(2));
+            else if (type == "LIC")
+            {
+                const auto r = license::Verify(at(1), at(2), g_net.PeerIp());
+                if (r.verdict == license::Verdict::Ok)
+                {
+                    g_licenseDeadline = 0;
+                    Log("лицензия сервера подтверждена" + (r.project.empty() ? std::string() : ": " + r.project));
+                }
+                else if (!license::IsPrivateAddress(g_net.PeerIp())) RefuseUnlicensed(r.reason);
+            }
             else if (type == "CFG")
             {
                 for (size_t i = 1; i + 1 < m.size(); i += 2) settings::Set(m[i], m[i + 1]);
@@ -2812,6 +2840,9 @@ namespace flov::game
             // Игра уже открыта, а игрок нажал «Играть» в лаунчере сервера или
             // ссылку flovmp:// — переходим на тот сервер сразу, как в RAGE:MP,
             // а не просим нажать F9.
+            if (g_licenseDeadline && now > g_licenseDeadline && g_welcomed)
+                RefuseUnlicensed("сервер не прислал подтверждение лицензии");
+
             static ULONGLONG nextConnectPoll = 0;
             if (now >= nextConnectPoll)
             {

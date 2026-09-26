@@ -30,6 +30,8 @@ namespace flov
         NetState State() const { return _state.load(); }
         std::string Status() const;
         std::string Endpoint() const;
+        /// IP, к которому реально подключились (для проверки лицензии сервера).
+        std::string PeerIp() const;
         int PingMs() const { return _ping.load(); }
         void SetPing(int ms) { _ping = ms; }
 
@@ -47,6 +49,7 @@ namespace flov
         std::deque<std::vector<std::string>> _inbound;
         std::string _status;
         std::string _endpoint;
+        std::string _peerIp;
         std::mutex _sendMutex;
     };
 }
