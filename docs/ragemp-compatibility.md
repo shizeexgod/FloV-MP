@@ -16,13 +16,14 @@
 | Клиент `player.getVariable`, `mp.events.addDataHandler` | Частично | `script.cpp`, серверный `StarterResource.Roster.cs`; только игроки, нет общих metadata других сущностей |
 | Клиент `mp.browsers`, `browser.call` | Частично | `script.cpp`; CEF в GTA ещё не проверен |
 | Клиент `mp.game` native и `mp.keys` | Частично | `script.cpp`; нужна сверка сигнатур и событий с реальными ресурсами |
-| Сервер `mp.events.add/call` | Нет | Серверный JS runtime не реализован; есть только C# SDK и события alt:V |
-| Сервер `mp.players`, `mp.vehicles`, `player.call`, `setVariable` | Нет как JS API | Низкоуровневые реестры и события C# есть; адаптера RAGE нет |
+| Сервер `mp.events.add/call` | Экспериментально | `server/resources/flovmp-rage-compat`: Node-тесты пройдены, в `js-module` ещё не запущено |
+| Сервер `mp.players`, `player.call`, `setVariable` | Экспериментально | Адаптер только native-игроков; переменные кешируются в одном ресурсе; живой запуск не проведён |
+| Сервер `mp.vehicles` | Нет | Есть C# реестр, JS-обёртки нет |
 | Сервер `mp.colshapes`, `mp.markers`, `mp.blips`, `mp.checkpoints`, `mp.world` | Нет как JS API | В C# есть world object/blip/marker, но семантика RAGE и JS-объекты не реализованы |
 | Переносчик существующих серверных ресурсов | Нет | Нужны диагностика unsupported API, преобразование конфигурации и проверка на примере |
 
-Первый вертикальный срез: из серверного JS обработать `playerJoin` и
-`mp.events.add` → `player.call` → клиентский `mp.events.add` с аргументами;
-добавить `mp.players.at/toArray`, `player.setVariable/getVariable` и тесты
-подключения бота. Затем машины и world-примитивы. Это даст проверяемый путь
-переноса, не создавая пустые заглушки всего API сразу.
+Первый вертикальный срез как код готов: серверный JS `playerJoin` и
+`mp.events.add` → `player.call` → существующий CEV-контракт; также
+`mp.players.at/toArray` и `player.setVariable/getVariable`. Node-тесты есть,
+но интеграция с реальным `js-module` и ботом ещё впереди. Затем машины и
+world-примитивы.
