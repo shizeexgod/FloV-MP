@@ -253,6 +253,7 @@ public sealed class NativeServer : IDisposable
         catch (IOException) { }
         catch (SocketException) { }
         catch (FormatException) { leaveReason = "повреждённые данные"; }
+        catch (DecoderFallbackException) { leaveReason = "некорректный UTF-8"; }
         catch (Exception ex) { _log("соединение: " + ex.Message); }
         finally
         {
@@ -308,6 +309,7 @@ public sealed class NativeServer : IDisposable
     /// <summary>Чтение строк с жёстким лимитом длины: StreamReader.ReadLine копит память без предела.</summary>
     private sealed class LineReader
     {
+        private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly Stream _stream;
         private readonly byte[] _buffer = new byte[8192];
         private int _start, _end;
@@ -324,9 +326,10 @@ public sealed class NativeServer : IDisposable
                     if (_buffer[i] != (byte)'\n') continue;
                     line.Write(_buffer, _start, i - _start);
                     _start = i + 1;
+                    if (line.Length > NativeProtocol.MaxLineBytes) throw new LineTooLongException();
                     var bytes = line.ToArray();
                     var length = bytes.Length > 0 && bytes[^1] == '\r' ? bytes.Length - 1 : bytes.Length;
-                    return Encoding.UTF8.GetString(bytes, 0, length);
+                    return StrictUtf8.GetString(bytes, 0, length);
                 }
                 line.Write(_buffer, _start, _end - _start);
                 if (line.Length > NativeProtocol.MaxLineBytes) throw new LineTooLongException();

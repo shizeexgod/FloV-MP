@@ -233,6 +233,30 @@ public sealed class NativeServerTests
     }
 
     [Fact]
+    public async Task SingleBufferOversizedLineDisconnects()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+        await client.SendAsync("CHAT\t" + new string('x', NativeProtocol.MaxLineBytes));
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Contains("длинное", left.Reason);
+    }
+
+    [Fact]
+    public async Task InvalidUtf8DisconnectsWithoutDeliveringMessage()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+        await client.Tcp.GetStream().WriteAsync(new byte[] { (byte)'C', (byte)'H', (byte)'A', (byte)'T', 9, 0xC3, 0x28, 10 });
+        var left = await WaitEventAsync<NativeLeft>(server);
+        Assert.Contains("UTF-8", left.Reason);
+    }
+
+    [Fact]
     public async Task KickDeliversReasonBeforeDisconnect()
     {
         using var server = StartServer();
