@@ -94,6 +94,16 @@ namespace flov::game
 
         Net g_net;
         std::map<int, Remote> g_remotes;
+
+        /// Все игроки сервера (PJOIN/PQUIT) и их переменные (SVAR) — для
+        /// клиентского кода: mp.players, getVariable. g_remotes — только те,
+        /// кто рядом; здесь — все, включая себя.
+        struct RosterEntry
+        {
+            std::string name;
+            std::map<std::string, std::string> vars;
+        };
+        std::map<int, RosterEntry> g_players;
         std::map<uint32_t, NetVehicle> g_netVehicles;
         std::map<int, std::pair<uint32_t, int>> g_netSeats;   // ID игрока → (машина, место)
         // Наша посадка: в какой машине и на каком месте мы сейчас по мнению игры.
@@ -1572,6 +1582,7 @@ namespace flov::game
         void ResetSession()
         {
             script::Reset();   // клиентский код сервера — только пока мы на нём
+            g_players.clear();
             world::Clear();
             world::ResetInteriors();   // карта — как до сервера
             ui::CloseMenu();
@@ -1761,15 +1772,50 @@ namespace flov::game
             {
                 const int id = ToInt(at(1));
                 if (id <= 0 || id == g_myId) return;
+                const bool streamedIn = !g_remotes.count(id);
                 auto& r = g_remotes[id];
                 r.id = id;
                 r.name = at(2);
+                if (streamedIn) script::EntityEvent("entityStreamIn", id);
             }
             else if (type == "PDEL")
             {
                 auto it = g_remotes.find(ToInt(at(1)));
-                if (it != g_remotes.end()) { DestroyRemote(it->second); g_remotes.erase(it); }
+                if (it != g_remotes.end())
+                {
+                    script::EntityEvent("entityStreamOut", it->first);
+                    DestroyRemote(it->second);
+                    g_remotes.erase(it);
+                }
                 voice::Forget((uint32_t)ToInt(at(1)));
+            }
+            else if (type == "PJOIN")
+            {
+                const int id = ToInt(at(1));
+                if (id <= 0) return;
+                const bool fresh = !g_players.count(id);
+                g_players[id].name = at(2);
+                if (fresh && id != g_myId) script::EntityEvent("playerJoin", id);
+            }
+            else if (type == "PQUIT")
+            {
+                const int id = ToInt(at(1));
+                auto it = g_players.find(id);
+                if (it == g_players.end() || id == g_myId) return;
+                script::EntityEvent("playerQuit", id, it->second.name);
+                g_players.erase(it);
+            }
+            else if (type == "SVAR")
+            {
+                const int id = ToInt(at(1));
+                const std::string key = at(2), json = at(3);
+                if (id <= 0 || key.empty() || key.size() > 64 || json.size() > 4096) return;
+                auto& vars = g_players[id].vars;
+                auto it = vars.find(key);
+                const std::string old = it != vars.end() ? it->second : std::string();
+                if (json.empty()) { if (it == vars.end()) return; vars.erase(it); }
+                else { if (old == json) return; vars[key] = json; }
+                script::DataChange(id, key, json, old);
             }
             else if (type == "MSG") SendChatLine(at(1), at(2), at(3));
             else if (type == "WELCOME")
@@ -1777,6 +1823,7 @@ namespace flov::game
                 g_myId = ToInt(at(1));
                 g_myName = at(2);
                 script::SetLocalPlayer(g_myId, g_myName);
+                g_players[g_myId].name = g_myName;
                 g_serverName = at(4);
                 g_welcomed = true;
                 g_welcomeAt = GetTickCount64();
@@ -2192,7 +2239,9 @@ namespace flov::game
             const bool espVehicles = g_espMode == 2 || g_espMode == 3;
             const Vector3 cam = n::GET_GAMEPLAY_CAM_COORD();
             world::AddLabels(labels, cam.x, cam.y, cam.z);
-            if (!g_cfg.tags && !g_espMode) { ui::SetLabels(std::move(labels)); return; }
+            // mp.nametags.enabled = false — ники рисует клиентский код сервера сам.
+            const bool tags = g_cfg.tags && !script::NametagsDisabledByScript();
+            if (!tags && !g_espMode) { ui::SetLabels(std::move(labels)); return; }
             const float tagDist = g_cfg.tagDistance;
             for (auto& [id, r] : g_remotes)
             {
@@ -2209,7 +2258,7 @@ namespace flov::game
                 const int level = RosterLevel(id);
                 // Основатель (-1) скрыт от младших администраторов, как в alt:V-клиенте.
                 const bool espShow = espPlayers && d < 250.f && level >= 0 && !(g_adminLevel < 8 && level >= 8);
-                const bool nametag = g_cfg.tags && !hidden && d < tagDist && spawned &&
+                const bool nametag = tags && !hidden && d < tagDist && spawned &&
                                      n::HAS_ENTITY_CLEAR_LOS_TO_ENTITY(n::PLAYER_PED_ID(), r.ped, 17);
                 if (!nametag && !espShow) continue;
                 float sx = 0, sy = 0;
@@ -2858,12 +2907,116 @@ namespace flov::game
         }
     }
 
+    namespace
+    {
+        std::vector<int> WorldPlayers()
+        {
+            std::vector<int> ids;
+            ids.reserve(g_players.size() + 1);
+            for (const auto& [id, _] : g_players) ids.push_back(id);
+            if (g_myId > 0 && !g_players.count(g_myId)) ids.push_back(g_myId);
+            return ids;
+        }
+
+        int SeatOf(int playerId, int* vehicleId)
+        {
+            for (const auto& [vid, v] : g_netVehicles)
+                for (const auto& [seat, who] : v.seats)
+                    if (who == playerId) { *vehicleId = (int)vid; return seat; }
+            *vehicleId = 0;
+            return -2;
+        }
+
+        script::PlayerView WorldPlayer(int id)
+        {
+            script::PlayerView p;
+            auto r = g_players.find(id);
+            if (id == g_myId && g_myId > 0)
+            {
+                p.ok = true;
+                p.name = g_myName;
+                const Ped me = n::PLAYER_PED_ID();
+                p.handle = me;
+                const Vector3 c = n::GET_ENTITY_COORDS(me, TRUE);
+                p.x = c.x; p.y = c.y; p.z = c.z;
+                p.hasPosition = true;
+                p.heading = n::GET_ENTITY_HEADING(me);
+                p.health = std::clamp(n::GET_ENTITY_HEALTH(me) - 100, 0, 100);
+                p.armor = std::clamp(n::GET_PED_ARMOUR(me), 0, 100);
+                p.seat = SeatOf(id, &p.vehicle);
+                return p;
+            }
+            auto rm = g_remotes.find(id);
+            if (r == g_players.end() && rm == g_remotes.end()) return p;
+            p.ok = true;
+            p.name = r != g_players.end() ? r->second.name : rm->second.name;
+            if (rm != g_remotes.end())
+            {
+                const Remote& x = rm->second;
+                p.handle = x.ped && n::DOES_ENTITY_EXIST(x.ped) ? x.ped : 0;
+                if (x.hasState)
+                {
+                    p.x = x.cur.x; p.y = x.cur.y; p.z = x.cur.z;
+                    p.heading = x.cur.heading;
+                    p.hasPosition = true;
+                    p.health = std::clamp(x.cur.health - 100, 0, 100);
+                    p.armor = std::clamp(x.cur.armor, 0, 100);
+                }
+            }
+            p.seat = SeatOf(id, &p.vehicle);
+            return p;
+        }
+
+        const std::string* WorldVariable(int id, const std::string& key)
+        {
+            auto r = g_players.find(id);
+            if (r == g_players.end()) return nullptr;
+            auto v = r->second.vars.find(key);
+            return v == r->second.vars.end() ? nullptr : &v->second;
+        }
+
+        std::vector<std::string> WorldVariableKeys(int id)
+        {
+            std::vector<std::string> keys;
+            auto r = g_players.find(id);
+            if (r != g_players.end()) for (const auto& [k, _] : r->second.vars) keys.push_back(k);
+            return keys;
+        }
+
+        std::vector<int> WorldVehicles()
+        {
+            std::vector<int> ids;
+            for (const auto& [id, _] : g_netVehicles) ids.push_back((int)id);
+            return ids;
+        }
+
+        script::VehicleView WorldVehicle(int id)
+        {
+            script::VehicleView v;
+            auto it = g_netVehicles.find((uint32_t)id);
+            if (it == g_netVehicles.end()) return v;
+            const NetVehicle& x = it->second;
+            v.ok = true;
+            v.handle = x.handle && n::DOES_ENTITY_EXIST(x.handle) ? x.handle : 0;
+            v.model = x.model;
+            v.plate = x.plate;
+            v.x = x.s.x; v.y = x.s.y; v.z = x.s.z;
+            v.heading = x.s.heading;
+            v.engine = x.engine;
+            v.locked = x.locked;
+            auto d = x.seats.find(-1);
+            v.driver = d != x.seats.end() ? d->second : 0;
+            return v;
+        }
+    }
+
     void ScriptMain()
     {
         Log("скрипт запущен, GTA5.exe " + GameVersion());
         crash::Install();   // поверх обработчика, который игра ставит при старте
         ApplySettings(); // значения по умолчанию до первого CFG от сервера
         script::SetNativeBackend({ shv::nativeInit, shv::nativePush64, shv::nativeCall });
+        script::SetWorldBackend({ WorldPlayers, WorldPlayer, WorldVariable, WorldVariableKeys, WorldVehicles, WorldVehicle });
         ui::SetUnderlay(browser::Render);   // браузеры сервера под интерфейсом платформы
         ui::SetKeySink(browser::Key);
         ui::SetWindowTitle("FloV Multiplayer");

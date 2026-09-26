@@ -33,7 +33,6 @@ namespace flov::ui
     namespace
     {
         constexpr UINT kMsgApplyTitle = WM_APP + 0x46;
-        constexpr UINT kMsgLayoutCheck = WM_APP + 0x47;   // проверка смены раскладки после Alt+Shift
 
         // --- общее состояние ------------------------------------------------------
         std::mutex g_mutex;
@@ -617,11 +616,14 @@ namespace flov::ui
             return CallNextHookEx(g_keyboardHook, code, wp, lp);
         }
 
+        std::atomic<HKL> g_inputLayout{ nullptr };   // своя раскладка полей ввода; null — как у окна
+        int g_dropChars = 0;                          // сколько системных WM_CHAR пропустить (букву дали мы)
+
         /// Язык раскладки окна игры для подписи в поле чата: «RU», «EN»…
         std::string InputLanguage()
         {
             if (!g_hwnd) return {};
-            const HKL hkl = GetKeyboardLayout(GetWindowThreadProcessId(g_hwnd, nullptr));
+            const HKL hkl = g_inputLayout.load() ? g_inputLayout.load() : GetKeyboardLayout(GetWindowThreadProcessId(g_hwnd, nullptr));
             wchar_t name[16] = {};
             if (!GetLocaleInfoW(MAKELCID(LOWORD((UINT_PTR)hkl), SORT_DEFAULT), LOCALE_SISO639LANGNAME, name, 16)) return {};
             std::string out;
@@ -629,13 +631,33 @@ namespace flov::ui
             return out;
         }
 
-        /// Сменить раскладку: сама Windows это в окне GTA не делает — оконная
-        /// процедура игры не пропускает запрос смены языка, и в чате, консоли и
-        /// полях страниц сервера оставалась одна раскладка.
-        void NextKeyboardLayout(HWND hwnd)
+        /// Своя раскладка ввода. Сменить язык в окне GTA Windows не даёт
+        /// (проверено в игре: и системная комбинация, и ActivateKeyboardLayout
+        /// не работали), поэтому поля ввода переводят клавишу в букву сами — по
+        /// раскладке, которую выбрал игрок: Alt+Shift / Ctrl+Shift по кругу из
+        /// установленных в Windows. От языка окна игры это не зависит.
+        void CycleInputLayout()
         {
-            ActivateKeyboardLayout((HKL)HKL_NEXT, KLF_SETFORPROCESS);
-            PostMessageW(hwnd, WM_NULL, 0, 0);
+            HKL list[16] = {};
+            const int n = GetKeyboardLayoutList(16, list);
+            if (n <= 0) return;
+            const HKL cur = g_inputLayout.load() ? g_inputLayout.load() : GetKeyboardLayout(0);
+            int i = 0;
+            while (i < n && list[i] != cur) ++i;
+            g_inputLayout = list[i < n ? (i + 1) % n : 0];
+            Log("ui: раскладка ввода — " + InputLanguage());
+        }
+
+        /// Буква нажатой клавиши по своей раскладке; 0 — клавиша буквы не даёт.
+        wchar_t CharForKey(WPARAM vk, LPARAM lp)
+        {
+            BYTE state[256] = {};
+            if (!GetKeyboardState(state)) return 0;
+            const HKL hkl = g_inputLayout.load() ? g_inputLayout.load() : GetKeyboardLayout(0);
+            wchar_t buf[4] = {};
+            // Флаг 4: не менять состояние клавиатуры ядра (мёртвые клавиши и т. п.).
+            const int n = ToUnicodeEx((UINT)vk, (UINT)((lp >> 16) & 0xFF), state, buf, 4, 4, hkl);
+            return n == 1 ? buf[0] : 0;
         }
 
         // Alt+Shift / Ctrl+Shift: отпустили модификатор, пока зажат второй, и
@@ -667,17 +689,36 @@ namespace flov::ui
                       wp == VK_LMENU || wp == VK_RMENU || wp == VK_LCONTROL || wp == VK_RCONTROL))
             {
                 g_layoutChord = false;
-                // Сначала даём сработать самой Windows (её запрос уже в очереди
-                // перед нашим сообщением); не сменила — меняем сами. Иначе при
-                // работающей системной смене язык переключался бы дважды.
-                if (TextInputOpen())
-                    PostMessageW(hwnd, kMsgLayoutCheck, (WPARAM)GetKeyboardLayout(0), 0);
+                if (TextInputOpen()) CycleInputLayout();
             }
-            if (msg == kMsgLayoutCheck)
+            // Язык окна сменился средствами Windows (Win+Пробел, языковая панель) —
+            // идём за ним, чтобы не было двух разных «текущих» языков.
+            if (msg == WM_INPUTLANGCHANGE) g_inputLayout = (HKL)lp;
+            // Буква — по своей раскладке, системный WM_CHAR этой клавиши пропускаем.
+            if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !IsLayoutModifier(wp) && TextInputOpen())
             {
-                if ((HKL)wp == GetKeyboardLayout(0)) NextKeyboardLayout(hwnd);
-                return 0;
+                const wchar_t ch = CharForKey(wp, lp);
+                if (ch)
+                {
+                    bool ourField;
+                    {
+                        std::lock_guard lock(g_mutex);
+                        ourField = g_chatOpen || g_consoleOpen || g_connectOpen;
+                    }
+                    if (ourField)
+                    {
+                        // Клавиша, открывшая чат, свою букву в строку не даёт (g_skipChar).
+                        HandleChar(ch);
+                        g_dropChars = 1;
+                    }
+                    else if (const auto sink = g_keySink.load())
+                    {
+                        // Поля страниц сервера: сначала нажатие, потом буква.
+                        if (sink(msg, wp, lp)) { sink(WM_CHAR, ch, lp); g_dropChars = 1; return 0; }
+                    }
+                }
             }
+            if ((msg == WM_CHAR || msg == WM_SYSCHAR) && g_dropChars > 0) { --g_dropChars; return 0; }
             if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && (wp == VK_F12 || wp == VK_HOME))
             {
                 // До окна F12/Home доходить не должны — их забирает перехват.

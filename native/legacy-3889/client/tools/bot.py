@@ -584,6 +584,37 @@ def client_packages_test(host, port):
     return ok
 
 
+def roster_test(host, port):
+    """Список игроков и переменные (mp.players, player.setVariable как в RAGE:MP).
+    Нужен шаблон gamemode: при входе он ставит level (всем) и money (только себе)."""
+    ok = True
+
+    def check(name, cond):
+        nonlocal ok
+        ok &= bool(cond)
+        print(("OK   " if cond else "FAIL ") + name)
+
+    a = Bot(host, port, "RosterA", log=lambda s: None)
+    a.connect()
+    a.send("READY")
+    time.sleep(1.0)
+    b = Bot(host, port, "RosterB", log=lambda s: None)
+    b.connect()
+    b.send("READY")
+    time.sleep(1.5)
+    check("A видит вход B (PJOIN)", wait_for(a, lambda m: m[0] == "PJOIN" and m[1] == str(b.id) and m[2] == "RosterB"))
+    check("B при входе получил список с A", wait_for(b, lambda m: m[0] == "PJOIN" and m[1] == str(a.id)))
+    check("A видит общую переменную B (level)", wait_for(a, lambda m: m[0] == "SVAR" and m[1] == str(b.id) and m[2] == "level" and m[3] == "1"))
+    check("B получил переменную A, выставленную до его входа", wait_for(b, lambda m: m[0] == "SVAR" and m[1] == str(a.id) and m[2] == "level"))
+    check("свои деньги A видит только A", wait_for(a, lambda m: m[0] == "SVAR" and m[1] == str(a.id) and m[2] == "money" and m[3] == "5000"))
+    time.sleep(0.5)
+    check("чужие деньги B до A не дошли", not any(m[0] == "SVAR" and m[1] == str(b.id) and m[2] == "money" for m in a.messages))
+    b.close()
+    check("A видит выход B (PQUIT)", wait_for(a, lambda m: m[0] == "PQUIT" and m[1] == str(b.id), timeout=5))
+    a.close()
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -597,6 +628,7 @@ def main():
     ap.add_argument("--client-version", default="bot-1.0", help="версия клиента в HELLO (1.0.6+ — реестр транспорта)")
     ap.add_argument("--moderation-test", metavar="ADMIN_KEY", help="сценарий модерации; ключ бота-владельца")
     ap.add_argument("--client-packages-test", action="store_true", help="клиентский код сервера: CPKG, файлы, события CEV/CEVS")
+    ap.add_argument("--roster-test", action="store_true", help="список игроков и переменные: PJOIN/PQUIT/SVAR")
     ap.add_argument("--identity", metavar="KEY", help="напечатать ID игрока для файла ключа (создаст ключ)")
     ap.add_argument("--drive", type=lambda v: int(v, 0), default=0, help="хэш модели машины (0xB779A091 = adder)")
     ap.add_argument("--hit", type=int, default=0, help="ID игрока: нанести урон (проверка PvP)")
@@ -608,6 +640,8 @@ def main():
         sys.exit(0 if check(a.host, a.port) else 1)
     if a.client_packages_test:
         sys.exit(0 if client_packages_test(a.host, a.port) else 1)
+    if a.roster_test:
+        sys.exit(0 if roster_test(a.host, a.port) else 1)
     if a.identity:
         print(identity_of(a.identity))
         return

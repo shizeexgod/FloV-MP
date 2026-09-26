@@ -544,7 +544,12 @@ xcopy /E /I sdk\client_packages server\client_packages  # Windows
 | таймеры | `setTimeout`, `setInterval`, `setImmediate`, `clear*` |
 | клавиши | `mp.keys.bind(vk, down, fn)`, `unbind`, `isDown`; пока открыт чат или консоль, клавиши скриптам не приходят |
 | чат, курсор | `mp.gui.chat.push/show`, `mp.gui.cursor.show(freeze, show)` |
-| свой игрок | `mp.players.local.handle / id / name / position / heading` |
+| свой игрок | `mp.players.local.handle / id / name / position / heading / vehicle`, `getHealth()`, `getArmour()`, `getVariable(ключ)` |
+| все игроки сервера | `mp.players.at(id)`, `forEach(fn)`, `forEachInStreamRange(fn)`, `toArray()`, `length`, `streamed`; у игрока `name`, `handle` (0 — далеко), `position`, `heading`, `vehicle`, `seat`, `getHealth()`, `getArmour()`, `getVariable(ключ)`, `variables` |
+| машины сервера | `mp.vehicles.at(id)`, `forEach`, …; у машины `handle`, `model`, `numberPlate`, `position`, `heading`, `engine`, `locked`, `driver` |
+| события мира | `playerJoin` / `playerQuit` (вход и выход с сервера), `entityStreamIn` / `entityStreamOut` (игрок рядом / ушёл) |
+| переменные | `mp.events.addDataHandler(ключ, (player, value, oldValue) => …)` — сервер поменял переменную |
+| встроенные ники | `mp.nametags.enabled = false` — рисуете свои (настройки ников в client.cfg остаются для тех, кто не хочет кода) |
 | модули | `require('./hud')`, `require('./config.json')` — только файлы пакета |
 | журнал | `console.log/warn/error`, `mp.console.log*` — в консоль F8 и журнал клиента |
 
@@ -563,6 +568,21 @@ Alt.OnServer<int, string, string>("flovmp:client:event", (playerId, name, json) 
 цифры и `_ : . -`, до 64 символов. Клиент отправляет не больше 100 событий в
 секунду, сервер принимает не больше 120 от одного игрока — лишние
 отбрасываются. Всё, что пришло от клиента, прислал игрок: проверяйте.
+
+### Переменные игрока (как `player.setVariable` в RAGE:MP)
+
+```csharp
+Alt.Emit("flovmp:player:setVariable", playerId, "job", "\"taxi\"");    // видят все клиенты
+Alt.Emit("flovmp:player:setOwnVariable", playerId, "money", "5000");   // видит только сам игрок
+Alt.Emit("flovmp:player:setVariable", playerId, "job", "");            // удалить
+```
+
+Значение — JSON (строка — в кавычках). Клиент: `player.getVariable("job")`,
+`mp.players.local.getVariable("money")`, изменения — `mp.events.addDataHandler`.
+Новый игрок получает все текущие значения при входе. Ключ — латиница, цифры и
+`_ : . -` до 64 символов, значение до 3800 символов, до 128 переменных на игрока.
+Переменные живут, пока игрок на сервере; хранить их между входами —
+`player_data` (раздел «Сохранение игрока»).
 
 ### Изоляция
 

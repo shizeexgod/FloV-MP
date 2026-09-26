@@ -97,6 +97,11 @@ public sealed class GamemodeResource : Resource
     private static void OnPlayerReady(int id, string name)
     {
         SendChat(id, $"{{c4b5fd}}[Сервер]{{ffffff}} Привет, {name}! Это ваш ресурс gamemode. Команды: /hello, /menu");
+        // Переменные игрока, как player.setVariable в RAGE:MP: клиентский код
+        // читает player.getVariable("level") и ловит mp.events.addDataHandler.
+        // Значение — JSON. setOwnVariable — видит только сам игрок (деньги и т. п.).
+        Alt.Emit("flovmp:player:setVariable", id, "level", "1");
+        Alt.Emit("flovmp:player:setOwnVariable", id, "money", "5000");
     }
 
     private static void OnCommand(int id, string name, string command, string args)

@@ -13,6 +13,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -78,6 +79,48 @@ namespace
         flov::script::TakeOutgoing();
         flov::script::RunSource("probe.js", "");   // не сбрасываем состояние
         return expr;
+    }
+}
+
+namespace
+{
+    // --- подставной мир для mp.players / mp.vehicles ---
+    std::map<int, std::map<std::string, std::string>> g_fakeVars;
+    std::vector<int> FakePlayers() { return { 1, 2, 7 }; }
+    flov::script::PlayerView FakePlayer(int id)
+    {
+        flov::script::PlayerView p;
+        if (id != 1 && id != 2 && id != 7) return p;
+        p.ok = true;
+        p.name = id == 1 ? "Me" : id == 2 ? "Anna" : "Far_Away";
+        p.handle = id == 7 ? 0 : 100 + id;   // 7 — далеко, не в зоне видимости
+        p.hasPosition = id != 7;
+        p.x = 10.f * id; p.y = 1.f; p.z = 2.f;
+        p.health = 80; p.armor = 25;
+        p.vehicle = id == 2 ? 5 : 0;
+        p.seat = id == 2 ? -1 : -2;
+        return p;
+    }
+    const std::string* FakeVar(int id, const std::string& key)
+    {
+        auto it = g_fakeVars.find(id);
+        if (it == g_fakeVars.end()) return nullptr;
+        auto v = it->second.find(key);
+        return v == it->second.end() ? nullptr : &v->second;
+    }
+    std::vector<std::string> FakeVarKeys(int id)
+    {
+        std::vector<std::string> k;
+        for (auto& [key, _] : g_fakeVars[id]) k.push_back(key);
+        return k;
+    }
+    std::vector<int> FakeVehicles() { return { 5 }; }
+    flov::script::VehicleView FakeVehicle(int id)
+    {
+        flov::script::VehicleView v;
+        if (id != 5) return v;
+        v.ok = true; v.handle = 555; v.model = 0xB779A091; v.plate = "FLOV 01"; v.driver = 2; v.engine = true;
+        return v;
     }
 }
 
@@ -265,6 +308,38 @@ int wmain()
         g_result[0] = 0;
     }
 #endif
+    printf("Мир: mp.players, переменные, события:\n");
+    {
+        flov::script::SetWorldBackend({ FakePlayers, FakePlayer, FakeVar, FakeVarKeys, FakeVehicles, FakeVehicle });
+        flov::script::SetLocalPlayer(1, "Me");
+        g_fakeVars[2]["job"] = "\"taxi\"";
+        Run("const a = mp.players.at(2);"
+            "let streamed = 0; mp.players.forEachInStreamRange(() => streamed++);"
+            "mp.events.callRemote('w', mp.players.length, a.name, a.getVariable('job'), a.getHealth(), a.vehicle.numberPlate,"
+            "  a.vehicle.driver === a, streamed, mp.players.at(7).position, mp.players.local.getVariable('job'));");
+        auto out = flov::script::TakeOutgoing();
+        Check(out.size() == 1 && out[0].second == "[3,\"Anna\",\"taxi\",80,\"FLOV 01\",true,2,null,null]",
+              "mp.players: список, имя, getVariable, здоровье, машина, зона видимости (" + (out.empty() ? std::string("—") : out[0].second) + ")");
+
+        Run("mp.events.addDataHandler('money', (p, v, old) => mp.events.callRemote('money', p.name, v, old === undefined));"
+            "mp.events.add('playerJoin', p => mp.events.callRemote('join', p.name));"
+            "mp.events.add('playerQuit', p => mp.events.callRemote('quit', p.name));"
+            "mp.nametags.enabled = false;");
+        g_fakeVars[2]["money"] = "{\"cash\":5}";
+        flov::script::DataChange(2, "money", "{\"cash\":5}", "");
+        flov::script::EntityEvent("playerJoin", 2);
+        flov::script::EntityEvent("playerQuit", 9, "Gone_Player");
+        Ticks(1);
+        out = flov::script::TakeOutgoing();
+        std::string got;
+        for (auto& [n, j] : out) got += n + j + " ";
+        Check(got == "money[\"Anna\",{\"cash\":5},true] join[\"Anna\"] quit[\"Gone_Player\"] ",
+              "addDataHandler, playerJoin, playerQuit с именем ушедшего (" + got + ")");
+        Check(flov::script::NametagsDisabledByScript(), "mp.nametags.enabled = false выключает встроенные ники");
+        flov::script::Reset();
+        Check(!flov::script::NametagsDisabledByScript(), "после отключения от сервера встроенные ники снова включены");
+        flov::script::SetWorldBackend({});
+    }
     printf("Браузеры:\n");
     {
         flov::script::Reset();

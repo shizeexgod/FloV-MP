@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -305,6 +305,7 @@ public partial class StarterResource
         SendClientSettings(session);
         SendModsInfo(session);
         SendClientPackagesInfo(session);
+        SendRosterOnJoin(session);
         Alt.Log($"[FloV:MP b3889] Клиент GTA Legacy {NativeProtocol.GameVersion}: {session.Name} ({session.Ip}), " +
                 $"ID игрока {session.Identity} (для setadmin sc:{session.Identity}), клиент {session.ClientVersion}.");
         // Версия клиента приходит из его сборки. Не совпала с версией
@@ -354,6 +355,7 @@ public partial class StarterResource
         foreach (var seen in _nativeVisible.Values) seen.Remove(session.Id);
         foreach (var other in _nativePlayers.Values)
             ((NativePlayerProxy)(object)other).Session.Send("PDEL", session.Id);
+        ForgetRoster(session.Id);
         OnPlayerDisconnect(proxy, reason ?? "connection closed");
     }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
@@ -664,6 +664,7 @@ public partial class StarterResource : Resource
         RegisterWorldApi();
         RegisterNativeApi();
         RegisterClientEventApi();
+        RegisterRosterApi();
         RegisterVehicleApi();
         RegisterAntiCheatApi();
         RegisterPlayerApi();

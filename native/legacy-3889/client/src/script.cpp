@@ -71,7 +71,11 @@ namespace flov::script
         int g_localId = -1;
         std::string g_localName;
         bool g_cursor = false;
-        bool g_cursorFreeze = false;        // mp.gui.cursor.show(freeze, …): управление персонажем выключено
+        bool g_cursorFreeze = false;
+        bool g_nametagsOff = false;          // mp.nametags.enabled = false
+        WorldBackend g_world;
+        struct EntityNote { std::string event; int id; std::string name, key, json, old; bool data; };
+        std::deque<EntityNote> g_entityInbox;        // mp.gui.cursor.show(freeze, …): управление персонажем выключено
 
         // Скачивание — в своём потоке, результат забирает игровой поток.
         std::mutex g_dl;
@@ -572,6 +576,89 @@ namespace flov::script
         }
         JSValue F_brFocused(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewInt32(ctx, browser::Focused()); }
         JSValue F_brAvailable(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewBool(ctx, browser::Available()); }
+
+        // --- мир: игроки и машины (mp.players, mp.vehicles) ---
+        JSValue IntArray(JSContext* ctx, const std::vector<int>& ids)
+        {
+            JSValue arr = JS_NewArray(ctx);
+            for (uint32_t i = 0; i < ids.size(); ++i) JS_SetPropertyUint32(ctx, arr, i, JS_NewInt32(ctx, ids[i]));
+            return arr;
+        }
+
+        JSValue F_players(JSContext* ctx, JSValueConst, int, JSValueConst*)
+        {
+            return IntArray(ctx, g_world.players ? g_world.players() : std::vector<int>{});
+        }
+
+        JSValue Pos(JSContext* ctx, float x, float y, float z)
+        {
+            JSValue v = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, v, "x", JS_NewFloat64(ctx, x));
+            JS_SetPropertyStr(ctx, v, "y", JS_NewFloat64(ctx, y));
+            JS_SetPropertyStr(ctx, v, "z", JS_NewFloat64(ctx, z));
+            return v;
+        }
+
+        JSValue F_player(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc < 1 || !g_world.player) return JS_NULL;
+            const PlayerView p = g_world.player(Int(ctx, argv[0]));
+            if (!p.ok) return JS_NULL;
+            JSValue o = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, o, "name", JS_NewString(ctx, p.name.c_str()));
+            JS_SetPropertyStr(ctx, o, "handle", JS_NewInt32(ctx, p.handle));
+            JS_SetPropertyStr(ctx, o, "position", p.hasPosition ? Pos(ctx, p.x, p.y, p.z) : JS_NULL);
+            JS_SetPropertyStr(ctx, o, "heading", JS_NewFloat64(ctx, p.heading));
+            JS_SetPropertyStr(ctx, o, "health", JS_NewInt32(ctx, p.health));
+            JS_SetPropertyStr(ctx, o, "armor", JS_NewInt32(ctx, p.armor));
+            JS_SetPropertyStr(ctx, o, "vehicle", JS_NewInt32(ctx, p.vehicle));
+            JS_SetPropertyStr(ctx, o, "seat", JS_NewInt32(ctx, p.seat));
+            return o;
+        }
+
+        JSValue F_pvar(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc < 2 || !g_world.variable) return JS_NULL;
+            const std::string* v = g_world.variable(Int(ctx, argv[0]), Str(ctx, argv[1], 64));
+            return v ? JS_NewStringLen(ctx, v->data(), v->size()) : JS_NULL;
+        }
+
+        JSValue F_pvarKeys(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            JSValue arr = JS_NewArray(ctx);
+            if (argc < 1 || !g_world.variableKeys) return arr;
+            const auto keys = g_world.variableKeys(Int(ctx, argv[0]));
+            for (uint32_t i = 0; i < keys.size(); ++i) JS_SetPropertyUint32(ctx, arr, i, JS_NewString(ctx, keys[i].c_str()));
+            return arr;
+        }
+
+        JSValue F_vehicles(JSContext* ctx, JSValueConst, int, JSValueConst*)
+        {
+            return IntArray(ctx, g_world.vehicles ? g_world.vehicles() : std::vector<int>{});
+        }
+
+        JSValue F_vehicle(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc < 1 || !g_world.vehicle) return JS_NULL;
+            const VehicleView v = g_world.vehicle(Int(ctx, argv[0]));
+            if (!v.ok) return JS_NULL;
+            JSValue o = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, o, "handle", JS_NewInt32(ctx, v.handle));
+            JS_SetPropertyStr(ctx, o, "model", JS_NewUint32(ctx, v.model));
+            JS_SetPropertyStr(ctx, o, "plate", JS_NewString(ctx, v.plate.c_str()));
+            JS_SetPropertyStr(ctx, o, "position", Pos(ctx, v.x, v.y, v.z));
+            JS_SetPropertyStr(ctx, o, "heading", JS_NewFloat64(ctx, v.heading));
+            JS_SetPropertyStr(ctx, o, "engine", JS_NewBool(ctx, v.engine));
+            JS_SetPropertyStr(ctx, o, "locked", JS_NewBool(ctx, v.locked));
+            JS_SetPropertyStr(ctx, o, "driver", JS_NewInt32(ctx, v.driver));
+            return o;
+        }
+
+        JSValue F_nametags(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 0) g_nametagsOff = JS_ToBool(ctx, argv[0]) != 1;
+            return JS_NewBool(ctx, !g_nametagsOff);
+        }
         JSValue F_brMax(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewInt32(ctx, browser::MaxCount()); }
         JSValue F_brStats(JSContext* ctx, JSValueConst, int, JSValueConst*)
         {
@@ -854,6 +941,95 @@ g.graphics.drawText = function (t, pos, o) {
     g.ui.drawText(+pos[0], +pos[1]);
 };
 
+// ---- игроки и машины: mp.players / mp.vehicles, как в RAGE:MP ----
+// mp.players — все игроки сервера (включая себя). В зоне видимости у игрока
+// есть handle (Ped GTA) и позиция; далеко — только имя и переменные.
+function parseVar(json) {
+    if (json === null || json === undefined || json === '') return undefined;
+    try { return JSON.parse(json); } catch (e) { return undefined; }
+}
+const playerObjs = new Map();
+class Player {
+    constructor(id) { this.id = id; this.remoteId = id; this._name = ''; }
+    get type() { return 'player'; }
+    get _info() { return F.player(this.id); }
+    get name() { const i = this._info; if (i) this._name = i.name; return this._name; }
+    get handle() { const i = this._info; return i ? i.handle : 0; }
+    get position() { const i = this._info; return i ? i.position : null; }
+    get heading() { const i = this._info; return i ? i.heading : 0; }
+    get vehicle() { const i = this._info; return i && i.vehicle ? mp.vehicles.at(i.vehicle) : null; }
+    get seat() { const i = this._info; return i ? i.seat : -2; }
+    get isLocal() { return this.id === F.localId(); }
+    getHealth() { const i = this._info; return i ? i.health : 0; }
+    getArmour() { const i = this._info; return i ? i.armor : 0; }
+    getVariable(key) { return parseVar(F.pvar(this.id, String(key))); }
+    hasVariable(key) { return F.pvar(this.id, String(key)) !== null; }
+    get variables() { const o = {}; for (const k of F.pvarKeys(this.id)) o[k] = this.getVariable(k); return o; }
+}
+function playerAt(id) {
+    id = id | 0;
+    let p = playerObjs.get(id);
+    if (!p) { p = new Player(id); playerObjs.set(id, p); }
+    return p;
+}
+const vehicleObjs = new Map();
+class Vehicle {
+    constructor(id) { this.id = id; this.remoteId = id; }
+    get type() { return 'vehicle'; }
+    get _info() { return F.vehicle(this.id); }
+    get handle() { const i = this._info; return i ? i.handle : 0; }
+    get model() { const i = this._info; return i ? i.model : 0; }
+    get numberPlate() { const i = this._info; return i ? i.plate : ''; }
+    get position() { const i = this._info; return i ? i.position : null; }
+    get heading() { const i = this._info; return i ? i.heading : 0; }
+    get engine() { const i = this._info; return !!(i && i.engine); }
+    get locked() { const i = this._info; return !!(i && i.locked); }
+    get driver() { const i = this._info; return i && i.driver ? playerAt(i.driver) : null; }
+}
+function pool(ids, at, streamedOnly) {
+    return {
+        at, atRemoteId: at,
+        exists(e) { return !!e && ids().includes(e.id); },
+        forEach(fn) { for (const id of ids()) fn(at(id), id); },
+        forEachInStreamRange(fn) { for (const id of ids()) { const e = at(id); if (e.handle) fn(e, id); } },
+        toArray() { return ids().map(at); },
+        get streamed() { return ids().map(at).filter(e => e.handle); },
+        get length() { return ids().length; },
+    };
+}
+mp.players = pool(() => F.players(), playerAt);
+mp.vehicles = pool(() => F.vehicles(), id => {
+    id = id | 0;
+    let v = vehicleObjs.get(id);
+    if (!v) { v = new Vehicle(id); vehicleObjs.set(id, v); }
+    return v;
+});
+const dataHandlers = new Map();
+mp.events.addDataHandler = (key, fn) => {
+    if (typeof fn !== 'function') throw new TypeError('mp.events.addDataHandler: нужна функция');
+    let list = dataHandlers.get(key);
+    if (!list) { list = []; dataHandlers.set(key, list); }
+    list.push(fn);
+};
+globalThis.__flovDataChange = (id, key, json, old) => {
+    const list = dataHandlers.get(key);
+    if (!list) return;
+    const p = playerAt(id);
+    for (const fn of list.slice()) {
+        try { fn(p, parseVar(json), parseVar(old)); } catch (e) { F.error('addDataHandler «' + key + '»', e); }
+    }
+};
+globalThis.__flovEntityEvent = (event, id, name) => {
+    const p = playerAt(id);
+    if (name) p._name = name;
+    dispatch(event, [p]);
+    if (event === 'playerQuit') playerObjs.delete(id);
+};
+mp.nametags = {
+    get enabled() { return F.nametags(); },
+    set enabled(v) { F.nametags(!!v); },
+};
+
 // ---- игрок ----
 mp.players = mp.players || {};
 mp.players.local = {
@@ -864,6 +1040,12 @@ mp.players.local = {
     get position() { return F.localPos(); },
     get heading() { return F.localHeading(); },
     get type() { return 'player'; },
+    getVariable(key) { return parseVar(F.pvar(F.localId(), String(key))); },
+    hasVariable(key) { return F.pvar(F.localId(), String(key)) !== null; },
+    getHealth() { const i = F.player(F.localId()); return i ? i.health : 0; },
+    getArmour() { const i = F.player(F.localId()); return i ? i.armor : 0; },
+    get vehicle() { const i = F.player(F.localId()); return i && i.vehicle ? mp.vehicles.at(i.vehicle) : null; },
+    get isLocal() { return true; },
 };
 
 // ---- require: модули пакета, как в RAGE:MP ----
@@ -960,6 +1142,8 @@ globalThis.__flovTick = function (blocked) {
             g_runningDigest.clear();
             g_cursor = false;
             g_cursorFreeze = false;
+            g_nametagsOff = false;
+            g_entityInbox.clear();
             browser::DestroyAll();   // страницы сервера живут, пока жив его код
         }
 
@@ -992,6 +1176,13 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "localHeading", F_localHeading, 0);
             AddFn(g_ctx, F, "localId", F_localId, 0);
             AddFn(g_ctx, F, "localName", F_localName, 0);
+            AddFn(g_ctx, F, "players", F_players, 0);
+            AddFn(g_ctx, F, "player", F_player, 1);
+            AddFn(g_ctx, F, "pvar", F_pvar, 2);
+            AddFn(g_ctx, F, "pvarKeys", F_pvarKeys, 1);
+            AddFn(g_ctx, F, "vehicles", F_vehicles, 0);
+            AddFn(g_ctx, F, "vehicle", F_vehicle, 1);
+            AddFn(g_ctx, F, "nametags", F_nametags, 1);
             AddFn(g_ctx, F, "brNew", F_brNew, 1);
             AddFn(g_ctx, F, "brDel", F_brDel, 1);
             AddFn(g_ctx, F, "brUrl", F_brUrl, 2);
@@ -1049,6 +1240,29 @@ globalThis.__flovTick = function (blocked) {
                 CallGlobal("__flovDispatch", 2, argv, kCallBudgetMs);
                 JS_FreeValue(g_ctx, argv[0]);
                 JS_FreeValue(g_ctx, argv[1]);
+            }
+        }
+
+        /// playerJoin/Quit, stream in/out и смены переменных → JS.
+        void FlushEntityEvents()
+        {
+            while (g_ctx && !g_entityInbox.empty())
+            {
+                const EntityNote n = std::move(g_entityInbox.front());
+                g_entityInbox.pop_front();
+                if (n.data)
+                {
+                    JSValue argv[4] = { JS_NewInt32(g_ctx, n.id), JS_NewString(g_ctx, n.key.c_str()),
+                                        JS_NewString(g_ctx, n.json.c_str()), JS_NewString(g_ctx, n.old.c_str()) };
+                    CallGlobal("__flovDataChange", 4, argv, kCallBudgetMs);
+                    for (auto& v : argv) JS_FreeValue(g_ctx, v);
+                }
+                else
+                {
+                    JSValue argv[3] = { JS_NewString(g_ctx, n.event.c_str()), JS_NewInt32(g_ctx, n.id), JS_NewString(g_ctx, n.name.c_str()) };
+                    CallGlobal("__flovEntityEvent", 3, argv, kCallBudgetMs);
+                    for (auto& v : argv) JS_FreeValue(g_ctx, v);
+                }
             }
         }
 
@@ -1283,6 +1497,7 @@ globalThis.__flovTick = function (blocked) {
         if (!startDir.empty()) StartFrom(startDir, startDigest);
         if (!g_ctx) return;
         FlushInbox();
+        FlushEntityEvents();
         FlushBrowserEvents();
         JSValue blocked = JS_NewBool(g_ctx, inputBlocked);
         CallGlobal("__flovTick", 1, &blocked, kCallBudgetMs);
@@ -1338,6 +1553,24 @@ globalThis.__flovTick = function (blocked) {
         JS_FreeValue(g_ctx, global);
         return taken;
     }
+
+    void SetWorldBackend(const WorldBackend& backend) { g_world = backend; }
+
+    void EntityEvent(const std::string& event, int id, const std::string& name)
+    {
+        if (!g_ctx) return;   // до запуска кода нечего сообщать: список он прочитает сам
+        if (g_entityInbox.size() >= 4096) g_entityInbox.pop_front();
+        g_entityInbox.push_back({ event, id, name, {}, {}, {}, false });
+    }
+
+    void DataChange(int id, const std::string& key, const std::string& json, const std::string& oldJson)
+    {
+        if (!g_ctx) return;
+        if (g_entityInbox.size() >= 4096) g_entityInbox.pop_front();
+        g_entityInbox.push_back({ {}, id, {}, key, json, oldJson, true });
+    }
+
+    bool NametagsDisabledByScript() { return g_ctx && g_nametagsOff; }
 
     bool CursorWanted() { return g_ctx && g_cursor; }
     bool CursorFreeze() { return g_ctx && g_cursor && g_cursorFreeze; }

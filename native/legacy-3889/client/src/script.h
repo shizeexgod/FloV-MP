@@ -68,6 +68,50 @@ namespace flov::script
     /// Скрипт сейчас работает.
     bool Running();
 
+    /// Мир для клиентского кода: mp.players, mp.vehicles — как в RAGE:MP.
+    /// Заполняет игровой поток (game.cpp), читает JS в том же потоке.
+    struct PlayerView
+    {
+        bool ok = false;
+        std::string name;
+        int handle = 0;          // 0 — не в зоне видимости
+        float x = 0, y = 0, z = 0, heading = 0;
+        bool hasPosition = false;
+        int health = 0, armor = 0;   // 0..100, как player.health в RAGE:MP
+        int vehicle = 0;         // ID машины реестра, 0 — пешком
+        int seat = -2;           // -1 — водитель
+    };
+    struct VehicleView
+    {
+        bool ok = false;
+        int handle = 0;
+        uint32_t model = 0;
+        std::string plate;
+        float x = 0, y = 0, z = 0, heading = 0;
+        bool engine = false, locked = false;
+        int driver = 0;
+    };
+    struct WorldBackend
+    {
+        std::vector<int> (*players)() = nullptr;           // все игроки сервера, включая себя
+        PlayerView (*player)(int id) = nullptr;
+        const std::string* (*variable)(int id, const std::string& key) = nullptr;   // JSON или nullptr
+        std::vector<std::string> (*variableKeys)(int id) = nullptr;
+        std::vector<int> (*vehicles)() = nullptr;
+        VehicleView (*vehicle)(int id) = nullptr;
+    };
+    void SetWorldBackend(const WorldBackend& backend);
+
+    /// playerJoin / playerQuit / entityStreamIn / entityStreamOut. name — для
+    /// playerQuit: игрока уже нет в списке, а обработчику нужно его имя.
+    void EntityEvent(const std::string& event, int id, const std::string& name = "");
+    /// Переменная игрока изменилась (SVAR): mp.events.addDataHandler.
+    void DataChange(int id, const std::string& key, const std::string& json, const std::string& oldJson);
+
+    /// mp.nametags.enabled = false — встроенные ники платформы выключены
+    /// скриптом (владелец рисует свои).
+    bool NametagsDisabledByScript();
+
     /// Скрипт показал курсор (mp.gui.cursor.show) и хочет ли заморозить персонажа.
     bool CursorWanted();
     bool CursorFreeze();
