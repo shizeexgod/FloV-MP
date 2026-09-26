@@ -1715,7 +1715,7 @@ namespace flov::game
             ui::SetConsoleTheme(Get("console.theme"));
             ui::SetAccent(Rgb("hud.accent"));
             ui::SetBrand(Get("branding.name"));
-            ui::SetLoadingStyle(SplitTips(Get("loading.tips")), Rgb("loading.accent", 0xFBBF24));
+            ui::SetLoadingStyle(SplitTips(Get("loading.tips")), Rgb("loading.accent", 0xFF3D8A));
             if (!g_welcomed) return;
 
             ui::SetChatEnabled(c.chat);

@@ -190,6 +190,8 @@ public sealed class ServerSettings
         new("chat.timestamps", Kind.Bool, "on", true, "Чат", "время у сообщений"),
         new("chat.width", Kind.Int, "540", true, "Чат", "ширина, пикселей при 1080p", 300, 1200),
         new("chat.max_length", Kind.Int, "256", true, "Чат", "максимум символов в сообщении", 16, 1024),
+        new("chat.prefix_color", Kind.Text, "#ff3d8a", true, "Чат",
+            "цвет всех префиксов в начале строк — [FloV:MP], [Сервер] и т. п. (#rrggbb; пусто — у каждого свой)"),
         new("chat.rp_commands", Kind.Bool, "on", false, "Чат", "команды /me /do /b /s /w"),
         new("chat.radius", Kind.Float, "0", false, "Чат",
             "радиус обычного чата в метрах: 0 — слышно всему серверу, 20 — только рядом (для RP)", 0, 1000),
@@ -203,7 +205,7 @@ public sealed class ServerSettings
         // --- Загрузка и окно игры ------------------------------------------------------------
         new("loading.enabled", Kind.Bool, "on", true, "Загрузка", "загрузочный экран от подключения до появления в мире"),
         new("loading.title", Kind.Text, "", true, "Загрузка", "заголовок загрузочного экрана. Пусто — имя сервера"),
-        new("loading.accent", Kind.Color, "#fbbf24", true, "Загрузка", "цвет полосы загрузки и надписей"),
+        new("loading.accent", Kind.Color, "#ff3d8a", true, "Загрузка", "цвет полосы загрузки и надписей"),
         new("loading.background_url", Kind.Text, "", true, "Загрузка",
             "ссылка на фон загрузочного экрана (http или https, JPEG или PNG до 16 МБ). " +
             "Клиент скачивает картинку один раз и держит в кэше; чтобы сменить её, нужен новый адрес"),
@@ -406,6 +408,40 @@ public sealed class ServerSettings
     }
 
     /// <summary>
+    /// Прежние значения по умолчанию, которые сменила платформа. Файл владельца
+    /// содержит все ключи, поэтому новое значение само не приходит: если в
+    /// строке стоит ровно старое, это не выбор владельца, а наш прежний
+    /// умолчательный — меняем на новый. Своё значение владельца не трогаем.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> RetiredDefaults = new Dictionary<string, string[]>
+    {
+        // 26.09: полоса загрузки — фирменный розовый вместо жёлтого.
+        ["loading.accent"] = new[] { "#fbbf24" },
+    };
+
+    public static string ReplaceRetiredDefaults(string text, string? path, out int replaced)
+    {
+        replaced = 0;
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var eq = line.IndexOf('=');
+            if (eq <= 0 || line.TrimStart().StartsWith('#')) continue;
+            var key = line[..eq].Trim();
+            if (!RetiredDefaults.TryGetValue(key, out var old) || !ByKey.TryGetValue(key, out var def)) continue;
+            var value = line[(eq + 1)..].Trim();
+            if (!old.Any(o => string.Equals(o, value, StringComparison.OrdinalIgnoreCase))) continue;
+            lines[i] = key + " = " + def.Default + (line.EndsWith('\r') ? "\r" : "");
+            replaced++;
+        }
+        if (replaced == 0) return text;
+        var updated = string.Join('\n', lines);
+        if (path != null) File.WriteAllText(path, updated, new UTF8Encoding(false));
+        return updated;
+    }
+
+    /// <summary>
     /// Загрузить из папки config (создать образец, если файла нет). Ключи,
     /// появившиеся в новой версии платформы, дописываются в конец файла
     /// владельца со значениями по умолчанию — его правки не трогаются.
@@ -423,6 +459,7 @@ public sealed class ServerSettings
                 return new ServerSettings();
             }
             var text = File.ReadAllText(path, Encoding.UTF8);
+            text = ReplaceRetiredDefaults(text, path, out var replaced);
             var (settings, problems, present) = Parse(text);
             foreach (var p in problems) warn($"[FloV:MP] {FileName}: {p}");
             var missing = Schema.Where(d => !present.Contains(d.Key)).ToList();
@@ -435,6 +472,7 @@ public sealed class ServerSettings
                 File.AppendAllText(path, sb.ToString(), new UTF8Encoding(false));
             }
             summary = $"{FileName}: {present.Count} ключей" + (missing.Count > 0 ? $", дописано новых: {missing.Count}" : "") +
+                      (replaced > 0 ? $", обновлено прежних значений по умолчанию: {replaced}" : "") +
                       (problems.Count > 0 ? $", замечаний: {problems.Count}" : "");
             return settings;
         }

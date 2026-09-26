@@ -25,12 +25,12 @@ namespace flov::settings
         { "nametags.health_color", "#4ade80" }, { "nametags.health_low_color", "#f87171" },
         { "nametags.armor_color", "#60a5fa" },
         { "chat.enabled", "on" }, { "chat.lines", "10" }, { "chat.fade_seconds", "15" }, { "chat.timestamps", "on" },
-        { "chat.width", "540" }, { "console.enabled", "on" },
+        { "chat.width", "540" }, { "chat.prefix_color", "#ff3d8a" }, { "console.enabled", "on" },
         { "voice.enabled", "on" }, { "voice.radius", "25" }, { "voice.key", "N" },
         { "keys.esp", "F3" }, { "keys.noclip", "F4" }, { "keys.waypoint", "F5" },
         { "keys.chat", "T" }, { "keys.console", "F8" }, { "console.theme", "obsidian" }, { "chat.max_length", "256" },
         { "window.title", "FloV Multiplayer — {server}" }, { "branding.name", "FloV:MP" },
-        { "loading.enabled", "on" }, { "loading.title", "" }, { "loading.accent", "#fbbf24" },
+        { "loading.enabled", "on" }, { "loading.title", "" }, { "loading.accent", "#ff3d8a" },
         { "loading.tips", "{a1a1aa}Голос:{71717a} удерживайте N, чтобы говорить. Вас слышат те, кто рядом. | "
                           "{a1a1aa}Чат:{71717a} клавиша T. Команды начинаются с «/», список — /help. | "
                           "{a1a1aa}Консоль:{71717a} клавиша F8 — там видно, что происходит, если что-то пошло не так. | "

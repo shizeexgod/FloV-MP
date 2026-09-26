@@ -29,7 +29,7 @@ public sealed class ServerSettingsTests
         Assert.Equal("F10", client["keys.console"]);
         Assert.Equal("slate", client["console.theme"]);
         Assert.Equal("256", client["chat.max_length"]);
-        Assert.Equal("#fbbf24", client["loading.accent"]);
+        Assert.Equal("#ff3d8a", client["loading.accent"]);
     }
 
     [Fact]
@@ -103,5 +103,19 @@ public sealed class ServerSettingsTests
         Assert.Equal(0x7B, ServerSettings.KeyCode("F12"));
         Assert.Equal(0, ServerSettings.KeyCode("F13"));
         Assert.Equal(0, ServerSettings.KeyCode("ESC"));
+    }
+
+    [Fact]
+    public void Прежний_умолчательный_цвет_загрузки_заменяется_а_свой_владельца_нет()
+    {
+        var text = "loading.accent = #fbbf24\r\nhud.accent = #ffffff\r\n";
+        var updated = ServerSettings.ReplaceRetiredDefaults(text, null, out var n);
+        Assert.Equal(1, n);
+        Assert.Contains("loading.accent = #ff3d8a\r\n", updated);
+        Assert.Contains("hud.accent = #ffffff", updated);
+
+        var own = ServerSettings.ReplaceRetiredDefaults("loading.accent = #22c55e\n", null, out var m);
+        Assert.Equal(0, m);
+        Assert.Equal("loading.accent = #22c55e\n", own);
     }
 }

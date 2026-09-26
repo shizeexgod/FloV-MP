@@ -33,6 +33,7 @@ namespace flov::ui
     namespace
     {
         constexpr UINT kMsgApplyTitle = WM_APP + 0x46;
+        constexpr UINT kMsgLayoutCheck = WM_APP + 0x47;   // проверка смены раскладки после Alt+Shift
 
         // --- общее состояние ------------------------------------------------------
         std::mutex g_mutex;
@@ -112,7 +113,7 @@ namespace flov::ui
         std::string g_loadingTitle, g_loadingStep;
         float g_loadingPercent = -1.f, g_loadingShownPercent = 0.f;
         std::vector<std::string> g_tips;
-        uint32_t g_loadingAccent = 0xFBBF24;
+        uint32_t g_loadingAccent = 0xFF3D8A;   // фирменный розовый FloV:MP
         // Картинки загрузочного экрана. Логотип зашит в клиент, фон и свой
         // логотип владелец сервера кладёт в %LOCALAPPDATA%\FloVMP\ui.
         ImFont* g_load = nullptr;   // Inter, только загрузочный экран
@@ -572,6 +573,8 @@ namespace flov::ui
                 bool swallow = false;
                 if (OurProcessInForeground())
                 {
+                    static std::atomic<bool> seen{ false };
+                    if (!seen.exchange(true)) Log("ui: перехват клавиш получает нажатия в окне игры");
                     // F12 и Home открывают оверлей Rockstar Games (подсказка про
                     // Home видна на экране загрузки 1.0.3889). Мультиплееру он не
                     // нужен: игрок попадает в меню одиночной игры посреди сервера.
@@ -614,8 +617,75 @@ namespace flov::ui
             return CallNextHookEx(g_keyboardHook, code, wp, lp);
         }
 
+        /// Язык раскладки окна игры для подписи в поле чата: «RU», «EN»…
+        std::string InputLanguage()
+        {
+            if (!g_hwnd) return {};
+            const HKL hkl = GetKeyboardLayout(GetWindowThreadProcessId(g_hwnd, nullptr));
+            wchar_t name[16] = {};
+            if (!GetLocaleInfoW(MAKELCID(LOWORD((UINT_PTR)hkl), SORT_DEFAULT), LOCALE_SISO639LANGNAME, name, 16)) return {};
+            std::string out;
+            for (wchar_t c : std::wstring(name)) if (c < 128) out += (char)toupper((int)c);
+            return out;
+        }
+
+        /// Сменить раскладку: сама Windows это в окне GTA не делает — оконная
+        /// процедура игры не пропускает запрос смены языка, и в чате, консоли и
+        /// полях страниц сервера оставалась одна раскладка.
+        void NextKeyboardLayout(HWND hwnd)
+        {
+            ActivateKeyboardLayout((HKL)HKL_NEXT, KLF_SETFORPROCESS);
+            PostMessageW(hwnd, WM_NULL, 0, 0);
+        }
+
+        // Alt+Shift / Ctrl+Shift: отпустили модификатор, пока зажат второй, и
+        // между ними не было других клавиш — как это делает Windows.
+        bool g_layoutChord = false;
+
+        bool TextInputOpen()
+        {
+            std::lock_guard lock(g_mutex);
+            return g_chatOpen || g_consoleOpen || g_connectOpen || g_scriptCursor;
+        }
+
         LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {
+            // Запрос смены языка — прямо Windows, мимо оконной процедуры GTA.
+            if (msg == WM_INPUTLANGCHANGEREQUEST) return DefWindowProcW(hwnd, msg, wp, lp);
+            if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
+            {
+                const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                const bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+                const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                const bool mod = wp == VK_SHIFT || wp == VK_MENU || wp == VK_CONTROL || wp == VK_LSHIFT || wp == VK_RSHIFT ||
+                                 wp == VK_LMENU || wp == VK_RMENU || wp == VK_LCONTROL || wp == VK_RCONTROL;
+                if (!mod) g_layoutChord = false;
+                else if (shift && (alt || ctrl)) g_layoutChord = true;
+            }
+            else if ((msg == WM_KEYUP || msg == WM_SYSKEYUP) && g_layoutChord &&
+                     (wp == VK_SHIFT || wp == VK_MENU || wp == VK_CONTROL || wp == VK_LSHIFT || wp == VK_RSHIFT ||
+                      wp == VK_LMENU || wp == VK_RMENU || wp == VK_LCONTROL || wp == VK_RCONTROL))
+            {
+                g_layoutChord = false;
+                // Сначала даём сработать самой Windows (её запрос уже в очереди
+                // перед нашим сообщением); не сменила — меняем сами. Иначе при
+                // работающей системной смене язык переключался бы дважды.
+                if (TextInputOpen())
+                    PostMessageW(hwnd, kMsgLayoutCheck, (WPARAM)GetKeyboardLayout(0), 0);
+            }
+            if (msg == kMsgLayoutCheck)
+            {
+                if ((HKL)wp == GetKeyboardLayout(0)) NextKeyboardLayout(hwnd);
+                return 0;
+            }
+            if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && (wp == VK_F12 || wp == VK_HOME))
+            {
+                // До окна F12/Home доходить не должны — их забирает перехват.
+                // Дошли — значит, кто-то обошёл его: пишем, чтобы это было видно.
+                static bool reported = false;
+                if (!reported) { reported = true; Log("ui: ВНИМАНИЕ: клавиша " + std::string(wp == VK_F12 ? "F12" : "Home") + " дошла до окна игры мимо перехвата"); }
+                if (wp == VK_F12) return 0;
+            }
             // Курсор скрипта открыт — клавиатура браузерам сервера (кроме
             // случая, когда игрок печатает в нашем чате или консоли).
             if (const auto sink = g_keySink.load())
@@ -730,6 +800,55 @@ namespace flov::ui
             }
             if (!cur.empty()) out.push_back({ cur, color });
             return out;
+        }
+
+        /// Строка чата к единому виду. Префикс в начале («[FloV:MP]», «[Сервер]»,
+        /// «[Транспорт]»…) — всегда цвет chat.prefix_color, у кого бы он ни был
+        /// свой; текст после префикса сохраняет свой цвет (зелёный «готово»,
+        /// красная ошибка). Тёмно-серые оттенки поднимаются до читаемых поверх
+        /// города. Пустой chat.prefix_color — строки как есть.
+        std::string NormalizeChatLine(const std::string& text)
+        {
+            auto isCode = [&](size_t i) {
+                if (i + 7 >= text.size() || text[i] != '{' || text[i + 7] != '}') return false;
+                for (size_t k = i + 1; k < i + 7; ++k) if (!isxdigit((unsigned char)text[k])) return false;
+                return true;
+            };
+            // Тёмно-серые коды — светлее (на 40% к белому); цветные не трогаем.
+            std::string out;
+            out.reserve(text.size() + 16);
+            for (size_t i = 0; i < text.size(); ++i)
+            {
+                if (isCode(i))
+                {
+                    const uint32_t c = (uint32_t)strtoul(text.substr(i + 1, 6).c_str(), nullptr, 16);
+                    const int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+                    const int hi = std::max({ r, g, b }), lo = std::min({ r, g, b });
+                    if (hi - lo < 28 && hi < 0xC8)
+                    {
+                        auto up = [](int v) { return v + (255 - v) * 2 / 5; };
+                        char buf[10];
+                        snprintf(buf, sizeof buf, "{%02x%02x%02x}", up(r), up(g), up(b));
+                        out += buf;
+                    }
+                    else out += text.substr(i, 8);
+                    i += 7;
+                    continue;
+                }
+                out += text[i];
+            }
+            const std::string pc = settings::Get("chat.prefix_color");
+            if (pc.size() != 7 || pc[0] != '#') return out;
+            size_t pos = 0;
+            std::string color;   // цвет, которым шла строка до префикса
+            while (pos + 7 < out.size() && out[pos] == '{' && out[pos + 7] == '}') { color = out.substr(pos, 8); pos += 8; }
+            if (pos >= out.size() || out[pos] != '[') return out;
+            const size_t close = out.find(']', pos);
+            if (close == std::string::npos || close - pos > 48) return out;
+            std::string rest = out.substr(close + 1);
+            // Текст после префикса раньше продолжал его цвет — сохраняем тот цвет.
+            if (!(rest.size() >= 8 && rest[0] == '{' && rest[7] == '}')) rest = (color.empty() ? "{ffffff}" : color) + rest;
+            return "{" + pc.substr(1) + "}" + out.substr(pos, close - pos + 1) + rest;
         }
 
         std::string StripColors(const std::string& text)
@@ -946,7 +1065,7 @@ namespace flov::ui
                         const auto& c = g_chat[i];
                         const float lead = (stamps ? Measure(g_mono, "[" + c.time + "] ").x : 0) +
                                            (c.author.empty() ? 0 : Measure(g_bold, c.author + ": ").x);
-                        total += DrawWrapped(dl, g_text, ImVec2(x, 0), lead, width, lineH, c.text, 0xF4F4F5, 1, false, true) + 3 * s;
+                        total += DrawWrapped(dl, g_text, ImVec2(x, 0), lead, width, lineH, c.text, 0xFFFFFF, 1, false, true) + 3 * s;
                     }
                     dl->AddRectFilled(ImVec2(x - 10 * s, top - 8 * s), ImVec2(x + width + 10 * s, top + std::max(total, lineH) + 8 * s),
                                       Rgba(0, 0, 0, 0.28f), 8 * s);
@@ -958,7 +1077,7 @@ namespace flov::ui
                     if (stamps)
                     {
                         const std::string t = "[" + c.time + "] ";
-                        ShadowText(dl, g_mono, ImVec2(x, y + (Px(g_text) - Px(g_mono)) * 0.6f), Rgba(113, 113, 122, alpha), t);
+                        ShadowText(dl, g_mono, ImVec2(x, y + (Px(g_text) - Px(g_mono)) * 0.6f), Rgba(161, 161, 170, alpha), t);
                         lead += Measure(g_mono, t).x;
                     }
                     if (!c.author.empty())
@@ -967,7 +1086,7 @@ namespace flov::ui
                         ShadowText(dl, g_bold, ImVec2(x + lead, y), Rgb(c.authorRgb, alpha), a);
                         lead += Measure(g_bold, a).x;
                     }
-                    y += DrawWrapped(dl, g_text, ImVec2(x, y), lead, width, lineH, c.text, 0xF4F4F5, alpha, true, false) + 3 * s;
+                    y += DrawWrapped(dl, g_text, ImVec2(x, y), lead, width, lineH, c.text, 0xFFFFFF, alpha, true, false) + 3 * s;
                 }
             }
             if (!g_chatOpen) return;
@@ -982,8 +1101,13 @@ namespace flov::ui
             // Шеврон ›
             dl->AddLine(ImVec2(b0.x + 12 * s, cy - 4 * s), ImVec2(b0.x + 16 * s, cy), Rgb(g_accent), 2 * s);
             dl->AddLine(ImVec2(b0.x + 16 * s, cy), ImVec2(b0.x + 12 * s, cy + 4 * s), Rgb(g_accent), 2 * s);
-            DrawField(dl, g_text, ImVec2(b0.x + 28 * s, cy - Px(g_text) / 2), width - 30 * s, g_input, true,
+            const std::string lang = InputLanguage();
+            const float langW = lang.empty() ? 0.f : Measure(g_mono, lang).x + 16 * s;
+            DrawField(dl, g_text, ImVec2(b0.x + 28 * s, cy - Px(g_text) / 2), width - 30 * s - langW, g_input, true,
                       "Введите сообщение или команду (/)…", Rgba(244, 244, 245, 1.f));
+            // Язык ввода (RU/EN): смена — Alt+Shift или Ctrl+Shift.
+            if (!lang.empty())
+                ShadowText(dl, g_mono, ImVec2(b1.x - langW + 4 * s, cy - Px(g_mono) / 2), Rgba(161, 161, 170, 1.f), lang);
 
             // Подвал: клавиши и счётчик.
             float fx = b0.x + 2 * s;
@@ -2070,9 +2194,24 @@ namespace flov::ui
             g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboard, self, 0);
             if (g_keyboardHook) Log("ui: перехват клавиш Rockstar включён (F12, Home)");
             else { Log("ui: не удалось поставить перехват клавиш, ошибка " + std::to_string(GetLastError())); return 1; }
+            // Windows зовёт первым последний поставленный перехват. Social Club
+            // ставит свой позже нас и съедает F12 раньше, чем он дойдёт до нас
+            // (в журнале не было ни одного «перехвачена», а оверлей открывался).
+            // Поэтому раз в секунду ставим свой заново — он снова первый. Сначала
+            // новый, потом снимаем старый: окна без перехвата не бывает.
+            SetTimer(nullptr, 0, 1000, nullptr);
             MSG msg;
-            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {}
-            UnhookWindowsHookEx(g_keyboardHook);
+            while (GetMessageW(&msg, nullptr, 0, 0) > 0)
+            {
+                if (msg.message != WM_TIMER) continue;
+                if (HHOOK fresh = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboard, self, 0))
+                {
+                    HHOOK old = g_keyboardHook;
+                    g_keyboardHook = fresh;
+                    if (old) UnhookWindowsHookEx(old);
+                }
+            }
+            if (g_keyboardHook) UnhookWindowsHookEx(g_keyboardHook);
             g_keyboardHook = nullptr;
             return 0;
         }
@@ -2113,7 +2252,7 @@ namespace flov::ui
     {
         {
             std::lock_guard lock(g_mutex);
-            g_chat.push_back({ Now(false), author, text, authorRgb, GetTickCount64() });
+            g_chat.push_back({ Now(false), author, NormalizeChatLine(text), authorRgb, GetTickCount64() });
             while (g_chat.size() > kChatHistory) g_chat.pop_front();
             g_chatWake = GetTickCount64();
             if (g_chatScroll > 0) ++g_chatScroll; // читающий историю не теряет место
