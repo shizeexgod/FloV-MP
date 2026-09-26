@@ -332,6 +332,8 @@ int wmain()
         using flov::license::Verdict;
         Check(!payload.empty() && flov::license::Verify(payload, sig, "188.127.229.224", issued).verdict == Verdict::Ok,
               "подтверждение с VDS: подпись сервера лицензий, та же машина — вход разрешён");
+        Check(flov::license::Verify(payload, sig, "188.127.229.224", issued).project == "FloV:MP — сервер разработчика (VDS)",
+              "название проекта по-русски раскрыто");
         Check(flov::license::Verify(payload, sig, "5.6.7.8", issued).verdict == Verdict::WrongMachine,
               "та же лицензия на чужой машине — отказ");
         Check(flov::license::Verify(payload, sig, "192.168.1.20", issued).verdict == Verdict::Ok,

@@ -76,7 +76,22 @@ namespace flov::license
             std::string out;
             for (size_t i = at + key.size(); i < json.size() && json[i] != '"'; ++i)
             {
-                if (json[i] == '\\' && i + 1 < json.size()) { ++i; out += json[i] == 'n' ? '\n' : json[i]; continue; }
+                if (json[i] == '\\' && i + 1 < json.size())
+                {
+                    ++i;
+                    if (json[i] == 'u' && i + 4 < json.size())
+                    {
+                        // \uXXXX — .NET так кодирует всё, кроме ASCII (название проекта по-русски).
+                        const unsigned cp = (unsigned)strtoul(json.substr(i + 1, 4).c_str(), nullptr, 16);
+                        i += 4;
+                        if (cp < 0x80) out += (char)cp;
+                        else if (cp < 0x800) { out += (char)(0xC0 | (cp >> 6)); out += (char)(0x80 | (cp & 0x3F)); }
+                        else { out += (char)(0xE0 | (cp >> 12)); out += (char)(0x80 | ((cp >> 6) & 0x3F)); out += (char)(0x80 | (cp & 0x3F)); }
+                        continue;
+                    }
+                    out += json[i] == 'n' ? '\n' : json[i];
+                    continue;
+                }
                 out += json[i];
             }
             return out;
