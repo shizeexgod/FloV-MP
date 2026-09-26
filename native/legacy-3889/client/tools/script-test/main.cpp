@@ -427,6 +427,83 @@ int wmain()
         Check(find("after") == "[0]", "browser.destroy");
         flov::script::Reset();
 
+        std::ofstream(dir + L"\\ui\\chat.html") <<
+            "<!doctype html><script>"
+            "window.chatAPI={"
+            " push:t=>mp.trigger('chat:push',t),"
+            " activate:(active,command)=>{mp.trigger('chat:active',active,command);"
+            "  if(active)setTimeout(()=>mp.invoke(command?'command':'chatMessage',command?'help тест':'Привет чат'),0);}};"
+            "mp.events.add('force',()=>mp.invoke('chatMessage','скрытый спам'));"
+            "mp.trigger('chat:ready');</script>";
+        std::ofstream(dir + L"\\index.js") <<
+            "const chat = mp.browsers.new('package://ui/chat.html').markAsChat();\n"
+            "mp.events.add('chat:ready', () => mp.events.callRemote('chatReady'));\n"
+            "mp.events.add('chat:active', (active, command) => mp.events.callRemote('chatActive', active, command));\n"
+            "mp.events.add('chat:push', text => mp.events.callRemote('chatPush', text));\n"
+            "mp.events.add('chat:activateApi', () => mp.gui.chat.activate(true));\n"
+            "mp.events.add('chat:forceHidden', () => chat.call('force'));\n";
+        Check(flov::script::RunFolder(dir), "HTML-чат с markAsChat запустился");
+        bool chatReady = false;
+        const ULONGLONG chatReadyEnd = GetTickCount64() + 15000;
+        while (GetTickCount64() < chatReadyEnd && !chatReady)
+        {
+            flov::script::Tick(false);
+            for (auto& [name, json] : flov::script::TakeOutgoing()) if (name == "chatReady") chatReady = true;
+            Sleep(16);
+        }
+        Check(chatReady && flov::script::ChatToBrowser("строка сервера"), "markAsChat принимает строки сервера");
+        bool pushed = false;
+        const ULONGLONG pushEnd = GetTickCount64() + 5000;
+        while (GetTickCount64() < pushEnd && !pushed)
+        {
+            flov::script::Tick(false);
+            for (auto& [name, json] : flov::script::TakeOutgoing())
+                if (name == "chatPush" && json == "[\"строка сервера\"]") pushed = true;
+            Sleep(16);
+        }
+        Check(pushed, "chatAPI.push получает сообщения платформы");
+
+        auto invokeChat = [&](bool command, const std::string& expected)
+        {
+            Check(flov::script::ActivateCustomChat(command) && flov::script::CustomChatActive(),
+                  command ? "ввод команды активирует HTML-чат" : "T активирует HTML-чат");
+            std::vector<flov::script::ChatSubmission> submitted;
+            const ULONGLONG submitEnd = GetTickCount64() + 5000;
+            while (GetTickCount64() < submitEnd && submitted.empty())
+            {
+                flov::script::Tick(true);
+                flov::script::TakeOutgoing();
+                submitted = flov::script::TakeChatSubmissions();
+                Sleep(16);
+            }
+            Check(submitted.size() == 1 && submitted[0].command == command && submitted[0].text == expected &&
+                  !flov::script::CustomChatActive(),
+                  command ? "mp.invoke('command') возвращает команду и закрывает ввод"
+                          : "mp.invoke('chatMessage') возвращает текст и закрывает ввод");
+        };
+        invokeChat(false, "Привет чат");
+        invokeChat(true, "help тест");
+        flov::script::Emit("chat:activateApi");
+        std::vector<flov::script::ChatSubmission> apiSubmitted;
+        const ULONGLONG apiSubmitEnd = GetTickCount64() + 5000;
+        while (GetTickCount64() < apiSubmitEnd && apiSubmitted.empty())
+        {
+            flov::script::Tick(true);
+            flov::script::TakeOutgoing();
+            apiSubmitted = flov::script::TakeChatSubmissions();
+            Sleep(16);
+        }
+        Check(apiSubmitted.size() == 1 && !apiSubmitted[0].command && apiSubmitted[0].text == "Привет чат",
+              "mp.gui.chat.activate использует отмеченный HTML-чат");
+        Check(flov::script::ActivateCustomChat(false) && flov::script::DeactivateCustomChat() &&
+              !flov::script::CustomChatActive(), "Esc аварийно закрывает HTML-чат без участия страницы");
+        Ticks(10);
+        Check(flov::script::TakeChatSubmissions().empty(), "отложенный submit после Esc отклоняется");
+        flov::script::Emit("chat:forceHidden");
+        Ticks(10);
+        Check(flov::script::TakeChatSubmissions().empty(), "неактивный HTML-чат не может отправлять скрытые сообщения");
+        flov::script::Reset();
+
         std::ofstream(dir + L"\\index.js") <<
             "const life = mp.browsers.new('package://ui/index.html');\n"
             "life.focus();\n"

@@ -627,6 +627,33 @@ mp.trigger('panel:submit', input.value);
 | чат на HTML | `browser.markAsChat()` — встроенный чат скрывается, строки чата (и `mp.gui.chat.push`) идут в `chatAPI.push(текст)` страницы |
 | мышь и клавиатура | `mp.gui.cursor.show(freeze, show)`: курсор, клики, колесо и ввод текста уходят страницам; `freeze` — персонаж стоит |
 
+Полная замена чата не требует курсора. T и `/` открывают отмеченную
+`markAsChat()` страницу, а мир продолжает работать. Контракт страницы:
+
+```js
+window.chatAPI = {
+  push(text) { lines.append(Object.assign(document.createElement('p'), { textContent: text })); },
+  activate(active, command) {
+    form.hidden = !active;
+    if (active) { input.value = command ? '/' : ''; input.focus(); }
+  },
+};
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  text.startsWith('/') ? mp.invoke('command', text.slice(1))
+                       : mp.invoke('chatMessage', text);
+});
+```
+
+Платформа принимает `mp.invoke('chatMessage', text)` и
+`mp.invoke('command', command)` только от текущего chat-browser и только пока
+его ввод активен. Длина затем ограничивается `chat.max_length`, а команда
+проходит обычные серверные проверки. Не вставляйте строки игроков через
+`innerHTML`: используйте `textContent`. Esc всегда закрывает ввод на уровне
+платформы, даже если обработчик страницы сломан.
+
 После закрытия общего cursor/input и после падения CEF focus намеренно
 сбрасывается: открытая панель должна повторно вызвать `focus()` в обработчике
 `browserRestored` (SDK-пример это делает).

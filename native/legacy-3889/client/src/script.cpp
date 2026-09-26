@@ -73,6 +73,8 @@ namespace flov::script
         bool g_cursor = false;
         bool g_cursorFreeze = false;
         bool g_nametagsOff = false;          // mp.nametags.enabled = false
+        bool g_customChatActive = false;
+        std::deque<ChatSubmission> g_chatSubmissions;
         WorldBackend g_world;
         struct EntityNote { std::string event; int id; std::string name, key, json, old; bool data; };
         std::deque<EntityNote> g_entityInbox;        // mp.gui.cursor.show(freeze, …): управление персонажем выключено
@@ -486,6 +488,47 @@ namespace flov::script
             return JS_UNDEFINED;
         }
 
+        JSValue F_chatMode(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            const bool enabled = argc > 0 && JS_ToBool(ctx, argv[0]) == 1;
+            ui::SetCustomChatEnabled(enabled);
+            if (!enabled)
+            {
+                g_customChatActive = false;
+                ui::SetCustomChatActive(false);
+            }
+            return JS_UNDEFINED;
+        }
+
+        JSValue F_chatState(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            g_customChatActive = argc > 0 && JS_ToBool(ctx, argv[0]) == 1;
+            ui::SetCustomChatActive(g_customChatActive);
+            return JS_UNDEFINED;
+        }
+
+        JSValue F_chatSubmit(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (!g_customChatActive || argc < 2 || g_chatSubmissions.size() >= 16) return JS_FALSE;
+            const char* kind = JS_ToCString(ctx, argv[0]);
+            size_t length = 0;
+            const char* value = JS_ToCStringLen(ctx, &length, argv[1]);
+            if (!kind || !value)
+            {
+                if (kind) JS_FreeCString(ctx, kind);
+                if (value) JS_FreeCString(ctx, value);
+                return JS_FALSE;
+            }
+            const bool command = strcmp(kind, "command") == 0;
+            const bool message = strcmp(kind, "chatMessage") == 0;
+            const bool accepted = (command || message) && length > 0 && length <= 4096;
+            if (accepted)
+                g_chatSubmissions.push_back({ command, std::string(value, length) });
+            JS_FreeCString(ctx, kind);
+            JS_FreeCString(ctx, value);
+            return JS_NewBool(ctx, accepted);
+        }
+
         JSValue F_cursor(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
         {
             g_cursor = argc > 0 && JS_ToBool(ctx, argv[0]) == 1;
@@ -865,12 +908,23 @@ class Browser {
     destroy() {
         if (browsers.get(this.id) !== this) return;
         browsers.delete(this.id);
-        if (chatBrowser === this) { chatBrowser = null; F.chatShow(true); }
+        if (chatBrowser === this) {
+            setChatActive(false, false);
+            chatBrowser = null;
+            F.chatMode(false);
+            F.chatShow(true);
+        }
         F.brDel(this.id);
         dispatch('browserDestroyed', [this]);
     }
     // Страница заменяет встроенный чат: сообщения уходят в chatAPI.push(текст) страницы.
-    markAsChat() { chatBrowser = this; F.chatShow(false); }
+    markAsChat() {
+        if (chatBrowser && chatBrowser !== this) setChatActive(false, false);
+        chatBrowser = this;
+        F.chatMode(true);
+        F.chatShow(false);
+        return this;
+    }
 }
 mp.browsers = {
     new(url) {
@@ -895,17 +949,42 @@ mp.browsers = {
         catch (e) { return { count: browsers.size, visible: 0, maxBrowsers: F.brMax() }; }
     },
 };
+let chatActive = false;
+function setChatActive(active, command) {
+    if (!chatBrowser) return false;
+    chatActive = !!active;
+    F.chatState(chatActive);
+    if (chatActive) chatBrowser.focus(); else chatBrowser.blur();
+    chatBrowser.execute('window.chatAPI&&chatAPI.activate(' + (chatActive ? 'true' : 'false') + ',' + (command ? 'true' : 'false') + ')');
+    return true;
+}
+globalThis.__flovActivateChat = command => setChatActive(true, !!command);
+globalThis.__flovDeactivateChat = () => setChatActive(false, false);
+mp.gui.chat.activate = v => chatBrowser ? setChatActive(!!v, false) : F.chatShow(!!v);
 globalThis.__flovBrowserHostState = restored => {
+    if (!restored && chatActive) { chatActive = false; F.chatState(false); }
     for (const br of [...browsers.values()]) dispatch(restored ? 'browserRestored' : 'browserCrashed', [br]);
 };
 globalThis.__flovBrowserEvent = (kind, id, a, b) => {
     const br = browsers.get(id);
     if (!br) return;
     if (kind === 'dom') dispatch('browserDomReady', [br]);
-    else if (kind === 'fail') dispatch('browserLoadingFailed', [br, Number(a), String(b)]);
+    else if (kind === 'fail') {
+        if (br === chatBrowser) setChatActive(false, false);
+        dispatch('browserLoadingFailed', [br, Number(a), String(b)]);
+    }
     else if (kind === 'trigger') {
         let args = [];
         try { args = JSON.parse(b); } catch (e) {}
+        if (br === chatBrowser && a === '__flov:invoke') {
+            const action = String(args[0] ?? '');
+            if (action === 'chatMessage' || action === 'command') {
+                const text = String(args[1] ?? '');
+                const accepted = text.length > 0 && F.chatSubmit(action, text);
+                if (accepted) setChatActive(false, false);
+            }
+            return;
+        }
         dispatch(a, Array.isArray(args) ? args : [args]);
     }
 };
@@ -1169,6 +1248,9 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "keyDown", F_keyDown, 1);
             AddFn(g_ctx, F, "chatPush", F_chatPush, 1);
             AddFn(g_ctx, F, "chatShow", F_chatShow, 1);
+            AddFn(g_ctx, F, "chatMode", F_chatMode, 1);
+            AddFn(g_ctx, F, "chatState", F_chatState, 1);
+            AddFn(g_ctx, F, "chatSubmit", F_chatSubmit, 2);
             AddFn(g_ctx, F, "cursor", F_cursor, 2);
             AddFn(g_ctx, F, "cursorVisible", F_cursorVisible, 0);
             AddFn(g_ctx, F, "localHandle", F_localHandle, 0);
@@ -1528,6 +1610,10 @@ globalThis.__flovTick = function (blocked) {
         }
         Stop();
         browser::NewSession();
+        g_customChatActive = false;
+        g_chatSubmissions.clear();
+        ui::SetCustomChatActive(false);
+        ui::SetCustomChatEnabled(false);
         g_inbox.clear();
         g_outbox.clear();
         g_packageDir.clear();
@@ -1552,6 +1638,49 @@ globalThis.__flovTick = function (blocked) {
         JS_FreeValue(g_ctx, f);
         JS_FreeValue(g_ctx, global);
         return taken;
+    }
+
+    bool ActivateCustomChat(bool command)
+    {
+        if (!g_ctx || g_customChatActive) return false;
+        JSValue global = JS_GetGlobalObject(g_ctx);
+        JSValue f = JS_GetPropertyStr(g_ctx, global, "__flovActivateChat");
+        JSValue arg = JS_NewBool(g_ctx, command);
+        g_deadline = GetTickCount64() + kCallBudgetMs;
+        JSValue r = JS_Call(g_ctx, f, global, 1, &arg);
+        g_deadline = 0;
+        const bool activated = !JS_IsException(r) && JS_ToBool(g_ctx, r) == 1;
+        if (JS_IsException(r)) Say(2, "активация HTML-чата: " + DescribeException(g_ctx));
+        JS_FreeValue(g_ctx, r);
+        JS_FreeValue(g_ctx, arg);
+        JS_FreeValue(g_ctx, f);
+        JS_FreeValue(g_ctx, global);
+        return activated;
+    }
+
+    bool CustomChatActive() { return g_ctx && g_customChatActive; }
+
+    bool DeactivateCustomChat()
+    {
+        if (!g_ctx || !g_customChatActive) return false;
+        JSValue global = JS_GetGlobalObject(g_ctx);
+        JSValue f = JS_GetPropertyStr(g_ctx, global, "__flovDeactivateChat");
+        g_deadline = GetTickCount64() + kCallBudgetMs;
+        JSValue r = JS_Call(g_ctx, f, global, 0, nullptr);
+        g_deadline = 0;
+        const bool deactivated = !JS_IsException(r) && JS_ToBool(g_ctx, r) == 1 && !g_customChatActive;
+        if (JS_IsException(r)) Say(2, "закрытие HTML-чата: " + DescribeException(g_ctx));
+        JS_FreeValue(g_ctx, r);
+        JS_FreeValue(g_ctx, f);
+        JS_FreeValue(g_ctx, global);
+        return deactivated;
+    }
+
+    std::vector<ChatSubmission> TakeChatSubmissions()
+    {
+        std::vector<ChatSubmission> out(g_chatSubmissions.begin(), g_chatSubmissions.end());
+        g_chatSubmissions.clear();
+        return out;
     }
 
     void SetWorldBackend(const WorldBackend& backend) { g_world = backend; }

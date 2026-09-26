@@ -59,7 +59,8 @@ namespace flov::script
     /// Отключились от сервера — остановить скрипт и забыть его состояние.
     void Reset();
 
-    /// Запустить код из строки — для тестов и средства предпросмотра.
+    /// Запустить код из строки в новой JS-сессии — для тестов и предпросмотра.
+    /// Текущее состояние и browser предыдущей сессии уничтожаются.
     bool RunSource(const std::string& fileName, const std::string& source);
 
     /// Запустить пакет из папки на диске — для тестов и отладки.
@@ -119,4 +120,18 @@ namespace flov::script
     /// Строка чата — в страницу, которую скрипт сделал чатом (markAsChat).
     /// false — такой страницы нет, строка идёт во встроенный чат.
     bool ChatToBrowser(const std::string& text);
+
+    struct ChatSubmission
+    {
+        bool command = false;       // true: mp.invoke('command', text)
+        std::string text;
+    };
+    /// T или / запросили HTML-чат. command=true означает ввод команды.
+    bool ActivateCustomChat(bool command);
+    /// Esc/ошибка страницы закрывает ввод независимо от JavaScript ресурса.
+    bool DeactivateCustomChat();
+    /// Пока true, CEF получает клавиатуру, а управление GTA отключено.
+    bool CustomChatActive();
+    /// Сообщения страницы через mp.invoke('chatMessage'|'command', text).
+    std::vector<ChatSubmission> TakeChatSubmissions();
 }

@@ -1324,7 +1324,8 @@ namespace flov::game
         /// Пока открыт чат, консоль или окно F9 — игре не нужны ни клавиши, ни Esc.
         void InputEveryFrame()
         {
-            if (ui::InputActive() || ui::MsSinceInputClosed() < 300 || ui::LoadingVisible())
+            const bool customChat = script::CustomChatActive();
+            if (ui::InputActive() || customChat || ui::MsSinceInputClosed() < 300 || ui::LoadingVisible())
             {
                 n::DISABLE_ALL_CONTROL_ACTIONS(0);
                 for (int g : { 0, 2 }) { n::DISABLE_CONTROL_ACTION(g, 199, TRUE); n::DISABLE_CONTROL_ACTION(g, 200, TRUE); }
@@ -1333,7 +1334,7 @@ namespace flov::game
             // камера и стрельба выключены, с freeze — и всё управление персонажем.
             const bool scriptCursor = script::CursorWanted() && !ui::ConsoleOpen() && !ui::LoadingVisible();
             ui::SetScriptCursor(scriptCursor);
-            browser::SetInput(scriptCursor && !ui::InputActive());
+            browser::SetInput((scriptCursor || customChat) && !ui::InputActive());
             if (scriptCursor)
             {
                 if (script::CursorFreeze()) n::DISABLE_ALL_CONTROL_ACTIONS(0);
@@ -2569,6 +2570,12 @@ namespace flov::game
                     if (vk == key) g_net.Send({ "KEY", name });
             }
 
+            const int customChatRequest = ui::TakeCustomChatRequest();
+            if (customChatRequest == 3)
+                script::DeactivateCustomChat();
+            else if (customChatRequest && g_welcomed)
+                script::ActivateCustomChat(customChatRequest == 2);
+
             if (g_reconnectLeft > 0 && GetTickCount64() >= g_reconnectAt)
             {
                 const int attempt = kReconnectTries - g_reconnectLeft + 1;
@@ -2622,11 +2629,29 @@ namespace flov::game
             }
 
             const size_t maxLen = (size_t)std::clamp(settings::Int("chat.max_length", 256), 16, 1024);
-            for (const auto& line : ui::TakeSubmittedChat())
+            auto truncateUtf8 = [](const std::string& value, size_t bytes)
             {
-                if (!g_welcomed || !CarCommandModelOk(line)) continue;
-                g_net.Send({ "CHAT", line.substr(0, maxLen) });
+                if (value.size() <= bytes) return value;
+                size_t end = bytes;
+                while (end > 0 && ((unsigned char)value[end] & 0xC0) == 0x80) --end;
+                return value.substr(0, end);
+            };
+            auto submit = [&](std::string line)
+            {
+                if (!g_welcomed || line.empty() || !CarCommandModelOk(line)) return;
+                g_net.Send({ "CHAT", truncateUtf8(line, maxLen) });
+            };
+            for (auto request : script::TakeChatSubmissions())
+            {
+                if (request.command)
+                {
+                    while (!request.text.empty() && request.text.front() == '/') request.text.erase(request.text.begin());
+                    if (request.text.empty()) continue;
+                    request.text.insert(request.text.begin(), '/');
+                }
+                submit(std::move(request.text));
             }
+            for (const auto& line : ui::TakeSubmittedChat()) submit(line);
         }
 
         /// Запрос на подключение от лаунчера/коннектора: переменная окружения

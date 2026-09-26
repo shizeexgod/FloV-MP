@@ -137,6 +137,38 @@ CDN или WebSocket, владелец добавляет точные origins �
 Focus при закрытии cursor/input или падении Chromium сбрасывается; если панель
 всё ещё открыта, обработчик `browserRestored` должен вызвать `focus()` снова.
 
+Свой чат полностью заменяет встроенный через `browser.markAsChat()`. Страница
+должна предоставить `chatAPI.push(text)` для новых строк и
+`chatAPI.activate(active, command)` для открытия/закрытия поля ввода. Клавиша
+T вызывает `activate(true, false)`, `/` — `activate(true, true)`. Отправка из
+страницы выполняется только во время активного ввода:
+
+```js
+// client_packages/index.js
+const chat = mp.browsers.new('package://chat/index.html').markAsChat();
+
+// client_packages/chat/app.js
+window.chatAPI = {
+  push(text) { appendSafeText(text); }, // вставляйте как textContent, не innerHTML
+  activate(active, command) {
+    input.hidden = !active;
+    if (active) { input.value = command ? '/' : ''; input.focus(); }
+  },
+};
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  if (text.startsWith('/')) mp.invoke('command', text.slice(1));
+  else mp.invoke('chatMessage', text);
+});
+```
+
+`mp.gui.chat.push(...)` также направляется в `chatAPI.push`. Внешняя страница,
+iframe и неактивное поле не могут вызвать отправку. Esc аварийно закрывает ввод
+даже при ошибке JavaScript страницы; после submit, уничтожения
+страницы, отключения от сервера или падения CEF ввод и focus сбрасываются.
+
 ## 8. Чего менять нельзя
 
 | Что | Почему |

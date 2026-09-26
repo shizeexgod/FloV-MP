@@ -52,6 +52,8 @@ namespace flov::ui
         std::string g_brand = "FloV:MP";
 
         bool g_chatEnabled = false, g_chatOpen = false;
+        bool g_customChatEnabled = false, g_customChatActive = false;
+        int g_customChatRequest = 0;
         std::wstring g_input;
         size_t g_caret = 0;
         std::vector<std::wstring> g_history;
@@ -505,6 +507,12 @@ namespace flov::ui
                 g_skipChar = vk >= '0' && vk <= 'Z';
                 return true;
             }
+            if (g_customChatEnabled && !g_customChatActive && !alt &&
+                (vk == (WPARAM)g_chatKey || vk == VK_OEM_2))
+            {
+                g_customChatRequest = vk == VK_OEM_2 ? 2 : 1;
+                return true;
+            }
             if (g_chatEnabled && !alt && (vk == (WPARAM)g_chatKey || vk == VK_OEM_2))
             {
                 g_chatOpen = true;
@@ -717,7 +725,7 @@ namespace flov::ui
         bool TextInputOpen()
         {
             std::lock_guard lock(g_mutex);
-            return g_chatOpen || g_consoleOpen || g_connectOpen || g_scriptCursor;
+            return g_chatOpen || g_consoleOpen || g_connectOpen || g_scriptCursor || g_customChatActive;
         }
 
         WNDPROC g_topPrevProc = nullptr;
@@ -798,6 +806,17 @@ namespace flov::ui
                 static bool reported = false;
                 if (!reported) { reported = true; Log("ui: ВНИМАНИЕ: клавиша " + std::string(wp == VK_F12 ? "F12" : "Home") + " дошла до окна игры мимо перехвата"); }
                 if (wp == VK_F12) return 0;
+            }
+            // Аварийное закрытие HTML-чата не зависит от JavaScript страницы:
+            // сломанный resource не должен навсегда забрать управление игрока.
+            if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && wp == VK_ESCAPE)
+            {
+                std::lock_guard lock(g_mutex);
+                if (g_customChatActive)
+                {
+                    g_customChatRequest = 3;
+                    return 0;
+                }
             }
             // Курсор скрипта открыт — клавиатура браузерам сервера (кроме
             // случая, когда игрок печатает в нашем чате или консоли).
@@ -2431,6 +2450,29 @@ namespace flov::ui
         std::lock_guard lock(g_mutex);
         g_chatEnabled = enabled;
         if (!enabled && g_chatOpen) CloseChat();
+    }
+
+    void SetCustomChatEnabled(bool enabled)
+    {
+        std::lock_guard lock(g_mutex);
+        g_customChatEnabled = enabled;
+        if (!enabled)
+        {
+            g_customChatActive = false;
+            g_customChatRequest = 0;
+        }
+    }
+
+    void SetCustomChatActive(bool active)
+    {
+        std::lock_guard lock(g_mutex);
+        g_customChatActive = g_customChatEnabled && active;
+    }
+
+    int TakeCustomChatRequest()
+    {
+        std::lock_guard lock(g_mutex);
+        return std::exchange(g_customChatRequest, 0);
     }
 
     void SetCommands(std::vector<Command> commands)

@@ -204,6 +204,8 @@ def check_security_regressions(rep):
                 "нужны двусторонние caps, pixel-budget, метрики и integration-тест")
         script_src = (ROOT / "native/legacy-3889/client/src/script.cpp").read_text(
             encoding="utf-8", errors="ignore")
+        script_test = (ROOT / "native/legacy-3889/client/tools/script-test/main.cpp").read_text(
+            encoding="utf-8", errors="ignore")
         custom_ui = (
             't == "BOUNDS"' in cef_src
             and "void SetBounds(" in browser_client
@@ -217,6 +219,18 @@ def check_security_regressions(rep):
                 "CEF даёт серверу bounds, focus и lifecycle каждого UI-слоя",
                 "viewport/input/recovery доступны через mp.browsers" if custom_ui else
                 "неполный контракт серверного кастома HUD")
+        custom_chat = (
+            "invoke(name, ...args) { send('__flov:invoke'" in cef_src
+            and "markAsChat()" in script_src
+            and "__flovActivateChat" in script_src
+            and "F.chatSubmit(action, text)" in script_src
+            and "неактивный HTML-чат не может отправлять скрытые сообщения" in script_test
+            and "mp.invoke('command') возвращает команду" in script_test
+        )
+        rep.add(PASS if custom_chat else FAIL,
+                "Свой HTML-чат имеет полный двусторонний контракт",
+                "T и / активируют ввод; message/command возвращаются только из активной chat-page" if custom_chat else
+                "нет mp.invoke, активации chatAPI или security regression-теста")
 
     # События от клиента — то, что может прислать поддельный клиент. Каждый
     # обработчик обязан либо проверять права на сервере, либо быть в списке

@@ -726,6 +726,10 @@ namespace
     const mp = {
         __flov: true,
         trigger(name, ...args) { send(String(name), JSON.stringify(args)); },
+        // RAGE:MP-совместимый путь из CEF в функции платформы. Клиентский
+        // runtime принимает только известные действия и только от browser,
+        // который серверный пакет явно назначил HTML-чатом.
+        invoke(name, ...args) { send('__flov:invoke', JSON.stringify([String(name), ...args])); },
         events: {
             add(name, fn) {
                 if (name && typeof name === 'object') { for (const k of Object.keys(name)) mp.events.add(k, name[k]); return; }

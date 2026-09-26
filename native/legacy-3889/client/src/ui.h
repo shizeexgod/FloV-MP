@@ -58,6 +58,15 @@ namespace flov::ui
     void AddChat(const std::string& textWithColors, const std::string& author = "", uint32_t authorRgb = 0xFFFFFF);
     void ClearChat();
     void SetChatEnabled(bool enabled);
+    /// HTML-чат зарегистрирован через browser.markAsChat(). T и / больше не
+    /// открывают встроенное поле, а создают запрос клиентскому коду сервера.
+    void SetCustomChatEnabled(bool enabled);
+    /// Страница HTML сейчас принимает клавиатуру. Нужен UI только для своей
+    /// раскладки ToUnicodeEx; InputActive намеренно остаётся false, чтобы
+    /// сообщения окна дошли до CEF.
+    void SetCustomChatActive(bool active);
+    /// 0 — запроса нет, 1 — обычный чат (T), 2 — команда (/), 3 — закрыть (Esc).
+    int TakeCustomChatRequest();
     void SetCommands(std::vector<Command> commands);
     std::vector<std::string> TakeSubmittedChat();
 
