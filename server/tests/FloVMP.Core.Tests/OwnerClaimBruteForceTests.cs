@@ -66,6 +66,17 @@ public sealed class OwnerClaimBruteForceTests : IDisposable
     }
 
     [Fact]
+    public void Claim_GrantsBySocialClub_NotByName()
+    {
+        // Ник задаёт клиент: запись «ник → 8» позволила бы любому зайти под
+        // ником владельца и получить его права.
+        var mgr = NewManager();
+        Assert.True(mgr.TryClaimOwner(mgr.CurrentSetupToken, "Owner", 111UL, out _));
+        Assert.Equal(8, mgr.GetAssignedRank(111UL, "Owner"));
+        Assert.Equal(0, mgr.GetAssignedRank(222UL, "Owner"));
+    }
+
+    [Fact]
     public void CorrectToken_IsCaseInsensitive()
     {
         // Владелец набирает токен руками из консоли — регистр не должен мешать.

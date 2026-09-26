@@ -1148,14 +1148,10 @@ public partial class StarterResource : Resource
         {
             SendChatMessage(player, "{34d399}[Admin]{ffffff} У вас права администратора (Уровень " + assigned + "). Список команд: {fde047}/help");
         }
-        else if (!string.IsNullOrEmpty(_adminManager.CurrentSetupToken))
-        {
-            SendChatMessage(player, "{38bdf8}[Setup]{ffffff} Доступна команда {fde047}/claimowner <токен>{ffffff} для первичной активации прав.");
-        }
-        else
-        {
-            SendChatMessage(player, "{a1a1aa}Доступна команда /pos для координат.");
-        }
+        // Обычным игрокам — ничего лишнего. Подсказку «/claimowner <токен>» раньше
+        // видел каждый зашедший на новый сервер: это приглашало подбирать токен,
+        // а владельцу она не нужна — токен и инструкция печатаются в консоли
+        // сервера при запуске.
     }
 
     private void OnConsoleCommand(string name, string[] args)

@@ -570,7 +570,22 @@ namespace flov::ui
             {
                 const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lp);
                 bool swallow = false;
-                if (OurProcessInForeground())
+                const bool ours = OurProcessInForeground();
+                if ((key->vkCode == VK_F12 || key->vkCode == VK_HOME) && !(key->flags & LLKHF_UP))
+                {
+                    // Первые нажатия — в журнал: съели или почему нет. По этим
+                    // строкам видно, кто открывает оверлей Rockstar.
+                    static std::atomic<int> logged{ 0 };
+                    if (logged.fetch_add(1) < 12)
+                    {
+                        DWORD pid = 0;
+                        if (HWND fg = GetForegroundWindow()) GetWindowThreadProcessId(fg, &pid);
+                        Log(std::string("ui: перехват: ") + (key->vkCode == VK_F12 ? "F12" : "Home") +
+                            (ours ? " — окно игры, съедена" : " — активен другой процесс (" + std::to_string(pid) + "), пропущена") +
+                            ((key->flags & LLKHF_INJECTED) ? ", программное нажатие" : ""));
+                    }
+                }
+                if (ours)
                 {
                     static std::atomic<bool> seen{ false };
                     if (!seen.exchange(true)) Log("ui: перехват клавиш получает нажатия в окне игры");
@@ -636,11 +651,46 @@ namespace flov::ui
         /// не работали), поэтому поля ввода переводят клавишу в букву сами — по
         /// раскладке, которую выбрал игрок: Alt+Shift / Ctrl+Shift по кругу из
         /// установленных в Windows. От языка окна игры это не зависит.
-        void CycleInputLayout()
+        /// Языки ввода игрока из настроек Windows (HKCU\Keyboard Layout\Preload
+        /// с подстановками). GetKeyboardLayoutList в процессе GTA возвращал только
+        /// английскую — русскую процесс не загружал, и Alt+Shift всегда давал EN.
+        std::vector<HKL> InputLayouts()
         {
+            static std::vector<HKL> cached;
+            if (!cached.empty()) return cached;
+            HKEY preload = nullptr, subst = nullptr;
+            RegOpenKeyExW(HKEY_CURRENT_USER, L"Keyboard Layout\\Preload", 0, KEY_READ, &preload);
+            RegOpenKeyExW(HKEY_CURRENT_USER, L"Keyboard Layout\\Substitutes", 0, KEY_READ, &subst);
+            for (int i = 1; preload && i <= 32; ++i)
+            {
+                wchar_t klid[KL_NAMELENGTH] = {};
+                DWORD size = sizeof klid, type = 0;
+                if (RegQueryValueExW(preload, std::to_wstring(i).c_str(), nullptr, &type, (BYTE*)klid, &size) != ERROR_SUCCESS) continue;
+                wchar_t real[KL_NAMELENGTH] = {};
+                DWORD rsize = sizeof real;
+                if (subst && RegQueryValueExW(subst, klid, nullptr, &type, (BYTE*)real, &rsize) == ERROR_SUCCESS && real[0])
+                    wcscpy_s(klid, real);
+                if (HKL h = LoadKeyboardLayoutW(klid, KLF_NOTELLSHELL))
+                    if (std::find(cached.begin(), cached.end(), h) == cached.end()) cached.push_back(h);
+            }
+            if (preload) RegCloseKey(preload);
+            if (subst) RegCloseKey(subst);
             HKL list[16] = {};
             const int n = GetKeyboardLayoutList(16, list);
+            for (int i = 0; i < n; ++i)
+                if (std::find(cached.begin(), cached.end(), list[i]) == cached.end()) cached.push_back(list[i]);
+            std::string names;
+            for (HKL h : cached) { char b[16]; snprintf(b, sizeof b, "%04X ", (unsigned)LOWORD((UINT_PTR)h)); names += b; }
+            Log("ui: языки ввода игрока: " + names);
+            return cached;
+        }
+
+        void CycleInputLayout()
+        {
+            const std::vector<HKL> layouts = InputLayouts();
+            const int n = (int)layouts.size();
             if (n <= 0) return;
+            const HKL* list = layouts.data();
             const HKL cur = g_inputLayout.load() ? g_inputLayout.load() : GetKeyboardLayout(0);
             int i = 0;
             while (i < n && list[i] != cur) ++i;
@@ -668,6 +718,28 @@ namespace flov::ui
         {
             std::lock_guard lock(g_mutex);
             return g_chatOpen || g_consoleOpen || g_connectOpen || g_scriptCursor;
+        }
+
+        WNDPROC g_topPrevProc = nullptr;
+        int g_topInstalls = 0;
+
+        /// Самый внешний фильтр окна игры: F12 и Home (и их raw input) дальше
+        /// не идут. Нужен, если Social Club встал в цепочку оконных процедур
+        /// позже нашего WndProc и видит клавиши раньше него.
+        LRESULT CALLBACK TopWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+        {
+            if ((msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP) &&
+                (wp == VK_F12 || wp == VK_HOME))
+                return 0;
+            if (msg == WM_INPUT)
+            {
+                RAWINPUT ri{};
+                UINT size = sizeof ri;
+                if (GetRawInputData((HRAWINPUT)lp, RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) != (UINT)-1 &&
+                    ri.header.dwType == RIM_TYPEKEYBOARD && (ri.data.keyboard.VKey == VK_F12 || ri.data.keyboard.VKey == VK_HOME))
+                    return DefWindowProcW(hwnd, msg, wp, lp);   // освободить данные, дальше не отдавать
+            }
+            return CallWindowProcW(g_topPrevProc, hwnd, msg, wp, lp);
         }
 
         LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -2156,6 +2228,28 @@ namespace flov::ui
             Log("ui: оверлей готов (" + std::to_string(desc.BufferDesc.Width) + "x" + std::to_string(desc.BufferDesc.Height) + ")");
         }
 
+        void EnsureTopFilter()
+        {
+            if (!g_previewMode && g_hwnd)
+            {
+                static ULONGLONG nextTopCheck = 0;
+                const ULONGLONG t = GetTickCount64();
+                if (t >= nextTopCheck)
+                {
+                    nextTopCheck = t + 2000;
+                    const auto current = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(g_hwnd, GWLP_WNDPROC));
+                    if (current != TopWndProc && current != WndProc && g_topInstalls < 8)
+                    {
+                        // Кто-то (Social Club) встал поверх нашего WndProc.
+                        g_topPrevProc = current;
+                        SetWindowLongPtrW(g_hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(TopWndProc));
+                        ++g_topInstalls;
+                        Log("ui: поверх окна игры встала чужая обработка клавиш — фильтр F12/Home поставлен над ней");
+                    }
+                }
+            }
+        }
+
         void OnPresent(void* raw)
         {
             auto* swapChain = static_cast<IDXGISwapChain*>(raw);
@@ -2165,6 +2259,7 @@ namespace flov::ui
             }
             __except (EXCEPTION_EXECUTE_HANDLER) { return; }
             if (!g_imguiReady) return;
+            EnsureTopFilter();
 
             ID3D11Texture2D* back = nullptr;
             if (FAILED(swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back))) || !back) return;

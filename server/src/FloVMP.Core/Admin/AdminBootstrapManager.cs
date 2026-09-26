@@ -476,8 +476,11 @@ public class AdminBootstrapManager
 
             _claimFailures = 0;
 
-            // Назначаем Основателя (Уровень 8)
-            if (!string.IsNullOrEmpty(playerName))
+            // Назначаем Основателя (Уровень 8) — по SocialClubId / ключу игрока.
+            // По нику — только если ID нет вовсе и владелец сам включил выдачу по
+            // нику: ник задаёт клиент, и запись «ник → 8» позволила бы любому
+            // взять этот ник и получить права.
+            if (socialClubId == 0 && _config.AllowNameBasedAdmin && !string.IsNullOrEmpty(playerName))
             {
                 _config.Admins[playerName] = 8;
                 if (!_config.Founders.Contains(playerName))
