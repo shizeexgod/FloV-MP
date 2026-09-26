@@ -1,0 +1,342 @@
+FloV:MP — ПОЛНЫЙ АУДИТ ТЕКУЩЕГО СОСТОЯНИЯ
+Дата: 24.09.2026
+Снимок: git HEAD b6a223b5041781a1556da7b4c1528cf78cabcdd3 + незакоммиченные изменения web/
+
+ВАЖНО: во время аудита Claude Code параллельно менял web/. Поэтому выводы по web
+относятся к указанному снимку и должны быть перепроверены после слияния его правок.
+Продуктовый код в рамках этого аудита не менялся.
+
+КРАТКИЙ ВЫВОД
+==============
+
+Серверная сборка и пакет не развалены: 444 серверных и 96 launcher-тестов
+прошли, health-check дал 69/69, Windows smoke-тест установки и запуска пакета
+1.0.5-beta прошёл. Но продукт ещё нельзя честно считать полностью готовым:
+
+1. Официальный gate GTA Legacy b3889 красный и сам объявляет native adapter
+   отсутствующим, хотя ASI-клиент уже лежит в проекте и пакете.
+2. Живой двухклиентский E2E GTA b3889 не подтверждён этим аудитом; все E2E-флаги
+   профиля остаются false.
+3. Раздача модов/карт игрокам (roadmap 4) и серверное владение транспортом
+   (roadmap 8) не реализованы полностью.
+4. RemoteServerAgent, TelemetryReporter, DynamicResourceManager и
+   AssetStreamingManager не подключены к production startup graph.
+5. В портале найдены критичные security-проблемы. До публичного продакшена web
+   выпускать нельзя без исправления пунктов SEC-01, SEC-02, SEC-04 и SEC-06.
+
+
+P0 — БЛОКЕРЫ РЕЛИЗА / БЕЗОПАСНОСТИ
+===================================
+
+[P0-01] Официальная поддержка b3889 формально заблокирована
+----------------------------------------------------------
+Файлы:
+  config/client-profiles/legacy-3889.json:15-26
+  runtime/compat/legacy-3889/native-profile.json:14-27
+  scripts/verify-legacy-3889.ps1:51-55
+  scripts/verify-legacy-3889-contract.py:39-63
+
+Факт:
+  supportStatus = needs-native-adapter
+  nativeClient.status = missing
+  gameWindowAlive/clientConnected/resourceLoaded/playerSpawned/twoClientSync = false
+
+Проверка:
+  powershell -File scripts/verify-legacy-3889.ps1
+  Результат: exit 2, NativeStatus=missing, SupportStatus=needs-native-adapter.
+
+При этом native/legacy-3889/client/build/bin/Release/FloVMP.asi существует и
+входит в flovmp-server-1.0.5-beta-windows.zip. Получились две несовместимые
+«истины»: поставка утверждает, что 3889 — основной рабочий путь, а официальный
+профиль и gate утверждают, что адаптера нет. Автоматизация, CI и новый разработчик
+будут считать релиз неподдерживаемым.
+
+Что сделать:
+  - не просто заменить строку на supported;
+  - выполнить живой E2E: окно GTA живо, TCP gateway принят, ресурс загружен,
+    игрок появился, два клиента видят друг друга, урон и транспорт проходят;
+  - записать реальные хэши артефактов и выставить пять gate-флагов;
+  - переделать verify-legacy-3889-contract.py: он сейчас специально требует
+    старое состояние needs-native-adapter и поэтому «зелёный» тест доказывает
+    незавершённость, а не поддержку.
+
+[P0-02] Портал fail-open переключается на тестовую БД с известными правами
+-------------------------------------------------------------------------
+Файл: web/src/lib/db.ts:146-150, 166-375, 398-428
+
+Любая ошибка MySQL выставляет глобальный mysqlUnavailable=true, после чего весь
+процесс использует JSON mock store. Этот store автоматически содержит заранее
+заданные admin-пользователя, активную лицензию, project API key и agent tokens.
+То есть временное падение боевой БД не выключает портал, а подменяет его базой с
+другими пользователями и правами.
+
+Риск: обход авторизации/лицензирования и управление фиктивными production
+серверами. Production должен fail-closed: startup error или HTTP 503. Mock store
+разрешать только явным флагом development/test; seed-ключи убрать из runtime-кода.
+
+[P0-03] Захардкоженный fallback JWT позволяет подделать admin-сессию
+------------------------------------------------------------------
+Файл: web/src/lib/auth.ts:5, 22-29
+
+Если JWT_SECRET не задан, подпись и проверка используют известную строку из git.
+Любой, кто видит репозиторий, может выпустить cookie с role=owner/admin.
+
+Исправление: обязательный случайный JWT_SECRET при старте, без fallback; ротация
+боевого секрета и инвалидирование старых сессий.
+
+[P0-04] Electron updater доверяет неподписанному манифесту исполняемого движка
+----------------------------------------------------------------------------
+Файл: launcher/electron/src/main.js:350-455
+
+engine-manifest.json и engine.tgz скачиваются с одного настраиваемого base URL.
+SHA-256 архива и файлов берутся из этого же неподписанного манифеста. Подмена CDN
+или HTTP-трафика позволяет прислать одновременно вредоносный архив и подходящие
+ему хэши; затем ENGINE_DIR рекурсивно удаляется и заменяется исполняемыми файлами.
+
+Исправление: подписывать manifest offline release-key, проверять подпись
+встроенным public key ДО чтения version/archive/entry/files; HTTPS оставить как
+вторую линию защиты.
+
+[P0-05] Next.js 14.2.35 имеет известные critical/high уязвимости
+---------------------------------------------------------------
+Файл: web/package.json:16 и текущий web/package-lock.json
+
+npm audit --omit=dev --json: exit 1, direct dependency next = critical. Среди
+показанных advisory — unauthenticated RCE для уязвимых Windows-hosted версий,
+RCE через image optimization/AVIF, SSRF и несколько DoS.
+
+Исправление: миграция на актуальную исправленную поддерживаемую ветку Next,
+затем build + audit + регрессия всех API routes. Простого patch в 14.x по текущему
+audit недостаточно.
+
+[P0-06] Межпроектный доступ к resource-командам сервера
+------------------------------------------------------
+Файл: web/src/app/api/v1/projects/[id]/servers/[serverId]/resources/route.ts:6-19, 26-78
+
+Route проверяет, что пользователь владеет project id из URL, но затем принимает
+произвольный serverId и не проверяет server.project_id == params.id. Владелец
+проекта A может подставить ID сервера проекта B: GET прочитает его resources,
+POST поставит ему start/stop/restart и оптимистично изменит состояние.
+
+Исправление: после getServerById обязательно сверить project_id с params.id либо
+получать сервер одним SQL по (server_id, project_id); добавить cross-tenant тесты.
+
+
+P1 — ФУНКЦИИ, КОТОРЫЕ СЕЙЧАС НЕ РАБОТАЮТ ИЛИ РАБОТАЮТ НЕ ПОЛНОСТЬЮ
+============================================================================
+
+[P1-01] RemoteServerAgent не подключён к серверу
+------------------------------------------------
+Файл: server/src/FloVMP.Core/Licensing/RemoteServerAgent.cs
+
+В production-коде нет ни одного new RemoteServerAgent; класс создаётся только в
+тестах. Команды из web-панели реально никто не опрашивает и не выполняет.
+
+Дополнительный дефект: ReportResultAsync на строках 152-163 отправляет PATCH без
+agent token, а web route на строках 91-99 требует token. Даже после подключения
+агента каждый отчёт о выполнении получит 401.
+
+Ещё один security-дефект: web PATCH принимает token, но SQL completeAgentCommand
+(web/src/lib/db.ts:1066-1076) обновляет только WHERE id=?, не связывая command с
+сервером этого token. Один agent token может переписать результат чужой команды.
+
+[P1-02] Панель ресурсов показывает успех до реального выполнения
+---------------------------------------------------------------
+Файл: web/src/app/api/v1/projects/[id]/servers/[serverId]/resources/route.ts:67-77
+
+После постановки команды route сразу меняет local status на running/stopped.
+С учётом отсутствующего production-agent это гарантированно создаёт ложный UI:
+портал пишет «running», хотя сервер ничего не делал. Статус менять только после
+подтверждённого authenticated result/heartbeat.
+
+[P1-03] SSE «живых логов» полностью синтетический
+-----------------------------------------------
+Файл: web/src/app/api/v1/agent/stream/route.ts:17-67
+
+Route раз в 4 секунды генерирует случайные sampleEvents (128 entities, 60 Hz,
+245+ MB, 0 anomalies). Он не связан с сервером и доступен без авторизации.
+Это не telemetry и не live log; цифры вводят владельца в заблуждение.
+
+[P1-04] TelemetryReporter существует только в тестах
+---------------------------------------------------
+Файл: server/src/FloVMP.Core/Licensing/TelemetryReporter.cs
+
+Production startup его не создаёт. Web heartbeat endpoint есть, но игровой
+сервер сам туда показатели не отправляет. Пункт метрик/оповещений roadmap не
+закрыт.
+
+[P1-05] DynamicResourceManager существует только в тестах
+---------------------------------------------------------
+Файл: server/src/FloVMP.Core/Resources/DynamicResourceManager.cs
+
+Production startup не создаёт менеджер. Web resource_start/stop/restart не
+имеют связанного runtime consumer. Заявленное управление ресурсами через портал
+не работает.
+
+[P1-06] AssetStreamingManager и AssetPacker не образуют систему раздачи модов
+----------------------------------------------------------------------------
+Файлы:
+  server/src/FloVMP.Core/Streaming/AssetStreamingManager.cs
+  server/src/FloVMP.Core/Assets/AssetPacker.cs
+
+AssetStreamingManager используется только тестами, AssetPacker — отдельный
+инструмент. Нет production-сервиса, протокола клиента, CDN/downloader, rollback,
+mount/installation моделей. Следовательно roadmap пункт 4 «Раздача модов и карт»
+по-прежнему практически 0% для конечного игрока. Наличие unit-тестов классов не
+закрывает end-to-end функцию.
+
+[P1-07] Серверный API транспорта нативного игрока возвращает заглушки
+--------------------------------------------------------------------
+Файл: server/src/FloVMP.Starter/NativePlayerProxy.cs:165-168
+
+IsInVehicle читается, но IPlayer.Vehicle всегда null, Seat всегда 0. Геймод не
+может узнать реальную машину и место игрока 3889. Это прямо блокирует нормальную
+RP-логику транспорта и подтверждает, что roadmap пункт 8 не закрыт.
+
+[P1-08] Транспорт живёт у клиента-владельца и исчезает при его выходе
+--------------------------------------------------------------------
+Файл: server/src/FloVMP.Starter/StarterResource.Native.cs:630-665
+
+На сервере есть временная таблица owner/state с коротким TTL и проверка водителя,
+но нет полноценной Vehicle entity, persistent registry, передачи ownership,
+полного snapshot при migration и восстановления после disconnect. Roadmap 8:
+примерно 20–30% (базовая синхронизация и защита owner-поля есть; серверной
+сущности и lifecycle нет).
+
+[P1-09] SetLocalMetaData нативного игрока не реплицируется
+---------------------------------------------------------
+Файл: server/src/FloVMP.Starter/NativePlayerProxy.cs:199-201
+
+Метаданные сохраняются только в ConcurrentDictionary LocalMeta на сервере.
+Другим клиентам snapshot/delta не отправляется. Поэтому кастомные server-side
+nametag, HP/armor bars, mute/AFK/voice icons через metadata ещё не реализованы.
+
+[P1-10] Неподдержанные IPlayer API тихо превращаются в no-op/default
+-------------------------------------------------------------------
+Файлы:
+  server/src/FloVMP.Starter/NativePlayerProxy.cs:210-212
+  server/src/FloVMP.Starter/StarterResource.Native.cs:112-116
+
+Любой неизвестный член интерфейса лишь один раз логируется и возвращает null/0.
+Геймод может успешно собраться и выглядеть рабочим, но команда ничего не сделает.
+Для SDK безопаснее иметь явный список capabilities и исключение/ошибку в dev,
+а не молчаливую деградацию.
+
+[P1-11] Web и standalone license authority выдают несовместимые online lease
+----------------------------------------------------------------------------
+Файлы:
+  web/src/lib/license.ts:90-112
+  web/src/app/api/v1/license/verify/route.ts:105-125
+  server/src/FloVMP.Core/Licensing/LicenseRemoteVerifier.cs:81-98
+
+Web lease содержит licenseKey/valid/issuedAt/validUntil/reason, но не serverId.
+Runtime verifier требует подписанный serverId и иначе отвечает «lease выдан
+другому серверу». Значит web verify endpoint не может быть заменой standalone
+authority для текущего runtime.
+
+[P1-12] Launcher build API ничего не собирает
+---------------------------------------------
+Файл: web/src/app/api/v1/launcher/build/route.ts:20-58
+
+Route создаёт запись build_status=ready и URL несуществующего Setup.exe, затем
+пишет «лаунчер успешно собран». Компилятор/packager не вызывается, файл не
+создаётся. Функция является заглушкой.
+
+[P1-13] Public donate допускает произвольный execute payload
+----------------------------------------------------------
+Файл: web/src/app/api/v1/public/[slug]/donate/route.ts:15-39
+
+Проектный API key разрешает customCommand без allowlist/структурированной схемы,
+и он ставится agent-командой execute. Сейчас агент не подключён, поэтому путь
+функционально мёртв. После его подключения это станет удалённым произвольным
+выполнением команд игрового сервера для любого держателя integration key.
+Нужны строго типизированные donation actions и allowlist.
+
+
+P2 — ТЕСТЫ, ДОКУМЕНТАЦИЯ И ЭКСПЛУАТАЦИОННЫЕ ДЕФЕКТЫ
+===================================================
+
+[P2-01] Player-sync contract test сломан устаревшей строковой проверкой
+---------------------------------------------------------------------
+Файлы:
+  scripts/verify-player-sync-contract.py:43
+  server/src/FloVMP.Starter/StarterResource.cs:1008-1010
+  docs/engine/player-sync-contract.md:9
+
+Скрипт ищет точный текст player.Spawn(_spawnPosition, 0), но код теперь делает
+NextSpawn() и player.Spawn(spawnPos, 0). Проверка падает с «не найден обязательный
+hook», хотя spawn существует. Это false negative и устаревшая документация.
+
+[P2-02] Стандартный unittest discovery не запускает updater self-test
+--------------------------------------------------------------------
+Команда python -m unittest discover -s scripts -p 'test_*.py' вернула 0 tests
+и exit 5, тогда как прямой python scripts/test_flo_update.py прошёл.
+test_flo_update.py — executable self-test, а не discoverable unittest suite.
+CI должен вызывать его явно либо файл должен содержать unittest.TestCase.
+
+[P2-03] Native ASI нельзя воспроизводимо пересобрать в текущем окружении
+---------------------------------------------------------------------
+cmake отсутствует в PATH; команда сборки из native/legacy-3889/README.md не
+запускается. Пакет использует уже лежащий build/bin/Release/FloVMP.asi.
+Это не доказывает, что бинарник плохой, но чистая машина/CI сейчас не может
+воспроизвести его из исходников без ручной установки и настройки toolchain.
+
+[P2-04] Состояние launcher хранится в двух разных product roots
+---------------------------------------------------------------
+Electron использует %LOCALAPPDATA%/FloridaV, native b3889 и установщик —
+%LOCALAPPDATA%/FloVMP. Это создаёт две версии install/connect/session state и
+может приводить к «launcher установил/видит одно, play.ps1 читает другое».
+
+[P2-05] Roadmap сам себе противоречит по Esc
+-------------------------------------------
+docs/roadmap.md в таблице MVP утверждает «штатное меню GTA поверх живого мира,
+без паузы», а раздел известных ограничений говорит, что штатное меню ставит игру
+на паузу и поэтому используется своё. В C++ сейчас реализована попытка открыть
+ACTIVATE_FRONTEND_MENU(..., FALSE) и каждый кадр SET_GAME_PAUSED(FALSE)
+(game.cpp:1871-1887), но это требует живого теста: скриптовый tick GTA может сам
+останавливаться внутри frontend независимо от game pause flag.
+
+[P2-06] Версия клиента не enforced
+----------------------------------
+server/src/FloVMP.Starter/StarterResource.Native.cs:295-304
+
+При несовпадении clientVersion сервер только предупреждает и продолжает вход.
+После несовместимого протокольного/physics update старый клиент останется в мире
+с частично неверным поведением. Нужен minCompatibleClientVersion и принудительное
+обновление только при реально несовместимом диапазоне.
+
+
+ЧТО ПРОВЕРЕНО И ПРОШЛО
+======================
+
+PASS  server: dotnet test FloVMP.sln — 444/444.
+PASS  launcher tests — 96/96.
+PASS  python scripts/test_flo_update.py — self-test OK.
+PASS  python scripts/flovmp_healthcheck.py --build — 69 проверок, 0 провалов.
+PASS  scripts/smoke_windows.ps1 — распаковка, manifest, install.ps1, config,
+      gamemode build, server startup, console commands, check-files.
+PASS  web npm run build — production build и 41 страница/API route собраны.
+FAIL  scripts/verify-legacy-3889.ps1 — exit 2 (официально unsupported).
+FAIL  scripts/verify-player-sync-contract.py — устаревшая строковая проверка.
+FAIL  npm audit --omit=dev — critical Next.js dependency.
+SKIP  живая GTA b3889, два клиента и VDS — не запускались в этом локальном
+      source-аудите; зелёные unit/smoke не заменяют этот E2E.
+
+
+РЕКОМЕНДУЕМЫЙ ПОРЯДОК ИСПРАВЛЕНИЙ
+=================================
+
+1. Web security: DB fail-closed, обязательный JWT secret, Next upgrade,
+   server/project ownership в resources route, signed engine manifest.
+2. Провести и зафиксировать честный двухклиентский E2E b3889; только после этого
+   перевести официальный profile/gate в supported.
+3. Подключить RemoteServerAgent с token-bound result; убрать optimistic success.
+4. Исправить несовместимость web lease/serverId или оставить единственным
+   authority standalone-сервис и удалить ложный альтернативный путь.
+5. Реализовать replicated metadata и server Vehicle entity/lifecycle.
+6. Реализовать реальную раздачу модов end-to-end, а не отдельные helper-классы.
+7. Починить contract tests, CI discovery и воспроизводимую native build-среду.
+
+Это перечень подтверждённых дефектов текущего снимка, а не заявление, что иных
+ошибок нет. Самые большие непроверенные зоны — живой GTA E2E, VDS deployment,
+нагрузка 1000–2000 клиентов и поведение штатного GTA frontend на Esc.
