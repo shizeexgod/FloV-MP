@@ -2250,6 +2250,24 @@ namespace flov::ui
             }
         }
 
+        /// Подтормаживания — в журнал, чтобы искать их по данным: длинный кадр и
+        /// сколько в нём заняла наша отрисовка (интерфейс, браузеры). Не чаще раза
+        /// в 5 с и не больше 60 записей — сам журнал рывков добавлять не должен.
+        void NoteFrame(float frameMs, float ourMs)
+        {
+            static ULONGLONG nextLog = 0;
+            static int logged = 0;
+            const bool ourSpike = ourMs >= 8.f;
+            if ((frameMs < 150.f && !ourSpike) || !g_hwnd || GetForegroundWindow() != g_hwnd) return;
+            const ULONGLONG t = GetTickCount64();
+            if (t < nextLog || logged >= 60) return;
+            nextLog = t + 5000;
+            ++logged;
+            char line[128];
+            snprintf(line, sizeof line, "рывок: кадр %.0f мс, наша отрисовка %.1f мс", frameMs, ourMs);
+            Log(line);
+        }
+
         void OnPresent(void* raw)
         {
             auto* swapChain = static_cast<IDXGISwapChain*>(raw);
@@ -2279,6 +2297,8 @@ namespace flov::ui
 
             ImGui_ImplDX11_NewFrame();
             ImGui::NewFrame();
+            LARGE_INTEGER drawStart;
+            QueryPerformanceCounter(&drawStart);
             DrawFrame((float)bd.Width, (float)bd.Height);
             ImGui::Render();
 
@@ -2288,6 +2308,9 @@ namespace flov::ui
             g_context->OMSetRenderTargets(1, &rtv, nullptr);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
             g_context->OMSetRenderTargets(1, &prevRtv, prevDsv);
+            LARGE_INTEGER drawEnd;
+            QueryPerformanceCounter(&drawEnd);
+            NoteFrame(io.DeltaTime * 1000.f, (float)(drawEnd.QuadPart - drawStart.QuadPart) * 1000.f / (float)g_freq.QuadPart);
             if (prevRtv) prevRtv->Release();
             if (prevDsv) prevDsv->Release();
             rtv->Release();

@@ -5,6 +5,10 @@
 #include <ctime>
 #include <atomic>
 #include <mutex>
+#include <share.h>
+#include <thread>
+#include <deque>
+#include <condition_variable>
 #include <sstream>
 #include <iomanip>
 
@@ -39,24 +43,89 @@ namespace flov
         if (auto hook = g_logHook.load()) hook(text); // консоль F8 видит тот же журнал
     }
 
+    namespace
+    {
+        // Журнал пишется своим потоком: раньше каждая строка открывала и
+        // закрывала файл прямо в вызывающем потоке — игровом, отрисовки,
+        // перехвата клавиш. С антивирусом это миллисекунды на строку и
+        // заметные подтормаживания при пачке строк.
+        std::mutex g_logMutex;
+        std::condition_variable g_logCv;
+        std::deque<std::string> g_logQueue;
+        bool g_logStarted = false;
+        FILE* g_logFile = nullptr;
+
+        std::wstring LogPath()
+        {
+            // Утилиты и тесты (не GTA5.exe) — в свой файл: журнал игрока не
+            // затирается проверками разработчика.
+            wchar_t exe[MAX_PATH] = {};
+            GetModuleFileNameW(nullptr, exe, MAX_PATH);
+            std::wstring name = exe;
+            name = name.substr(name.find_last_of(L"\\/") + 1);
+            const bool game = _wcsicmp(name.c_str(), L"GTA5.exe") == 0;
+            if (!game && name.size() > 4) name.resize(name.size() - 4);
+            return DataDir() + L"\\logs\\" + (game ? std::wstring(L"client-3889") : L"dev-" + name) + L".log";
+        }
+
+        void WriteBatch(std::deque<std::string>& batch)
+        {
+            if (!g_logFile) return;
+            for (const auto& line : batch) fwrite(line.data(), 1, line.size(), g_logFile);
+            fflush(g_logFile);
+        }
+
+        void LogThread()
+        {
+            for (;;)
+            {
+                std::deque<std::string> batch;
+                {
+                    std::unique_lock lock(g_logMutex);
+                    g_logCv.wait(lock, [] { return !g_logQueue.empty(); });
+                    batch.swap(g_logQueue);
+                }
+                WriteBatch(batch);
+            }
+        }
+
+        std::string Stamp(const std::string& text)
+        {
+            SYSTEMTIME t;
+            GetLocalTime(&t);
+            char head[32];
+            snprintf(head, sizeof head, "%02d:%02d:%02d.%03d ", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds);
+            return head + text + "\r\n";
+        }
+    }
+
     void WriteLog(const std::string& text)
     {
-        static std::mutex mutex;
-        std::lock_guard lock(mutex);
-        static bool rotated = false;
-        const auto path = DataDir() + L"\\logs\\client-3889.log";
-        if (!rotated)
+        std::lock_guard lock(g_logMutex);
+        if (!g_logStarted)
         {
-            rotated = true;
+            g_logStarted = true;
+            const auto path = LogPath();
+            CreateDirectoryW((DataDir() + L"\\logs").c_str(), nullptr);
             // Журнал прошлого запуска — рядом, чтобы жалобу «вылетело» можно было разобрать.
             MoveFileExW(path.c_str(), (path + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
+            g_logFile = _wfsopen(path.c_str(), L"ab", _SH_DENYWR);
+            std::thread(LogThread).detach();
         }
-        FILE* f = nullptr;
-        if (_wfopen_s(&f, path.c_str(), L"ab") != 0 || !f) return;
-        SYSTEMTIME t;
-        GetLocalTime(&t);
-        fprintf(f, "%02d:%02d:%02d.%03d %s\r\n", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds, text.c_str());
-        fclose(f);
+        if (g_logQueue.size() < 20000) g_logQueue.push_back(Stamp(text));
+        g_logCv.notify_one();
+    }
+
+    void FlushLogNow(const std::string& text)
+    {
+        // Падение игры: поток журнала может уже не успеть — пишем сами, сразу.
+        std::deque<std::string> batch;
+        {
+            std::lock_guard lock(g_logMutex);
+            batch.swap(g_logQueue);
+        }
+        batch.push_back(Stamp(text));
+        WriteBatch(batch);
     }
 
     std::string ToUtf8(const std::wstring& text)

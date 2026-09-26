@@ -141,7 +141,7 @@ namespace flov::crash
                             (long long)time(nullptr), game.c_str());
                     fclose(f);
                 }
-                WriteLog("ПАДЕНИЕ ИГРЫ: " + std::string(codeText) + " в " + safeModule + "+" + offsetText +
+                FlushLogNow("ПАДЕНИЕ ИГРЫ: " + std::string(codeText) + " в " + safeModule + "+" + offsetText +
                          " — дамп: " + ToUtf8(base + L".dmp"));
             }
             return g_previous ? g_previous(ep) : EXCEPTION_CONTINUE_SEARCH;

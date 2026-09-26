@@ -2835,6 +2835,28 @@ namespace flov::game
         void Tick()
         {
             const ULONGLONG now = GetTickCount64();
+            LARGE_INTEGER tickStart, freq;
+            QueryPerformanceCounter(&tickStart);
+            QueryPerformanceFrequency(&freq);
+            struct TickTimer
+            {
+                LARGE_INTEGER start, freq;
+                ~TickTimer()
+                {
+                    // Кадр логики FloV:MP дольше 8 мс — в журнал (не чаще раза в 5 с).
+                    LARGE_INTEGER end;
+                    QueryPerformanceCounter(&end);
+                    const double ms = (double)(end.QuadPart - start.QuadPart) * 1000.0 / (double)freq.QuadPart;
+                    static ULONGLONG nextLog = 0;
+                    static int logged = 0;
+                    if (ms < 8.0 || GetTickCount64() < nextLog || logged >= 60) return;
+                    nextLog = GetTickCount64() + 5000;
+                    ++logged;
+                    char line[96];
+                    snprintf(line, sizeof line, "рывок: кадр логики FloV:MP %.1f мс", ms);
+                    Log(line);
+                }
+            } tickTimer{ tickStart, freq };
             HandleHotkeys();
 
             // Игра уже открыта, а игрок нажал «Играть» в лаунчере сервера или
