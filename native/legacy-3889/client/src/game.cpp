@@ -2832,9 +2832,35 @@ namespace flov::game
             else ui::SetWatermark("");
         }
 
+        /// Разбивка кадра логики по частям: при рывке видно, что именно заняло время.
+        struct TickProfile
+        {
+            LARGE_INTEGER last{}, freq{};
+            const char* names[24] = {};
+            double ms[24] = {};
+            int n = 0;
+            void Start() { QueryPerformanceFrequency(&freq); QueryPerformanceCounter(&last); n = 0; }
+            void Mark(const char* name)
+            {
+                LARGE_INTEGER t;
+                QueryPerformanceCounter(&t);
+                if (n < 24) { names[n] = name; ms[n] = (double)(t.QuadPart - last.QuadPart) * 1000.0 / (double)freq.QuadPart; ++n; }
+                last = t;
+            }
+            std::string Top() const
+            {
+                std::string out;
+                for (int i = 0; i < n; ++i)
+                    if (ms[i] >= 2.0) { char b[64]; snprintf(b, sizeof b, " %s %.1f;", names[i], ms[i]); out += b; }
+                return out;
+            }
+        };
+        TickProfile g_prof;
+
         void Tick()
         {
             const ULONGLONG now = GetTickCount64();
+            g_prof.Start();
             LARGE_INTEGER tickStart, freq;
             QueryPerformanceCounter(&tickStart);
             QueryPerformanceFrequency(&freq);
@@ -2853,8 +2879,8 @@ namespace flov::game
                     nextLog = GetTickCount64() + 5000;
                     ++logged;
                     char line[96];
-                    snprintf(line, sizeof line, "рывок: кадр логики FloV:MP %.1f мс", ms);
-                    Log(line);
+                    snprintf(line, sizeof line, "рывок: кадр логики FloV:MP %.1f мс:", ms);
+                    Log(line + g_prof.Top());
                 }
             } tickTimer{ tickStart, freq };
             HandleHotkeys();
@@ -2881,9 +2907,11 @@ namespace flov::game
                 }
             }
 
+            g_prof.Mark("клавиши");
             for (const auto& m : g_net.Poll())
                 if (!m.empty()) HandleMessage(m);
 
+            g_prof.Mark("сеть");
             InputEveryFrame();
             StatsTick(now);
             if (!g_welcomed)
@@ -2902,11 +2930,13 @@ namespace flov::game
                 }
                 return;
             }
+            g_prof.Mark("ввод");
             const Ped me = n::PLAYER_PED_ID();
             WorldEveryFrame();
 
             // Клиентский код сервера: таймеры, клавиши, render. Пока открыт чат
             // или консоль, клавиши скриптам не отдаём — игрок печатает текст.
+            g_prof.Mark("мир-кадр");
             script::Tick(ui::InputActive());
             for (auto& [name, json] : script::TakeOutgoing()) g_net.Send({ "CEVS", name, json });
 
@@ -2916,18 +2946,24 @@ namespace flov::game
                 g_readySent = true;
                 g_net.Send({ "READY" });
             }
+            g_prof.Mark("скрипт");
             LoadingTick(now);
 
             if (g_noclip) NoClipTick();
             if (g_spectateTarget) SpectateTick();
+            g_prof.Mark("загрузка");
             VoiceTick(me);
+            g_prof.Mark("голос");
             CheckDeath(me);
             UndoRemoteDamage(me);
             DetectHits(me);
             const Vector3 myPos = n::GET_ENTITY_COORDS(me, TRUE);
             // Машины реестра — до игроков: персонажей сажают в уже созданные копии.
+            g_prof.Mark("бой");
             UpdateNetVehicles(now, myPos);
+            g_prof.Mark("машины");
             for (auto& [id, r] : g_remotes) UpdateRemote(r, now, myPos);
+            g_prof.Mark("игроки");
             world::Tick(myPos.x, myPos.y, myPos.z);
 
             bool stateSent = false;
@@ -2945,6 +2981,7 @@ namespace flov::game
                 g_net.Send({ "PING", std::to_string(now) });
             }
             if (n::IS_CUTSCENE_ACTIVE()) RestoreGameplayView();
+            g_prof.Mark("состояние");
             if (now >= g_nextClean)
             {
                 // Сюжет мог запустить новый скрипт (например, после смерти) — снова остановить.
@@ -2956,7 +2993,9 @@ namespace flov::game
                     n::CLEAR_AREA_OF_COPS(p.x, p.y, p.z, 500.f, 0);
                 }
             }
+            g_prof.Mark("очистка");
             BuildLabels();
+            g_prof.Mark("ники");
         }
     }
 
