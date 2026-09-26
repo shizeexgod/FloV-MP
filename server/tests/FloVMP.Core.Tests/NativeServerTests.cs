@@ -257,6 +257,21 @@ public sealed class NativeServerTests
     }
 
     [Fact]
+    public async Task FragmentedUtf8AndBufferedNextLineAreReadCorrectly()
+    {
+        using var server = StartServer();
+        using var client = new FakeClient();
+        await client.JoinAsync(server.Port);
+        await WaitEventAsync<NativeJoined>(server);
+        var stream = client.Tcp.GetStream();
+        await stream.WriteAsync(new byte[] { (byte)'C', (byte)'H', (byte)'A', (byte)'T', 9, 0xD1 });
+        await stream.WriteAsync(new byte[] { 0x8F, 10, (byte)'P', (byte)'I', (byte)'N', (byte)'G', 9, (byte)'4', (byte)'2', 10 });
+        var message = await WaitEventAsync<NativeMessage>(server);
+        Assert.Equal(new[] { "CHAT", "я" }, message.Parts);
+        Assert.Equal("PONG\t42", await client.ReadUntilAsync("PONG"));
+    }
+
+    [Fact]
     public async Task KickDeliversReasonBeforeDisconnect()
     {
         using var server = StartServer();

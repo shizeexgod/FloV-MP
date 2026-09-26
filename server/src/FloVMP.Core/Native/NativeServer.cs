@@ -312,27 +312,37 @@ public sealed class NativeServer : IDisposable
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly Stream _stream;
         private readonly byte[] _buffer = new byte[8192];
+        // Один буфер на соединение вместо MemoryStream + ToArray на каждое
+        // STATE. При 2000 клиентах и 20 STATE/с это убирает 80k+ аллокаций/с.
+        private readonly byte[] _line = new byte[NativeProtocol.MaxLineBytes];
         private int _start, _end;
+        private int _lineLength;
 
         public LineReader(Stream stream) => _stream = stream;
 
         public async Task<string?> ReadLineAsync(CancellationToken token)
         {
-            var line = new MemoryStream();
             while (true)
             {
-                for (var i = _start; i < _end; i++)
+                if (_start < _end)
                 {
-                    if (_buffer[i] != (byte)'\n') continue;
-                    line.Write(_buffer, _start, i - _start);
-                    _start = i + 1;
-                    if (line.Length > NativeProtocol.MaxLineBytes) throw new LineTooLongException();
-                    var bytes = line.ToArray();
-                    var length = bytes.Length > 0 && bytes[^1] == '\r' ? bytes.Length - 1 : bytes.Length;
-                    return StrictUtf8.GetString(bytes, 0, length);
+                    var available = _buffer.AsSpan(_start, _end - _start);
+                    var newline = available.IndexOf((byte)'\n');
+                    var count = newline < 0 ? available.Length : newline;
+                    if (_lineLength + count > _line.Length) throw new LineTooLongException();
+                    available[..count].CopyTo(_line.AsSpan(_lineLength));
+                    _lineLength += count;
+                    _start += count;
+                    if (newline >= 0)
+                    {
+                        _start++; // delimiter
+                        var length = _lineLength > 0 && _line[_lineLength - 1] == '\r'
+                            ? _lineLength - 1 : _lineLength;
+                        var line = StrictUtf8.GetString(_line, 0, length);
+                        _lineLength = 0;
+                        return line;
+                    }
                 }
-                line.Write(_buffer, _start, _end - _start);
-                if (line.Length > NativeProtocol.MaxLineBytes) throw new LineTooLongException();
                 _start = _end = 0;
                 var read = await _stream.ReadAsync(_buffer, token);
                 if (read <= 0) return null;
