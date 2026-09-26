@@ -81,8 +81,8 @@ origin/master недостаточно.
 ЧТО ПОДТВЕРЖДЕНО АВТОТЕСТАМИ
 ============================
 
-  CEF browser integration: 43/43
-  Native client script:     37/37
+  CEF browser integration: 47/47
+  Native client script:     42/42
   Server tests:             643/643
   Launcher tests:           96/96
   Общий healthcheck --build: 72/72
@@ -172,22 +172,20 @@ PID_RENDERER, main frame и origin сообщения. Настоящий лок
 Bounds/position/size и живой профиль hidden/1 FPS остаются отдельными задачами.
 
 
-[P1-2] Доделать платформенный API кастома HUD
+[ЗАКРЫТО 26.09] Платформенный API кастома HUD
 --------------------------------------------
 
 Что уже можно:
   владелец сервера полностью задаёт HTML/CSS/JS/Canvas/WebGL, ники, HP/armor,
   HUD, меню, modal, порядок слоёв, ввод и частоту кадров без изменения ASI.
 
-Чего пока нет как законченного контракта:
-  - bounds/position/size для отдельных browser;
-  - явного focus/cursor ownership API для нескольких UI-слоёв;
-  - документированного deviceScaleFactor/DPI поведения;
-  - полной lifecycle-модели destroyed/crashed/restarted на уровне одного browser;
-  - эталонного SDK-примера HUD + menu + modal + transparent click-through.
+Теперь есть per-browser bounds/position/size, явные focus/blur/focused,
+документированный physical-pixel/deviceScaleFactor=1 контракт и lifecycle
+created/domReady/loadFailed/destroyed/crashed/restored. Resize не использует
+старый alpha-buffer для hit-test. SDK-пример показывает HUD + modal,
+transparent click-through, focus/blur и восстановление после CEF crash.
 
-Не блокирует один fullscreen HUD, но блокирует обещание «полный API как у
-RAGE:MP» без оговорок.
+Проверки: Chromium 47/47, QuickJS/API 42/42.
 
 
 [P1-3] Не считать roadmap 26b закрытым на 100%
@@ -230,7 +228,7 @@ origin policy, упаковки и GTA E2E — примерно 80–85%. В roa
 =======================
 
 1. Сверить HEAD и не потерять локальные CEF-коммиты.
-2. Добавить bounds/focus API; caps/метрики уже закрыты.
+2. Bounds/focus/lifecycle и caps/метрики закрыты; следующий шаг — GTA E2E.
 3. Повторить Release build, browser tests, script tests и общий healthcheck.
 4. Собрать чистый installer/release из точного commit.
 5. Выполнить живой GTA b3889 E2E и только затем отметить 26b закрытым.

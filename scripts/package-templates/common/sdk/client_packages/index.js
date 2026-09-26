@@ -13,10 +13,18 @@ const config = require('./config.json');
 
 // Страница из этой же папки: package://ui/index.html. Можно и https://…
 const ui = mp.browsers.new('package://ui/index.html');
+ui.inputEnabled = false; // HUD виден, но до открытия меню ввод проходит в игру.
 let panelOpen = false;
 
 mp.events.add('browserDomReady', (browser) => {
     if (browser === ui) ui.call('hud:player', mp.players.local.name);
+});
+mp.events.add('browserRestored', (browser) => {
+    // CEF host автоматически поднялся после падения: вернуть состояние HUD.
+    if (browser === ui) {
+        ui.call('hud:player', mp.players.local.name);
+        if (panelOpen) ui.focus();
+    }
 });
 
 // Сервер присылает деньги: Alt.Emit("flovmp:client:call", id, "hud:money", "[5000]").
@@ -25,6 +33,8 @@ mp.events.add('hud:money', (value) => ui.call('hud:money', Number(value) || 0));
 // Панель: курсор для страницы, управление персонажем на это время выключено.
 function togglePanel(open) {
     panelOpen = open;
+    ui.inputEnabled = open;
+    if (open) ui.focus(); else ui.blur();
     ui.call('panel:toggle', open);
     mp.gui.cursor.show(open, open);
 }

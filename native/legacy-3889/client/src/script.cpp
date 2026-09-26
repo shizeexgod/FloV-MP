@@ -559,6 +559,18 @@ namespace flov::script
             if (argc > 1) browser::Reload(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
             return JS_UNDEFINED;
         }
+        JSValue F_brBounds(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 4) browser::SetBounds(Int(ctx, argv[0]), Int(ctx, argv[1]), Int(ctx, argv[2]),
+                                              Int(ctx, argv[3]), Int(ctx, argv[4]));
+            return JS_UNDEFINED;
+        }
+        JSValue F_brFocus(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+        {
+            if (argc > 1) browser::Focus(Int(ctx, argv[0]), JS_ToBool(ctx, argv[1]) == 1);
+            return JS_UNDEFINED;
+        }
+        JSValue F_brFocused(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewInt32(ctx, browser::Focused()); }
         JSValue F_brAvailable(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewBool(ctx, browser::Available()); }
         JSValue F_brMax(JSContext* ctx, JSValueConst, int, JSValueConst*) { return JS_NewInt32(ctx, browser::MaxCount()); }
         JSValue F_brStats(JSContext* ctx, JSValueConst, int, JSValueConst*)
@@ -724,7 +736,7 @@ mp.gui.cursor = {
 const browsers = new Map();
 let chatBrowser = null;
 class Browser {
-    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this._orderId = id; this._inputEnabled = true; this._frameRate = 60; }
+    constructor(id, url) { this.id = id; this.remoteId = id; this._url = url; this._active = true; this._orderId = id; this._inputEnabled = true; this._frameRate = 60; this._bounds = null; }
     get type() { return 'browser'; }
     get url() { return this._url; }
     set url(u) { this._url = String(u); F.brUrl(this.id, this._url); }
@@ -736,6 +748,28 @@ class Browser {
     set inputEnabled(v) { this._inputEnabled = !!v; F.brInput(this.id, this._inputEnabled); }
     get frameRate() { return this._frameRate; }
     set frameRate(v) { this._frameRate = Math.max(1, Math.min(60, Math.trunc(Number(v) || 1))); F.brRate(this.id, this._frameRate); }
+    get bounds() { return this._bounds ? { ...this._bounds } : null; }
+    set bounds(v) {
+        if (v == null) { this._bounds = null; F.brBounds(this.id, 0, 0, 0, 0); return; }
+        if (typeof v !== 'object') throw new TypeError('browser.bounds: нужен {x,y,width,height} или null');
+        const nx = Number(v.x ?? 0), ny = Number(v.y ?? 0), nw = Number(v.width), nh = Number(v.height);
+        if (![nx, ny, nw, nh].every(Number.isFinite))
+            throw new RangeError('browser.bounds: нужны конечные x/y и width/height больше нуля');
+        const maxSide = 7680;
+        const tx = Math.trunc(nx), ty = Math.trunc(ny), tw = Math.trunc(nw), th = Math.trunc(nh);
+        if (tw < 1 || th < 1)
+            throw new RangeError('browser.bounds: width/height после округления должны быть не меньше 1');
+        const x = Math.max(-maxSide, Math.min(maxSide, tx));
+        const y = Math.max(-maxSide, Math.min(maxSide, ty));
+        const width = Math.min(maxSide, tw), height = Math.min(maxSide, th);
+        this._bounds = { x, y, width, height };
+        F.brBounds(this.id, x, y, width, height);
+    }
+    setBounds(x, y, width, height) { this.bounds = { x, y, width, height }; return this; }
+    resetBounds() { this.bounds = null; return this; }
+    focus() { F.brFocus(this.id, true); return this; }
+    blur() { F.brFocus(this.id, false); return this; }
+    get focused() { return F.brFocused() === this.id; }
     execute(code) { F.brExec(this.id, String(code)); }
     call(name, ...args) { F.brCall(this.id, String(name), JSON.stringify(args)); }
     reload(ignoreCache) { F.brReload(this.id, !!ignoreCache); }
@@ -744,6 +778,7 @@ class Browser {
         browsers.delete(this.id);
         if (chatBrowser === this) { chatBrowser = null; F.chatShow(true); }
         F.brDel(this.id);
+        dispatch('browserDestroyed', [this]);
     }
     // Страница заменяет встроенный чат: сообщения уходят в chatAPI.push(текст) страницы.
     markAsChat() { chatBrowser = this; F.chatShow(false); }
@@ -765,10 +800,14 @@ mp.browsers = {
     toArray() { return [...browsers.values()]; },
     get length() { return browsers.size; },
     get max() { return F.brMax(); },
+    get focused() { return browsers.get(F.brFocused()) || null; },
     get stats() {
         try { return JSON.parse(F.brStats()); }
         catch (e) { return { count: browsers.size, visible: 0, maxBrowsers: F.brMax() }; }
     },
+};
+globalThis.__flovBrowserHostState = restored => {
+    for (const br of [...browsers.values()]) dispatch(restored ? 'browserRestored' : 'browserCrashed', [br]);
 };
 globalThis.__flovBrowserEvent = (kind, id, a, b) => {
     const br = browsers.get(id);
@@ -961,6 +1000,9 @@ globalThis.__flovTick = function (blocked) {
             AddFn(g_ctx, F, "brOrder", F_brOrder, 2);
             AddFn(g_ctx, F, "brRate", F_brRate, 2);
             AddFn(g_ctx, F, "brReload", F_brReload, 2);
+            AddFn(g_ctx, F, "brBounds", F_brBounds, 5);
+            AddFn(g_ctx, F, "brFocus", F_brFocus, 2);
+            AddFn(g_ctx, F, "brFocused", F_brFocused, 0);
             AddFn(g_ctx, F, "brAvailable", F_brAvailable, 0);
             AddFn(g_ctx, F, "brMax", F_brMax, 0);
             AddFn(g_ctx, F, "brStats", F_brStats, 0);
@@ -1028,6 +1070,9 @@ globalThis.__flovTick = function (blocked) {
                     JSValue args = JS_NewArray(g_ctx);
                     JSValue argv[2] = { JS_NewString(g_ctx, restored ? "browserHostRestored" : "browserHostLost"), args };
                     CallGlobal("__flovDispatch", 2, argv, kCallBudgetMs);
+                    JSValue state = JS_NewBool(g_ctx, restored);
+                    CallGlobal("__flovBrowserHostState", 1, &state, kCallBudgetMs);
+                    JS_FreeValue(g_ctx, state);
                     JS_FreeValue(g_ctx, argv[0]);
                     JS_FreeValue(g_ctx, argv[1]);
                     continue;

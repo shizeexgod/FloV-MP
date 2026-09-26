@@ -232,7 +232,7 @@ namespace
                     public CefResourceRequestHandler
     {
     public:
-        explicit Browser(int id) : _id(id) {}
+        Browser(int id, int width, int height) : _id(id), _width(width), _height(height) {}
 
         CefRefPtr<CefRenderHandler> GetRenderHandler() override { return this; }
         CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }
@@ -242,6 +242,15 @@ namespace
 
         CefRefPtr<CefBrowser> Get() const { return _browser; }
         int Id() const { return _id; }
+        uint64_t Pixels() const { return (uint64_t)_width * _height; }
+
+        void SetSize(int width, int height)
+        {
+            if (width == _width && height == _height) return;
+            _width = width;
+            _height = height;
+            if (_browser) _browser->GetHost()->WasResized();
+        }
 
         void Close()
         {
@@ -261,6 +270,12 @@ namespace
             if (_browser) _browser->GetHost()->SetWindowlessFrameRate(_frameRate);
         }
 
+        void SetFocus(bool focused)
+        {
+            _focused = focused;
+            if (_browser) _browser->GetHost()->SetFocus(focused);
+        }
+
         void Navigate(const std::string& url)
         {
             if (_browser) _browser->GetMainFrame()->LoadURL(url);
@@ -268,12 +283,12 @@ namespace
         }
 
         // --- рисование ---
-        void GetViewRect(CefRefPtr<CefBrowser>, CefRect& rect) override { rect = CefRect(0, 0, g_width, g_height); }
+        void GetViewRect(CefRefPtr<CefBrowser>, CefRect& rect) override { rect = CefRect(0, 0, _width, _height); }
 
         bool GetScreenInfo(CefRefPtr<CefBrowser>, CefScreenInfo& info) override
         {
             info.device_scale_factor = 1.f;
-            info.rect = info.available_rect = CefRect(0, 0, g_width, g_height);
+            info.rect = info.available_rect = CefRect(0, 0, _width, _height);
             return true;
         }
 
@@ -335,6 +350,7 @@ namespace
             auto host = browser->GetHost();
             host->SetWindowlessFrameRate(_frameRate);
             host->WasHidden(!_visible);
+            host->SetFocus(_focused);
             if (_closing) { host->CloseBrowser(true); return; }
             if (!_pendingUrl.empty())
             {
@@ -550,9 +566,10 @@ namespace
         }
 
         int _id;
+        int _width, _height;
         CefRefPtr<CefBrowser> _browser;
         std::string _pendingUrl;
-        bool _visible = true, _closing = false;
+        bool _visible = true, _closing = false, _focused = false;
         int _frameRate = 60;
         Frame _frame;
         std::vector<uint8_t> _view, _popup;
@@ -569,6 +586,13 @@ namespace
     {
         auto it = g_browsers.find(I(id));
         return it == g_browsers.end() ? nullptr : it->second;
+    }
+
+    uint64_t BrowserPixelsExcept(int exceptId = 0)
+    {
+        uint64_t total = 0;
+        for (const auto& [id, browser] : g_browsers) if (id != exceptId) total += browser->Pixels();
+        return total;
     }
 
     // --- package:// — файлы client_packages сервера --------------------------------------
@@ -845,19 +869,26 @@ namespace
         {
             const int id = I(at(1));
             if (id <= 0 || g_browsers.count(id)) return;
+            int width = p.size() > 3 ? I(at(3)) : g_width;
+            int height = p.size() > 4 ? I(at(4)) : g_height;
+            if (width < 64 || height < 64 || width > ipc::kMaxSide || height > ipc::kMaxSide)
+            {
+                Send({ "FAIL", N(id), "-5", at(2) });
+                return;
+            }
             if (g_browsers.size() >= ipc::kMaxBrowsers)
             {
                 Send({ "LOG", "0", "2", "CEF host: достигнут лимит browser " + N(ipc::kMaxBrowsers) });
                 Send({ "FAIL", N(id), "-3", at(2) });
                 return;
             }
-            if ((uint64_t)(g_browsers.size() + 1) * g_width * g_height > ipc::kMaxTotalPixels)
+            if (BrowserPixelsExcept() + (uint64_t)width * height > ipc::kMaxTotalPixels)
             {
                 Send({ "LOG", "0", "2", "CEF host: превышен общий pixel-budget" });
                 Send({ "FAIL", N(id), "-4", at(2) });
                 return;
             }
-            CefRefPtr<Browser> b = new Browser(id);
+            CefRefPtr<Browser> b = new Browser(id, width, height);
             g_browsers[id] = b;
             CefWindowInfo wi;
             wi.SetAsWindowless(nullptr);
@@ -876,14 +907,8 @@ namespace
         {
             const int w = I(at(1)), h = I(at(2));
             if (w < 64 || h < 64 || w > ipc::kMaxSide || h > ipc::kMaxSide) return;
-            if ((uint64_t)g_browsers.size() * w * h > ipc::kMaxTotalPixels)
-            {
-                Send({ "LOG", "0", "2", "CEF host: SIZE отклонён — превышен общий pixel-budget" });
-                return;
-            }
             g_width = w;
             g_height = h;
-            for (auto& [id, b] : g_browsers) if (b->Get()) b->Get()->GetHost()->WasResized();
         }
         else if (t == "ROOT")
         {
@@ -917,10 +942,23 @@ namespace
             auto b = Find(at(1));
             if (!b) return;
             auto br = b->Get();
-            if (t == "DEL") { b->Close(); return; }
+            if (t == "DEL") { g_browsers.erase(b->Id()); b->Close(); return; }
             if (t == "URL") { b->Navigate(at(2)); return; }
             if (t == "SHOW") { b->SetVisible(at(2) == "1"); return; }
             if (t == "RATE") { b->SetFrameRate(I(at(2))); return; }
+            if (t == "FOCUS") { b->SetFocus(at(2) == "1"); return; }
+            if (t == "BOUNDS")
+            {
+                const int w = I(at(2)), h = I(at(3));
+                if (w < 64 || h < 64 || w > ipc::kMaxSide || h > ipc::kMaxSide) return;
+                if (BrowserPixelsExcept(b->Id()) + (uint64_t)w * h > ipc::kMaxTotalPixels)
+                {
+                    Send({ "LOG", "0", "2", "CEF host: BOUNDS отклонён — превышен общий pixel-budget" });
+                    return;
+                }
+                b->SetSize(w, h);
+                return;
+            }
             if (!br) return;   // ввод/JS требуют уже созданный Chromium browser
             if (t == "EXEC") br->GetMainFrame()->ExecuteJavaScript(at(2), "", 0);
             else if (t == "CALL")
@@ -930,7 +968,6 @@ namespace
             else if (t == "MOUSE") b->Mouse(I(at(2)), I(at(3)), I(at(4)), I(at(5)));
             else if (t == "LEAVE") b->Leave();
             else if (t == "KEY") b->Key((UINT)I(at(2)), (WPARAM)_atoi64(at(3).c_str()), (LPARAM)_atoi64(at(4).c_str()), I(at(5)));
-            else if (t == "FOCUS") br->GetHost()->SetFocus(at(2) == "1");
         }
     }
 

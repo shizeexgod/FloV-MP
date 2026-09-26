@@ -33,6 +33,10 @@ namespace flov::browser
             bool inputEnabled = true;
             int order = 0;
             int frameRate = 60;
+            bool fullscreen = true;
+            int boundX = 0, boundY = 0, boundW = 0, boundH = 0;
+            int displayX = 0, displayY = 0, displayW = 0, displayH = 0;
+            int renderW = 0, renderH = 0;
             ULONGLONG triggerWindow = 0;
             int triggerCount = 0;
             bool triggerWarned = false;
@@ -101,6 +105,7 @@ namespace flov::browser
         uint64_t g_uploadedFrames = 0;
         uint64_t g_droppedFrames = 0;
         uint64_t g_uploadMicros = 0;
+        double g_layoutScale = 1.0;
         LARGE_INTEGER g_perfFrequency{};
         ID3D11DeviceContext* g_ctx = nullptr;
         ID3D11BlendState* g_premul = nullptr;
@@ -109,6 +114,7 @@ namespace flov::browser
         void SendLocked(const std::vector<std::string>& fields);
         std::string Utf8(const std::wstring& w);
         void Push(Event::Kind kind, int id, std::string a = {}, std::string b = {});
+        void CloseFrame(Item& it);
 
         std::vector<std::string> ReadOriginPolicy(const std::wstring& root)
         {
@@ -136,35 +142,84 @@ namespace flov::browser
             SendLocked(fields);
         }
 
-        std::pair<int, int> RenderSizeLocked(size_t count)
+        void RecomputeLayoutLocked(int skipId, bool announceScale)
         {
-            if (!count) return { 0, 0 };
-            int w = g_screenW > 0 ? g_screenW : 1920;
-            int h = g_screenH > 0 ? g_screenH : 1080;
-            const uint64_t pixels = (uint64_t)w * h * count;
-            if (pixels <= ipc::kMaxTotalPixels) return { w, h };
-            const double scale = std::sqrt((double)ipc::kMaxTotalPixels / (double)pixels);
-            w = std::max(64, (int)std::floor(w * scale));
-            h = std::max(64, (int)std::floor(h * scale));
-            while ((uint64_t)w * h * count > ipc::kMaxTotalPixels)
+            if (g_items.empty())
             {
-                if (w >= h) --w;
-                else --h;
+                g_sentW = g_sentH = 0;
+                g_layoutScale = 1.0;
+                return;
             }
-            return { w, h };
-        }
+            const int screenW = g_screenW > 0 ? g_screenW : 1920;
+            const int screenH = g_screenH > 0 ? g_screenH : 1080;
+            uint64_t desiredPixels = 0;
+            for (auto& [id, it] : g_items)
+            {
+                it.displayX = it.fullscreen ? 0 : it.boundX;
+                it.displayY = it.fullscreen ? 0 : it.boundY;
+                it.displayW = it.fullscreen ? screenW : std::clamp(it.boundW, 1, ipc::kMaxSide);
+                it.displayH = it.fullscreen ? screenH : std::clamp(it.boundH, 1, ipc::kMaxSide);
+                desiredPixels += (uint64_t)std::max(64, it.displayW) * std::max(64, it.displayH);
+            }
+            double scale = 1.0;
+            if (desiredPixels > ipc::kMaxTotalPixels)
+            {
+                // max(64, …) делает простую sqrt-формулу неточной для смеси
+                // маленьких виджетов и fullscreen HUD. Бинарный поиск находит
+                // наибольший безопасный scale для реальной суммы поверхностей.
+                double low = 0.0, high = 1.0;
+                for (int step = 0; step < 40; ++step)
+                {
+                    const double mid = (low + high) * 0.5;
+                    uint64_t pixels = 0;
+                    for (const auto& [id, it] : g_items)
+                        pixels += (uint64_t)std::max(64, (int)std::floor(it.displayW * mid)) *
+                                  std::max(64, (int)std::floor(it.displayH * mid));
+                    if (pixels <= ipc::kMaxTotalPixels) low = mid;
+                    else high = mid;
+                }
+                scale = low;
+            }
 
-        void UpdateRenderSizeLocked(size_t count, bool announceScale)
-        {
-            if (!count) { g_sentW = g_sentH = 0; return; }
-            const auto [w, h] = RenderSizeLocked(count);
-            if (w == g_sentW && h == g_sentH) return;
-            g_sentW = w;
-            g_sentH = h;
-            SendLocked({ "SIZE", N(w), N(h) });
-            if (announceScale && g_screenW > 0 && (w != g_screenW || h != g_screenH))
+            struct Change { int id, oldW, oldH, newW, newH; };
+            std::vector<Change> smaller, larger;
+            g_sentW = g_sentH = 0;
+            for (auto& [id, it] : g_items)
+            {
+                int rw = std::max(64, (int)std::floor(it.displayW * scale));
+                int rh = std::max(64, (int)std::floor(it.displayH * scale));
+                if (rw != it.renderW || rh != it.renderH)
+                {
+                    Change c{ id, it.renderW, it.renderH, rw, rh };
+                    if ((uint64_t)rw * rh <= (uint64_t)it.renderW * it.renderH) smaller.push_back(c);
+                    else larger.push_back(c);
+                    // Старый alpha-buffer имеет другую систему координат.
+                    // До FRAME нового размера лучше пропустить ввод в игру,
+                    // чем отправить клик не тому элементу страницы.
+                    if (it.renderW > 0)
+                    {
+                        CloseFrame(it);
+                        it.shmName.clear();
+                        it.w = it.h = 0;
+                    }
+                    it.renderW = rw;
+                    it.renderH = rh;
+                }
+                g_sentW = std::max(g_sentW, rw);
+                g_sentH = std::max(g_sentH, rh);
+            }
+            auto send = [&](const Change& c) {
+                if (skipId < 0 || c.id == skipId) return;
+                SendLocked({ "BOUNDS", N(c.id), N(c.newW), N(c.newH) });
+            };
+            // Сначала уменьшаем старые поверхности, затем увеличиваем: host ни
+            // на одном промежуточном шаге не выходит за общий pixel-budget.
+            for (const auto& c : smaller) send(c);
+            for (const auto& c : larger) send(c);
+            if (announceScale && scale < 0.999 && std::abs(scale - g_layoutScale) > 0.001)
                 Push(Event::Kind::Console, 0, "1", "браузеры: внутреннее CEF-разрешение снижено до " +
-                     N(w) + "x" + N(h) + " из-за общего лимита памяти");
+                     std::to_string((int)std::lround(scale * 100)) + "% из-за общего лимита памяти");
+            g_layoutScale = scale;
         }
 
         std::vector<int> OrderedIdsLocked()
@@ -282,6 +337,13 @@ namespace flov::browser
                 if (g_process) { CloseHandle(g_process); g_process = nullptr; }
                 g_hostUp = false;
                 g_hostReady = false;
+                // Новый Chromium process не наследует focus старого. Не
+                // оставляем JS-состояние focused=true, пока реальный browser
+                // уже уничтожен: открытое меню назначит focus повторно после
+                // browserRestored/browserDomReady.
+                g_mouseTarget = g_focus = 0;
+                g_lastX = g_lastY = -1;
+                g_lastButtons = 0;
                 Push(Event::Kind::HostLost, 0);
                 for (auto& [id, it] : g_items) { it.shmName.clear(); CloseFrame(it); }
             }
@@ -510,8 +572,10 @@ namespace flov::browser
         g_items[id].url = url;
         g_items[id].order = id;
         SendRootLocked();
-        UpdateRenderSizeLocked(g_items.size(), true);
-        SendLocked({ "NEW", N(id), url });
+        if (g_screenW > 0) SendLocked({ "SIZE", N(g_screenW), N(g_screenH) });
+        RecomputeLayoutLocked(id, true);
+        const auto& item = g_items.at(id);
+        SendLocked({ "NEW", N(id), url, N(item.renderW), N(item.renderH) });
         return id;
     }
 
@@ -527,7 +591,7 @@ namespace flov::browser
         if (it->second.srv) it->second.srv->Release();
         if (it->second.tex) it->second.tex->Release();
         g_items.erase(it);
-        UpdateRenderSizeLocked(g_items.size(), false);
+        RecomputeLayoutLocked(0, false);
         if (g_mouseTarget == id) g_mouseTarget = 0;
         if (g_focus == id) g_focus = 0;
     }
@@ -578,6 +642,7 @@ namespace flov::browser
             g_restarts = 0;
             g_screenW = g_screenH = g_sentW = g_sentH = 0;
             g_uploadedFrames = g_droppedFrames = g_uploadMicros = 0;
+            g_layoutScale = 1.0;
         }
         if (process)
         {
@@ -656,6 +721,41 @@ namespace flov::browser
         if (g_items.count(id)) SendLocked({ "RELOAD", N(id), ignoreCache ? "1" : "0" });
     }
 
+    void SetBounds(int id, int x, int y, int width, int height)
+    {
+        std::lock_guard lock(g_mutex);
+        auto it = g_items.find(id);
+        if (it == g_items.end()) return;
+        it->second.fullscreen = width <= 0 || height <= 0;
+        it->second.boundX = std::clamp(x, -ipc::kMaxSide, ipc::kMaxSide);
+        it->second.boundY = std::clamp(y, -ipc::kMaxSide, ipc::kMaxSide);
+        it->second.boundW = std::clamp(width, 1, ipc::kMaxSide);
+        it->second.boundH = std::clamp(height, 1, ipc::kMaxSide);
+        ReleaseInputLocked(id);
+        RecomputeLayoutLocked(0, true);
+    }
+
+    void Focus(int id, bool focused)
+    {
+        std::lock_guard lock(g_mutex);
+        if (!focused)
+        {
+            if (g_focus == id) ReleaseInputLocked(id);
+            return;
+        }
+        auto it = g_items.find(id);
+        if (it == g_items.end() || !it->second.visible || !it->second.inputEnabled) return;
+        if (g_focus && g_focus != id && g_items.count(g_focus)) SendLocked({ "FOCUS", N(g_focus), "0" });
+        g_focus = id;
+        SendLocked({ "FOCUS", N(id), "1" });
+    }
+
+    int Focused()
+    {
+        std::lock_guard lock(g_mutex);
+        return g_focus;
+    }
+
     void SetPackageRoot(const std::wstring& dir)
     {
         std::lock_guard lock(g_mutex);
@@ -673,10 +773,11 @@ namespace flov::browser
         if (!g_hostUp && !g_items.empty() && g_restarts < 3 && StartHostLocked())
         {
             SendRootLocked();
-            if (g_sentW) SendLocked({ "SIZE", N(g_sentW), N(g_sentH) });
+            if (g_screenW) SendLocked({ "SIZE", N(g_screenW), N(g_screenH) });
+            RecomputeLayoutLocked(-1, false);
             for (auto& [id, it] : g_items)
             {
-                SendLocked({ "NEW", N(id), it.url });
+                SendLocked({ "NEW", N(id), it.url, N(it.renderW), N(it.renderH) });
                 if (!it.visible) SendLocked({ "SHOW", N(id), "0" });
                 if (it.frameRate != 60) SendLocked({ "RATE", N(id), N(it.frameRate) });
             }
@@ -724,7 +825,7 @@ namespace flov::browser
             std::lock_guard lock(g_mutex);
             if (g_mouseTarget) SendLocked({ "LEAVE", N(g_mouseTarget) });
             if (g_focus) SendLocked({ "FOCUS", N(g_focus), "0" });
-            g_mouseTarget = 0;
+            g_mouseTarget = g_focus = 0;
             g_lastButtons = 0;
             g_lastX = g_lastY = -1;
         }
@@ -734,9 +835,9 @@ namespace flov::browser
     {
         if (!g_input) return;
         std::lock_guard lock(g_mutex);
-        if (!g_sentW || g_items.empty()) return;
-        const int x = std::clamp((int)(nx * g_sentW), 0, g_sentW - 1);
-        const int y = std::clamp((int)(ny * g_sentH), 0, g_sentH - 1);
+        if (!g_screenW || !g_screenH || g_items.empty()) return;
+        const int x = std::clamp((int)(nx * g_screenW), 0, g_screenW - 1);
+        const int y = std::clamp((int)(ny * g_screenH), 0, g_screenH - 1);
         if (x == g_lastX && y == g_lastY && buttons == g_lastButtons && !wheel) return;
 
         // Цель: пока кнопка зажата — тот же браузер (перетаскивание); иначе —
@@ -749,7 +850,11 @@ namespace flov::browser
             for (auto it = ordered.rbegin(); it != ordered.rend(); ++it)
             {
                 auto& item = g_items.at(*it);
-                if (item.visible && item.inputEnabled && OpaqueAt(item, x, y)) { target = *it; break; }
+                if (!item.visible || !item.inputEnabled || x < item.displayX || y < item.displayY ||
+                    x >= item.displayX + item.displayW || y >= item.displayY + item.displayH) continue;
+                const int localX = (int)((int64_t)(x - item.displayX) * item.w / std::max(1, item.displayW));
+                const int localY = (int)((int64_t)(y - item.displayY) * item.h / std::max(1, item.displayH));
+                if (OpaqueAt(item, localX, localY)) { target = *it; break; }
             }
             // До первого кадра alpha ещё неизвестна. Разрешаем ранний ввод
             // только такому браузеру; стабильный полностью прозрачный кадр
@@ -758,7 +863,10 @@ namespace flov::browser
                 for (auto it = ordered.rbegin(); it != ordered.rend(); ++it)
                 {
                     auto& item = g_items.at(*it);
-                    if (item.visible && item.inputEnabled && item.lastSeq < 0) { target = *it; break; }
+                    if (item.visible && item.inputEnabled && item.lastSeq < 0 && item.w > 0 && item.h > 0 &&
+                        x >= item.displayX && y >= item.displayY &&
+                        x < item.displayX + item.displayW && y < item.displayY + item.displayH)
+                    { target = *it; break; }
                 }
         }
         if (target != g_mouseTarget && g_mouseTarget && g_items.count(g_mouseTarget))
@@ -773,7 +881,10 @@ namespace flov::browser
                 g_focus = target;
                 SendLocked({ "FOCUS", N(target), "1" });
             }
-            SendLocked({ "MOUSE", N(target), N(x), N(y), N(buttons), N(wheel) });
+            const auto& item = g_items.at(target);
+            const int localX = std::clamp((int)((int64_t)(x - item.displayX) * item.w / std::max(1, item.displayW)), 0, std::max(0, item.w - 1));
+            const int localY = std::clamp((int)((int64_t)(y - item.displayY) * item.h / std::max(1, item.displayH)), 0, std::max(0, item.h - 1));
+            SendLocked({ "MOUSE", N(target), N(localX), N(localY), N(buttons), N(wheel) });
         }
         g_lastX = x;
         g_lastY = y;
@@ -823,7 +934,8 @@ namespace flov::browser
         {
             g_screenW = w;
             g_screenH = h;
-            UpdateRenderSizeLocked(g_items.size(), true);
+            SendLocked({ "SIZE", N(w), N(h) });
+            RecomputeLayoutLocked(0, true);
         }
         if (g_items.empty() || !device || !ctx) return;
         g_ctx = ctx;
@@ -926,7 +1038,8 @@ namespace flov::browser
             }
             if (!it.visible || it.lastSeq < 0 || !dl) continue;
             if (!any) { dl->AddCallback(PremultipliedBlend, nullptr); any = true; }
-            dl->AddImage((ImTextureID)it.srv, ImVec2(0, 0), ImVec2(width, height));
+            dl->AddImage((ImTextureID)it.srv, ImVec2((float)it.displayX, (float)it.displayY),
+                         ImVec2((float)(it.displayX + it.displayW), (float)(it.displayY + it.displayH)));
         }
         if (any) dl->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
     }

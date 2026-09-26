@@ -286,25 +286,65 @@ int wmain()
             "mp.trigger('page:loaded', location.href);</script>";
         std::ofstream(dir + L"\\index.js") <<
             "const b = mp.browsers.new('package://ui/index.html');\n"
-            "b.orderId = 7; b.inputEnabled = false; b.frameRate = 30;\n"
+            "let fractionalRejected = false; try { b.setBounds(0, 0, 0.5, 100); } catch (e) { fractionalRejected = e instanceof RangeError; }\n"
+            "b.setBounds(999999, -999999, 999999, 999999); mp.events.callRemote('bounds', fractionalRejected, b.bounds);\n"
+            "b.orderId = 7; b.inputEnabled = true; b.frameRate = 30; b.setBounds(10, 20, 320, 180).focus();\n"
             "mp.events.add('browserDomReady', (br) => { if (br === b) b.call('hello', 'сервер'); });\n"
-            "mp.events.add('page:loaded', (href) => mp.events.callRemote('loaded', href, mp.browsers.length, mp.browsers.exists(b), b.orderId, b.inputEnabled, b.frameRate, mp.browsers.max, mp.browsers.stats.count));\n"
-            "mp.events.add('page:hi', (text) => { mp.events.callRemote('hi', text); b.destroy(); mp.events.callRemote('after', mp.browsers.length); });\n";
+            "mp.events.add('browserDestroyed', (br) => { if (br === b) mp.events.callRemote('destroyed', mp.browsers.exists(br)); });\n"
+            "mp.events.add('page:loaded', (href) => mp.events.callRemote('loaded', href, mp.browsers.length, mp.browsers.exists(b), b.orderId, b.inputEnabled, b.frameRate, mp.browsers.max, mp.browsers.stats.count, b.bounds, b.focused, mp.browsers.focused === b));\n"
+            "mp.events.add('page:hi', (text) => { mp.events.callRemote('hi', text); b.blur(); mp.events.callRemote('focus', b.focused, mp.browsers.focused); b.destroy(); mp.events.callRemote('after', mp.browsers.length); });\n";
         flov::browser::SetHostExe(FLOVMP_CEF_HOST);
         flov::script::Reset();
         Check(flov::script::RunFolder(dir), "index.js с mp.browsers.new запустился");
         std::vector<std::pair<std::string, std::string>> got;
         const ULONGLONG end = GetTickCount64() + 30000;
-        while (GetTickCount64() < end && got.size() < 3)
+        while (GetTickCount64() < end && got.size() < 6)
         {
             flov::script::Tick(false);
             for (auto& e : flov::script::TakeOutgoing()) got.push_back(e);
             Sleep(16);
         }
         auto find = [&](const char* n) -> std::string { for (auto& [k, v] : got) if (k == n) return v; return "—"; };
-        Check(find("loaded") == "[\"package://ui/index.html\",1,true,7,false,30,12,1]", "страница загрузилась, свойства и метрики browser применились (" + find("loaded") + ")");
+        Check(find("bounds") == "[true,{\"x\":7680,\"y\":-7680,\"width\":7680,\"height\":7680}]",
+              "bounds отклоняет дробный ноль и совпадает с native clamp (" + find("bounds") + ")");
+        Check(find("loaded") == "[\"package://ui/index.html\",1,true,7,true,30,12,1,{\"x\":10,\"y\":20,\"width\":320,\"height\":180},true,true]",
+              "страница загрузилась, bounds/focus/метрики browser применились (" + find("loaded") + ")");
         Check(find("hi") == "[\"привет, сервер\"]", "browserDomReady → browser.call → страница → обратно (" + find("hi") + ")");
+        Check(find("focus") == "[false,null]", "browser.blur возвращает focus игре (" + find("focus") + ")");
+        Check(find("destroyed") == "[false]", "browserDestroyed приходит после удаления из коллекции (" + find("destroyed") + ")");
         Check(find("after") == "[0]", "browser.destroy");
+        flov::script::Reset();
+
+        std::ofstream(dir + L"\\index.js") <<
+            "const life = mp.browsers.new('package://ui/index.html');\n"
+            "life.focus();\n"
+            "mp.events.add('browserDomReady', br => { if (br === life) mp.events.callRemote('lifeReady'); });\n"
+            "mp.events.add('browserCrashed', br => { if (br === life) mp.events.callRemote('lifeCrashed', life.focused, mp.browsers.focused); });\n"
+            "mp.events.add('browserRestored', br => { if (br === life) mp.events.callRemote('lifeRestored'); });\n";
+        Check(flov::script::RunFolder(dir), "per-browser lifecycle test запустился");
+        bool lifeReady = false, lifeCrashed = false, lifeFocusReset = false, lifeRestored = false, lifeReadyAgain = false;
+        const ULONGLONG readyEnd = GetTickCount64() + 15000;
+        while (GetTickCount64() < readyEnd && !lifeReady)
+        {
+            flov::script::Tick(false);
+            for (auto& [name, json] : flov::script::TakeOutgoing()) if (name == "lifeReady") lifeReady = true;
+            Sleep(16);
+        }
+        Check(lifeReady && flov::browser::CrashHostForTest(), "CEF host остановлен для JS lifecycle");
+        const ULONGLONG lifeEnd = GetTickCount64() + 20000;
+        while (GetTickCount64() < lifeEnd && !(lifeCrashed && lifeRestored && lifeReadyAgain))
+        {
+            flov::script::Tick(false);
+            for (auto& [name, json] : flov::script::TakeOutgoing())
+            {
+                if (name == "lifeCrashed") { lifeCrashed = true; lifeFocusReset = json == "[false,null]"; }
+                else if (name == "lifeRestored") lifeRestored = true;
+                else if (name == "lifeReady") lifeReadyAgain = true;
+            }
+            Sleep(16);
+        }
+        Check(lifeCrashed && lifeFocusReset && lifeRestored && lifeReadyAgain,
+              "crash сбрасывает focus; browserCrashed/Restored и повторный DomReady доходят до server UI");
         flov::script::Reset();
 
         std::ofstream(dir + L"\\index.js") <<

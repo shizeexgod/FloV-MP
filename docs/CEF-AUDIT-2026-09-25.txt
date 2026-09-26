@@ -15,7 +15,7 @@ FloV:MP — АУДИТ CEF / mp.browsers ДЛЯ ПЕРЕДАЧИ CLAUDE CODE
 
 Полная Release-сборка проходит. Актуальные тесты:
   - browser integration: 22/22;
-  - native client script: 37/37.
+  - native client script: 42/42 (после bounds/focus/lifecycle).
 
 P0-5 закрыт: общий постоянный cache/profile удалён, cookies и localStorage
 теперь in-memory и request context пересоздаётся при смене server package.
@@ -35,7 +35,7 @@ package:// и явно разрешённая главная remote-страни
 отправленные сразу после new(), больше не теряются до OnAfterCreated; ранний
 destroy не оставляет осиротевший Chromium browser. Добавлен browser.frameRate
 (1–60), скрытые browser не копируют кадры в GTA. Browser integration: 24/24;
-native client script: 37/37.
+native client script: 42/42 после полного API слоёв.
 
 CEF→client bridge защищён от runaway-страницы: 240 mp.trigger/с на browser,
 1000/с суммарно, с предупреждением вместо заморозки игрового тика. Обе стороны
@@ -206,18 +206,18 @@ OnBeforeBrowse фильтрует навигацию верхнего уровн
   - запрет file/javascript/custom schemes, popup/new-window и downloads;
   - тесты localhost/private IP, redirect и iframe navigation.
 
-[P1-4] API свободы UI пока неполный, несмотря на рабочий fullscreen CEF
+[P1-4] ЗАКРЫТО 26.09: полный контракт слоёв серверного UI
 --------------------------------------------------------------------
 
-Для одного fullscreen HUD уже можно рисовать почти всё HTML/CSS/Canvas/WebGL.
-Но платформенный API пока не даёт честного управления несколькими слоями.
-Нужны:
-  - рабочие zIndex/orderId и inputEnabled;
-  - bounds/position/size либо явно зафиксированный fullscreen-only контракт;
-  - cursor ownership/focus API и предсказуемый возврат управления GTA;
-  - DPI/deviceScaleFactor и resize без размытия;
-  - lifecycle events: created, domReady, loadFailed(code,url), crashed,
-    restarted, destroyed;
+Сделано: рабочие orderId/inputEnabled, `setBounds/resetBounds/bounds`, явные
+`focus/blur/focused` и `mp.browsers.focused`. Bounds — физические пиксели
+backbuffer, fullscreen responsive, `deviceScaleFactor=1`; resize блокирует ввод
+по старому alpha-buffer до нового кадра. Lifecycle включает created, domReady,
+loadFailed(code,url), destroyed, общие HostLost/Restored и per-browser
+Crashed/Restored. SDK-пример показывает постоянный HUD, модальную панель,
+transparent click-through, focus/blur и восстановление состояния после crash.
+
+Integration: Chromium 47/47, QuickJS/API 42/42.
   - ограничения execute/call/trigger и диагностические ошибки;
   - пример SDK HUD + menu + modal + transparent click-through.
 

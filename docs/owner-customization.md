@@ -129,6 +129,13 @@ CDN или WebSocket, владелец добавляет точные origins �
 страниц исчерпать память игрока на 4K. Текущая нагрузка доступна клиентскому коду
 как `mp.browsers.stats`, предел — `mp.browsers.max`. Для постоянного HUD лучше
 одна HTML-страница с несколькими компонентами, а не browser на каждый виджет.
+Для независимых панелей доступны `browser.setBounds(x,y,width,height)`,
+`resetBounds()`, `focus()/blur()` и `mp.browsers.focused`. Координаты — физические
+пиксели игрового backbuffer; fullscreen-интерфейс остаётся responsive. При
+падении Chromium серверный код получает `browserCrashed`, затем
+`browserRestored` и повторный `browserDomReady`, чтобы восстановить состояние.
+Focus при закрытии cursor/input или падении Chromium сбрасывается; если панель
+всё ещё открыта, обработчик `browserRestored` должен вызвать `focus()` снова.
 
 ## 8. Чего менять нельзя
 

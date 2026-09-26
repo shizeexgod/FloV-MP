@@ -597,19 +597,32 @@ mp.trigger('panel:submit', input.value);
 |---|---|
 | создать | `mp.browsers.new(url)` — `package://папка/файл.html`; внешний URL работает только после явного разрешения origin |
 | управлять | `browser.url = …`, `browser.active = false` (скрыть, не тратит время), `browser.orderId = 100` (выше), `browser.inputEnabled = false` (виден, но пропускает ввод), `browser.frameRate = 30` (1–60 FPS), `browser.reload(ignoreCache)`, `browser.destroy()` |
+| геометрия | `browser.setBounds(x, y, width, height)` — отдельный viewport в физических пикселях; `browser.resetBounds()`/`browser.bounds = null` — responsive fullscreen; текущее значение — `browser.bounds` |
+| focus | `browser.focus()`, `browser.blur()`, `browser.focused`, `mp.browsers.focused`; ранний focus сразу после `new()` не теряется |
 | в страницу | `browser.call(имя, …аргументы)`, `browser.execute(код)` |
 | из страницы | `mp.trigger(имя, …аргументы)` → `mp.events.add(имя, …)` клиентского кода |
-| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)`, `browserHostLost`, `browserHostRestored` |
+| события | `browserCreated`, `browserDomReady`, `browserLoadingFailed(browser, errorCode, url)`, `browserDestroyed`; после падения host — общие `browserHostLost/Restored` и per-browser `browserCrashed/Restored` |
 | список | `mp.browsers.at(id)`, `exists(b)`, `forEach(fn)`, `toArray()`, `length` |
 | нагрузка | `mp.browsers.max` (12), `mp.browsers.stats` — число/видимость слоёв, исходное и внутреннее разрешение, pixels, приблизительная память, загруженные/отброшенные кадры и суммарное время upload |
 | чат на HTML | `browser.markAsChat()` — встроенный чат скрывается, строки чата (и `mp.gui.chat.push`) идут в `chatAPI.push(текст)` страницы |
 | мышь и клавиатура | `mp.gui.cursor.show(freeze, show)`: курсор, клики, колесо и ввод текста уходят страницам; `freeze` — персонаж стоит |
+
+После закрытия общего cursor/input и после падения CEF focus намеренно
+сбрасывается: открытая панель должна повторно вызвать `focus()` в обработчике
+`browserRestored` (SDK-пример это делает).
 
 Несколько страниц по умолчанию накладываются по порядку создания; порядок можно
 менять через `orderId`. Клик уходит верхней с `inputEnabled !== false`,
 у которой под курсором не прозрачно, — прозрачные места пропускают клик
 ниже или обратно в игру. Страницы — над миром и никами игроков, но под чатом, меню и консолью
 платформы. `console.log` страницы виден в консоли F8.
+
+По умолчанию browser responsive fullscreen. Bounds задаются в физических
+пикселях backbuffer GTA; Chromium использует `deviceScaleFactor = 1`. Поэтому
+обычный fullscreen HUD лучше адаптировать CSS (`vw/vh`, media queries), а bounds
+использовать для независимых небольших панелей. После смены разрешения fullscreen
+страницы получают новый viewport автоматически. Во время resize старый
+alpha-buffer не принимает клики до первого кадра нового размера.
 
 Для постоянно анимированного HUD оставляйте `frameRate = 60`; статичным меню
 обычно достаточно 30. Скрытый через `active = false` browser перестаёт рисовать

@@ -379,31 +379,44 @@ requestAnimationFrame(draw);
     printf("Слои и пропуск ввода:\n");
     const int top = flov::browser::Create("package://ui/top.html");
     Check(Until([&] { return Size(top) == g_w; }, 10000), "второй прозрачный слой получил кадр");
+    flov::browser::SetBounds(top, 50, 40, 300, 200);
+    Check(Until([&] { return Size(top) == 300; }, 5000), "per-browser bounds меняют Chromium viewport");
+    flov::browser::Focus(top, true);
+    Check(flov::browser::Focused() == top, "явный focus назначает владельца клавиатуры");
+    flov::browser::SetInput(false);
+    Check(flov::browser::Focused() == 0, "закрытие общего CEF input сбрасывает focus");
+    flov::browser::SetInput(true);
+    flov::browser::Focus(top, true);
+    flov::browser::Focus(top, false);
+    Check(flov::browser::Focused() == 0, "blur возвращает focus игре");
     const size_t lowerBefore = SeenCount(flov::browser::Event::Kind::Trigger, "clicked");
     flov::browser::SetOrder(top, 100);
     flov::browser::SetInputEnabled(top, false);
-    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    const float overlapX = 200.f / g_w, overlapY = 150.f / g_h;
+    flov::browser::Mouse(overlapX, overlapY, 1, 0); flov::browser::Mouse(overlapX, overlapY, 0, 0);
     Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "clicked") > lowerBefore; }, 5000),
           "inputEnabled=false пропускает клик слою ниже");
 
     flov::browser::SetInputEnabled(top, true);
     const size_t topBefore = SeenCount(flov::browser::Event::Kind::Trigger, "topClicked");
-    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    flov::browser::Mouse(overlapX, overlapY, 1, 0); flov::browser::Mouse(overlapX, overlapY, 0, 0);
     Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "topClicked") > topBefore; }, 5000),
           "больший orderId получает клик первым");
 
     flov::browser::SetOrder(top, -100);
     const size_t lowerAfterOrder = SeenCount(flov::browser::Event::Kind::Trigger, "clicked");
-    flov::browser::Mouse(bx, by, 1, 0); flov::browser::Mouse(bx, by, 0, 0);
+    flov::browser::Mouse(overlapX, overlapY, 1, 0); flov::browser::Mouse(overlapX, overlapY, 0, 0);
     Check(Until([&] { return SeenCount(flov::browser::Event::Kind::Trigger, "clicked") > lowerAfterOrder; }, 5000),
           "смена orderId меняет hit-test слоёв");
 
     flov::browser::SetOrder(top, 100);
     const size_t movedBefore = SeenCount(flov::browser::Event::Kind::Trigger, "topMoved");
-    flov::browser::Mouse(700.f / g_w, 300.f / g_h, 0, 0);
+    flov::browser::Mouse(60.f / g_w, 50.f / g_h, 0, 0);
     for (int i = 0; i < 20; ++i) { Pump(); Sleep(16); }
     Check(SeenCount(flov::browser::Event::Kind::Trigger, "topMoved") == movedBefore,
           "полностью прозрачная точка не перехватывает мышь");
+    flov::browser::SetBounds(top, 0, 0, 0, 0);
+    Check(Until([&] { return Size(top) == g_w; }, 5000), "reset bounds возвращает responsive fullscreen");
     flov::browser::Destroy(top);
 
     const int switching = flov::browser::Create("package://ui/index.html");

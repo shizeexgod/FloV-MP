@@ -13,7 +13,7 @@ Chromium-тесты зелёные. Но продукт ещё нельзя че
 проверенным: не пройден живой GTA Legacy 1.0.3889.0 E2E и не доказано, что
 новые бинарники попали в установщик/CDN/VDS.
 
-Текущий local HEAD на момент отчёта: 799c9ab
+Текущий local HEAD на момент отчёта: 8ab0571
 Текущий origin/master: ebe88c4
 
 ВАЖНО: CEF-цепочка находится только локально. Если Claude работает не в
@@ -85,11 +85,11 @@ Fail-closed origin/network policy для CEF:
 ПОСЛЕДНИЕ ПОДТВЕРЖДЁННЫЕ ПРОВЕРКИ
 =================================
 
-  CEF browser integration: 43/43
-  Native client script:     37/37
+  CEF browser integration: 47/47
+  Native client script:     42/42
   Server tests:             643/643
   Launcher tests:           96/96
-  Общий healthcheck --build: 72/72
+  Общий healthcheck --build: 73/73
 
 Эти проверки доказывают контракты native/Chromium вне GTA. Они НЕ доказывают
 реальный вход и стабильность внутри GTA Legacy b3889.
@@ -146,24 +146,22 @@ host, общий pixel-budget — 12×1920×1080. На 4K/при множест�
 разрешение пропорционально снижается. `mp.browsers.stats` показывает count,
 visible, screen/render size, pixels, приблизительную память, uploaded/dropped
 frames и upload time. Лишний browser штатно отклоняется. Новые проверки:
-CEF browser integration 43/43, JS 37/37. Отдельно доказано, что `frameRate=1`
+CEF browser integration 47/47, JS 42/42. Отдельно доказано, что `frameRate=1`
 ограничивает поток кадров, а `active=false` останавливает композитинг.
 
 Живой профилинг hidden/1 FPS внутри GTA всё ещё входит в P0 E2E.
 
-[P1] 5. Закончить API серверного кастома HUD
+[ЗАКРЫТО 26.09] 5. Закончить API серверного кастома HUD
 --------------------------------------------
 
 Уже можно полностью задавать HTML/CSS/JS/Canvas/WebGL, ники, HP/armor, HUD,
 меню, modal, z-order, ввод и FPS без изменения ASI.
 
-Не хватает законченного контракта:
-
-- bounds/position/size для browser вместо fullscreen-only;
-- явный focus/cursor ownership для нескольких UI-слоёв;
-- документированное DPI/deviceScaleFactor поведение;
-- per-browser crashed/restarted/destroyed lifecycle;
-- эталонный SDK sample: HUD + menu + modal + transparent click-through.
+После отчёта добавлены physical-pixel `bounds/setBounds/resetBounds`, явные
+`focus/blur/focused`, responsive fullscreen и безопасный resize без клика по
+старому alpha-buffer. Lifecycle: destroyed, crashed, restored и повторный
+DomReady. SDK sample показывает HUD + modal + transparent click-through,
+focus/blur и recovery. Проверки: Chromium 47/47, QuickJS/API 42/42.
 
 [P1] 6. Полноценная подпись server package
 ------------------------------------------
@@ -205,7 +203,7 @@ CEF browser integration 43/43, JS 37/37. Отдельно доказано, чт
 
 1. Сверить git status/log и сохранить локальную CEF-цепочку.
 2. Проверить/закоммитить незакоммиченную exact-origin policy отдельно.
-3. Доделать bounds/focus API; caps и метрики уже реализованы.
+3. Bounds/focus/lifecycle и caps/метрики уже реализованы; перейти к GTA E2E.
 4. Повторить все Release tests.
 5. Собрать installer/release из точного commit.
 6. Выполнить живой GTA b3889 E2E двумя клиентами.

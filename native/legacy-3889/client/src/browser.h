@@ -33,6 +33,11 @@ namespace flov::browser
     /// Частота перерисовки CEF; 60 для HUD, ниже для статичных меню.
     void SetFrameRate(int id, int frameRate);
     void Reload(int id, bool ignoreCache);
+    /// Экранные bounds в физических пикселях. width/height <= 0 возвращают
+    /// полноэкранный responsive viewport.
+    void SetBounds(int id, int x, int y, int width, int height);
+    void Focus(int id, bool focused);
+    int Focused();
 
     struct Stats
     {

@@ -315,7 +315,11 @@ nametag, lifecycle игроков и доставки ресурсов: [ауд�
       `mp.browsers.stats` показывает слои, площадь, приблизительную память,
       upload/dropped frames и время загрузки кадров. С resource regression:
       браузеры 43, движок JS 37 (включая реальное снижение кадров на 1 FPS и
-      остановку hidden browser).
+      остановку hidden browser). Полный API слоёв: per-browser physical-pixel
+      `bounds/setBounds/resetBounds`, `focus/blur/focused`, responsive fullscreen,
+      безопасный resize и lifecycle `browserDestroyed/Crashed/Restored`.
+      SDK-пример показывает HUD + modal + transparent click-through и recovery.
+      После этих regression-тестов: Chromium 47, QuickJS/API 42.
     - **26c — серверный JS как в RAGE:MP** (`mp.*` на js-module alt:V) и
       скрипт переноса сервера с RAGE:MP (объединяется с пунктом 17).
 27. **Кость и часть тела в `flovmp:damage`** — чтобы геймод мог считать

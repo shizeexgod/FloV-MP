@@ -202,6 +202,21 @@ def check_security_regressions(rep):
                 "CEF ограничен по числу слоёв и общей площади",
                 "клиент и host проверяют общий контракт; метрики доступны серверному UI" if resource_caps else
                 "нужны двусторонние caps, pixel-budget, метрики и integration-тест")
+        script_src = (ROOT / "native/legacy-3889/client/src/script.cpp").read_text(
+            encoding="utf-8", errors="ignore")
+        custom_ui = (
+            't == "BOUNDS"' in cef_src
+            and "void SetBounds(" in browser_client
+            and "setBounds(x, y, width, height)" in script_src
+            and "get focused() { return browsers.get(F.brFocused())" in script_src
+            and "browserCrashed" in script_src
+            and "per-browser bounds меняют Chromium viewport" in browser_test
+            and "явный focus назначает владельца клавиатуры" in browser_test
+        )
+        rep.add(PASS if custom_ui else FAIL,
+                "CEF даёт серверу bounds, focus и lifecycle каждого UI-слоя",
+                "viewport/input/recovery доступны через mp.browsers" if custom_ui else
+                "неполный контракт серверного кастома HUD")
 
     # События от клиента — то, что может прислать поддельный клиент. Каждый
     # обработчик обязан либо проверять права на сервере, либо быть в списке
