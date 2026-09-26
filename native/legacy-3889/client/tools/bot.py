@@ -270,6 +270,50 @@ def check(host, port):
     return ok
 
 
+def sustained_check(host, port, seconds):
+    """Проверяет доставку команд после длительного потока STATE 20/с с двух клиентов."""
+    seconds = max(25.0, seconds)
+    first = Bot(host, port, "LongCheckA", log=lambda s: None)
+    second = Bot(host, port, "LongCheckB", log=lambda s: None)
+    try:
+        first.connect()
+        second.connect()
+        a = threading.Thread(target=first.walk, args=(seconds + 5,), daemon=True)
+        b = threading.Thread(target=second.walk, args=(seconds + 5,), daemon=True)
+        a.start()
+        b.start()
+        time.sleep(seconds)
+        alive = first.alive and second.alive
+        mark_a, mark_b = len(first.messages), len(second.messages)
+        first.send("CHAT", "проверка после нагрузки")
+        first.send("CHAT", "/help")
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            chat = any(m[0] == "MSG" and "проверка после нагрузки" in m[-1]
+                       for m in second.messages[mark_b:])
+            help_reply = any(m[0] == "MSG" and "КОМАНД" in m[-1]
+                             for m in first.messages[mark_a:])
+            if chat and help_reply:
+                break
+            time.sleep(0.05)
+        first.close()
+        deadline = time.time() + 5
+        while time.time() < deadline and not any(
+                m[0] == "PDEL" and m[1] == str(first.id) for m in second.messages[mark_b:]):
+            time.sleep(0.05)
+        left = any(m[0] == "PDEL" and m[1] == str(first.id) for m in second.messages[mark_b:])
+        for name, good in (("оба соединения после %.0f с" % seconds, alive),
+                           ("чат после нагрузки", chat), ("/help после нагрузки", help_reply),
+                           ("PDEL после нагрузки", left)):
+            print(("OK   " if good else "FAIL ") + name)
+        return alive and chat and help_reply and left
+    finally:
+        if first.sock:
+            first.close()
+        if second.sock:
+            second.close()
+
+
 def identity_of(key_path):
     """ID игрока (как его видит сервер) по файлу ключа бота."""
     import hashlib
@@ -624,6 +668,8 @@ def main():
     ap.add_argument("--say", default=None)
     ap.add_argument("--seconds", type=float, default=30)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--sustained-check", action="store_true",
+                    help="20 STATE/с от двух ботов; после --seconds проверить чат, /help и PDEL")
     ap.add_argument("--vehicle-test", action="store_true", help="сценарий реестра транспорта (клиенты 1.0.6 и 1.0.5)")
     ap.add_argument("--client-version", default="bot-1.0", help="версия клиента в HELLO (1.0.6+ — реестр транспорта)")
     ap.add_argument("--moderation-test", metavar="ADMIN_KEY", help="сценарий модерации; ключ бота-владельца")
@@ -638,6 +684,8 @@ def main():
     a = ap.parse_args()
     if a.check:
         sys.exit(0 if check(a.host, a.port) else 1)
+    if a.sustained_check:
+        sys.exit(0 if sustained_check(a.host, a.port, a.seconds) else 1)
     if a.client_packages_test:
         sys.exit(0 if client_packages_test(a.host, a.port) else 1)
     if a.roster_test:
