@@ -229,6 +229,11 @@ if ($Uninstall) {
     if ($state -and $state.AddedNoBattlEye) { Set-NoBattlEye $dir $false | Out-Null; Say 'BattlEye снова включён (убран -nobattleye из args.txt).' }
     if ($state -and $state.AddedStraightToGame) { Set-StraightToGame $dir $false | Out-Null; Say 'Стартовая страница GTA возвращена (убран -scOfflineOnly).' }
     if ($state -and $state.Shortcut) { Remove-Item $state.Shortcut -Force -ErrorAction SilentlyContinue }
+    # Ссылку flovmp:// снимаем, только если она ведёт в наш play.ps1.
+    $protoCmd = 'HKCU:\Software\Classes\flovmp\shell\open\command'
+    if ((Test-Path $protoCmd) -and ((Get-ItemProperty $protoCmd).'(default)' -like '*play.ps1*')) {
+        Remove-Item 'HKCU:\Software\Classes\flovmp' -Recurse -Force -ErrorAction SilentlyContinue
+    }
     # Моды серверов (mods-sync.ps1): папку mods убираем, только если её вёл FloV:MP,
     # и возвращаем моды, которые были у игрока до нас.
     $mods = Join-Path $dir 'mods'
@@ -358,6 +363,18 @@ if (Test-Path (Join-Path $cefSrc 'flovmp-cef.exe')) {
 } else {
     Say 'В архиве нет FloVMP\cef — интерфейсы серверов на HTML работать не будут.' Yellow
 }
+
+# Ссылка flovmp:// — кнопка «Играть» в лаунчере или на сайте сервера запускает
+# игру сразу на нужный сервер (без прав администратора, для текущего игрока).
+try {
+    $proto = 'HKCU:\Software\Classes\flovmp'
+    New-Item -Path "$proto\shell\open\command" -Force | Out-Null
+    Set-ItemProperty -Path $proto -Name '(default)' -Value 'URL:FloV:MP'
+    Set-ItemProperty -Path $proto -Name 'URL Protocol' -Value ''
+    $cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $here 'play.ps1') + '" -Url "%1"'
+    Set-ItemProperty -Path "$proto\shell\open\command" -Name '(default)' -Value $cmd
+    Say 'Ссылки flovmp:// открывают игру на сервере.' Green
+} catch { Say "Ссылки flovmp:// не зарегистрированы: $($_.Exception.Message)" Yellow }
 
 # Ярлык на сервер
 $server = Get-ServerInfo

@@ -1,4 +1,4 @@
-﻿param([string]$Address = "", [string]$Name = "")
+﻿param([string]$Address = "", [string]$Name = "", [string]$Url = "")
 # Подключиться к серверу FloV:MP: оставить клиенту запрос и запустить GTA V.
 # Без адреса берётся server.txt рядом (его заполняет владелец сервера).
 # Адрес — адрес игрового сервера (1.2.3.4 или 1.2.3.4:7788); клиент сам
@@ -8,6 +8,30 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dir = Join-Path $env:LOCALAPPDATA 'FloVMP'
 New-Item -ItemType Directory -Force $dir | Out-Null
 function Say($t, $c = 'Gray') { Write-Host "[FloV:MP] $t" -ForegroundColor $c }
+
+# Ссылка flovmp://1.2.3.4:7788 (или flovmp://connect/1.2.3.4:7788?name=Ник) —
+# её открывает кнопка «Играть» в лаунчере или на сайте сервера. Ссылку может
+# подсунуть любая страница, поэтому адрес строго проверяется, а игрока
+# спрашивают, хочет ли он на этот сервер.
+if ($Url) {
+    $u = $Url.Trim()
+    if ($u -notmatch '^flovmp://(connect/)?(?<addr>[A-Za-z0-9.\-]{1,253}(:\d{1,5})?)/?(\?name=(?<name>[^&]{1,32}))?$') {
+        Say "Неверная ссылка на сервер: $u" Red
+        exit 2
+    }
+    $Address = $Matches.addr
+    $nameRaw = $Matches.name
+    # Порт игры + 10 — шлюз игроков, поэтому верхняя граница 65525.
+    if ($Address -match ':(\d+)$' -and ([int]$Matches[1] -lt 1 -or [int]$Matches[1] -gt 65525)) {
+        Say "Неверный порт в ссылке: $u" Red
+        exit 2
+    }
+    if ($nameRaw) { $Name = [Uri]::UnescapeDataString($nameRaw) -replace '[^\p{L}\p{N}_ .-]', '' }
+    Add-Type -AssemblyName System.Windows.Forms
+    $answer = [System.Windows.Forms.MessageBox]::Show("Подключиться к серверу $Address?", 'FloV:MP',
+        [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { exit 0 }
+}
 
 if (-not $Address) {
     $f = Join-Path $here 'server.txt'
@@ -42,7 +66,8 @@ $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 [IO.File]::WriteAllText((Join-Path $dir 'last-server.txt'), "$Address`n$Name`n", (New-Object Text.UTF8Encoding $false))
 
 if (Get-Process GTA5 -ErrorAction SilentlyContinue) {
-    Say 'GTA V уже запущена: нажмите F9 в игре — адрес уже подставлен.' Yellow
+    # Клиент в игре сам заметит запрос (connect.txt) за секунду и перейдёт на сервер.
+    Say "GTA V уже запущена — переход на сервер $Address." Green
     exit 0
 }
 # Моды сервера (карта, машины) — до запуска: GTA читает папку mods только при старте.

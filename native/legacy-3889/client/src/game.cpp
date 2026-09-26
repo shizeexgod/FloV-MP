@@ -2554,6 +2554,8 @@ namespace flov::game
 
         /// Запрос на подключение от лаунчера/коннектора: переменная окружения
         /// FLOVMP_CONNECT или файл connect.txt (действует 10 минут, одноразовый).
+        bool ReadConnectFile(std::string& host, int& port, std::string& name);
+
         bool ReadConnectRequest(std::string& host, int& port, std::string& name)
         {
             char env[256]{};
@@ -2563,6 +2565,13 @@ namespace flov::game
                 if (GetEnvironmentVariableA("FLOVMP_NAME", nm, sizeof nm) > 0) name = nm;
                 return true;
             }
+            return ReadConnectFile(host, port, name);
+        }
+
+        /// Запрос подключения от play.cmd / ссылки flovmp:// / лаунчера сервера:
+        /// файл connect.txt в папке FloV:MP. Читается один раз и удаляется.
+        bool ReadConnectFile(std::string& host, int& port, std::string& name)
+        {
             const auto path = DataDir() + L"\\connect.txt";
             FILE* f = nullptr;
             if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return false;
@@ -2750,6 +2759,25 @@ namespace flov::game
         {
             const ULONGLONG now = GetTickCount64();
             HandleHotkeys();
+
+            // Игра уже открыта, а игрок нажал «Играть» в лаунчере сервера или
+            // ссылку flovmp:// — переходим на тот сервер сразу, как в RAGE:MP,
+            // а не просим нажать F9.
+            static ULONGLONG nextConnectPoll = 0;
+            if (now >= nextConnectPoll)
+            {
+                nextConnectPoll = now + 1000;
+                if (GetFileAttributesW((DataDir() + L"\\connect.txt").c_str()) != INVALID_FILE_ATTRIBUTES)
+                {
+                    std::string host, name;
+                    int port = 0;
+                    if (ReadConnectFile(host, port, name))
+                    {
+                        Log("запрос подключения во время игры: " + host + ":" + std::to_string(port));
+                        StartConnect(host, port, name);
+                    }
+                }
+            }
 
             for (const auto& m : g_net.Poll())
                 if (!m.empty()) HandleMessage(m);

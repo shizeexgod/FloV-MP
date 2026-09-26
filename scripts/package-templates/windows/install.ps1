@@ -243,6 +243,37 @@ try {
     elseif (-not (Test-Path -LiteralPath (Join-Path $target 'license.flv'))) {
         Write-Host 'Ключ лицензии не указан. После запуска сервера введите в его окне: license activate FLV-...' -ForegroundColor Yellow
     }
+    # Комплект клиента для игроков: адрес этого сервера, чтобы у игрока после
+    # установки сразу был ярлык и вход одной кнопкой (как делает install.sh на
+    # Linux). Свой server.txt владельца не трогаем.
+    $clientDir = Join-Path $target 'client-b3889'
+    $serverTxt = Join-Path $clientDir 'server.txt'
+    if ((Test-Path -LiteralPath $clientDir) -and -not (Test-Path -LiteralPath $serverTxt)) {
+        $publicHost = $null
+        try { $publicHost = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 5).ToString().Trim() } catch { }
+        if ($publicHost -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+            $publicHost = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+                Select-Object -First 1 -ExpandProperty IPAddress)
+        }
+        $gamePort = 7788
+        $serverName = 'FloV:MP'
+        $toml = Join-Path $target 'server\server.toml'
+        if (-not (Test-Path -LiteralPath $toml)) { $toml = Join-Path $target 'server\server.toml.example' }
+        if (Test-Path -LiteralPath $toml) {
+            foreach ($l in Get-Content -LiteralPath $toml -Encoding UTF8) {
+                if ($l -match '^\s*port\s*=\s*(\d+)') { $gamePort = [int]$Matches[1] }
+                if ($l -match '^\s*name\s*=\s*"(.+)"') { $serverName = $Matches[1] }
+            }
+        }
+        if ($publicHost) {
+            $text = "# Адрес сервера для игроков (заполнен установщиком сервера).`naddress=$($publicHost):$gamePort`nname=$serverName`n"
+            [IO.File]::WriteAllText($serverTxt, $text, (New-Object Text.UTF8Encoding $false))
+            Write-Host "Комплект игрока: адрес $($publicHost):$gamePort записан в client-b3889\server.txt" -ForegroundColor Green
+        } else {
+            Write-Host 'Внешний адрес не определён — впишите его в client-b3889\server.txt перед раздачей игрокам.' -ForegroundColor Yellow
+        }
+    }
     Write-Host "Готово: $target" -ForegroundColor Green
     $committed = $true
     if ($backup -and (Test-Path $backup)) { Write-Host "Резервная копия: $backup" -ForegroundColor Yellow }
