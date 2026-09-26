@@ -982,9 +982,11 @@ fi
 
 # Комплект клиента для игроков: адрес сервера — чтобы у игрока после
 # установки сразу был ярлык на этот сервер.
-if [ -d "$INSTALL_DIR/client-b3889" ] && [ -n "${PUBLIC_HOST:-}" ]; then
-  printf '# Адрес сервера для игроков (заполнен установщиком сервера).\naddress=%s:%s\nname=%s\n' \
-    "$PUBLIC_HOST" "$GAME_PORT" "$SERVER_NAME" > "$INSTALL_DIR/client-b3889/server.txt"
+if [ -d "$INSTALL_DIR/client-b3889" ]; then
+  if [ -n "${PUBLIC_HOST:-}" ] && [ ! -f "$INSTALL_DIR/client-b3889/server.txt" ]; then
+    printf '# Адрес сервера для игроков (заполнен установщиком сервера).\naddress=%s:%s\nname=%s\n' \
+      "$PUBLIC_HOST" "$GAME_PORT" "$SERVER_NAME" > "$INSTALL_DIR/client-b3889/server.txt"
+  fi
   ( cd "$INSTALL_DIR" && rm -f client-b3889.zip && \
     { command -v zip >/dev/null 2>&1 && zip -qr client-b3889.zip client-b3889; } ) || true
 fi

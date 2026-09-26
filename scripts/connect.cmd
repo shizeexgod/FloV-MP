@@ -50,7 +50,10 @@ echo [INFO] Connector: %CONNECT_EXE%
 echo [INFO] Log: %LOCALAPPDATA%\FloVMP\connect.log
 
 set "TARGET=%~1"
-if "%TARGET%"=="" set "TARGET=188.127.229.224:7788"
+if "%TARGET%"=="" (
+    echo [ERROR] Specify customer server host:port explicitly.
+    exit /b 2
+)
 
 rem Direct VPN-bypass route is added by the connector itself (it auto-detects
 rem the physical IPv4 gateway). No hardcoded gateway here.

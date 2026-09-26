@@ -21,8 +21,8 @@ if ($Url) {
     }
     $Address = $Matches.addr
     $nameRaw = $Matches.name
-    # Порт игры + 10 — шлюз игроков, поэтому верхняя граница 65525.
-    if ($Address -match ':(\d+)$' -and ([int]$Matches[1] -lt 1 -or [int]$Matches[1] -gt 65525)) {
+    # Порт игры + 20 — встроенная раздача модов; оставляем место и для неё.
+    if ($Address -match ':(\d+)$' -and ([int]$Matches[1] -lt 1 -or [int]$Matches[1] -gt 65515)) {
         Say "Неверный порт в ссылке: $u" Red
         exit 2
     }
@@ -43,6 +43,22 @@ if (-not $Address) {
     exit 1
 }
 
+# Treat launcher arguments and server.txt equally: neither may inject extra
+# connect.txt fields or point to a malformed endpoint. Reserve room for the
+# native gateway (+10) and built-in mods endpoint (+20).
+if ($Address -notmatch '^(?<host>[A-Za-z0-9][A-Za-z0-9.-]{0,252})(:(?<port>\d{1,5}))?$') {
+    Say 'Неверный адрес сервера. Нужен host или host:port.' Red
+    exit 2
+}
+$hostPart = $Matches.host
+$port = if ($Matches.port) { [int]$Matches.port } else { 7788 }
+if ($port -lt 1 -or $port -gt 65515 -or $hostPart -eq '0.0.0.0') {
+    Say 'Неверный адрес или порт сервера.' Red
+    exit 2
+}
+$Name = ($Name -replace '[\r\n=]', '').Trim()
+if ($Name.Length -gt 32) { $Name = $Name.Substring(0, 32) }
+
 # Клиент установлен? Лаунчер может передать точную папку игры через env,
 # чтобы пакетный вход не выбрал другую Legacy-установку из реестра.
 $gta = [Environment]::GetEnvironmentVariable('FLOVMP_GTA_PATH', 'Process')
@@ -57,8 +73,6 @@ if (-not $gta -or -not (Test-Path (Join-Path $gta 'FloVMP.asi'))) {
     try { $gta = (Get-Content $state -Raw -Encoding UTF8 | ConvertFrom-Json).GtaDir } catch { }
 }
 
-$hostPart = $Address; $port = 7788
-if ($Address -match '^(?<h>[^:]+):(?<p>\d+)$') { $hostPart = $Matches.h; $port = [int]$Matches.p }
 $native = "{0}:{1}" -f $hostPart, ($port + 10)
 $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 [IO.File]::WriteAllText((Join-Path $dir 'connect.txt'), "address=$native`nname=$Name`ncreated=$now`n", (New-Object Text.UTF8Encoding $false))

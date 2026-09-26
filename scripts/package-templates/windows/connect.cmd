@@ -5,29 +5,31 @@ title FloV:MP
 
 rem Primary entry point for the bundled Legacy b3889 client:
 rem connect.cmd [host:port]
-rem Without an argument the port is read from server\server.toml: the owner may
-rem change it, and a hardcoded 7788 would point at a server that is not there.
+rem Without an argument play.ps1 reads client-b3889\server.txt, written by the
+rem installer with this customer's public VDS address and game port.
 rem NOTE: keep this file pure ASCII. cmd.exe parses the whole IF (...) block
 rem before chcp takes effect, and Cyrillic inside it breaks the parser.
 set "TARGET=%~1"
-if not "%TARGET%"=="" goto run
-
-set "PORT="
-if exist "%~dp0server\server.toml" (
-    for /f "tokens=2 delims== " %%p in ('findstr /r /c:"^port[ ]*=" "%~dp0server\server.toml"') do (
-        if not defined PORT set "PORT=%%p"
-    )
-)
-if not defined PORT set "PORT=7788"
-set "TARGET=127.0.0.1:!PORT!"
-
 :run
-echo [FloV:MP] Подключение к %TARGET%
+if "%TARGET%"=="" (
+    echo [FloV:MP] Подключение к серверу из client-b3889\server.txt
+) else (
+    echo [FloV:MP] Подключение к %TARGET%
+)
 
 rem The b3889 client is the normal product path.
 if exist "%~dp0client-b3889\play.cmd" (
-    call "%~dp0client-b3889\play.cmd" "%TARGET%" "%~2"
+    if "%TARGET%"=="" (
+        call "%~dp0client-b3889\play.cmd"
+    ) else (
+        call "%~dp0client-b3889\play.cmd" "%TARGET%" "%~2"
+    )
     exit /b %errorlevel%
+)
+
+if "%TARGET%"=="" (
+    echo [FloV:MP] client-b3889 missing; pass customer host:port explicitly.
+    exit /b 2
 )
 
 rem Compatibility fallback for old packages without client-b3889.
