@@ -16,6 +16,11 @@
 
   <ItemGroup>
     <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <EmbeddedResource Include="../../../scripts/distribution/release-signing.pub.pem" LogicalName="FloVMP.ReleaseSigningPublicKey" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FloVMP.Core.Tests" />
   </ItemGroup>
 
 </Project>

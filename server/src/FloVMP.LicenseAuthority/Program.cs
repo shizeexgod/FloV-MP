@@ -188,7 +188,7 @@ static class Cli
                 return 0;
             }
             case "publish":
-                return Publish(cfg, rest.FirstOrDefault() ?? throw new CliError("укажите папку релиза"));
+                return ReleasePublisher.Publish(cfg.Data, rest.FirstOrDefault() ?? throw new CliError("укажите папку релиза"));
         }
         throw new CliError($"неизвестная команда «{cmd}». Список: flovmp-license help");
     }
@@ -209,36 +209,6 @@ static class Cli
         using var k = LoadKey(cfg);
         Console.WriteLine("Открытый ключ (должен совпадать с вшитым в сервер FloV:MP):");
         Console.WriteLine(k.ExportSubjectPublicKeyInfoPem());
-        return 0;
-    }
-
-    static int Publish(Config cfg, string folder)
-    {
-        folder = Path.GetFullPath(folder);
-        var found = new List<(string Os, Dictionary<string, string> Info)>();
-        foreach (var os in new[] { "linux", "windows" })
-        {
-            var txt = Path.Combine(folder, $"release-{os}.txt");
-            if (!File.Exists(txt)) continue;
-            if (!File.Exists(txt + ".sig")) throw new CliError($"нет подписи {txt}.sig");
-            var info = File.ReadAllLines(txt).Where(l => l.Contains('=')).ToDictionary(l => l[..l.IndexOf('=')], l => l[(l.IndexOf('=') + 1)..].Trim());
-            using var fs = File.OpenRead(Path.Combine(folder, info["file"]));
-            var sha = Convert.ToHexString(SHA256.HashData(fs)).ToLowerInvariant();
-            if (sha != info["sha256"]) throw new CliError($"SHA-256 {info["file"]} не совпадает с release-{os}.txt");
-            found.Add((os, info));
-        }
-        if (found.Count == 0) throw new CliError("в папке нет release-linux.txt / release-windows.txt");
-        var releases = Path.Combine(cfg.Data, "releases");
-        var dest = Path.Combine(releases, found[0].Info["version"]);
-        Directory.CreateDirectory(dest);
-        foreach (var f in Directory.GetFiles(folder)) File.Copy(f, Path.Combine(dest, Path.GetFileName(f)), true);
-        var current = Path.Combine(releases, "current");
-        var tmp = current + ".new";
-        if (Directory.Exists(tmp) || File.Exists(tmp)) Directory.Delete(tmp);
-        Directory.CreateSymbolicLink(tmp, dest);
-        if (Directory.Exists(current)) Directory.Delete(current);
-        Directory.Move(tmp, current);
-        foreach (var (os, info) in found) Console.WriteLine($"опубликован {os} {info["version"]} ({info["file"]})");
         return 0;
     }
 
