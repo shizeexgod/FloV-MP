@@ -91,12 +91,13 @@ public sealed class HttpApi
                 if (ctx.Request.HttpMethod != "POST") return Error(405, "нужен POST");
                 if (Blocked(ip)) return Error(429, "слишком много неверных запросов — подождите 10 минут");
                 if (ctx.Request.ContentLength64 > 8192) return Error(413, "слишком большой запрос");
-                using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
                 string? key = null, serverId = null, version = null;
                 var slots = 0;
                 try
                 {
-                    using var doc = JsonDocument.Parse(reader.ReadToEnd());
+                    var body = ReadBoundedBody(ctx.Request.InputStream);
+                    if (body is null) return Error(413, "слишком большой запрос");
+                    using var doc = JsonDocument.Parse(body);
                     var r = doc.RootElement;
                     key = Str(r, "licenseKey");
                     serverId = Str(r, "serverId");
@@ -104,6 +105,7 @@ public sealed class HttpApi
                     if (r.TryGetProperty("slots", out var s) && s.ValueKind == JsonValueKind.Number) s.TryGetInt32(out slots);
                 }
                 catch (JsonException) { return Error(400, "неверный JSON"); }
+                catch (DecoderFallbackException) { return Error(400, "неверная кодировка JSON"); }
                 return Count(ip, _service.Verify(key, serverId, ip, version, slots));
             }
 
@@ -168,6 +170,21 @@ public sealed class HttpApi
 
     private static string? Str(JsonElement r, string name) =>
         r.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    internal static string? ReadBoundedBody(Stream input)
+    {
+        const int limit = 8192;
+        var bytes = new byte[limit + 1];
+        var count = 0;
+        while (count < bytes.Length)
+        {
+            var read = input.Read(bytes, count, bytes.Length - count);
+            if (read == 0) break;
+            count += read;
+        }
+        if (count > limit) return null;
+        return new UTF8Encoding(false, true).GetString(bytes, 0, count);
+    }
 
     /// <summary>Отказ «ключ не найден / неверный формат» считается попыткой подбора.</summary>
     private ServiceReply Count(string ip, ServiceReply reply)
